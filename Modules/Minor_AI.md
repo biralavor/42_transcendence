@@ -27,6 +27,11 @@ AI minor modules add focused intelligence features without the full complexity o
 - Auto-warning system for borderline content.
 - Human moderator override capability.
 
+**Major Constraints**
+| Type | Constraint | Risk if Violated |
+|------|-----------|-----------------|
+| — | None | — |
+
 **Implementation options**: OpenAI Moderation API, Perspective API (Google), or custom classifier.
 
 ### Voice/Speech Integration (1 pt)
@@ -34,6 +39,11 @@ AI minor modules add focused intelligence features without the full complexity o
 - Voice input: speech-to-text for user interaction.
 - OR Text-to-speech: convert text content to audio for accessibility or interaction.
 - Proper error handling for unsupported browsers.
+
+**Major Constraints**
+| Type | Constraint | Risk if Violated |
+|------|-----------|-----------------|
+| — | None | — |
 
 **Implementation options**: Web Speech API (browser-native), Google Cloud Speech, Azure Speech, Whisper API.
 
@@ -43,6 +53,11 @@ AI minor modules add focused intelligence features without the full complexity o
 - Surface insights in the admin dashboard or user profile.
 - Support for at least one language (English minimum).
 
+**Major Constraints**
+| Type | Constraint | Risk if Violated |
+|------|-----------|-----------------|
+| — | None | — |
+
 **Implementation options**: VADER, TextBlob (Python), Transformers sentiment model, or OpenAI API.
 
 ### Image Recognition & Tagging (1 pt)
@@ -50,6 +65,11 @@ AI minor modules add focused intelligence features without the full complexity o
 - Automatically analyze uploaded images and generate descriptive tags.
 - Tag system persists to database and is searchable.
 - Display recognized tags on image/content.
+
+**Major Constraints**
+| Type | Constraint | Risk if Violated |
+|------|-----------|-----------------|
+| — | None | — |
 
 **Implementation options**: Google Cloud Vision API, AWS Rekognition, Azure Computer Vision, CLIP model.
 

@@ -17,6 +17,11 @@ The Data and Analytics category has one Major module: a comprehensive analytics 
 - Customizable date ranges and filters.
 - Data visualization library integration (Chart.js, D3.js, Recharts, etc.).
 
+**Major Constraints**
+| Type | Constraint | Risk if Violated |
+|------|-----------|-----------------|
+| — | None | — |
+
 **Dependencies**: Requires meaningful data — benefits from game statistics, user activity, or content engagement data.
 
 ---

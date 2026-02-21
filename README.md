@@ -67,6 +67,10 @@ INCOMPATIBLE COMBINATIONS:
 > - **Effort** `H`: Requires 1+ week of focused development
 > - **Effort** `L`: Can be completed in 1–3 days
 
+**Constraint Legend (used in all matrices below)**
+- 🔴 Hard constraint — violating it = 0 pts or module rejected
+- 🟡 Soft constraint — violating it = evaluation risk or partial rejection
+
 ### The Four Quadrants
 
 | | **Effort L** | **Effort H** |
@@ -82,45 +86,45 @@ INCOMPATIBLE COMBINATIONS:
 
 ### Quick Wins (High Impact, Low Effort)
 
-| Module | Type | Pts | Why it's a quick win |
-|--------|------|-----|---------------------|
-| Web: Full-Stack Framework | Major | 2 | Foundation — every other module depends on it |
-| User Mgmt: Standard Auth | Major | 2 | Essential — profiles, friends, online status |
-| User Mgmt: OAuth 2.0 | Minor | 1 | "Login with 42/GitHub" — a few hours |
-| User Mgmt: Game Statistics | Minor | 1 | Win/loss tracking — pairs directly with the game |
-| User Mgmt: 2FA | Minor | 1 | TOTP library + QR code — low effort |
-| Gaming: Tournament System | Minor | 1 | Bracket + matchmaking — core Pong feature |
-| Gaming: Game Customization | Minor | 1 | Power-ups, ball speed, paddle size |
-| Gaming: Gamification | Minor | 1 | XP, badges, leaderboard |
-| Web: ORM | Minor | 1 | Prisma/TypeORM — clean DB access |
-| Web: Notifications | Minor | 1 | Game invites, tournament alerts |
-| Web: PWA | Minor | 1 | Install Pong as mobile app — service worker |
-| DevOps: Health Check | Minor | 1 | `/health` endpoint + cron backup — ~4 hours |
-| A11y: Browser Support | Minor | 1 | Test on Firefox + Safari |
+| Module | Type | Pts | Why it's a quick win | Constraints |
+|--------|------|-----|---------------------|-------------|
+| Web: Full-Stack Framework | Major | 2 | Foundation — every other module depends on it | None |
+| User Mgmt: Standard Auth | Major | 2 | Essential — profiles, friends, online status | None |
+| User Mgmt: OAuth 2.0 | Minor | 1 | "Login with 42/GitHub" — a few hours | None |
+| User Mgmt: Game Statistics | Minor | 1 | Win/loss tracking — pairs directly with the game | 🔴 Prereq: Web-Based Game |
+| User Mgmt: 2FA | Minor | 1 | TOTP library + QR code — low effort | None |
+| Gaming: Tournament System | Minor | 1 | Bracket + matchmaking — core Pong feature | 🔴 Prereq: Web-Based Game |
+| Gaming: Game Customization | Minor | 1 | Power-ups, ball speed, paddle size | 🔴 Prereq: Web-Based Game |
+| Gaming: Gamification | Minor | 1 | XP, badges, leaderboard | None |
+| Web: ORM | Minor | 1 | Prisma/TypeORM — clean DB access | None |
+| Web: Notifications | Minor | 1 | Game invites, tournament alerts | None |
+| Web: PWA | Minor | 1 | Install Pong as mobile app — service worker | None |
+| DevOps: Health Check | Minor | 1 | `/health` endpoint + cron backup — ~4 hours | None |
+| A11y: Browser Support | Minor | 1 | Test on Firefox + Safari | None |
 
 **Quick Wins Total: 14 pts — minimum passed with quick wins alone!**
 
 ### Major Bets (High Impact, High Effort)
 
-| Module | Type | Pts | Why it's worth the effort |
-|--------|------|-----|--------------------------|
-| Web: Real-Time WebSockets | Major | 2 | Essential for game sync — but complex to implement right |
-| Web: User Interaction | Major | 2 | Chat + friends — needed for social game invitations |
-| Gaming: Web-Based Game | Major | 2 | The Pong game itself — the core deliverable |
-| Gaming: Remote Players | Major | 2 | Online multiplayer — makes Pong actually playable |
-| AI: AI Opponent | Major | 2 | Classic Pong AI — must explain during evaluation |
-| Data: Analytics Dashboard | Major | 2 | Game stats visualization — win rates, tournament history |
-| Blockchain: Tournament Scores | Major | 2 | Immutable tournament leaderboard — impressive tech |
+| Module | Type | Pts | Why it's worth the effort | Constraints |
+|--------|------|-----|--------------------------|-------------|
+| Web: Real-Time WebSockets | Major | 2 | Essential for game sync — but complex to implement right | None |
+| Web: User Interaction | Major | 2 | Chat + friends — needed for social game invitations | None — but unlocks Advanced Chat |
+| Gaming: Web-Based Game | Major | 2 | The Pong game itself — the core deliverable | None — but unlocks all Gaming deps |
+| Gaming: Remote Players | Major | 2 | Online multiplayer — makes Pong actually playable | 🔴 Prereq: Web-Based Game + WebSockets |
+| AI: AI Opponent | Major | 2 | Classic Pong AI — must explain during evaluation | 🔴 Prereq: Web-Based Game · 🟡 Eval Demo · 🟡 Must use Customization if implemented |
+| Data: Analytics Dashboard | Major | 2 | Game stats visualization — win rates, tournament history | None |
+| Blockchain: Tournament Scores | Major | 2 | Immutable tournament leaderboard — impressive tech | 🔴 Prereq: Web-Based Game + Tournament System |
 
 ### Fill-ins (Low Impact, Low Effort)
 
-| Module | Type | Pts | Notes |
-|--------|------|-----|-------|
-| Web: Advanced Search | Minor | 1 | Find players by username |
-| Web: File Upload | Minor | 1 | Avatar uploads only |
-| Data: GDPR Compliance | Minor | 1 | User data deletion — minimal scope for Pong |
-| Gaming: Spectator Mode | Minor | 1 | Watch matches live |
-| Web: SSR | Minor | 1 | Only if using Next.js/Nuxt.js already |
+| Module | Type | Pts | Notes | Constraints |
+|--------|------|-----|-------|-------------|
+| Web: Advanced Search | Minor | 1 | Find players by username | None |
+| Web: File Upload | Minor | 1 | Avatar uploads only | None |
+| Data: GDPR Compliance | Minor | 1 | User data deletion — minimal scope for Pong | None |
+| Gaming: Spectator Mode | Minor | 1 | Watch matches live | 🔴 Prereq: Web-Based Game + WebSockets |
+| Web: SSR | Minor | 1 | Only if using Next.js/Nuxt.js already | 🔴 Incompatible with ICP Backend |
 
 ### Avoid (Low Impact, High Effort)
 
@@ -137,18 +141,18 @@ INCOMPATIBLE COMBINATIONS:
 | DevOps: Microservices | Adds complexity without meaningful benefit |
 | Blockchain: ICP Backend | Real-time game needs low latency |
 
-### Recommended Build (22 pts)
+### Recommended Build (26 pts)
 ```
-Web Major:      Full-Stack Framework (2) + WebSockets (2) + User Interaction (2) = 6 pts
-Gaming Major:   Web Game (2) + Remote Players (2)                                = 4 pts
-AI Major:       AI Opponent (2)                                                  = 2 pts
-User Mgmt:      Standard Auth (2) + OAuth (1) + Game Stats (1) + 2FA (1)        = 5 pts
-Gaming Minors:  Tournament (1) + Customization (1) + Gamification (1)           = 3 pts
-Data Major:     Analytics Dashboard (2)                                          = 2 pts
-Web Minors:     ORM (1) + Notifications (1) + PWA (1)                           = 3 pts
-DevOps Minor:   Health Check (1)                                                 = 1 pt
-──────────────────────────────────────────────────────────────────────────────────
-TOTAL:                                                                           26 pts
+Web Major:      Full-Stack Framework (2) + WebSockets (2) + User Interaction (2)                                          = 6 pts
+Gaming Major:   Web Game (2) + Remote Players (2) [🔴 Prereq: Web Game + WebSockets]                                     = 4 pts
+AI Major:       AI Opponent (2) [🔴 Prereq: Web Game · 🟡 Eval Demo · 🟡 Must use Customization if implemented]          = 2 pts
+User Mgmt:      Standard Auth (2) + OAuth (1) + Game Stats (1) [🔴 Prereq: Web Game] + 2FA (1)                          = 5 pts
+Gaming Minors:  Tournament (1) [🔴 Prereq: Web Game] + Customization (1) [🔴 Prereq: Web Game] + Gamification (1)       = 3 pts
+Data Major:     Analytics Dashboard (2)                                                                                   = 2 pts
+Web Minors:     ORM (1) + Notifications (1) + PWA (1)                                                                    = 3 pts
+DevOps Minor:   Health Check (1)                                                                                          = 1 pt
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+TOTAL:                                                                                                                    26 pts
 ```
 
 ---
@@ -159,48 +163,48 @@ TOTAL:                                                                          
 
 ### Quick Wins (High Impact, Low Effort)
 
-| Module | Type | Pts | Why it's a quick win |
-|--------|------|-----|---------------------|
-| Web: Full-Stack Framework | Major | 2 | Foundation |
-| User Mgmt: Standard Auth | Major | 2 | Student profiles, teacher/student social |
-| User Mgmt: OAuth 2.0 | Minor | 1 | Easy login for students |
-| User Mgmt: Activity Analytics | Minor | 1 | Study streaks, lesson completion tracking |
-| Gaming: Gamification | Minor | 1 | Learning XP, streak badges — Duolingo model |
-| A11y: Multiple Languages (i18n) | Minor | 1 | A language app MUST be multilingual |
-| A11y: Browser Support | Minor | 1 | Students use all browsers |
-| Web: ORM | Minor | 1 | Course/lesson data queries |
-| Web: Notifications | Minor | 1 | Assignment reminders, lesson completion |
-| DevOps: Health Check | Minor | 1 | Easy 1 pt |
-| Data: GDPR Compliance | Minor | 1 | Student data protection — legally important |
+| Module | Type | Pts | Why it's a quick win | Constraints |
+|--------|------|-----|---------------------|-------------|
+| Web: Full-Stack Framework | Major | 2 | Foundation | None |
+| User Mgmt: Standard Auth | Major | 2 | Student profiles, teacher/student social | None |
+| User Mgmt: OAuth 2.0 | Minor | 1 | Easy login for students | None |
+| User Mgmt: Activity Analytics | Minor | 1 | Study streaks, lesson completion tracking | None |
+| Gaming: Gamification | Minor | 1 | Learning XP, streak badges — Duolingo model | None |
+| A11y: Multiple Languages (i18n) | Minor | 1 | A language app MUST be multilingual | 🟡 Min: 3 complete translations |
+| A11y: Browser Support | Minor | 1 | Students use all browsers | 🟡 Min: 2 additional browsers |
+| Web: ORM | Minor | 1 | Course/lesson data queries | None |
+| Web: Notifications | Minor | 1 | Assignment reminders, lesson completion | None |
+| DevOps: Health Check | Minor | 1 | Easy 1 pt | None |
+| Data: GDPR Compliance | Minor | 1 | Student data protection — legally important | None |
 
 **Quick Wins Total: 13 pts — one more module to minimum!**
 
 ### Major Bets (High Impact, High Effort)
 
-| Module | Type | Pts | Why it's worth the effort |
-|--------|------|-----|--------------------------|
-| User Mgmt: Advanced Permissions | Major | 2 | Teacher vs student vs admin roles |
-| User Mgmt: Organization System | Major | 2 | Schools, classrooms, study groups |
-| AI: RAG System | Major | 2 | Answer grammar questions from knowledge base |
-| AI: LLM Interface | Major | 2 | AI language tutor — conversation practice |
-| AI: Recommendation System | Major | 2 | Recommend next lessons based on progress |
-| AI: Voice/Speech | Minor | 1 | Pronunciation practice — core feature for language learning |
-| Web: User Interaction | Major | 2 | Peer practice chat sessions |
-| Web: Real-Time WebSockets | Major | 2 | Live lesson collaboration |
-| Data: Analytics Dashboard | Major | 2 | Student progress tracking |
+| Module | Type | Pts | Why it's worth the effort | Constraints |
+|--------|------|-----|--------------------------|-------------|
+| User Mgmt: Advanced Permissions | Major | 2 | Teacher vs student vs admin roles | None |
+| User Mgmt: Organization System | Major | 2 | Schools, classrooms, study groups | None |
+| AI: RAG System | Major | 2 | Answer grammar questions from knowledge base | None |
+| AI: LLM Interface | Major | 2 | AI language tutor — conversation practice | None |
+| AI: Recommendation System | Major | 2 | Recommend next lessons based on progress | None |
+| AI: Voice/Speech | Minor | 1 | Pronunciation practice — core feature for language learning | None |
+| Web: User Interaction | Major | 2 | Peer practice chat sessions | None — but unlocks Advanced Chat |
+| Web: Real-Time WebSockets | Major | 2 | Live lesson collaboration | None |
+| Data: Analytics Dashboard | Major | 2 | Student progress tracking | None |
 
 ### Fill-ins (Low Impact, Low Effort)
 
-| Module | Type | Pts | Notes |
-|--------|------|-----|-------|
-| Web: Advanced Search | Minor | 1 | Search vocabulary lists, lessons |
-| Web: File Upload | Minor | 1 | Audio exercises, lesson documents |
-| Web: SSR | Minor | 1 | SEO for lesson pages |
-| A11y: RTL Support | Minor | 1 | Arabic/Hebrew learners |
-| Data: Export/Import | Minor | 1 | Import vocabulary lists, export progress |
-| User Mgmt: 2FA | Minor | 1 | Student account security |
-| AI: Content Moderation | Minor | 1 | Moderate student submissions |
-| AI: Sentiment Analysis | Minor | 1 | Detect student frustration in responses |
+| Module | Type | Pts | Notes | Constraints |
+|--------|------|-----|-------|-------------|
+| Web: Advanced Search | Minor | 1 | Search vocabulary lists, lessons | None |
+| Web: File Upload | Minor | 1 | Audio exercises, lesson documents | None |
+| Web: SSR | Minor | 1 | SEO for lesson pages | 🔴 Incompatible with ICP Backend |
+| A11y: RTL Support | Minor | 1 | Arabic/Hebrew learners | None |
+| Data: Export/Import | Minor | 1 | Import vocabulary lists, export progress | None |
+| User Mgmt: 2FA | Minor | 1 | Student account security | None |
+| AI: Content Moderation | Minor | 1 | Moderate student submissions | None |
+| AI: Sentiment Analysis | Minor | 1 | Detect student frustration in responses | None |
 
 ### Avoid (Low Impact, High Effort)
 
@@ -211,20 +215,20 @@ TOTAL:                                                                          
 | DevOps: Microservices | Premature for typical team timeline |
 | A11y: WCAG 2.1 AA | High effort; forms and lessons are accessible naturally |
 
-### Recommended Build (26 pts)
+### Recommended Build (27 pts)
 ```
-Web Major:      Full-Stack Framework (2) + User Interaction (2) + WebSockets (2) = 6 pts
-User Mgmt:      Standard Auth (2) + Advanced Permissions (2)                     = 4 pts
-AI Major:       RAG System (2) + LLM Interface (2)                               = 4 pts
-Data Major:     Analytics Dashboard (2)                                           = 2 pts
-User Mgmt:      OAuth (1) + Activity Analytics (1) + 2FA (1)                     = 3 pts
-Gaming Minor:   Gamification (1)                                                  = 1 pt
-AI Minors:      Voice/Speech (1) + Content Moderation (1) + Sentiment (1)        = 3 pts
-A11y Minors:    i18n (1) + Browser Support (1)                                   = 2 pts
-Data Minor:     GDPR (1)                                                          = 1 pt
-DevOps Minor:   Health Check (1)                                                  = 1 pt
-──────────────────────────────────────────────────────────────────────────────────
-TOTAL:                                                                            27 pts
+Web Major:      Full-Stack Framework (2) + User Interaction (2) + WebSockets (2)                                          = 6 pts
+User Mgmt:      Standard Auth (2) + Advanced Permissions (2)                                                              = 4 pts
+AI Major:       RAG System (2) + LLM Interface (2)                                                                        = 4 pts
+Data Major:     Analytics Dashboard (2)                                                                                   = 2 pts
+User Mgmt:      OAuth (1) + Activity Analytics (1) + 2FA (1)                                                             = 3 pts
+Gaming Minor:   Gamification (1)                                                                                          = 1 pt
+AI Minors:      Voice/Speech (1) + Content Moderation (1) + Sentiment (1)                                                = 3 pts
+A11y Minors:    i18n (1) [🟡 Min: 3 languages] + Browser Support (1) [🟡 Min: 2 browsers]                               = 2 pts
+Data Minor:     GDPR (1)                                                                                                  = 1 pt
+DevOps Minor:   Health Check (1)                                                                                          = 1 pt
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+TOTAL:                                                                                                                    27 pts
 ```
 
 ---
@@ -235,45 +239,45 @@ TOTAL:                                                                          
 
 ### Quick Wins (High Impact, Low Effort)
 
-| Module | Type | Pts | Why it's a quick win |
-|--------|------|-----|---------------------|
-| Web: Full-Stack Framework | Major | 2 | Foundation |
-| User Mgmt: Standard Auth | Major | 2 | Adopter + shelter profiles |
-| User Mgmt: OAuth 2.0 | Minor | 1 | Easy login for adopters |
-| User Mgmt: 2FA | Minor | 1 | Shelter admin account security |
-| Web: File Upload | Minor | 1 | Pet photos — **essential** feature |
-| Web: Notifications | Minor | 1 | Adoption status updates |
-| Web: Advanced Search | Minor | 1 | Filter pets by type, age, location |
-| Web: ORM | Minor | 1 | Pet/adoption/user data queries |
-| A11y: Browser Support | Minor | 1 | Broad community audience uses diverse browsers |
-| DevOps: Health Check | Minor | 1 | Easy 1 pt |
-| Data: GDPR Compliance | Minor | 1 | PII of adopters — legally required |
+| Module | Type | Pts | Why it's a quick win | Constraints |
+|--------|------|-----|---------------------|-------------|
+| Web: Full-Stack Framework | Major | 2 | Foundation | None |
+| User Mgmt: Standard Auth | Major | 2 | Adopter + shelter profiles | None |
+| User Mgmt: OAuth 2.0 | Minor | 1 | Easy login for adopters | None |
+| User Mgmt: 2FA | Minor | 1 | Shelter admin account security | None |
+| Web: File Upload | Minor | 1 | Pet photos — **essential** feature | None |
+| Web: Notifications | Minor | 1 | Adoption status updates | None |
+| Web: Advanced Search | Minor | 1 | Filter pets by type, age, location | None |
+| Web: ORM | Minor | 1 | Pet/adoption/user data queries | None |
+| A11y: Browser Support | Minor | 1 | Broad community audience uses diverse browsers | 🟡 Min: 2 additional browsers |
+| DevOps: Health Check | Minor | 1 | Easy 1 pt | None |
+| Data: GDPR Compliance | Minor | 1 | PII of adopters — legally required | None |
 
 **Quick Wins Total: 13 pts — one more module to minimum!**
 
 ### Major Bets (High Impact, High Effort)
 
-| Module | Type | Pts | Why it's worth the effort |
-|--------|------|-----|--------------------------|
-| Web: User Interaction | Major | 2 | Adopter ↔ shelter messaging |
-| Web: Public API | Major | 2 | Expose pet listings to external apps |
-| AI: Recommendation System | Major | 2 | Match pets to adopter lifestyle preferences |
-| User Mgmt: Advanced Permissions | Major | 2 | Shelter admin vs adopter roles |
-| User Mgmt: Organization System | Major | 2 | Shelters as organizations |
-| Data: Analytics Dashboard | Major | 2 | Adoption success rates, shelter performance |
-| AI: Image Recognition | Minor | 1 | Auto-tag pet photos (breed, size, color) |
-| A11y: Multiple Languages (i18n) | Minor | 1 | Multicultural adoption communities |
+| Module | Type | Pts | Why it's worth the effort | Constraints |
+|--------|------|-----|--------------------------|-------------|
+| Web: User Interaction | Major | 2 | Adopter ↔ shelter messaging | None — but unlocks Advanced Chat |
+| Web: Public API | Major | 2 | Expose pet listings to external apps | None |
+| AI: Recommendation System | Major | 2 | Match pets to adopter lifestyle preferences | None |
+| User Mgmt: Advanced Permissions | Major | 2 | Shelter admin vs adopter roles | None |
+| User Mgmt: Organization System | Major | 2 | Shelters as organizations | None |
+| Data: Analytics Dashboard | Major | 2 | Adoption success rates, shelter performance | None |
+| AI: Image Recognition | Minor | 1 | Auto-tag pet photos (breed, size, color) | None |
+| A11y: Multiple Languages (i18n) | Minor | 1 | Multicultural adoption communities | 🟡 Min: 3 complete translations |
 
 ### Fill-ins (Low Impact, Low Effort)
 
-| Module | Type | Pts | Notes |
-|--------|------|-----|-------|
-| Web: Custom Design System | Minor | 1 | Polished, empathetic UI matters for adoption |
-| Web: SSR | Minor | 1 | SEO for pet listing pages |
-| Data: Export/Import | Minor | 1 | Bulk import shelter inventory |
-| User Mgmt: Activity Analytics | Minor | 1 | Track adoption funnel |
-| AI: Content Moderation | Minor | 1 | Moderate user messages |
-| Gaming: Advanced Chat | Minor | 1 | Enhanced adopter-shelter messaging |
+| Module | Type | Pts | Notes | Constraints |
+|--------|------|-----|-------|-------------|
+| Web: Custom Design System | Minor | 1 | Polished, empathetic UI matters for adoption | 🟡 Min: 10+ reusable components |
+| Web: SSR | Minor | 1 | SEO for pet listing pages | 🔴 Incompatible with ICP Backend |
+| Data: Export/Import | Minor | 1 | Bulk import shelter inventory | None |
+| User Mgmt: Activity Analytics | Minor | 1 | Track adoption funnel | None |
+| AI: Content Moderation | Minor | 1 | Moderate user messages | None |
+| Gaming: Advanced Chat | Minor | 1 | Enhanced adopter-shelter messaging | 🔴 Prereq: User Interaction Major (basic chat) |
 
 ### Avoid (Low Impact, High Effort)
 
@@ -288,17 +292,17 @@ TOTAL:                                                                          
 
 ### Recommended Build (25 pts)
 ```
-Web Major:      Full-Stack Framework (2) + User Interaction (2) + Public API (2)  = 6 pts
-AI Major:       Recommendation System (2)                                         = 2 pts
-User Mgmt:      Standard Auth (2) + Advanced Permissions (2)                      = 4 pts
-Data Major:     Analytics Dashboard (2)                                            = 2 pts
-Web Minors:     File Upload (1) + Notifications (1) + Advanced Search (1) + ORM (1) = 4 pts
-User Mgmt:      OAuth (1) + 2FA (1) + Activity Analytics (1)                      = 3 pts
-AI Minor:       Image Recognition (1)                                              = 1 pt
-A11y Minors:    Browser Support (1) + i18n (1)                                    = 2 pts
-Data Minor:     GDPR (1)                                                           = 1 pt
-──────────────────────────────────────────────────────────────────────────────────
-TOTAL:                                                                             25 pts
+Web Major:      Full-Stack Framework (2) + User Interaction (2) + Public API (2)                                          = 6 pts
+AI Major:       Recommendation System (2)                                                                                 = 2 pts
+User Mgmt:      Standard Auth (2) + Advanced Permissions (2)                                                              = 4 pts
+Data Major:     Analytics Dashboard (2)                                                                                   = 2 pts
+Web Minors:     File Upload (1) + Notifications (1) + Advanced Search (1) + ORM (1)                                      = 4 pts
+User Mgmt:      OAuth (1) + 2FA (1) + Activity Analytics (1)                                                             = 3 pts
+AI Minor:       Image Recognition (1)                                                                                     = 1 pt
+A11y Minors:    Browser Support (1) [🟡 Min: 2 browsers] + i18n (1) [🟡 Min: 3 languages]                               = 2 pts
+Data Minor:     GDPR (1)                                                                                                  = 1 pt
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+TOTAL:                                                                                                                    25 pts
 ```
 
 ---
@@ -309,47 +313,47 @@ TOTAL:                                                                          
 
 ### Quick Wins (High Impact, Low Effort)
 
-| Module | Type | Pts | Why it's a quick win |
-|--------|------|-----|---------------------|
-| Web: Full-Stack Framework | Major | 2 | Foundation |
-| User Mgmt: Standard Auth | Major | 2 | Player profiles, friends, online status |
-| User Mgmt: OAuth 2.0 | Minor | 1 | Discord/GitHub login — gaming community |
-| User Mgmt: Game Statistics | Minor | 1 | Win rates, hand history — essential |
-| Gaming: Tournament System | Minor | 1 | Card game tournaments — core value |
-| Gaming: Gamification | Minor | 1 | XP, badges, leaderboard |
-| Gaming: Game Customization | Minor | 1 | Rule variants, house rules |
-| Web: ORM | Minor | 1 | Game state, card hand storage |
-| Web: Notifications | Minor | 1 | "Your turn!" alerts |
-| Web: PWA | Minor | 1 | Mobile card game install |
-| A11y: Browser Support | Minor | 1 | Gamers use all browsers |
-| DevOps: Health Check | Minor | 1 | Easy 1 pt |
+| Module | Type | Pts | Why it's a quick win | Constraints |
+|--------|------|-----|---------------------|-------------|
+| Web: Full-Stack Framework | Major | 2 | Foundation | None |
+| User Mgmt: Standard Auth | Major | 2 | Player profiles, friends, online status | None |
+| User Mgmt: OAuth 2.0 | Minor | 1 | Discord/GitHub login — gaming community | None |
+| User Mgmt: Game Statistics | Minor | 1 | Win rates, hand history — essential | 🔴 Prereq: Web-Based Game |
+| Gaming: Tournament System | Minor | 1 | Card game tournaments — core value | 🔴 Prereq: Web-Based Game |
+| Gaming: Gamification | Minor | 1 | XP, badges, leaderboard | None |
+| Gaming: Game Customization | Minor | 1 | Rule variants, house rules | 🔴 Prereq: Web-Based Game |
+| Web: ORM | Minor | 1 | Game state, card hand storage | None |
+| Web: Notifications | Minor | 1 | "Your turn!" alerts | None |
+| Web: PWA | Minor | 1 | Mobile card game install | None |
+| A11y: Browser Support | Minor | 1 | Gamers use all browsers | 🟡 Min: 2 additional browsers |
+| DevOps: Health Check | Minor | 1 | Easy 1 pt | None |
 
 **Quick Wins Total: 13 pts — one more module to minimum!**
 
 ### Major Bets (High Impact, High Effort)
 
-| Module | Type | Pts | Why it's worth the effort |
-|--------|------|-----|--------------------------|
-| Web: Real-Time WebSockets | Major | 2 | Card game turn sync — **essential** |
-| Web: User Interaction | Major | 2 | Chat + game invitations |
-| Gaming: Web-Based Game | Major | 2 | The card game itself |
-| Gaming: Remote Players | Major | 2 | Online play — makes it actually usable |
-| Gaming: Multiplayer 3+ | Major | 2 | Poker/Uno need 3+ players |
-| Gaming: Add Another Game | Major | 2 | Second card game (Poker + Uno) |
-| AI: AI Opponent | Major | 2 | AI card game bot (Poker/Uno AI) |
-| Data: Analytics Dashboard | Major | 2 | Win rates, tournament stats, peak hours |
-| Blockchain: Tournament Scores | Major | 2 | Verifiable card game tournament results |
+| Module | Type | Pts | Why it's worth the effort | Constraints |
+|--------|------|-----|--------------------------|-------------|
+| Web: Real-Time WebSockets | Major | 2 | Card game turn sync — **essential** | None |
+| Web: User Interaction | Major | 2 | Chat + game invitations | None — but unlocks Advanced Chat |
+| Gaming: Web-Based Game | Major | 2 | The card game itself | None — but unlocks all Gaming deps |
+| Gaming: Remote Players | Major | 2 | Online play — makes it actually usable | 🔴 Prereq: Web-Based Game + WebSockets |
+| Gaming: Multiplayer 3+ | Major | 2 | Poker/Uno need 3+ players | 🔴 Prereq: Web-Based Game |
+| Gaming: Add Another Game | Major | 2 | Second card game (Poker + Uno) | 🔴 Prereq: Web-Based Game |
+| AI: AI Opponent | Major | 2 | AI card game bot (Poker/Uno AI) | 🔴 Prereq: Web-Based Game · 🟡 Eval Demo · 🟡 Must use Customization if implemented |
+| Data: Analytics Dashboard | Major | 2 | Win rates, tournament stats, peak hours | None |
+| Blockchain: Tournament Scores | Major | 2 | Verifiable card game tournament results | 🔴 Prereq: Web-Based Game + Tournament System |
 
 ### Fill-ins (Low Impact, Low Effort)
 
-| Module | Type | Pts | Notes |
-|--------|------|-----|-------|
-| Web: Advanced Search | Minor | 1 | Find games, browse lobbies |
-| Gaming: Advanced Chat | Minor | 1 | In-game chat, direct game invitations |
-| Gaming: Spectator Mode | Minor | 1 | Watch tournament finals |
-| AI: Content Moderation | Minor | 1 | Moderate in-game chat |
-| Data: GDPR Compliance | Minor | 1 | User account compliance |
-| User Mgmt: 2FA | Minor | 1 | Ranked account security |
+| Module | Type | Pts | Notes | Constraints |
+|--------|------|-----|-------|-------------|
+| Web: Advanced Search | Minor | 1 | Find games, browse lobbies | None |
+| Gaming: Advanced Chat | Minor | 1 | In-game chat, direct game invitations | 🔴 Prereq: User Interaction Major (basic chat) |
+| Gaming: Spectator Mode | Minor | 1 | Watch tournament finals | 🔴 Prereq: Web-Based Game + WebSockets |
+| AI: Content Moderation | Minor | 1 | Moderate in-game chat | None |
+| Data: GDPR Compliance | Minor | 1 | User account compliance | None |
+| User Mgmt: 2FA | Minor | 1 | Ranked account security | None |
 
 ### Avoid (Low Impact, High Effort)
 
@@ -363,19 +367,94 @@ TOTAL:                                                                          
 | Blockchain: ICP Backend | Latency too high for card game sync |
 | Web: Collaborative Features | Not applicable to card games |
 
-### Recommended Build (26 pts)
+### Recommended Build (27 pts)
 ```
-Web Major:      Full-Stack Framework (2) + WebSockets (2) + User Interaction (2)  = 6 pts
-Gaming Major:   Web Game (2) + Remote Players (2) + Multiplayer 3+ (2)            = 6 pts
-AI Major:       AI Opponent (2)                                                    = 2 pts
-User Mgmt:      Standard Auth (2) + Game Stats (1) + OAuth (1)                    = 4 pts
-Gaming Minors:  Tournament (1) + Gamification (1) + Customization (1)             = 3 pts
-Data Major:     Analytics Dashboard (2)                                            = 2 pts
-Web Minors:     ORM (1) + Notifications (1) + PWA (1)                             = 3 pts
-DevOps Minor:   Health Check (1)                                                   = 1 pt
-──────────────────────────────────────────────────────────────────────────────────
-TOTAL:                                                                             27 pts
+Web Major:      Full-Stack Framework (2) + WebSockets (2) + User Interaction (2)                                          = 6 pts
+Gaming Major:   Web Game (2) + Remote Players (2) [🔴 Prereq: Web Game + WebSockets] + Multiplayer 3+ (2) [🔴 Prereq: Web Game] = 6 pts
+AI Major:       AI Opponent (2) [🔴 Prereq: Web Game · 🟡 Eval Demo · 🟡 Must use Customization if implemented]          = 2 pts
+User Mgmt:      Standard Auth (2) + Game Stats (1) [🔴 Prereq: Web Game] + OAuth (1)                                    = 4 pts
+Gaming Minors:  Tournament (1) [🔴 Prereq: Web Game] + Gamification (1) + Customization (1) [🔴 Prereq: Web Game]       = 3 pts
+Data Major:     Analytics Dashboard (2)                                                                                   = 2 pts
+Web Minors:     ORM (1) + Notifications (1) + PWA (1)                                                                    = 3 pts
+DevOps Minor:   Health Check (1)                                                                                          = 1 pt
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+TOTAL:                                                                                                                    27 pts
 ```
+
+---
+
+## Constraints Modules Matrix
+
+> Complete filtered view of hard and soft constraints across every module. Use this before finalising your module selection.
+
+**Legend:**
+- 🔴 Hard constraint — violating it = 0 pts or module rejected
+- 🟡 Soft constraint — violating it = evaluation risk or partial rejection
+
+| Module | Type | Pts | Constraint Type | Constraint | Risk if Violated |
+|--------|------|-----|----------------|-----------|-----------------|
+| **— Web —** | | | | | |
+| Full-Stack Framework | Major | 2 | — | None | — |
+| WebSockets | Major | 2 | — | None | — |
+| User Interaction | Major | 2 | — | None — unlocks Advanced Chat | — |
+| Public API | Major | 2 | — | None | — |
+| Frontend Framework | Minor | 1 | — | None | — |
+| Backend Framework | Minor | 1 | — | None | — |
+| ORM | Minor | 1 | — | None | — |
+| Notifications | Minor | 1 | — | None | — |
+| Collaborative Features | Minor | 1 | — | None | — |
+| SSR | Minor | 1 | 🔴 Hard Incompatibility | Cannot combine with ICP Backend (Blockchain Minor) | Both modules at risk |
+| PWA | Minor | 1 | — | None | — |
+| Custom Design System | Minor | 1 | 🟡 Minimum Threshold | 10+ reusable components required | Partial rejection |
+| Advanced Search | Minor | 1 | — | None | — |
+| File Upload | Minor | 1 | — | None | — |
+| **— Accessibility —** | | | | | |
+| WCAG 2.1 AA | Major | 2 | — | None | — |
+| i18n | Minor | 1 | 🟡 Minimum Threshold | At least 3 complete language translations | Partial rejection |
+| RTL Support | Minor | 1 | — | None | — |
+| Additional Browsers | Minor | 1 | 🟡 Minimum Threshold | Full compatibility with 2+ additional browsers | Partial rejection |
+| **— User Management —** | | | | | |
+| Standard Auth | Major | 2 | — | None | — |
+| Advanced Permissions | Major | 2 | — | None | — |
+| Organization System | Major | 2 | — | None | — |
+| Game Statistics | Minor | 1 | 🔴 Hard Prerequisite | Web-Based Game must be implemented first | 0 pts |
+| OAuth 2.0 | Minor | 1 | — | None | — |
+| 2FA | Minor | 1 | — | None | — |
+| Activity Analytics | Minor | 1 | — | None | — |
+| **— Artificial Intelligence —** | | | | | |
+| AI Opponent | Major | 2 | 🔴 Hard Prereq · 🟡 Eval Demo · 🟡 Cross-dep | Web-Based Game · Must explain AI at evaluation · Must use Customization if implemented | 0 pts / Fail at eval |
+| RAG System | Major | 2 | — | None | — |
+| LLM Interface | Major | 2 | — | None | — |
+| Recommendation System | Major | 2 | — | None | — |
+| Content Moderation | Minor | 1 | — | None | — |
+| Voice/Speech | Minor | 1 | — | None | — |
+| Sentiment Analysis | Minor | 1 | — | None | — |
+| Image Recognition | Minor | 1 | — | None | — |
+| **— Cybersecurity —** | | | | | |
+| WAF/ModSecurity + Vault | Major | 2 | — | None | — |
+| **— Gaming & UX —** | | | | | |
+| Web-Based Game | Major | 2 | — | None — foundational, unlocks all Gaming prerequisites | — |
+| Remote Players | Major | 2 | 🔴 Hard Prerequisite | Web-Based Game + WebSockets (Web Major) | 0 pts |
+| Multiplayer 3+ | Major | 2 | 🔴 Hard Prerequisite | Web-Based Game | 0 pts |
+| Add Another Game | Major | 2 | 🔴 Hard Prerequisite | Web-Based Game | 0 pts |
+| 3D Graphics | Major | 2 | — | None (recommended with a game, not required) | — |
+| Advanced Chat | Minor | 1 | 🔴 Hard Prerequisite | User Interaction Major (basic chat) must exist | 0 pts |
+| Tournament System | Minor | 1 | 🔴 Hard Prerequisite | Web-Based Game | 0 pts |
+| Game Customization | Minor | 1 | 🔴 Hard Prereq · 🟡 Cross-dep | Web-Based Game · AI Opponent must use it if both implemented | 0 pts |
+| Gamification | Minor | 1 | 🟡 Minimum Threshold | 3+ features · DB-persistent · visual feedback required | Partial rejection |
+| Spectator Mode | Minor | 1 | 🔴 Hard Prerequisite | Web-Based Game + WebSockets (Web Major) | 0 pts |
+| **— DevOps —** | | | | | |
+| ELK Stack | Major | 2 | — | None | — |
+| Prometheus + Grafana | Major | 2 | — | None | — |
+| Microservices | Major | 2 | — | None | — |
+| Health Check + Backups | Minor | 1 | — | None | — |
+| **— Data & Analytics —** | | | | | |
+| Analytics Dashboard | Major | 2 | — | None | — |
+| Data Export/Import | Minor | 1 | — | None | — |
+| GDPR Compliance | Minor | 1 | — | None | — |
+| **— Blockchain —** | | | | | |
+| Tournament Scores on Blockchain | Major | 2 | 🔴 Hard Prerequisite | Web-Based Game + Tournament System (Minor) | 0 pts |
+| ICP Backend | Minor | 1 | 🔴 Hard Incompatibility | Cannot combine with SSR (Web Minor) | Both modules at risk |
 
 ---
 

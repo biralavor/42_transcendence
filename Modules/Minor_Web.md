@@ -29,32 +29,82 @@ Web minor modules extend and polish the core web stack. They range from quick wi
 ### Frontend Framework (1 pt)
 Already included if you implement the Full-Stack Framework Major. Only claim separately if using frontend-only without the Major.
 
+**Major Constraints**
+| Type | Constraint | Risk if Violated |
+|------|-----------|-----------------|
+| — | None | — |
+
 ### Backend Framework (1 pt)
 Already included if you implement the Full-Stack Framework Major. Only claim separately if using backend-only without the Major.
+
+**Major Constraints**
+| Type | Constraint | Risk if Violated |
+|------|-----------|-----------------|
+| — | None | — |
 
 ### ORM for Database (1 pt)
 Use Prisma, TypeORM, Sequelize, SQLAlchemy, ActiveRecord, etc. Provides type-safe database queries and migration management.
 
+**Major Constraints**
+| Type | Constraint | Risk if Violated |
+|------|-----------|-----------------|
+| — | None | — |
+
 ### Notification System (1 pt)
 Real-time notifications for user actions: new message, friend request, game challenge, tournament update, etc. Implemented with WebSockets or Server-Sent Events.
+
+**Major Constraints**
+| Type | Constraint | Risk if Violated |
+|------|-----------|-----------------|
+| — | None | — |
 
 ### Real-Time Collaborative Features (1 pt)
 Shared workspaces, live document editing, collaborative drawing canvas. Requires operational transformation or CRDT for conflict resolution. High effort — only choose if core to your project concept.
 
+**Major Constraints**
+| Type | Constraint | Risk if Violated |
+|------|-----------|-----------------|
+| — | None | — |
+
 ### Server-Side Rendering (SSR) (1 pt)
 Next.js, Nuxt.js, or SvelteKit. Improves initial load time and SEO. **Warning**: Incompatible with ICP blockchain backend (Minor Blockchain).
+
+**Major Constraints**
+| Type | Constraint | Risk if Violated |
+|------|-----------|-----------------|
+| 🔴 Hard Incompatibility | Cannot combine with ICP Backend (Blockchain Minor) | Both modules at risk |
 
 ### Progressive Web App (PWA) (1 pt)
 Service worker for offline caching, Web App Manifest for installability, push notifications. Especially valuable for mobile gaming.
 
+**Major Constraints**
+| Type | Constraint | Risk if Violated |
+|------|-----------|-----------------|
+| — | None | — |
+
 ### Custom Design System (1 pt)
 Build 10+ reusable components: Button, Input, Modal, Card, Badge, Toast, etc. Must include consistent color palette, typography scale, and icon set.
+
+**Major Constraints**
+| Type | Constraint | Risk if Violated |
+|------|-----------|-----------------|
+| 🟡 Minimum Threshold | Must include 10+ reusable components, color palette, typography, and icon set | Partial rejection |
 
 ### Advanced Search (1 pt)
 Full-text search with filters (by category, date, type), sorting (by relevance, date, name), and pagination. Elasticsearch or database full-text search.
 
+**Major Constraints**
+| Type | Constraint | Risk if Violated |
+|------|-----------|-----------------|
+| — | None | — |
+
 ### File Upload & Management (1 pt)
 Support images, documents, audio/video. Client + server validation (type, size, format). Secure storage (local or S3-compatible). Preview, progress bar, delete functionality.
+
+**Major Constraints**
+| Type | Constraint | Risk if Violated |
+|------|-----------|-----------------|
+| — | None | — |
 
 ---
 

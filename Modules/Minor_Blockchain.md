@@ -25,6 +25,11 @@ The Blockchain minor offers ICP (Internet Computer Protocol) as an alternative b
 
 **Critical Constraint**: **Incompatible with Server-Side Rendering (SSR)**. Do not combine with the SSR Web Minor module.
 
+**Major Constraints**
+| Type | Constraint | Risk if Violated |
+|------|-----------|-----------------|
+| 🔴 Hard Incompatibility | Cannot combine with SSR (Web Minor) | Both modules at risk |
+
 **Implementation notes**:
 - ICP uses Motoko or Rust for canister development.
 - Completely different paradigm from traditional backend frameworks.

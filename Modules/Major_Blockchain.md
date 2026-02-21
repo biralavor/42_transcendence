@@ -16,6 +16,12 @@ The Blockchain category offers one Major module: storing tournament scores on a 
 - Ensure data integrity and immutability — scores cannot be altered after recording.
 - Smart contract deployment and interaction via Web3.js or Ethers.js.
 
+**Major Constraints**
+| Type | Constraint | Risk if Violated |
+|------|-----------|-----------------|
+| 🔴 Hard Prerequisite | Web-Based Game (Gaming Major 1) must be implemented first | 0 pts |
+| 🔴 Hard Prerequisite | Tournament System (Gaming Minor) must be implemented first | 0 pts |
+
 **Dependencies**: Requires a game/tournament to exist (Gaming Major + Tournament Minor).
 
 ---

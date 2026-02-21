@@ -16,6 +16,13 @@ AI modules span from game opponents to full LLM integrations and machine learnin
 - Must support game customization options if they are implemented.
 - You must be able to explain your AI implementation during evaluation.
 
+**Major Constraints**
+| Type | Constraint | Risk if Violated |
+|------|-----------|-----------------|
+| 🔴 Hard Prerequisite | At least one game (Gaming Major: Web-Based Game) must be implemented first | 0 pts |
+| 🟡 Evaluation Demo | Must explain AI implementation to evaluator during defense | Fail at evaluation |
+| 🟡 Cross-module Dependency | If Game Customization (Gaming Minor) is implemented, AI must be able to use the customized settings | Partial rejection |
+
 **Dependencies**: Requires at least one game implemented first (Gaming Major).
 
 ---
@@ -27,6 +34,11 @@ AI modules span from game opponents to full LLM integrations and machine learnin
 - Implement proper context retrieval and response generation pipeline.
 - Integrate a vector database or similar retrieval mechanism.
 
+**Major Constraints**
+| Type | Constraint | Risk if Violated |
+|------|-----------|-----------------|
+| — | None | — |
+
 **Dependencies**: None — but benefits from a chat interface (User Interaction Major).
 
 ---
@@ -36,6 +48,11 @@ AI modules span from game opponents to full LLM integrations and machine learnin
 - Generate text and/or images based on user input.
 - Handle streaming responses properly (token-by-token display).
 - Implement error handling and rate limiting for API calls.
+
+**Major Constraints**
+| Type | Constraint | Risk if Violated |
+|------|-----------|-----------------|
+| — | None | — |
 
 **Dependencies**: None — but requires WebSockets for streaming responses.
 
@@ -47,6 +64,11 @@ AI modules span from game opponents to full LLM integrations and machine learnin
 - Collaborative filtering OR content-based filtering approach.
 - System continuously improves recommendations over time.
 - Must demonstrate measurable personalization.
+
+**Major Constraints**
+| Type | Constraint | Risk if Violated |
+|------|-----------|-----------------|
+| — | None | — |
 
 **Dependencies**: Requires sufficient user data — needs Standard User Management.
 

@@ -27,6 +27,11 @@ User Management minor modules enhance the foundational authentication and profil
 - Show achievements and progression milestones.
 - Leaderboard integration showing top players.
 
+**Major Constraints**
+| Type | Constraint | Risk if Violated |
+|------|-----------|-----------------|
+| 🔴 Hard Prerequisite | At least one functional game (Gaming Major: Web-Based Game) must be implemented | 0 pts |
+
 **Dependencies**: Requires at least one functional game (Gaming Major Module 1).
 
 ### OAuth 2.0 (1 pt)
@@ -35,6 +40,11 @@ User Management minor modules enhance the foundational authentication and profil
 - Support at least one provider: Google, GitHub, 42 (Intra), Discord, etc.
 - Proper token handling and session management.
 - Account linking: connect OAuth identity to existing email account.
+
+**Major Constraints**
+| Type | Constraint | Risk if Violated |
+|------|-----------|-----------------|
+| — | None | — |
 
 **Notes**: Use Passport.js (Node.js), python-social-auth, or similar OAuth library. Never implement OAuth from scratch.
 
@@ -45,6 +55,11 @@ User Management minor modules enhance the foundational authentication and profil
 - Backup codes for account recovery.
 - 2FA enrollment, unenrollment, and bypass flows.
 
+**Major Constraints**
+| Type | Constraint | Risk if Violated |
+|------|-----------|-----------------|
+| — | None | — |
+
 **Notes**: Use `speakeasy` (Node.js), `pyotp` (Python), or similar TOTP library.
 
 ### User Activity Analytics Dashboard (1 pt)
@@ -52,6 +67,11 @@ User Management minor modules enhance the foundational authentication and profil
 - Track user engagement metrics: login frequency, session duration, feature usage.
 - Dashboard displaying activity patterns and trends.
 - User segmentation by activity level.
+
+**Major Constraints**
+| Type | Constraint | Risk if Violated |
+|------|-----------|-----------------|
+| — | None | — |
 
 **Notes**: Requires user consent and GDPR compliance consideration.
 

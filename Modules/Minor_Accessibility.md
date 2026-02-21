@@ -26,6 +26,11 @@ Minor Accessibility and Internationalization modules extend the foundational WCA
 - Language switcher in the UI (persistent preference saved to user profile).
 - All user-facing text must be externalized (no hardcoded strings).
 
+**Major Constraints**
+| Type | Constraint | Risk if Violated |
+|------|-----------|-----------------|
+| 🟡 Minimum Threshold | At least 3 complete language translations required; language switcher in UI; all user-facing text must be translatable | Partial rejection |
+
 **Notes**: Does not require professional translations — use DeepL or Google Translate but review output. Pseudo-localization testing helps catch hardcoded strings.
 
 ### RTL Language Support (1 pt)
@@ -35,6 +40,11 @@ Minor Accessibility and Internationalization modules extend the foundational WCA
 - RTL-specific UI adjustments (e.g., directional icons, navigation arrows).
 - Seamless LTR ↔ RTL switching without page reload.
 
+**Major Constraints**
+| Type | Constraint | Risk if Violated |
+|------|-----------|-----------------|
+| — | None | — |
+
 **Notes**: CSS logical properties (`margin-inline-start`, `padding-inline-end`) make RTL much easier than directional properties (`margin-left`). Use `dir="rtl"` on `<html>` element.
 
 ### Additional Browser Support (1 pt)
@@ -43,6 +53,11 @@ Minor Accessibility and Internationalization modules extend the foundational WCA
 - Test and fix all features in each browser.
 - Document any browser-specific limitations.
 - Consistent UI/UX across all supported browsers.
+
+**Major Constraints**
+| Type | Constraint | Risk if Violated |
+|------|-----------|-----------------|
+| 🟡 Minimum Threshold | Full compatibility with at least 2 additional browsers; all features must be tested and fixed in each | Partial rejection |
 
 **Notes**: Safari has known issues with WebRTC, certain CSS features, and service workers. Test early and often.
 

@@ -18,6 +18,11 @@ Accessibility and Internationalization modules ensure your application is usable
 - Proper semantic HTML, ARIA labels, and focus management.
 - Sufficient color contrast ratios (4.5:1 for normal text).
 
+**Major Constraints**
+| Type | Constraint | Risk if Violated |
+|------|-----------|-----------------|
+| — | None | — |
+
 **Dependencies**: None — but affects every UI component across all modules.
 
 ---
