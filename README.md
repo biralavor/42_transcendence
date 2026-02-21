@@ -141,19 +141,22 @@ INCOMPATIBLE COMBINATIONS:
 | DevOps: Microservices | Adds complexity without meaningful benefit |
 | Blockchain: ICP Backend | Real-time game needs low latency |
 
-### Recommended Build (26 pts)
-```
-Web Major:      Full-Stack Framework (2) + WebSockets (2) + User Interaction (2)                                          = 6 pts
-Gaming Major:   Web Game (2) + Remote Players (2) [🔴 Prereq: Web Game + WebSockets]                                     = 4 pts
-AI Major:       AI Opponent (2) [🔴 Prereq: Web Game · 🟡 Eval Demo · 🟡 Must use Customization if implemented]          = 2 pts
-User Mgmt:      Standard Auth (2) + OAuth (1) + Game Stats (1) [🔴 Prereq: Web Game] + 2FA (1)                          = 5 pts
-Gaming Minors:  Tournament (1) [🔴 Prereq: Web Game] + Customization (1) [🔴 Prereq: Web Game] + Gamification (1)       = 3 pts
-Data Major:     Analytics Dashboard (2)                                                                                   = 2 pts
-Web Minors:     ORM (1) + Notifications (1) + PWA (1)                                                                    = 3 pts
-DevOps Minor:   Health Check (1)                                                                                          = 1 pt
-──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-TOTAL:                                                                                                                    26 pts
-```
+### Recommended Build
+
+> [!TIP]
+> **Pong Game — 26 pts**
+>
+> | Category | Modules | Pts | Constraints |
+> |----------|---------|:---:|-------------|
+> | Web Major | Full-Stack Framework + WebSockets + User Interaction | 6 | None |
+> | Gaming Major | Web Game + Remote Players | 4 | 🔴 Remote Players → needs Web Game + WebSockets |
+> | AI Major | AI Opponent | 2 | 🔴 Needs Web Game · 🟡 Eval Demo · 🟡 Must use Customization if implemented |
+> | User Mgmt | Standard Auth + OAuth + Game Stats + 2FA | 5 | 🔴 Game Stats → needs Web Game |
+> | Gaming Minors | Tournament + Customization + Gamification | 3 | 🔴 Tournament + Customization → need Web Game |
+> | Data Major | Analytics Dashboard | 2 | None |
+> | Web Minors | ORM + Notifications + PWA | 3 | None |
+> | DevOps Minor | Health Check | 1 | None |
+> | **TOTAL** | | **26** | |
 
 ---
 
@@ -215,21 +218,24 @@ TOTAL:                                                                          
 | DevOps: Microservices | Premature for typical team timeline |
 | A11y: WCAG 2.1 AA | High effort; forms and lessons are accessible naturally |
 
-### Recommended Build (27 pts)
-```
-Web Major:      Full-Stack Framework (2) + User Interaction (2) + WebSockets (2)                                          = 6 pts
-User Mgmt:      Standard Auth (2) + Advanced Permissions (2)                                                              = 4 pts
-AI Major:       RAG System (2) + LLM Interface (2)                                                                        = 4 pts
-Data Major:     Analytics Dashboard (2)                                                                                   = 2 pts
-User Mgmt:      OAuth (1) + Activity Analytics (1) + 2FA (1)                                                             = 3 pts
-Gaming Minor:   Gamification (1)                                                                                          = 1 pt
-AI Minors:      Voice/Speech (1) + Content Moderation (1) + Sentiment (1)                                                = 3 pts
-A11y Minors:    i18n (1) [🟡 Min: 3 languages] + Browser Support (1) [🟡 Min: 2 browsers]                               = 2 pts
-Data Minor:     GDPR (1)                                                                                                  = 1 pt
-DevOps Minor:   Health Check (1)                                                                                          = 1 pt
-──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-TOTAL:                                                                                                                    27 pts
-```
+### Recommended Build
+
+> [!TIP]
+> **Language Learning Platform — 27 pts**
+>
+> | Category | Modules | Pts | Constraints |
+> |----------|---------|:---:|-------------|
+> | Web Major | Full-Stack Framework + User Interaction + WebSockets | 6 | None |
+> | User Mgmt | Standard Auth + Advanced Permissions | 4 | None |
+> | AI Major | RAG System + LLM Interface | 4 | None |
+> | Data Major | Analytics Dashboard | 2 | None |
+> | User Mgmt Minors | OAuth + Activity Analytics + 2FA | 3 | None |
+> | Gaming Minor | Gamification | 1 | None |
+> | AI Minors | Voice/Speech + Content Moderation + Sentiment | 3 | None |
+> | A11y Minors | i18n + Browser Support | 2 | 🟡 i18n: min 3 languages · 🟡 Browser Support: min 2 browsers |
+> | Data Minor | GDPR | 1 | None |
+> | DevOps Minor | Health Check | 1 | None |
+> | **TOTAL** | | **27** | |
 
 ---
 
@@ -290,20 +296,23 @@ TOTAL:                                                                          
 | DevOps: Microservices | Premature complexity |
 | Web: Real-Time WebSockets | Useful but not essential for this platform |
 
-### Recommended Build (25 pts)
-```
-Web Major:      Full-Stack Framework (2) + User Interaction (2) + Public API (2)                                          = 6 pts
-AI Major:       Recommendation System (2)                                                                                 = 2 pts
-User Mgmt:      Standard Auth (2) + Advanced Permissions (2)                                                              = 4 pts
-Data Major:     Analytics Dashboard (2)                                                                                   = 2 pts
-Web Minors:     File Upload (1) + Notifications (1) + Advanced Search (1) + ORM (1)                                      = 4 pts
-User Mgmt:      OAuth (1) + 2FA (1) + Activity Analytics (1)                                                             = 3 pts
-AI Minor:       Image Recognition (1)                                                                                     = 1 pt
-A11y Minors:    Browser Support (1) [🟡 Min: 2 browsers] + i18n (1) [🟡 Min: 3 languages]                               = 2 pts
-Data Minor:     GDPR (1)                                                                                                  = 1 pt
-──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-TOTAL:                                                                                                                    25 pts
-```
+### Recommended Build
+
+> [!TIP]
+> **Pet Adoption Platform — 25 pts**
+>
+> | Category | Modules | Pts | Constraints |
+> |----------|---------|:---:|-------------|
+> | Web Major | Full-Stack Framework + User Interaction + Public API | 6 | None |
+> | AI Major | Recommendation System | 2 | None |
+> | User Mgmt | Standard Auth + Advanced Permissions | 4 | None |
+> | Data Major | Analytics Dashboard | 2 | None |
+> | Web Minors | File Upload + Notifications + Advanced Search + ORM | 4 | None |
+> | User Mgmt Minors | OAuth + 2FA + Activity Analytics | 3 | None |
+> | AI Minor | Image Recognition | 1 | None |
+> | A11y Minors | Browser Support + i18n | 2 | 🟡 Browser Support: min 2 browsers · 🟡 i18n: min 3 languages |
+> | Data Minor | GDPR | 1 | None |
+> | **TOTAL** | | **25** | |
 
 ---
 
@@ -367,19 +376,22 @@ TOTAL:                                                                          
 | Blockchain: ICP Backend | Latency too high for card game sync |
 | Web: Collaborative Features | Not applicable to card games |
 
-### Recommended Build (27 pts)
-```
-Web Major:      Full-Stack Framework (2) + WebSockets (2) + User Interaction (2)                                          = 6 pts
-Gaming Major:   Web Game (2) + Remote Players (2) [🔴 Prereq: Web Game + WebSockets] + Multiplayer 3+ (2) [🔴 Prereq: Web Game] = 6 pts
-AI Major:       AI Opponent (2) [🔴 Prereq: Web Game · 🟡 Eval Demo · 🟡 Must use Customization if implemented]          = 2 pts
-User Mgmt:      Standard Auth (2) + Game Stats (1) [🔴 Prereq: Web Game] + OAuth (1)                                    = 4 pts
-Gaming Minors:  Tournament (1) [🔴 Prereq: Web Game] + Gamification (1) + Customization (1) [🔴 Prereq: Web Game]       = 3 pts
-Data Major:     Analytics Dashboard (2)                                                                                   = 2 pts
-Web Minors:     ORM (1) + Notifications (1) + PWA (1)                                                                    = 3 pts
-DevOps Minor:   Health Check (1)                                                                                          = 1 pt
-──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-TOTAL:                                                                                                                    27 pts
-```
+### Recommended Build
+
+> [!TIP]
+> **Card Game Arena — 27 pts**
+>
+> | Category | Modules | Pts | Constraints |
+> |----------|---------|:---:|-------------|
+> | Web Major | Full-Stack Framework + WebSockets + User Interaction | 6 | None |
+> | Gaming Major | Web Game + Remote Players + Multiplayer 3+ | 6 | 🔴 Remote Players → needs Web Game + WebSockets · 🔴 Multiplayer 3+ → needs Web Game |
+> | AI Major | AI Opponent | 2 | 🔴 Needs Web Game · 🟡 Eval Demo · 🟡 Must use Customization if implemented |
+> | User Mgmt | Standard Auth + Game Stats + OAuth | 4 | 🔴 Game Stats → needs Web Game |
+> | Gaming Minors | Tournament + Gamification + Customization | 3 | 🔴 Tournament + Customization → need Web Game |
+> | Data Major | Analytics Dashboard | 2 | None |
+> | Web Minors | ORM + Notifications + PWA | 3 | None |
+> | DevOps Minor | Health Check | 1 | None |
+> | **TOTAL** | | **27** | |
 
 ---
 
