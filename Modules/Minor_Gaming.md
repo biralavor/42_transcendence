@@ -30,6 +30,11 @@ Gaming minor modules enhance the core game experience with social features, comp
 - Chat history persistence (stored in database).
 - Typing indicators (user is typing...) and read receipts.
 
+**Major Constraints**
+| Type | Constraint | Risk if Violated |
+|------|-----------|-----------------|
+| 🔴 Hard Prerequisite | Basic chat from User Interaction (Web Major 3) must be implemented first | 0 pts |
+
 **Dependencies**: Requires basic chat from the "User Interaction" Web Major module.
 
 ### Tournament System (1 pt)
@@ -38,6 +43,11 @@ Gaming minor modules enhance the core game experience with social features, comp
 - Track who plays against whom.
 - Matchmaking system for tournament participant pairing.
 - Tournament registration and management (create, join, start, end).
+
+**Major Constraints**
+| Type | Constraint | Risk if Violated |
+|------|-----------|-----------------|
+| 🔴 Hard Prerequisite | At least one functional game (Gaming Major: Web-Based Game) must be implemented | 0 pts |
 
 **Dependencies**: Requires at least one functional game.
 
@@ -48,6 +58,12 @@ Gaming minor modules enhance the core game experience with social features, comp
 - Customizable game settings (speed, obstacles, etc.).
 - Default options must always be available.
 
+**Major Constraints**
+| Type | Constraint | Risk if Violated |
+|------|-----------|-----------------|
+| 🔴 Hard Prerequisite | At least one functional game (Gaming Major: Web-Based Game) must be implemented | 0 pts |
+| 🟡 Cross-module Dependency | If AI Opponent (AI Major) is also implemented, it must be able to use the customized settings | Partial rejection |
+
 **Dependencies**: Requires at least one functional game. If you implement customization, the AI Opponent must handle the customized settings.
 
 ### Gamification System (1 pt)
@@ -57,6 +73,13 @@ Gaming minor modules enhance the core game experience with social features, comp
 - Visual feedback: notifications, progress bars, animations.
 - Clear rules and progression mechanics.
 
+**Major Constraints**
+| Type | Constraint | Risk if Violated |
+|------|-----------|-----------------|
+| 🟡 Minimum Threshold | Must implement at least 3 features from the list | Partial rejection |
+| 🟡 Minimum Threshold | System must be persistent — stored in database, not in-memory | Partial rejection |
+| 🟡 Minimum Threshold | Visual feedback required (notifications, progress bars, animations) | Partial rejection |
+
 **Note**: Despite being 1 pt, this can be a substantial implementation. Focus on quality over quantity.
 
 ### Spectator Mode (1 pt)
@@ -64,6 +87,12 @@ Gaming minor modules enhance the core game experience with social features, comp
 - Allow users to watch ongoing games live.
 - Real-time updates for spectators (same sync as players).
 - Optional: spectator chat channel.
+
+**Major Constraints**
+| Type | Constraint | Risk if Violated |
+|------|-----------|-----------------|
+| 🔴 Hard Prerequisite | At least one functional game (Gaming Major: Web-Based Game) must be implemented | 0 pts |
+| 🔴 Hard Prerequisite | WebSockets (Web Major 2) required for real-time spectator updates | 0 pts |
 
 **Dependencies**: Requires at least one functional game + WebSockets (Web Major).
 

@@ -17,6 +17,11 @@ DevOps modules bring production-grade infrastructure to your ft_transcendence pr
 - Log retention and archiving policies.
 - Secure access to all ELK components.
 
+**Major Constraints**
+| Type | Constraint | Risk if Violated |
+|------|-----------|-----------------|
+| — | None | — |
+
 **Dependencies**: Works best with Microservices (more log sources).
 
 ---
@@ -29,6 +34,11 @@ DevOps modules bring production-grade infrastructure to your ft_transcendence pr
 - Set up alerting rules (email/Slack on threshold breach).
 - Secure access to Grafana UI.
 
+**Major Constraints**
+| Type | Constraint | Risk if Violated |
+|------|-----------|-----------------|
+| — | None | — |
+
 **Dependencies**: None — works with monolith or microservices.
 
 ---
@@ -39,6 +49,11 @@ DevOps modules bring production-grade infrastructure to your ft_transcendence pr
 - Use REST APIs or message queues for inter-service communication.
 - Each service has a single responsibility (auth, game, chat, notification services).
 - Services can be independently deployed and scaled.
+
+**Major Constraints**
+| Type | Constraint | Risk if Violated |
+|------|-----------|-----------------|
+| — | None | — |
 
 **Dependencies**: Significantly increases complexity of all other modules.
 

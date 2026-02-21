@@ -25,6 +25,11 @@ The DevOps category has one minor module: a health check and status page system 
 - Disaster recovery procedures documented and tested.
 - Alerts when services go unhealthy.
 
+**Major Constraints**
+| Type | Constraint | Risk if Violated |
+|------|-----------|-----------------|
+| — | None | — |
+
 **Implementation options**:
 - Status page: Upptime, Cachet, or custom `/status` route.
 - Health checks: `/api/health` endpoint returning JSON status of database, cache, and external services.

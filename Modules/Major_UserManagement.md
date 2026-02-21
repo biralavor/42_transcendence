@@ -17,6 +17,11 @@ User Management modules handle identity, authentication, authorization, and soci
 - Users have a profile page displaying their information.
 - Email + password authentication with hashed/salted passwords (bcrypt/argon2).
 
+**Major Constraints**
+| Type | Constraint | Risk if Violated |
+|------|-----------|-----------------|
+| — | None — foundational module | — |
+
 **Dependencies**: None — foundational module.
 
 ---
@@ -28,6 +33,11 @@ User Management modules handle identity, authentication, authorization, and soci
 - Different views and actions based on user role.
 - Role-based access control (RBAC) across the application.
 
+**Major Constraints**
+| Type | Constraint | Risk if Violated |
+|------|-----------|-----------------|
+| — | None | — |
+
 **Dependencies**: Builds on Standard User Management.
 
 ---
@@ -38,6 +48,11 @@ User Management modules handle identity, authentication, authorization, and soci
 - Add and remove users from organizations.
 - View organizations and allow users to perform specific actions within them (minimum: create, read, update).
 - Users can belong to multiple organizations.
+
+**Major Constraints**
+| Type | Constraint | Risk if Violated |
+|------|-----------|-----------------|
+| — | None | — |
 
 **Dependencies**: Benefits from Advanced Permissions (roles within organizations).
 

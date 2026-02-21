@@ -17,6 +17,11 @@ Gaming and UX modules define the interactive core of game-based projects. They r
 - Clear rules and win/loss conditions.
 - Can be 2D or 3D.
 
+**Major Constraints**
+| Type | Constraint | Risk if Violated |
+|------|-----------|-----------------|
+| — | None — foundational module, but unlocks ALL other Gaming prerequisites | — |
+
 **Dependencies**: None — but is the **prerequisite** for ALL other Gaming modules.
 
 ---
@@ -28,6 +33,12 @@ Gaming and UX modules define the interactive core of game-based projects. They r
 - Smooth user experience for remote gameplay.
 - Implement reconnection logic.
 
+**Major Constraints**
+| Type | Constraint | Risk if Violated |
+|------|-----------|-----------------|
+| 🔴 Hard Prerequisite | Web-Based Game (Gaming Major 1) must be implemented first | 0 pts |
+| 🔴 Hard Prerequisite | WebSockets (Web Major 2) required for real-time sync | 0 pts |
+
 **Dependencies**: Requires Module 1 (Web-Based Game) + WebSockets (Web Major).
 
 ---
@@ -37,6 +48,11 @@ Gaming and UX modules define the interactive core of game-based projects. They r
 - Support for three or more players simultaneously in one game session.
 - Fair gameplay mechanics for all participants.
 - Proper synchronization across all clients.
+
+**Major Constraints**
+| Type | Constraint | Risk if Violated |
+|------|-----------|-----------------|
+| 🔴 Hard Prerequisite | Web-Based Game (Gaming Major 1) must be implemented first | 0 pts |
 
 **Dependencies**: Requires Module 1 (Web-Based Game).
 
@@ -49,6 +65,11 @@ Gaming and UX modules define the interactive core of game-based projects. They r
 - Implement a matchmaking system for the second game.
 - Maintain performance and responsiveness.
 
+**Major Constraints**
+| Type | Constraint | Risk if Violated |
+|------|-----------|-----------------|
+| 🔴 Hard Prerequisite | Web-Based Game (Gaming Major 1) must be implemented first | 0 pts |
+
 **Dependencies**: Requires Module 1 (Web-Based Game).
 
 ---
@@ -59,6 +80,11 @@ Gaming and UX modules define the interactive core of game-based projects. They r
 - Create an immersive 3D environment.
 - Implement advanced rendering techniques.
 - Ensure smooth performance and user interaction.
+
+**Major Constraints**
+| Type | Constraint | Risk if Violated |
+|------|-----------|-----------------|
+| — | None — recommended alongside a game but not a hard requirement | — |
 
 **Dependencies**: Works best with Module 1 (Web-Based Game) for context.
 

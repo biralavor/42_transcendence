@@ -15,6 +15,11 @@ Web modules form the technical backbone of any ft_transcendence project. They de
 - Use a **backend framework**: Express, Fastify, NestJS, Django, Flask, Ruby on Rails, etc.
 - Full-stack frameworks (Next.js, Nuxt.js, SvelteKit) count as **both** if you use their full capabilities.
 
+**Major Constraints**
+| Type | Constraint | Risk if Violated |
+|------|-----------|-----------------|
+| — | None | — |
+
 **Dependencies**: None — foundational module.
 
 ---
@@ -24,6 +29,11 @@ Web modules form the technical backbone of any ft_transcendence project. They de
 - Real-time updates across all connected clients.
 - Handle connection/disconnection events gracefully.
 - Efficient message broadcasting to multiple subscribers.
+
+**Major Constraints**
+| Type | Constraint | Risk if Violated |
+|------|-----------|-----------------|
+| — | None | — |
 
 **Dependencies**: None — but strongly enables Gaming, Chat, and Notifications.
 
@@ -35,6 +45,11 @@ Web modules form the technical backbone of any ft_transcendence project. They de
 - **Profile system**: view user information and stats.
 - **Friends system**: add/remove friends, see friends list and online status.
 
+**Major Constraints**
+| Type | Constraint | Risk if Violated |
+|------|-----------|-----------------|
+| — | None — but this module is a hard prerequisite for Advanced Chat (Gaming Minor) | — |
+
 **Dependencies**: None — but is a **prerequisite** for the Advanced Chat Minor module.
 
 ---
@@ -44,6 +59,11 @@ Web modules form the technical backbone of any ft_transcendence project. They de
 - Secured API key with rate limiting.
 - Full documentation (e.g., Swagger/OpenAPI).
 - At least 5 endpoints covering GET, POST, PUT, DELETE.
+
+**Major Constraints**
+| Type | Constraint | Risk if Violated |
+|------|-----------|-----------------|
+| — | None | — |
 
 **Dependencies**: Benefits from ORM Minor and Framework Major.
 

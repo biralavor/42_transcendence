@@ -25,6 +25,11 @@ Data and Analytics minor modules address data portability and legal compliance. 
 - Bulk operations support (process multiple records at once).
 - Progress indicators for large exports/imports.
 
+**Major Constraints**
+| Type | Constraint | Risk if Violated |
+|------|-----------|-----------------|
+| — | None | — |
+
 **Implementation notes**: Use `csv-parse`, `json2csv`, `fast-xml-parser`. Async processing for large datasets.
 
 ### GDPR Compliance Features (1 pt)
@@ -33,6 +38,11 @@ Data and Analytics minor modules address data portability and legal compliance. 
 - Data deletion with confirmation step (soft delete + eventual hard delete).
 - Export user data in a human-readable format (PDF or structured JSON).
 - Confirmation emails for all data operations (export, deletion requests).
+
+**Major Constraints**
+| Type | Constraint | Risk if Violated |
+|------|-----------|-----------------|
+| — | None | — |
 
 **Implementation notes**: GDPR applies to EU users but is best practice globally. Implement "right to be forgotten" — delete all user data including messages, game history, etc.
 

@@ -16,6 +16,11 @@ The Cybersecurity category has one Major module: hardened WAF/ModSecurity combin
 - Secrets must be encrypted and isolated from application code.
 - WAF must actively block common attack patterns (SQLi, XSS, CSRF, etc.).
 
+**Major Constraints**
+| Type | Constraint | Risk if Violated |
+|------|-----------|-----------------|
+| — | None | — |
+
 **Dependencies**: None — works alongside any backend framework.
 
 ---
