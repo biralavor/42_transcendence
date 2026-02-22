@@ -11,27 +11,27 @@ Detailed analysis of every available module — including cross-domain impact, d
 ### Major Modules (2 pts each)
 | File | Category | Modules | Max pts |
 |------|----------|---------|---------|
-| [Major_Web.md](Modules/Major_Web.md) | Web | Framework, WebSockets, User Interaction, Public API | 8 |
-| [Major_Accessibility.md](Modules/Major_Accessibility.md) | Accessibility | WCAG 2.1 AA Compliance | 2 |
-| [Major_UserManagement.md](Modules/Major_UserManagement.md) | User Management | Standard Auth, Advanced Permissions, Organization | 6 |
-| [Major_AI.md](Modules/Major_AI.md) | Artificial Intelligence | AI Opponent, RAG, LLM Interface, Recommendation | 8 |
-| [Major_Cybersecurity.md](Modules/Major_Cybersecurity.md) | Cybersecurity | WAF/ModSecurity + HashiCorp Vault | 2 |
-| [Major_Gaming.md](Modules/Major_Gaming.md) | Gaming & UX | Web Game, Remote Players, Multiplayer 3+, 2nd Game, 3D | 10 |
-| [Major_DevOps.md](Modules/Major_DevOps.md) | DevOps | ELK Stack, Prometheus+Grafana, Microservices | 6 |
-| [Major_DataAnalytics.md](Modules/Major_DataAnalytics.md) | Data & Analytics | Advanced Analytics Dashboard | 2 |
-| [Major_Blockchain.md](Modules/Major_Blockchain.md) | Blockchain | Tournament Scores on Blockchain (Avalanche/Solidity) | 2 |
+| [Major_Web.md](docs/modules/Major_Web.md) | Web | Framework, WebSockets, User Interaction, Public API | 8 |
+| [Major_Accessibility.md](docs/modules/Major_Accessibility.md) | Accessibility | WCAG 2.1 AA Compliance | 2 |
+| [Major_UserManagement.md](docs/modules/Major_UserManagement.md) | User Management | Standard Auth, Advanced Permissions, Organization | 6 |
+| [Major_AI.md](docs/modules/Major_AI.md) | Artificial Intelligence | AI Opponent, RAG, LLM Interface, Recommendation | 8 |
+| [Major_Cybersecurity.md](docs/modules/Major_Cybersecurity.md) | Cybersecurity | WAF/ModSecurity + HashiCorp Vault | 2 |
+| [Major_Gaming.md](docs/modules/Major_Gaming.md) | Gaming & UX | Web Game, Remote Players, Multiplayer 3+, 2nd Game, 3D | 10 |
+| [Major_DevOps.md](docs/modules/Major_DevOps.md) | DevOps | ELK Stack, Prometheus+Grafana, Microservices | 6 |
+| [Major_DataAnalytics.md](docs/modules/Major_DataAnalytics.md) | Data & Analytics | Advanced Analytics Dashboard | 2 |
+| [Major_Blockchain.md](docs/modules/Major_Blockchain.md) | Blockchain | Tournament Scores on Blockchain (Avalanche/Solidity) | 2 |
 
 ### Minor Modules (1 pt each)
 | File | Category | Modules | Max pts |
 |------|----------|---------|---------|
-| [Minor_Web.md](Modules/Minor_Web.md) | Web | Frontend FW, Backend FW, ORM, Notifications, Collaborative, SSR, PWA, Design System, Search, File Upload | 10 |
-| [Minor_Accessibility.md](Modules/Minor_Accessibility.md) | Accessibility | i18n (3+ languages), RTL Support, Additional Browsers | 3 |
-| [Minor_UserManagement.md](Modules/Minor_UserManagement.md) | User Management | Game Stats, OAuth 2.0, 2FA, Activity Analytics | 4 |
-| [Minor_AI.md](Modules/Minor_AI.md) | Artificial Intelligence | Content Moderation, Voice/Speech, Sentiment, Image Recognition | 4 |
-| [Minor_Gaming.md](Modules/Minor_Gaming.md) | Gaming & UX | Advanced Chat, Tournament, Customization, Gamification, Spectator | 5 |
-| [Minor_DevOps.md](Modules/Minor_DevOps.md) | DevOps | Health Check + Status Page + Backups | 1 |
-| [Minor_DataAnalytics.md](Modules/Minor_DataAnalytics.md) | Data & Analytics | Data Export/Import, GDPR Compliance | 2 |
-| [Minor_Blockchain.md](Modules/Minor_Blockchain.md) | Blockchain | ICP Backend (**incompatible with SSR**) | 1 |
+| [Minor_Web.md](docs/modules/Minor_Web.md) | Web | Frontend FW, Backend FW, ORM, Notifications, Collaborative, SSR, PWA, Design System, Search, File Upload | 10 |
+| [Minor_Accessibility.md](docs/modules/Minor_Accessibility.md) | Accessibility | i18n (3+ languages), RTL Support, Additional Browsers | 3 |
+| [Minor_UserManagement.md](docs/modules/Minor_UserManagement.md) | User Management | Game Stats, OAuth 2.0, 2FA, Activity Analytics | 4 |
+| [Minor_AI.md](docs/modules/Minor_AI.md) | Artificial Intelligence | Content Moderation, Voice/Speech, Sentiment, Image Recognition | 4 |
+| [Minor_Gaming.md](docs/modules/Minor_Gaming.md) | Gaming & UX | Advanced Chat, Tournament, Customization, Gamification, Spectator | 5 |
+| [Minor_DevOps.md](docs/modules/Minor_DevOps.md) | DevOps | Health Check + Status Page + Backups | 1 |
+| [Minor_DataAnalytics.md](docs/modules/Minor_DataAnalytics.md) | Data & Analytics | Data Export/Import, GDPR Compliance | 2 |
+| [Minor_Blockchain.md](docs/modules/Minor_Blockchain.md) | Blockchain | ICP Backend (**incompatible with SSR**) | 1 |
 
 > **Total available**: 46 Major pts + 30 Minor pts = **76 pts total**
 > **Minimum to pass**: 14 pts — aim for **16–18 pts** as evaluation buffer.
