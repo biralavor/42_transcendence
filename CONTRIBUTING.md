@@ -173,6 +173,21 @@ git push
 
 Once approved and merged, the branch is automatically deleted. ✅
 
+### 5. Verify the Issue is Linked to Your PR
+
+After submitting, check the PR page right sidebar under **Development**:
+- You should see your Issue `#N` listed there — this confirms the link is active.
+
+**If the Issue is not linked — fix it before requesting review:**
+
+| Fix method | How |
+|------------|-----|
+| Edit PR description | Click **Edit** on the PR body → add `Closes #N` → Save |
+| Link via sidebar | PR page → **Development** (right sidebar) → **Link an issue** → search and select `#N` |
+
+> The sidebar method links the Issue without auto-closing it on merge.
+> If you want auto-close, add `Closes #N` in the PR description instead.
+
 ---
 
 ## Conventional Commits Cheat-Sheet
