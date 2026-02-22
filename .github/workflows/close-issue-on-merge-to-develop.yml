@@ -1,0 +1,40 @@
+name: Close linked issue on merge to develop
+
+on:
+  pull_request_target:
+    types: [closed]
+    branches: [develop]
+
+jobs:
+  close-issue:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const body = pr.body ?? '';
+
+            // Match: Closes/Fixes/Resolves #N (case-insensitive)
+            const pattern = /(?:closes|fixes|resolves)\s+#(\d+)/gi;
+            const matches = [...body.matchAll(pattern)];
+
+            if (matches.length === 0) {
+              console.log('No closing keywords found in PR body.');
+              return;
+            }
+
+            for (const match of matches) {
+              const issueNumber = parseInt(match[1]);
+              console.log(`Closing issue #${issueNumber}`);
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issueNumber,
+                state: 'closed',
+                state_reason: 'completed'
+              });
+            }

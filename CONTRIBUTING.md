@@ -77,7 +77,8 @@ flowchart TD
    docs(readme): update local setup instructions
    ```
 3. **Assign** yourself or the responsible person
-4. **Choose a Label** — GitHub may auto-detect it from the issue name; adjust if not
+4. **Choose a Label** — GitHub does not auto-label Issues; pick it manually based on the CC type in the name:
+   `feat` → `enhancement` · `fix` → `bug` · `docs` → `documentation` · `test` → `testing` · `ci` → `infrastructure` · `perf` → `performance` · `refactor` → `refactor` · `chore` → `chore`
 5. Set the **Project** and **Milestone**
 6. Click **Create**
 
@@ -127,33 +128,6 @@ git commit -m "feat(auth): add Google OAuth login"
 Optionally, append `#N` to cross-link the commit to the Issue on GitHub:
 ```bash
 git commit -m "feat(auth): add Google OAuth login #42"
-```
-
-### Closing Keywords — Closes, Fixes, Resolves
-
-These keywords tell GitHub to **automatically close the Issue** when the PR is merged.
-They are all equivalent — use whichever reads more naturally for the issue type:
-
-| Keyword | Typical use |
-|---------|-------------|
-| `Closes` | Feature requests, tasks |
-| `Fixes` | Bug reports |
-| `Resolves` | General issues, ambiguous type |
-
-**The keyword must go in the commit body, not the subject line.**
-Use a second `-m` flag — git treats each `-m` as a separate paragraph:
-
-```bash
-# ✅ Correct — subject and body are separate -m flags
-git commit -m "feat(auth): add Google OAuth login" -m "Closes #42"
-
-# ❌ Wrong — keyword mixed into the subject line
-git commit -m "feat(auth): add Google OAuth login Closes #42"
-```
-
-Multiple issues in one commit:
-```bash
-git commit -m "feat(auth): add Google OAuth login" -m "Closes #42, #43"
 ```
 
 Push to your feature branch:
@@ -230,3 +204,16 @@ feat!: remove legacy v1 API endpoints
 
 > Only the **Scrum Master** sends commits from `develop` to `main`.
 > Every merge to `main` must be accompanied by a Release tag (`v1.0.0`, `v1.1.0`, …).
+
+---
+
+## GitHub Automation
+
+| File | Purpose |
+|------|---------|
+| `.github/labeler.yml` | Label rules — maps branch name patterns and changed file paths to PR labels |
+| `.github/workflows/labeler.yml` | Triggers `actions/labeler` on every PR open or update |
+| `.github/workflows/close-issue-on-merge-to-develop.yml` | Auto-closes linked Issues when a PR is merged into `develop` |
+
+> Labels are applied based on branch name (e.g. `42-fix-*` → `bug`) and changed files.
+> Issues close automatically when your PR merges — no manual close needed.
