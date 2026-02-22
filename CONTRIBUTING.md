@@ -144,8 +144,9 @@ git push
 1. Go to GitHub — you will see a **Compare & pull request** banner → click it
 2. ⚠️ **Always set the base branch to `develop`** — never to `main`
 3. Write a short description of what you did and why
-4. Request **at least 1 reviewer** — choose someone familiar with the issue or who asked for the feature
-5. Submit the PR
+4. Right sidebar → **Projects** → set `Priority`, `Size`, `Estimate`, and `Sprint` *(recommended)*
+5. Request **at least 1 reviewer** — choose someone familiar with the issue or who asked for the feature
+6. Submit the PR
 
 Once approved and merged, the branch is automatically deleted. ✅
 

@@ -50,9 +50,17 @@ Each board uses the same five columns:
 
 ### Automation
 
-GitHub Projects built-in workflows handle two transitions automatically:
-- PR opened → Issue moves to **In Review**
-- PR merged → Issue moves to **Done** and is closed (via `close-issue-on-merge-to-develop.yml`)
+Two independent mechanisms handle status transitions:
+
+| Trigger | Mechanism | Effect |
+|---------|-----------|--------|
+| PR opened against `develop` | GitHub Projects built-in workflow | PR item moves to **In Review** |
+| PR merged into `develop` | GitHub Projects built-in workflow | PR item moves to **Done** |
+| PR merged into `develop` with a linked Issue | `.github/workflows/close-issue-on-merge-to-develop.yml` | Linked Issue is closed |
+
+> **Column moves** are handled by GitHub Projects built-in workflow rules triggered by PR events — no action needed from you.
+> **Issue closing** is handled by `.github/workflows/close-issue-on-merge-to-develop.yml` via GitHub's `closingIssuesReferences` GraphQL field, which captures issues linked either through closing keywords (`Closes #N`, `Fixes #N`, `Resolves #N`) in the PR body **or** via the Development sidebar.
+> If no issue is linked by either method, the PR card moves to **Done** but no Issue is closed.
 
 ---
 
@@ -125,12 +133,14 @@ Open the Issue → right sidebar → **Projects** → select `42 Transcendence` 
 
 ## Custom Fields
 
-| Field | Type | Values | Meaning |
-|-------|------|--------|---------|
-| `Status` | Single select | `Backlog` · `Ready` · `In Progress` · `In Review` · `Done` | Where the Issue is in the workflow |
-| `Priority` | Single select | `High` · `Medium` · `Low` | High = critical / blocker · Medium = important · Low = nice to have |
-| `Size` | Single select | `XS` · `S` · `M` · `L` · `XL` | Estimated effort for the Issue |
-| `Squad` | Single select | `DB` · `BE` · `FE` | Owning squad — use for board filtering |
+| Field | Type | Values | Applies to | Meaning |
+|-------|------|--------|:----------:|---------|
+| `Status` | Single select | `Backlog` · `Ready` · `In Progress` · `In Review` · `Done` | Issue · PR | Where the item is in the workflow |
+| `Priority` | Single select | `High` · `Medium` · `Low` | Issue · PR | High = critical / blocker · Medium = important · Low = nice to have |
+| `Size` | Single select | `XS` · `S` · `M` · `L` · `XL` | Issue · PR | Categorical effort estimate |
+| `Estimate` | Number | any | Issue · PR | Numeric effort estimate (story points or hours) |
+| `Sprint` | Iteration | Sprint 01 … Sprint 10 | Issue · PR | Which sprint this item belongs to |
+| `Squad` | Single select | `DB` · `BE` · `FE` | Issue · PR | Owning squad — use for board filtering |
 
 ---
 
