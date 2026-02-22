@@ -5,10 +5,16 @@ on:
     types: [closed]
     branches: [develop]
 
+# A PR can only be merged once — concurrency is a safety net against retries.
+concurrency:
+  group: close-issue-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
 jobs:
   close-issue:
     if: github.event.pull_request.merged == true
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
     permissions:
       issues: write
     steps:
