@@ -1,0 +1,81 @@
+# .github/labeler.yml
+# Auto-labels PRs using actions/labeler v5.
+#
+# Strategy:
+#   head-branch  → matches the source branch name (e.g. 42-fix-auth-token)
+#   changed-files → matches files touched in the PR
+#
+# Branch naming convention: #N-type-scope-description (Conventional Commits via GitHub Issues)
+# All head-branch patterns match ^[0-9]+- to anchor on the issue number prefix.
+#
+# NOTE: labels must exist in the repository before they can be applied.
+# Create them at: github.com/<org>/<repo>/labels
+
+# ── Conventional Commits type → label ─────────────────────────────────────────
+
+enhancement:
+  - head-branch: ['^[0-9]+-feat']
+
+bug:
+  - head-branch: ['^[0-9]+-fix']
+
+documentation:
+  - head-branch: ['^[0-9]+-docs']
+  - changed-files:
+    - any-glob-to-any-file:
+      - '**/*.md'
+      - 'docs/**'
+
+refactor:
+  - head-branch: ['^[0-9]+-refactor']
+
+testing:
+  - head-branch: ['^[0-9]+-test']
+  - changed-files:
+    - any-glob-to-any-file:
+      - '**/tests/**'
+      - '**/*.test.*'
+      - '**/*.spec.*'
+
+chore:
+  - head-branch: ['^[0-9]+-chore']
+
+infrastructure:
+  - head-branch: ['^[0-9]+-ci']
+  - changed-files:
+    - any-glob-to-any-file:
+      - '.github/**'
+      - 'docker-compose*'
+      - 'Dockerfile*'
+      - 'Makefile'
+
+performance:
+  - head-branch: ['^[0-9]+-perf']
+
+style:
+  - head-branch: ['^[0-9]+-style']
+
+revert:
+  - head-branch: ['^[0-9]+-revert']
+
+# ── File-based labels (no CC type equivalent) ─────────────────────────────────
+
+configuration:
+  - changed-files:
+    - any-glob-to-any-file:
+      - '.env*'
+      - '**/config/**'
+      - '**/settings.*'
+      - 'nginx.conf'
+      - '*.ini'
+      - '*.toml'
+
+dependencies:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'package.json'
+      - 'package-lock.json'
+      - 'requirements*.txt'
+      - 'Pipfile*'
+      - 'pyproject.toml'
+      - 'poetry.lock'
