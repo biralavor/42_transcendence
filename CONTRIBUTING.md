@@ -79,8 +79,10 @@ flowchart TD
 3. **Assign** yourself or the responsible person
 4. **Choose a Label** — GitHub does not auto-label Issues; pick it manually based on the CC type in the name:
    `feat` → `enhancement` · `fix` → `bug` · `docs` → `documentation` · `test` → `testing` · `ci` → `infrastructure` · `perf` → `performance` · `refactor` → `refactor` · `chore` → `chore`
-5. Set the **Project** and **Milestone**
-6. Click **Create**
+5. **Link to the Project** — right sidebar → **Projects** → select `42 Transcendence`
+6. **Set the Sprint** — right sidebar → **Milestone** → select the sprint you plan to start working on *(required)*
+7. **Set Priority and Size** — right sidebar → **Projects fields** → set `Priority` and `Size` *(recommended)* — see [`docs/GitHub-Projects.md`](docs/GitHub-Projects.md) for field values
+8. Click **Create**
 
 > You will now see an issue number — e.g. **`#42`**. Keep it in mind; you will use it next.
 
@@ -217,3 +219,17 @@ feat!: remove legacy v1 API endpoints
 
 > Labels are applied based on branch name (e.g. `42-fix-*` → `bug`) and changed files.
 > Issues close automatically when your PR merges — no manual close needed.
+
+---
+
+## GitHub Projects
+
+The team uses a single shared board to track all work across Database, Backend, and Frontend squads.
+
+See [`docs/GitHub-Projects.md`](docs/GitHub-Projects.md) for:
+- Board columns and what each status means
+- Feature flow: Database → Backend → Frontend
+- Full sprint schedule (Sprint 01–10)
+- Milestones: sprint-level and phase-level
+- Custom fields: Status · Priority · Size · Squad
+- How to handle cross-squad Issues
