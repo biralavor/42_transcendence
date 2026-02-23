@@ -1,0 +1,43 @@
+#!/bin/sh
+# .githooks/prepare-commit-msg
+#
+# Automatically appends Co-Authored-By trailers to every commit.
+# Lists all team members except the current committer.
+#
+# Activation (one-time per developer):
+#   git config core.hooksPath .githooks
+#   chmod +x .githooks/prepare-commit-msg
+
+COMMIT_MSG_FILE=$1
+COMMIT_SOURCE=$2
+
+# Skip merge commits, squash commits, and amend commits — they already have an author.
+case "$COMMIT_SOURCE" in
+  merge|squash|commit) exit 0 ;;
+esac
+
+# Team members — edit this list when the team is finalised.
+# Format: "Name <email>"
+AUTHORS=(
+  "Alice Dev <alice@example.com>"
+  "Bob Dev <bob@example.com>"
+  "Carol Dev <carol@example.com>"
+  "Dave Dev <dave@example.com>"
+)
+
+# Read the current committer identity to exclude them from Co-Authored-By.
+CURRENT_EMAIL=$(git config user.email)
+
+# Build Co-Authored-By lines for everyone except the current committer.
+CO_AUTHORS=""
+for AUTHOR in "${AUTHORS[@]}"; do
+  EMAIL=$(echo "$AUTHOR" | grep -oE '[^<]+@[^>]+')
+  if [ "$EMAIL" != "$CURRENT_EMAIL" ]; then
+    CO_AUTHORS="${CO_AUTHORS}Co-Authored-By: ${AUTHOR}\n"
+  fi
+done
+
+# Append only if Co-Authored-By is not already present and there are co-authors.
+if [ -n "$CO_AUTHORS" ] && ! grep -q "Co-Authored-By:" "$COMMIT_MSG_FILE"; then
+  printf "\n${CO_AUTHORS}" >> "$COMMIT_MSG_FILE"
+fi

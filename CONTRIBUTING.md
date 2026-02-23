@@ -62,6 +62,22 @@ flowchart TD
 
 ---
 
+## One-Time Local Setup
+
+Run this once after cloning the repository:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+This activates the shared git hooks, including automatic `Co-Authored-By` trailers on every commit.
+
+> The hook reads team members from `.githooks/prepare-commit-msg`.
+> Update the `AUTHORS` list in that file when the team is finalised.
+> The current committer is excluded automatically — only co-authors are appended.
+
+---
+
 ## Part 1 — Starting New Work
 
 > **Do not fork. Do not commit directly to `develop` or `main`.
