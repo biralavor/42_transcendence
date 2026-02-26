@@ -1,0 +1,19 @@
+html, body { height: 100%; }
+
+.form-container{
+  max-width: 520px;
+  padding: 1rem;
+}
+
+.logo{
+  width: clamp(220px, 35vw, 300px);
+  height: auto;
+  display: block;
+  margin: 0 auto;
+  margin-bottom: 12px;
+}
+
+.form-box{
+  max-width: 320px;
+  margin: 0 auto;
+}
