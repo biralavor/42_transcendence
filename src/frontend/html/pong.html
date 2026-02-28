@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
+    <title>ft_transcendence landing page</title>
+    <style>
+      main {
+	  height: 100vh;
+      }
+      .canvasContainer {
+	  display: flex;
+	  align-items: center;
+	  justify-items: center;
+      }
+      canvas {
+	  border: solid white;
+	  margin: auto
+      }
+      </style>
+</head>
+<body>
+  <main class='canvasContainer'>
+    <canvas id='pongCanvas' width=800 height=400>
+      <!-- children of canvas tag only renders if browser does not support canvas elements as fallback for that case
+	   this happens for example on text only browsers like lynx and eww since they do not support graphics in general
+	-->
+      <p> :( </p>
+      <p> Our pong game depends on browser support for canvas elements.
+      </p>
+      <p>
+	If you are seeing this then it is likely that your browser does not support canvas element.
+	This makes playing our pong game in this browser impossible
+      </p>
+    </canvas>
+  </main>
+  <script >
+    // TODO set width and height of canvas
+    // based on biggest possible preserving
+    // desired aspect ratio. maybe a css only solution
+    // is possible for this, otherwise
+    // a js solution is possible
+    
+    // elements with id set on html automatically have
+    // a js variable referencing that id with that element
+    // but this do not work if element id is not a proper js identifier
+    // like using kebab cased ids for example "pong-canvas"
+    
+    const canvasContext = pongCanvas.getContext("2d");
+    console.log(canvasContext);
+    canvasContext.fillStyle = 'red';
+    const x = 10;
+    const y = 20;
+    const widthRect = 30;
+    const heightRect= 90;
+    canvasContext.fillRect(x, y, widthRect, heightRect);
+    
+  </script>
+</body>
+</html>
