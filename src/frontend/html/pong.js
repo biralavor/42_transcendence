@@ -81,6 +81,15 @@ class Entity {
     move(movement) {
 	this.position.move(movement);
     }
+
+    isCollidingWith(other) {
+	return (
+	    this.position.x < other.position.x + other.size.width
+		&& this.position.x + this.size.width > other.position.x
+		&& this.position.y < other.position.y + other.size.height
+		&& this.position.y + this.size.height > other.position.y
+	);
+    }
 }
 
 class Player extends Entity {
@@ -134,8 +143,8 @@ class GameState {
 	this.player1 = new Player(Player.Type.ONE);
 	this.player2 = new Player(Player.Type.TWO);
 	this.ball = new Ball();
-	this.ball.position.velX = 1;
-	this.ball.position.velY = -10;
+	this.ball.position.velX = 2;
+	this.ball.position.velY = 0;
     }
 
     
@@ -154,17 +163,32 @@ class GameState {
 	movements.ball.x = newBallPositionX;
 	movements.ball.velY = this.ball.position.velY;
 	movements.ball.velX = this.ball.position.velX;
-	console.log("movementsBefore: ", movements)
+
 	if (newBallPositionY <= 0) {
-	    movements.ball.y = 0 - newBallPositionY;
+	    const overflow = 0 - newBallPositionY
+	    movements.ball.y = overflow;
 	    movements.ball.velY = this.ball.position.velY * (-1.0);   
 	} else if (newBallPositionY >= canvasHeight - this.ball.size.height){
 	    const overflow = (canvasHeight - this.ball.size.height)
 		- newBallPositionY;
 	    movements.ball.y = (canvasHeight - this.ball.size.height) - overflow;
-	    movements.ball.velY = this.ball.position.velY * (-1.0);
+	    movements.ball.velY = -this.ball.position.velY;
 	}
-	console.log("movements: ", movements)
+	if (this.ball.isCollidingWith(this.player1)) {
+	    const p1Surface = (this.player1.position.x + this.player1.size.width);
+	    const ballSurface = newBallPositionX;
+	    const overflow = p1Surface - ballSurface;
+	    movements.ball.x = p1Surface + overflow;
+	    movements.ball.velX = -this.ball.position.velX
+	}
+	if (this.ball.isCollidingWith(this.player2)) {
+	    const p2Surface = (this.player2.position.x);
+	    const ballSurface = newBallPositionX + this.ball.size.width;
+	    const overflow = p2Surface - ballSurface;
+	    movements.ball.x = p2Surface + overflow - this.ball.size.width;
+	    movements.ball.velX = -this.ball.position.velX
+	}
+
 	return movements;
     }
 }
@@ -223,4 +247,3 @@ const targetFrameRate = 30; //frame per second
 const timeFrameMillis = 1000 / targetFrameRate; //millis per frame
 
 setInterval(gameLoop, timeFrameMillis, canvasContext, gameState)
-
