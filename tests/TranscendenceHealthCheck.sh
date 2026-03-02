@@ -22,6 +22,8 @@ FAIL=0
 DOMAIN=$(grep "^DOMAIN=" .env 2>/dev/null | cut -d= -f2- | tr -d '\r' || echo "localhost")
 DB_USER=$(grep "^DB_USER=" .env 2>/dev/null | cut -d= -f2- | tr -d '\r' || echo "transcendence_user")
 DB_NAME=$(grep "^DB_NAME=" .env 2>/dev/null | cut -d= -f2- | tr -d '\r' || echo "transcendence_db")
+BACKEND_PORT=$(grep "^BACKEND_PORT=" .env 2>/dev/null | cut -d= -f2- | tr -d '\r' || echo "8080")
+FRONTEND_PORT=$(grep "^FRONTEND_PORT=" .env 2>/dev/null | cut -d= -f2- | tr -d '\r' || echo "3000")
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 pass()    { printf "${GREEN}[PASS]${RESET} %s\n" "$1"; ((++PASS)); }
@@ -179,7 +181,7 @@ fi
 # ── 9. Backend Health ─────────────────────────────────────────────────────────
 section "Backend Health"
 if container_running backend; then
-    health_response=$(docker exec backend wget -qO- http://127.0.0.1:8080/health 2>/dev/null || echo "")
+    health_response=$(docker exec backend wget -q -O - "http://127.0.0.1:${BACKEND_PORT}/health" 2>/dev/null || echo "")
     if echo "$health_response" | grep -q '"status".*"ok"'; then
         pass "Backend /health returns {\"status\":\"ok\"}"
     else
@@ -192,7 +194,7 @@ fi
 # ── 10. Frontend Response ─────────────────────────────────────────────────────
 section "Frontend Response"
 if container_running frontend; then
-    frontend_response=$(docker exec frontend wget -qO- http://localhost:3000/ 2>/dev/null || echo "")
+    frontend_response=$(docker exec frontend wget -q -O - "http://localhost:${FRONTEND_PORT}/" 2>/dev/null || echo "")
     if echo "$frontend_response" | grep -qi "<html\|<h1\|transcendence"; then
         pass "Frontend responds with HTML on port 3000"
     else

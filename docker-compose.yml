@@ -26,11 +26,12 @@ services:
       dockerfile: Dockerfile
     container_name: backend
     environment:
-      DB_HOST:     ${DB_HOST}
-      DB_PORT:     ${DB_PORT}
-      DB_USER:     ${DB_USER}
-      DB_PASSWORD: ${DB_PASSWORD}
-      DB_NAME:     ${DB_NAME}
+      DB_HOST:      ${DB_HOST}
+      DB_PORT:      ${DB_PORT}
+      DB_USER:      ${DB_USER}
+      DB_PASSWORD:  ${DB_PASSWORD}
+      DB_NAME:      ${DB_NAME}
+      BACKEND_PORT: ${BACKEND_PORT}
     networks:
       - transcendence_network
     depends_on:
@@ -43,6 +44,8 @@ services:
       context: ./services/frontend
       dockerfile: Dockerfile
     container_name: frontend
+    environment:
+      FRONTEND_PORT: ${FRONTEND_PORT}
     networks:
       - transcendence_network
     depends_on:
@@ -54,6 +57,10 @@ services:
       context: ./services/nginx
       dockerfile: Dockerfile
     container_name: nginx
+    environment:
+      BACKEND_PORT:  ${BACKEND_PORT}
+      FRONTEND_PORT: ${FRONTEND_PORT}
+      DOMAIN:        ${DOMAIN}
     ports:
       - "443:443"
     networks:

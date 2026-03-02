@@ -4,16 +4,16 @@ events {
 
 http {
     upstream backend {
-        server backend:8080;
+        server backend:${BACKEND_PORT};
     }
 
     upstream frontend {
-        server frontend:3000;
+        server frontend:${FRONTEND_PORT};
     }
 
     server {
         listen 443 ssl;
-        server_name localhost;
+        server_name ${DOMAIN};
 
         ssl_certificate     /etc/nginx/ssl/nginx.crt;
         ssl_certificate_key /etc/nginx/ssl/nginx.key;
