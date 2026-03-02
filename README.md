@@ -75,11 +75,11 @@ Visit **https://localhost** (accept the self-signed TLS certificate).
 
 ```bash
 make ps                      # check container status
-bash TranscendenceHealthCheck.sh   # run health checks
+bash tests/TranscendenceHealthCheck.sh   # run health checks
 make fclean                  # full teardown
 ```
 
-See [DEV_DOC.md](DEV_DOC.md) for the full developer setup guide.
+See [docs/DEV_DOC.md](docs/DEV_DOC.md) for the full developer setup guide and [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) for the git workflow.
 
 ---
 
