@@ -19,7 +19,7 @@
 | Frontend | React (JavaScript) + WebSockets |
 | Backend | FastAPI (Python) + uvicorn |
 | Database | PostgreSQL 16 |
-| Infrastructure | Docker Compose · nginx (TLS 1.3) · Alpine Linux |
+| Infrastructure | Docker Compose · nginx (TLS 1.2/1.3) · Alpine Linux |
 
 ---
 
