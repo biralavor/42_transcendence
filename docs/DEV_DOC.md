@@ -112,6 +112,7 @@ make.bat up       :: build + start
 make.bat down     :: stop
 make.bat fclean   :: full clean
 make.bat re       :: fclean + up
+make.bat check    :: run health check
 ```
 
 ---
@@ -186,7 +187,7 @@ Stopping containers (`make down`) does **not** delete data — only `make fclean
 
 ```bash
 # Interactive (coloured output)
-bash TranscendenceHealthCheck.sh
+bash tests/TranscendenceHealthCheck.sh
 
 # Save colour-stripped report to release.txt
 make check
