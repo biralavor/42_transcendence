@@ -1,12 +1,11 @@
 FROM nginx:1.28.2-alpine
 
-RUN apk add --no-cache openssl && \
-    mkdir -p /etc/nginx/ssl && \
-    openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-        -keyout /etc/nginx/ssl/nginx.key \
-        -out /etc/nginx/ssl/nginx.crt \
-        -subj "/C=FR/ST=IDF/L=Paris/O=42/CN=localhost"
+RUN apk add --no-cache openssl gettext
 
-COPY nginx.conf /etc/nginx/nginx.conf
+COPY nginx.conf.template /etc/nginx/nginx.conf.template
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
 EXPOSE 443
+
+ENTRYPOINT ["/entrypoint.sh"]

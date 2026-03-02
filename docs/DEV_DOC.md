@@ -43,8 +43,8 @@ The file is **never committed** (covered by `.gitignore`).
 | `DB_USER` | `transcendence_user` | Database user |
 | `DB_PASSWORD` | *(your choice)* | Database password |
 | `DB_NAME` | `transcendence_db` | Database name |
-| `BACKEND_PORT` | `8080` | FastAPI internal port |
-| `FRONTEND_PORT` | `3000` | React dev server internal port |
+| `BACKEND_PORT` | `8080` | FastAPI internal port (uvicorn bind port + nginx proxy target) |
+| `FRONTEND_PORT` | `3000` | React dev server internal port (node bind port + nginx proxy target) |
 | `DOMAIN` | `localhost` | Domain for nginx and health checks |
 
 ### 4. Start the stack
@@ -58,7 +58,7 @@ What happens:
 2. `db` starts first — PostgreSQL runs `init.sql` creating the `users` table
 3. `backend` waits for `db` to be healthy, then starts FastAPI on port 8080
 4. `frontend` starts the Node.js stub on port 3000
-5. `nginx` starts on port 443 using the self-signed TLS cert baked into the image at build time
+5. `nginx` generates a self-signed TLS cert for `$DOMAIN` (CN + SAN) and starts on port 443
 
 Visit **https://localhost** (click through the self-signed certificate warning).
 
