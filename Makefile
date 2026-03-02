@@ -1,4 +1,4 @@
-.PHONY: all up down clean fclean re logs ps windows check
+.PHONY: all up down clean fclean re logs ps windows check build-backend build-frontend
 
 all: up
 
@@ -28,3 +28,9 @@ windows:
 
 check:
 	bash tests/TranscendenceHealthCheck.sh | tee /dev/tty | sed 's/\x1b\[[0-9;]*m//g' > release.txt
+
+build-backend:
+	docker compose up --build -d backend
+
+build-frontend:
+	docker compose up --build -d frontend

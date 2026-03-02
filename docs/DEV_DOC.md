@@ -104,6 +104,8 @@ All commands run from the **repository root**.
 | `make ps` | Show container status |
 | `make check` | Run health check, save report to `release.txt` |
 | `make windows` | Same as `make` — for GNU Make on Windows (Git Bash/WSL) |
+| `make build-backend` | Rebuild and restart the backend container only |
+| `make build-frontend` | Rebuild and restart the frontend container only |
 
 **Windows CMD users (no GNU Make):**
 
@@ -123,8 +125,38 @@ make.bat check    :: run health check
 |-----------|-----------|---------------|-----------|------|
 | `db` | `postgres:16-alpine` | 5432 | none | PostgreSQL database |
 | `backend` | `python:3.12-alpine` | 8080 | none | FastAPI + uvicorn |
-| `frontend` | `node:20-alpine` | 3000 | none | React app |
+| `frontend` | `node:20-alpine` | 3000 | none | React app (Vite dev server) |
 | `nginx` | `nginx:1.28.2-alpine` | 443 | **443** | TLS + reverse proxy |
+
+---
+
+## Package Management
+
+### Adding a backend dependency (pip)
+
+```bash
+# 1. Add the package to the requirements file
+echo "requests==2.32.3" >> services/backend/requirements.txt
+
+# 2. Rebuild only the backend
+make build-backend
+```
+
+### Adding a frontend dependency (npm)
+
+```bash
+# 1. Add the package to package.json
+#    (edit manually or run npm install locally if Node.js is available on your host)
+cd services/frontend
+npm install react-router-dom   # updates package.json + package-lock.json
+cd ../..
+
+# 2. Rebuild only the frontend
+make build-frontend
+```
+
+> `make build-backend` / `make build-frontend` rebuild only the affected image and
+> restart that single container — no need to tear down the whole stack with `make re`.
 
 ---
 
