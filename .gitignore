@@ -7,3 +7,7 @@ CLAUDE.md
 
 # Environment files
 .env
+
+# Node
+node_modules/
+dist/
