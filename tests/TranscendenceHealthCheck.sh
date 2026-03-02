@@ -1,7 +1,7 @@
 #!/bin/bash
 # TranscendenceHealthCheck.sh
 # Integration health check for the 42 ft_transcendence project.
-# Run from the repository root: bash TranscendenceHealthCheck.sh
+# Run from the repository root: bash tests/TranscendenceHealthCheck.sh
 #
 # Exit code: 0 = all mandatory checks passed, 1 = one or more failed.
 
