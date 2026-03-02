@@ -8,6 +8,7 @@ if "%1"=="fclean" goto fclean
 if "%1"=="re"     goto re
 if "%1"=="logs"   goto logs
 if "%1"=="ps"     goto ps
+if "%1"=="check"  goto check
 echo Unknown command: %1
 exit /b 1
 
@@ -38,4 +39,8 @@ exit /b
 
 :ps
 docker compose ps
+exit /b
+
+:check
+bash tests/TranscendenceHealthCheck.sh
 exit /b
