@@ -120,7 +120,16 @@ fi
 
 # ── 7. Docker Network ─────────────────────────────────────────────────────────
 section "Docker Network"
-net=$(docker network ls --format '{{.Name}}' 2>/dev/null | grep -i transcendence || true)
+# Derive network from a container in this compose project (avoids matching
+# other projects that also contain "transcendence" in their network name).
+_cid=$(docker compose ps -q 2>/dev/null | head -n1)
+if [[ -n "$_cid" ]]; then
+    net=$(docker inspect "$_cid" \
+        --format '{{range $k,$v := .NetworkSettings.Networks}}{{$k}} {{end}}' \
+        2>/dev/null | tr ' ' '\n' | grep -i transcendence | head -n1 || true)
+else
+    net=""
+fi
 if [[ -n "$net" ]]; then
     pass "Docker network found: $net"
     for svc in db backend frontend nginx; do

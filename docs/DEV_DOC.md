@@ -58,7 +58,7 @@ What happens:
 2. `db` starts first — PostgreSQL runs `init.sql` creating the `users` table
 3. `backend` waits for `db` to be healthy, then starts FastAPI on port 8080
 4. `frontend` starts the Node.js stub on port 3000
-5. `nginx` generates a self-signed TLS cert and starts on port 443
+5. `nginx` starts on port 443 using the self-signed TLS cert baked into the image at build time
 
 Visit **https://localhost** (click through the self-signed certificate warning).
 
@@ -124,7 +124,7 @@ make.bat check    :: run health check
 | `db` | `postgres:16-alpine` | 5432 | none | PostgreSQL database |
 | `backend` | `python:3.12-alpine` | 8080 | none | FastAPI + uvicorn |
 | `frontend` | `node:20-alpine` | 3000 | none | React app |
-| `nginx` | `nginx:alpine` | 443 | **443** | TLS + reverse proxy |
+| `nginx` | `nginx:1.28.2-alpine` | 443 | **443** | TLS + reverse proxy |
 
 ---
 
@@ -175,8 +175,8 @@ Named volumes (unlike bind mounts) work identically on Linux and Windows Docker 
 # List volumes
 docker volume ls | grep db_data
 
-# Inspect volume
-docker volume inspect 42_transcendence_db_data
+# Inspect volume (name is prefixed by the clone directory name)
+docker volume inspect $(docker volume ls -q | grep db_data)
 ```
 
 Stopping containers (`make down`) does **not** delete data — only `make fclean` removes the volume.
