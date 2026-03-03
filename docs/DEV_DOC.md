@@ -107,14 +107,27 @@ All commands run from the **repository root**.
 | `make build-backend` | Rebuild and restart the backend container only |
 | `make build-frontend` | Rebuild and restart the frontend container only |
 
-**Windows CMD users (no GNU Make):**
+**Windows users (no GNU Make):**
+
+| Shell | Syntax |
+|-------|--------|
+| CMD | `make.bat up` |
+| PowerShell | `.\make.bat up` |
 
 ```bat
+:: CMD
 make.bat up       :: build + start
 make.bat down     :: stop
 make.bat fclean   :: full clean
 make.bat re       :: fclean + up
 make.bat check    :: run health check
+
+:: PowerShell
+.\make.bat up
+.\make.bat down
+.\make.bat fclean
+.\make.bat re
+.\make.bat check
 ```
 
 ---
