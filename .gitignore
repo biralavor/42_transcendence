@@ -11,3 +11,7 @@ CLAUDE.md
 # Node
 node_modules/
 dist/
+
+# Python Temp Files
+__pycache__/
+*.pyc
