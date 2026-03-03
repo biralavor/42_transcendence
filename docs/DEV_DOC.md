@@ -57,7 +57,7 @@ What happens:
 1. Docker builds all 4 images from `services/*/Dockerfile`
 2. `db` starts first — PostgreSQL runs `init.sql` creating the `users` table
 3. `backend` waits for `db` to be healthy, then starts FastAPI on port 8080
-4. `frontend` starts the Node.js stub on port 3000
+4. `frontend` starts the Vite dev server on port 3000
 5. `nginx` generates a self-signed TLS cert for `$DOMAIN` (CN + SAN) and starts on port 443
 
 Visit **https://localhost** (click through the self-signed certificate warning).
@@ -75,7 +75,7 @@ Host port 443 ─────►│  nginx                                      
                     │    │                │                            │
                     │    │                └──────► db:5432             │
                     │    │                         (PostgreSQL 16)     │
-                    │    └──/*──────► frontend:3000 (React/Node.js)   │
+                    │    └──/*──────► frontend:3000 (React/Vite)      │
                     └─────────────────────────────────────────────────┘
 
 Named volume:  db_data  →  /var/lib/postgresql/data  (persists across restarts)
@@ -149,7 +149,7 @@ make.bat check    :: run health check
 
 ```bash
 # 1. Add the package to the requirements file
-echo "requests==2.32.3" >> services/backend/requirements.txt
+echo "requests==2.32.3" >> src/backend/requirements.txt
 
 # 2. Rebuild only the backend
 make build-backend
@@ -160,7 +160,7 @@ make build-backend
 ```bash
 # 1. Add the package to package.json
 #    (edit manually or run npm install locally if Node.js is available on your host)
-cd services/frontend
+cd src/frontend
 npm install react-router-dom   # updates package.json + package-lock.json
 cd ../..
 
@@ -168,8 +168,8 @@ cd ../..
 make build-frontend
 ```
 
-> `make build-backend` / `make build-frontend` rebuild only the affected image and
-> restart that single container — no need to tear down the whole stack with `make re`.
+> `make build-backend` / `make build-frontend` are only needed when **adding new packages**.
+> For regular code edits, live reload picks up changes automatically — see [Live Reload](#live-reload) below.
 
 ---
 
@@ -240,6 +240,29 @@ cat release.txt
 ```
 
 The script runs 15 check sections covering containers, TLS, ports, network, DB, API endpoints, Dockerfile safety, and secrets. Exit code 0 = all checks passed.
+
+---
+
+## Live Reload
+
+Both `backend` and `frontend` mount their source directories as Docker volumes, so **code changes on the host are reflected inside the running container immediately** — no rebuild required.
+
+| Service | Mechanism | What triggers reload |
+|---------|-----------|----------------------|
+| `backend` | uvicorn `--reload` watches `/app/*.py` | Any `.py` file save in `src/backend/` |
+| `frontend` | Vite HMR watches `/app/src/` | Any `.jsx` / `.css` file save in `src/frontend/` |
+
+```
+Host                         Container
+src/backend/   ──volume──►  /app/   ← uvicorn --reload watches here
+src/frontend/  ──volume──►  /app/   ← Vite HMR watches here
+```
+
+> `node_modules/` inside the frontend container is protected by an anonymous volume — the host directory never overrides it.
+
+**When you still need `make build-backend` / `make build-frontend`:**
+- Added a new pip package to `src/backend/requirements.txt`
+- Added a new npm package to `src/frontend/package.json`
 
 ---
 
