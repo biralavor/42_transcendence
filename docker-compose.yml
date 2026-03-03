@@ -22,13 +22,8 @@ services:
 
   backend:
     build:
-<<<<<<< 32-feat-login-page
       context: .
       dockerfile: services/backend/Dockerfile
-=======
-      context: ./services/backend
-      dockerfile: Dockerfile
->>>>>>> develop
     container_name: backend
     environment:
       DB_HOST:      ${DB_HOST}
