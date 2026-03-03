@@ -15,3 +15,6 @@ dist/
 # Python Temp Files
 __pycache__/
 *.pyc
+
+# Frontend Vite files
+.vite/
