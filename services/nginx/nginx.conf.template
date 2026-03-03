@@ -1,0 +1,37 @@
+events {
+    worker_connections 1024;
+}
+
+http {
+    upstream backend {
+        server backend:${BACKEND_PORT};
+    }
+
+    upstream frontend {
+        server frontend:${FRONTEND_PORT};
+    }
+
+    server {
+        listen 443 ssl;
+        server_name ${DOMAIN};
+
+        ssl_certificate     /etc/nginx/ssl/nginx.crt;
+        ssl_certificate_key /etc/nginx/ssl/nginx.key;
+        ssl_protocols       TLSv1.2 TLSv1.3;
+
+        # NOTE: proxy_pass with trailing slash strips the /api prefix.
+        # A request to /api/health becomes /health at the backend.
+        # FastAPI routes must NOT include /api (e.g. @app.get("/health"), not @app.get("/api/health")).
+        location /api/ {
+            proxy_pass         http://backend/;
+            proxy_set_header   Host $host;
+            proxy_set_header   X-Real-IP $remote_addr;
+        }
+
+        location / {
+            proxy_pass         http://frontend/;
+            proxy_set_header   Host $host;
+            proxy_set_header   X-Real-IP $remote_addr;
+        }
+    }
+}
