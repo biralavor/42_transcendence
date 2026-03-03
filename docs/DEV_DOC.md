@@ -149,7 +149,7 @@ make.bat check    :: run health check
 
 ```bash
 # 1. Add the package to the requirements file
-echo "requests==2.32.3" >> services/backend/requirements.txt
+echo "requests==2.32.3" >> src/backend/requirements.txt
 
 # 2. Rebuild only the backend
 make build-backend
@@ -160,7 +160,7 @@ make build-backend
 ```bash
 # 1. Add the package to package.json
 #    (edit manually or run npm install locally if Node.js is available on your host)
-cd services/frontend
+cd src/frontend
 npm install react-router-dom   # updates package.json + package-lock.json
 cd ../..
 

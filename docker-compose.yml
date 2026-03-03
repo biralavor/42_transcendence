@@ -22,8 +22,8 @@ services:
 
   backend:
     build:
-      context: ./services/backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/backend/Dockerfile
     container_name: backend
     environment:
       DB_HOST:      ${DB_HOST}
@@ -32,6 +32,8 @@ services:
       DB_PASSWORD:  ${DB_PASSWORD}
       DB_NAME:      ${DB_NAME}
       BACKEND_PORT: ${BACKEND_PORT}
+    volumes:
+      - ./src/backend:/app
     networks:
       - transcendence_network
     depends_on:
@@ -41,11 +43,14 @@ services:
 
   frontend:
     build:
-      context: ./services/frontend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/frontend/Dockerfile
     container_name: frontend
     environment:
       FRONTEND_PORT: ${FRONTEND_PORT}
+    volumes:
+      - ./src/frontend:/app
+      - /app/node_modules
     networks:
       - transcendence_network
     depends_on:
