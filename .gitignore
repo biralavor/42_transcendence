@@ -10,12 +10,8 @@ CLAUDE.md
 
 # Node
 node_modules/
-<<<<<<< 32-feat-login-page
 dist/
 
 # Python Temp Files
 __pycache__/
 *.pyc
-=======
-dist/
->>>>>>> develop

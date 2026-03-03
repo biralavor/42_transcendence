@@ -37,11 +37,8 @@ services:
       DB_PASSWORD:  ${DB_PASSWORD}
       DB_NAME:      ${DB_NAME}
       BACKEND_PORT: ${BACKEND_PORT}
-<<<<<<< 32-feat-login-page
     volumes:
       - ./src/backend:/app
-=======
->>>>>>> develop
     networks:
       - transcendence_network
     depends_on:
@@ -51,7 +48,6 @@ services:
 
   frontend:
     build:
-<<<<<<< 32-feat-login-page
       context: .
       dockerfile: services/frontend/Dockerfile
     container_name: frontend
@@ -60,13 +56,6 @@ services:
     volumes:
       - ./src/frontend:/app
       - /app/node_modules
-=======
-      context: ./services/frontend
-      dockerfile: Dockerfile
-    container_name: frontend
-    environment:
-      FRONTEND_PORT: ${FRONTEND_PORT}
->>>>>>> develop
     networks:
       - transcendence_network
     depends_on:
