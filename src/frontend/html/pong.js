@@ -87,6 +87,11 @@ class Position {
         this.y += this.velY;
     }
 
+    static copy(other) {
+	const newPosition = new Position(other.x, other.y);
+	newPosition.velX = other.velX;
+	newPosition.velY = other.velY;
+	return newPosition;
     }
 }
 
@@ -106,6 +111,9 @@ class Size {
         this.height = height;
     }
 
+    static copy(other) {
+	return new Size(other.width, other.height);
+    }
 }
 
 class Entity {
@@ -178,11 +186,11 @@ class Ball extends Entity {
     }
 
     static copy(other) {
-	const copyBall = new Ball();
+        const copyBall = new Ball();
         copyBall.color = other.color;
-	copyBall.position = other.position;
-	copyBall.size = other.size;
-	return copyBall;
+        copyBall.position = Position.copy(other.position);
+        copyBall.size = Size.copy(other.size);
+        return copyBall;
     }
 }
 
