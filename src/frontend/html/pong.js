@@ -79,9 +79,6 @@ class Position {
         return [newY, newX];
     }
 
-    /**
-     * @param {Position} movement - the new position
-     */
     move() {
         this.x += this.velX;
         this.y += this.velY;
@@ -124,7 +121,7 @@ class Entity {
     /** @type {Color} - color values  */
     color;
 
-    /** @param {Position} movement - the new position */
+
     move()
     {
         this.position.move();
