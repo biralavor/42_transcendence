@@ -8,6 +8,7 @@
 - https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Classes
 - https://developer.mozilla.org/en-US/docs/Web/API/Window/setInterval
 - https://developer.mozilla.org/pt-BR/docs/Web/API/CanvasRenderingContext2D
+- https://developer.mozilla.org/en-US/docs/Games/Techniques/2D_collision_detection
 
 ## react
 - https://medium.com/@pdx.lucasm/canvas-with-react-js-32e133c05258
