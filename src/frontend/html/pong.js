@@ -88,10 +88,10 @@ class Position {
     }
 
     static copy(other) {
-	const newPosition = new Position(other.x, other.y);
-	newPosition.velX = other.velX;
-	newPosition.velY = other.velY;
-	return newPosition;
+        const newPosition = new Position(other.x, other.y);
+        newPosition.velX = other.velX;
+        newPosition.velY = other.velY;
+        return newPosition;
     }
 }
 
@@ -112,7 +112,7 @@ class Size {
     }
 
     static copy(other) {
-	return new Size(other.width, other.height);
+        return new Size(other.width, other.height);
     }
 }
 
@@ -223,8 +223,9 @@ class GameState {
             newBall.position.y = overflow;
             newBall.position.velY = ballIntendedPosition.velY * (-1.0);
         } else if (ballIntendedPosition.y >= canvasHeight - newBall.size.height){
-            const overflow = (canvasHeight - newBall.size.height)
-                  - ballIntendedPosition.y;
+
+            const overflow = ballIntendedPosition.y
+                  - (canvasHeight - newBall.size.height)
             newBall.position.y = (canvasHeight - newBall.size.height) - overflow;
             newBall.position.velY = -this.ball.position.velY;
         }
