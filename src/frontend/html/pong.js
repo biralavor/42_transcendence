@@ -207,7 +207,7 @@ class GameState {
         this.ball.move(movements.ball);
     }
 
-    colision() {
+    collision() {
 
         const ballIntendedPosition = { ...this.ball.position };
 
@@ -217,7 +217,7 @@ class GameState {
         newBall.position.x = ballIntendedPosition.x;
         newBall.position.y = ballIntendedPosition.y;
 
-        // vertical colision
+        // vertical collision
         if (ballIntendedPosition.y <= 0) {
             const overflow = 0 - ballIntendedPosition.y
             newBall.position.y = overflow;
@@ -229,9 +229,9 @@ class GameState {
             newBall.position.y = (canvasHeight - newBall.size.height) - overflow;
             newBall.position.velY = -this.ball.position.velY;
         }
-        // horizontal colision
-        // TODO improve colision detection logic to
-        // handle better non frontal colisions
+        // horizontal collision
+        // TODO improve collision detection logic to
+        // handle better non frontal collisions
         if (this.player1.isCollidingWith(newBall)) {
             const p1Surface = (this.player1.position.x + this.player1.size.width);
             const ballSurface = ballIntendedPosition.x;
@@ -307,9 +307,9 @@ function gameLoop(canvasContext, gameState) {
     gameState.player1.move();
     gameState.player2.move();
 
-    // colision ball
-    const ballAfterColision = gameState.colision();
-    gameState.ball = ballAfterColision;
+    // collision ball
+    const ballAfterCollision = gameState.collision();
+    gameState.ball = ballAfterCollision;
 
     //rendering
     render(canvasContext, gameState);
