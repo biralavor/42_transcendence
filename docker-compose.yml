@@ -67,7 +67,7 @@ services:
       FRONTEND_PORT: ${FRONTEND_PORT}
       DOMAIN:        ${DOMAIN}
     ports:
-      - "443:443"
+      - "8443:443"
     networks:
       - transcendence_network
     depends_on:
