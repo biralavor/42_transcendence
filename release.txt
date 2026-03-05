@@ -1,0 +1,106 @@
+
+=== Container Status ===
+[PASS] Container 'db' is running
+[PASS] Container 'backend' is running
+[PASS] Container 'frontend' is running
+[PASS] Container 'nginx' is running
+
+=== Restart Policy ===
+[PASS] db restart policy: unless-stopped
+[PASS] backend restart policy: unless-stopped
+[PASS] frontend restart policy: unless-stopped
+[PASS] nginx restart policy: unless-stopped
+
+=== nginx TLS (port 443) ===
+[PASS] TLS protocol tls1_2 accepted
+[PASS] TLS protocol tls1_3 accepted
+[PASS] TLS protocol tls1 correctly rejected
+[PASS] TLS protocol tls1_1 correctly rejected
+
+=== HTTPS Response ===
+[PASS] nginx responds on https://localhost/ (HTTP 200)
+
+=== Port Exposure ===
+[PASS] Port 443 is exposed (nginx TLS)
+[PASS] Port 80 is NOT exposed to the host
+[PASS] Port 3000 is NOT exposed to the host
+[PASS] Port 8080 is NOT exposed to the host
+[PASS] Port 5432 is NOT exposed to the host
+
+=== Domain Resolution ===
+[FAIL] localhost does not resolve to local IP (got: '::1') — check /etc/hosts
+
+=== Docker Network ===
+[PASS] Docker network found: transcendence_transcendence_network
+[PASS] db is connected to transcendence_transcendence_network
+[PASS] backend is connected to transcendence_transcendence_network
+[PASS] frontend is connected to transcendence_transcendence_network
+[PASS] nginx is connected to transcendence_transcendence_network
+[PASS] No container uses 'network: host'
+
+=== PostgreSQL Health ===
+[PASS] PostgreSQL is accepting connections (pg_isready)
+[PASS] PostgreSQL port 5432 is NOT exposed to the host
+[PASS] PostgreSQL 'users' table exists in transcendence_db
+
+=== Backend Health ===
+[PASS] Backend /health returns {"status":"ok"}
+
+=== Frontend Response ===
+[PASS] Frontend responds with HTML on port 3000
+
+=== nginx Proxy Routes ===
+[PASS] nginx proxies https://localhost/ → frontend (HTML response)
+[PASS] nginx proxies https://localhost/api/health → backend ({"status":"ok"})
+
+=== Named Volume ===
+[PASS] Named volume 'db_data' exists
+[PASS] db container uses a Docker named volume (not a bind mount)
+
+=== Dockerfile Safety ===
+[PASS] database/Dockerfile: no :latest tag
+[PASS] database/Dockerfile: FROM uses a pinned version tag
+[PASS] database/Dockerfile: no obvious hardcoded credentials
+[PASS] database/Dockerfile: no forbidden loop patterns
+[PASS] backend/Dockerfile: no :latest tag
+[PASS] backend/Dockerfile: FROM uses a pinned version tag
+[PASS] backend/Dockerfile: no obvious hardcoded credentials
+[PASS] backend/Dockerfile: no forbidden loop patterns
+[PASS] frontend/Dockerfile: no :latest tag
+[PASS] frontend/Dockerfile: FROM uses a pinned version tag
+[PASS] frontend/Dockerfile: no obvious hardcoded credentials
+[PASS] frontend/Dockerfile: no forbidden loop patterns
+[PASS] nginx/Dockerfile: no :latest tag
+[PASS] nginx/Dockerfile: FROM uses a pinned version tag
+[PASS] nginx/Dockerfile: no obvious hardcoded credentials
+[PASS] nginx/Dockerfile: no forbidden loop patterns
+
+=== docker-compose.yml Safety ===
+[PASS] docker-compose.yml: no forbidden network directives
+[PASS] docker-compose.yml: no :latest tag
+[PASS] docker-compose.yml has a network definition
+[PASS] docker-compose.yml has a volume definition
+
+=== Secrets & Repository Structure ===
+[PASS] .env exists at repository root
+[PASS] .env: DB_HOST is set
+[PASS] .env: DB_PORT is set
+[PASS] .env: DB_USER is set
+[PASS] .env: DB_PASSWORD is set
+[PASS] .env: DB_NAME is set
+[PASS] .env: BACKEND_PORT is set
+[PASS] .env: FRONTEND_PORT is set
+[PASS] .env: DOMAIN is set
+[PASS] .env is NOT tracked by git
+[PASS] docker-compose.yml exists at repository root
+[PASS] Makefile exists at repository root
+[PASS] .env.example exists at repository root
+[PASS] Dockerfile exists and non-empty: services/database/
+[PASS] Dockerfile exists and non-empty: services/backend/
+[PASS] Dockerfile exists and non-empty: services/frontend/
+[PASS] Dockerfile exists and non-empty: services/nginx/
+
+══════════════════════════════════════════
+  MANDATORY  PASSED: 70   FAILED: 1  
+══════════════════════════════════════════
+1 mandatory check(s) failed. Review the output above.
