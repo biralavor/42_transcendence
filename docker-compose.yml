@@ -46,6 +46,9 @@ services:
       context: .
       dockerfile: services/frontend/Dockerfile
     container_name: frontend
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
     environment:
       FRONTEND_PORT: ${FRONTEND_PORT}
     volumes:
@@ -67,7 +70,8 @@ services:
       FRONTEND_PORT: ${FRONTEND_PORT}
       DOMAIN:        ${DOMAIN}
     ports:
-      - "443:443"
+      - "8080:80"
+      - "8443:443"
     networks:
       - transcendence_network
     depends_on:
