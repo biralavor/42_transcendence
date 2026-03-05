@@ -11,6 +11,15 @@ http {
         server frontend:${FRONTEND_PORT};
     }
 
+    # HTTP server - redirect to HTTPS
+    server {
+        listen 80;
+        server_name ${DOMAIN};
+
+        return 301 https://$host:8443$request_uri;
+    }
+
+    # HTTPS server
     server {
         listen 443 ssl;
         server_name ${DOMAIN};
