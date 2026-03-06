@@ -4,10 +4,10 @@ import NavbarComponent from '../Components/Navbar'
 export default function About ()
 {
     return(
-    <body>
+    <main>
         <NavbarComponent></NavbarComponent>
         <h3>hello world from about</h3>
-    </body>
+    </main>
     
     )
 }
