@@ -4,6 +4,8 @@ import Login from './pages/Login'
 import About from './pages/About'
 import Play from './pages/Play'
 import Leaderboard from './pages/Leaderboard'
+import Register from './pages/Register'
+import ForgotPassword from './pages/ForgotPassword'
 
 
 export default function App() {
@@ -15,6 +17,8 @@ export default function App() {
         <Route path="/about" element={<About />} />
         <Route path="/play" element={<Play />} />
         <Route path="/leaderboard" element={<Leaderboard />} />
+        <Route path="/register" element={<Register />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
       </Routes>
     </BrowserRouter>
   )
