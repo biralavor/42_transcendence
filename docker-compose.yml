@@ -1,3 +1,5 @@
+name: transcendence
+
 services:
 
   db:
@@ -33,7 +35,7 @@ services:
       DB_NAME:      ${DB_NAME}
       BACKEND_PORT: ${BACKEND_PORT}
     volumes:
-      - ./src/backend:/app
+      - backend_data:/app
     networks:
       - transcendence_network
     depends_on:
@@ -52,8 +54,7 @@ services:
     environment:
       FRONTEND_PORT: ${FRONTEND_PORT}
     volumes:
-      - ./src/frontend:/app
-      - /app/node_modules
+      - frontend_data:/app
     networks:
       - transcendence_network
     depends_on:
@@ -81,7 +82,10 @@ services:
 
 volumes:
   db_data:
+  backend_data:
+  frontend_data:
 
 networks:
   transcendence_network:
+    name: transcendence_network
     driver: bridge
