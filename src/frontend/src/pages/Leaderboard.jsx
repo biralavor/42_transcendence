@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import NavbarComponent from '../Components/Navbar'
 
-export default function About ()
+export default function Leaderboard ()
 {
     return(
     <main>
