@@ -54,7 +54,11 @@ down-frontend:
 	docker compose stop frontend && docker compose rm -f frontend
 
 .PHONY: re-backend
-re-backend: down-backend up-backend
+re-backend: down-backend
+	docker compose build --no-cache backend
+	docker compose up -d backend
 
 .PHONY: re-frontend
-re-frontend: down-frontend up-frontend
+re-frontend: down-frontend
+	docker compose build --no-cache frontend
+	docker compose up -d frontend
