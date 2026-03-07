@@ -19,10 +19,11 @@ esac
 # Team members — edit this list when the team is finalised.
 # Format: "Name <email>"
 AUTHORS=(
-  "Alice Dev <alice@example.com>"
-  "Bob Dev <bob@example.com>"
-  "Carol Dev <carol@example.com>"
-  "Dave Dev <dave@example.com>"
+  "Bira Lavor <umeneses@student.42.fr>"
+  "Bruno Gomes Lameirinha <bgomes-l@student.42.fr>"
+  "Bruno Thors <bnespoli@student.42.fr>"
+  "Lisley Costa <livieira@student.42.fr>"
+  "Mauricio Rodrigues <maurodri@student.42.fr>"
 )
 
 # Read the current committer identity to exclude them from Co-Authored-By.
