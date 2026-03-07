@@ -1,12 +1,13 @@
 import { Link } from 'react-router-dom'
 import NavbarComponent from '../Components/Navbar'
+import RegisterForm from '../Components/RegisterForm'
 
-export default function About ()
+export default function Register ()
 {
     return(
     <main>
         <NavbarComponent></NavbarComponent>
-        <h3>hello world from about</h3>
+        <RegisterForm></RegisterForm>
     </main>
     
     )

@@ -35,7 +35,8 @@ const NavbarComponent =  () => {
               <Link className="nav-link" to="/about">About</Link>
             </li>
           </ul>
-          <Link className="btn btn-outline-success" to="/login">login</Link>
+          <Link className="btn btn-outline-success" to="/register">Register</Link>
+          <Link className="btn btn-outline-success ms-2" to="/login">login</Link>
         </div>
       </div>
     </nav>
