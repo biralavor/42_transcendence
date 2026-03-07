@@ -1,4 +1,4 @@
-.PHONY: all up down clean fclean re logs ps windows check build-backend build-frontend
+.PHONY: all up down clean fclean re logs ps windows check build-backend build-frontend down-backend down-frontend re-backend re-frontend
 
 all: up
 
@@ -34,3 +34,13 @@ build-backend:
 
 build-frontend:
 	docker compose up --build -d frontend
+
+down-backend:
+	docker compose stop backend && docker compose rm -f backend
+
+down-frontend:
+	docker compose stop frontend && docker compose rm -f frontend
+
+re-backend: down-backend build-backend
+
+re-frontend: down-frontend build-frontend
