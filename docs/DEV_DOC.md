@@ -119,12 +119,12 @@ All commands run from the **repository root**.
 | `make ps` | Show container status |
 | `make check` | Run health check, save report to `release.txt` |
 | `make windows` | Same as `make` — for GNU Make on Windows (Git Bash/WSL) |
-| `make build-backend` | Rebuild and restart the backend container only |
-| `make build-frontend` | Rebuild and restart the frontend container only |
+| `make up-backend` | Rebuild and restart the backend container only |
+| `make up-frontend` | Rebuild and restart the frontend container only |
 | `make down-backend` | Stop and remove the backend container only |
 | `make down-frontend` | Stop and remove the frontend container only |
-| `make re-backend` | `down-backend` then `build-backend` — fast backend iteration |
-| `make re-frontend` | `down-frontend` then `build-frontend` — fast frontend iteration |
+| `make re-backend` | `down-backend` then `up-backend` — fast backend iteration |
+| `make re-frontend` | `down-frontend` then `up-frontend` — fast frontend iteration |
 
 **Windows users (no GNU Make):**
 
@@ -172,7 +172,7 @@ make.bat check    :: run health check
 echo "requests==2.32.3" >> src/backend/requirements.txt
 
 # 2. Rebuild only the backend
-make build-backend
+make up-backend
 ```
 
 ### Adding a frontend dependency (npm)
@@ -185,10 +185,10 @@ npm install react-router-dom   # updates package.json + package-lock.json
 cd ../..
 
 # 2. Rebuild only the frontend
-make build-frontend
+make up-frontend
 ```
 
-> `make build-backend` / `make build-frontend` are only needed when **adding new packages**.
+> `make up-backend` / `make up-frontend` are only needed when **adding new packages**.
 > For regular code edits, live reload picks up changes automatically — see [Live Reload](#live-reload) below.
 > Use `make re-backend` / `make re-frontend` when you need a **full container reset** (e.g. environment variable changes, broken container state).
 
@@ -265,6 +265,33 @@ The script runs 15 check sections covering containers, TLS, ports, network, DB, 
 
 ---
 
+## GitHub Actions
+
+Workflows live in `.github/workflows/`.
+
+| File | Trigger | What it does |
+|------|---------|--------------|
+| `labeler.yml` | PR opened / updated | Auto-applies labels based on branch name and changed file paths (rules in `.github/labeler.yml`) |
+| `close-issue-on-merge-to-develop.yml` | PR merged → `develop` | Parses the PR body for closing keywords and closes the linked issue(s) |
+
+### Closing issues automatically
+
+Add a closing keyword in the PR body referencing the issue number:
+
+```
+Closes #42
+Fixes #10
+Resolves #7
+```
+
+Accepted keywords (case-insensitive): `Close`, `Closes`, `Closed`, `Fix`, `Fixes`, `Fixed`, `Resolve`, `Resolves`, `Resolved`.
+
+> **Why not `closingIssuesReferences` (GraphQL)?**
+> GitHub's built-in API only resolves linked issues when a PR targets the **default branch** (`main`).
+> Since our PRs merge into `develop`, the workflow parses the PR body directly instead.
+
+---
+
 ## Live Reload
 
 Both `backend` and `frontend` mount their source directories as Docker volumes, so **code changes on the host are reflected inside the running container immediately** — no rebuild required.
@@ -282,7 +309,7 @@ src/frontend/  ──volume──►  /app/   ← Vite HMR watches here
 
 > `node_modules/` inside the frontend container is protected by an anonymous volume — the host directory never overrides it.
 
-**When you still need `make build-backend` / `make build-frontend`:**
+**When you still need `make up-backend` / `make up-frontend`:**
 - Added a new pip package to `src/backend/requirements.txt`
 - Added a new npm package to `src/frontend/package.json`
 
