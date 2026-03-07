@@ -121,6 +121,10 @@ All commands run from the **repository root**.
 | `make windows` | Same as `make` — for GNU Make on Windows (Git Bash/WSL) |
 | `make build-backend` | Rebuild and restart the backend container only |
 | `make build-frontend` | Rebuild and restart the frontend container only |
+| `make down-backend` | Stop and remove the backend container only |
+| `make down-frontend` | Stop and remove the frontend container only |
+| `make re-backend` | `down-backend` then `build-backend` — fast backend iteration |
+| `make re-frontend` | `down-frontend` then `build-frontend` — fast frontend iteration |
 
 **Windows users (no GNU Make):**
 
@@ -186,6 +190,7 @@ make build-frontend
 
 > `make build-backend` / `make build-frontend` are only needed when **adding new packages**.
 > For regular code edits, live reload picks up changes automatically — see [Live Reload](#live-reload) below.
+> Use `make re-backend` / `make re-frontend` when you need a **full container reset** (e.g. environment variable changes, broken container state).
 
 ---
 
