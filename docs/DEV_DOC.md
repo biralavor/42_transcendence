@@ -54,13 +54,26 @@ make
 ```
 
 What happens:
-1. Docker builds all 4 images from `services/*/Dockerfile`
+1. Docker builds 4 images from `services/*/Dockerfile` (`adminer` uses a pre-built image)
 2. `db` starts first — PostgreSQL runs `init.sql` creating the `users` table
 3. `backend` waits for `db` to be healthy, then starts FastAPI on port 8080
 4. `frontend` starts the Vite dev server on port 3000
-5. `nginx` generates a self-signed TLS cert for `$DOMAIN` (CN + SAN) and starts on port 443
+5. `adminer` waits for `db` to be healthy, then starts on host port **8888**
+6. `nginx` generates a self-signed TLS cert for `$DOMAIN` (CN + SAN) and starts on port 443
 
 Visit **https://localhost** (click through the self-signed certificate warning).
+
+### Adminer — Database Management UI
+
+Open **http://localhost:8888** and login with:
+
+| Field | Value |
+|-------|-------|
+| System | PostgreSQL |
+| Server | `db` |
+| Username | `DB_USER` from `.env` |
+| Password | `DB_PASSWORD` from `.env` |
+| Database | `DB_NAME` from `.env` |
 
 ---
 
@@ -76,6 +89,8 @@ Host port 443 ─────►│  nginx                                      
                     │    │                └──────► db:5432             │
                     │    │                         (PostgreSQL 16)     │
                     │    └──/*──────► frontend:3000 (React/Vite)      │
+                    │                                                  │
+Host port 8888 ────►│  adminer:8080  ──────────► db:5432              │
                     └─────────────────────────────────────────────────┘
 
 Named volume:  db_data  →  /var/lib/postgresql/data  (persists across restarts)
@@ -139,7 +154,8 @@ make.bat check    :: run health check
 | `db` | `postgres:16-alpine` | 5432 | none | PostgreSQL database |
 | `backend` | `python:3.12-alpine` | 8080 | none | FastAPI + uvicorn |
 | `frontend` | `node:20-alpine` | 3000 | none | React app (Vite dev server) |
-| `nginx` | `nginx:1.28.2-alpine` | 443 | **443** | TLS + reverse proxy |
+| `nginx` | `nginx:1.28.2-alpine` | 80, 443 | **8080**, **8443** | TLS + reverse proxy |
+| `adminer` | `adminer:latest` | 8080 | **8888** | Database management UI |
 
 ---
 
@@ -182,6 +198,7 @@ docker exec -it db sh
 docker exec -it backend sh
 docker exec -it frontend sh
 docker exec -it nginx sh
+docker exec -it adminer sh
 ```
 
 ### Restart a single service

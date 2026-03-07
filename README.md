@@ -72,6 +72,7 @@ make                         # build images + start all containers
 ```
 
 Visit **https://localhost** (accept the self-signed TLS certificate).
+Visit **http://localhost:8888** for Adminer — System: `PostgreSQL`, Server: `db`.
 
 ```bash
 make ps                      # check container status
