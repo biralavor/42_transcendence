@@ -1,0 +1,27 @@
+.register-page {
+  min-height: calc(100vh - 76px);
+  padding: 1rem 1rem;
+  background: linear-gradient(180deg, #1b1f24 0%, #161a1f 100%);
+}
+
+.form-container {
+  max-width: 600px;
+}
+
+.form-box {
+  padding: 2rem;
+  border-radius: 1rem;
+  background: rgba(33, 37, 41, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+}
+
+.logo {
+  width: 96px;
+  height: auto;
+  margin-bottom: 0.5rem;
+}
+
+.form-check-label {
+  font-size: 0.95rem;
+}
