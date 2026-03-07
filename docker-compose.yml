@@ -61,6 +61,18 @@ services:
       - backend
     restart: unless-stopped
 
+  adminer:
+    image: adminer:latest
+    container_name: adminer
+    ports:
+      - "8888:8080"
+    networks:
+      - transcendence_network
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
   nginx:
     build:
       context: ./services/nginx
