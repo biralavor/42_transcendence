@@ -1,11 +1,10 @@
 import { Link } from 'react-router-dom'
-import './RegisterForm.css'
 
 const RegisterForm = () => {
   return (
-    <main className="register-page min-vh-100 d-flex align-items-center justify-content-center py-4 bg-body-tertiary">
+    <div className="register-page min-vh-100 d-flex align-items-center justify-content-center py-4 bg-body-tertiary">
       <div className="w-100 m-auto form-container">
-        <form className="form-box" id="registerForm">
+        <form className="form-box" id="registerForm" method="post">
           <div className="text-center mb-2">
             <img
               src="/logo_tight_square.png"
@@ -101,7 +100,7 @@ const RegisterForm = () => {
           </p>
         </form>
       </div>
-    </main>
+    </div>
   )
 }
 

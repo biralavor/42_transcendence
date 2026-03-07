@@ -46,7 +46,7 @@ export default function Login() {
             <label className="form-check-label" htmlFor="flexCheckDefault">Remember me</label>
           </div>
           <div>
-            <Link to="/forgot-password" className='small text-decoration-none'>
+            <Link to="/forgot-password" className="small text-decoration-none">
             Forgot Password?
             </Link>
           </div>
