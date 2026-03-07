@@ -79,7 +79,7 @@ const RegisterForm = () => {
       if (data.message)
         setSuccess(data.message)
       else
-        setSuccess('Account created successfully!')
+        setSuccess('Account created successfully!!')
 
       setFormData({
         username: '',
