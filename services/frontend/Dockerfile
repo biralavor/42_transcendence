@@ -3,8 +3,7 @@ FROM node:20-alpine
 WORKDIR /app
 
 COPY src/frontend/package*.json ./
-RUN --mount=type=cache,target=/root/.npm \
-    npm install
+RUN npm install
 
 COPY src/frontend/ .
 
