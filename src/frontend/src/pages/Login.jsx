@@ -1,13 +1,12 @@
 import { Link } from 'react-router-dom'
 import './Login.css'
+import NavbarComponent from '../Components/Navbar'
 
 export default function Login() {
   return (
-    <div className="min-vh-100 d-flex align-items-center justify-content-center py-2 bg-body-tertiary">
-      <Link to="/" className="btn btn-outline-light position-fixed top-0 start-0 m-3 z-3">
-        Back to Home
-      </Link>
-
+    <>
+     <NavbarComponent></NavbarComponent>
+    
       <main className="w-100 m-auto form-container">
         <form id="loginForm" className="form-box">
           <div className="text-center mb-1">
@@ -46,12 +45,22 @@ export default function Login() {
             <input className="form-check-input" type="checkbox" id="flexCheckDefault" />
             <label className="form-check-label" htmlFor="flexCheckDefault">Remember me</label>
           </div>
-
+          <div>
+            <Link to="/forgot-password" className='small text-decoration-none'>
+            Forgot Password?
+            </Link>
+          </div>
           <button className="btn btn-primary w-100 py-2" type="submit">Sign in</button>
-
+          <p className="text-center mt-3 mb-0">
+            Don&apos;t have an account?{' '}
+            <Link to="/register" className="text-decoration-none">
+              Create one
+            </Link>
+          </p>
           <p className="text-body-secondary mt-5 mb-3 text-center">© 2026</p>
         </form>
+        
       </main>
-    </div>
+  </>
   )
 }

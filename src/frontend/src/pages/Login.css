@@ -9,7 +9,7 @@
 }
 
 .logo {
-  width: clamp(220px, 35vw, 300px);
+  width: clamp(180px, 30vw, 250px);
   height: auto;
   display: block;
   margin: 0 auto 12px;
