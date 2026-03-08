@@ -1,0 +1,43 @@
+POST https://localhost:8443/api/test HTTP/1.1
+content-type: application/json
+
+{
+    "name": "sample",
+    "time": "Wed, 21 Oct 2015 18:27:50 GMT"
+}
+
+
+GET https://localhost:8443/api/ HTTP/1.1
+
+POST https://localhost:8443/api/auth/register HTTP/1.1
+content-type: application/json
+
+{
+    "username": "maurodri",
+    "email": "maurodri@example.com",
+    "password": "maurodri123"
+}
+
+POST https://localhost:8443/api/auth/login HTTP/1.1
+content-type: application/json
+
+{
+    "username": "bruno",
+    "password": "bruno123"
+}
+
+POST https://localhost:8443/api/auth/login HTTP/1.1
+content-type: application/json
+
+{
+    "username": "bruno",
+    "password": "bruno23"
+}
+
+POST https://localhost:8443/api/auth/login HTTP/1.1
+content-type: application/json
+
+{
+    "username": "maurodri",
+    "password": "maurodri123"
+}
