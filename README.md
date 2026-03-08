@@ -80,7 +80,7 @@ bash tests/TranscendenceHealthCheck.sh   # run health checks
 make fclean                  # full teardown
 ```
 
-See [docs/DEV_DOC.md](docs/DEV_DOC.md) for the full developer setup guide and [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) for the git workflow.
+See [docs/DEV_DOC.md](docs/DEV_DOC.md) · [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/MICROSERVICES.md](docs/MICROSERVICES.md) · [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) for developer guides.
 
 ---
 
