@@ -1,15 +1,10 @@
-POST https://localhost:8443/api/test HTTP/1.1
-content-type: application/json
+### Health check
+GET https://localhost:8443/api/users/health HTTP/1.1
 
-{
-    "name": "sample",
-    "time": "Wed, 21 Oct 2015 18:27:50 GMT"
-}
+###
 
-
-GET https://localhost:8443/api/ HTTP/1.1
-
-POST https://localhost:8443/api/auth/register HTTP/1.1
+### Register
+POST https://localhost:8443/api/users/auth/register HTTP/1.1
 content-type: application/json
 
 {
@@ -18,7 +13,10 @@ content-type: application/json
     "password": "maurodri123"
 }
 
-POST https://localhost:8443/api/auth/login HTTP/1.1
+###
+
+### Login
+POST https://localhost:8443/api/users/auth/login HTTP/1.1
 content-type: application/json
 
 {

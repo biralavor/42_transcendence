@@ -1,8 +1,5 @@
-from fastapi import FastAPI, status, HTTPException
-from models.credentials import Credentials
-from models.login import Login
-from models.token import Token
-from models.register import RegisterRequest
+from fastapi import status, HTTPException
+from service.models import Credentials, Login, Token, RegisterRequest
 import bcrypt
 
 def hash_password(password: str) -> bytes:
