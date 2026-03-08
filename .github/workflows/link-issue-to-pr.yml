@@ -1,0 +1,73 @@
+name: Link issue to PR from branch name
+
+on:
+  pull_request:
+    types: [opened, reopened]
+
+# One run per PR — no need to stack concurrent runs for the same PR.
+concurrency:
+  group: link-issue-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  link-issue:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      issues: read
+      pull-requests: write
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            // Extract leading issue number from branch name (e.g. "70-devops-fix-..." → 70)
+            const branch = context.payload.pull_request.head.ref;
+            const match = branch.match(/^(\d+)-/);
+            if (!match) {
+              console.log(`Branch "${branch}" does not start with an issue number — skipping.`);
+              return;
+            }
+
+            const issueNumber = parseInt(match[1], 10);
+            console.log(`Branch prefix → issue #${issueNumber}`);
+
+            // Check the issue exists and is open
+            let issue;
+            try {
+              const response = await github.rest.issues.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issueNumber,
+              });
+              issue = response.data;
+            } catch (err) {
+              console.log(`Issue #${issueNumber} not found (${err.status}) — skipping.`);
+              return;
+            }
+
+            if (issue.state !== 'open') {
+              console.log(`Issue #${issueNumber} is already ${issue.state} — skipping.`);
+              return;
+            }
+
+            // Check if a closing keyword for this issue is already in the PR body
+            const body = context.payload.pull_request.body || '';
+            const alreadyLinked = new RegExp(
+              `(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\\s+#${issueNumber}\\b`, 'i'
+            ).test(body);
+
+            if (alreadyLinked) {
+              console.log(`PR body already references #${issueNumber} — nothing to do.`);
+              return;
+            }
+
+            // Append closing keyword to PR body
+            const closing = `\n\nCloses #${issueNumber}`;
+            await github.rest.pulls.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.pull_request.number,
+              body: body + closing,
+            });
+
+            console.log(`Appended "Closes #${issueNumber}" to PR #${context.payload.pull_request.number}`);
