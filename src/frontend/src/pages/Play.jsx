@@ -1,4 +1,5 @@
 import NavbarComponent from '../Components/Navbar'
+import PongCanvas from '../Components/PongCanvas'
 
 const matchModes = [
   {
