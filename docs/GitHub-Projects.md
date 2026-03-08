@@ -38,28 +38,30 @@ Database → Backend → Frontend
 
 ## Board Columns
 
-Each board uses the same five columns:
+The board uses five columns:
 
 | Column | Meaning | Moves here when |
 |--------|---------|-----------------|
 | `Backlog` | Exists, not in current sprint | Issue created |
 | `Ready` | Assigned to this sprint, not started | Added to sprint milestone |
 | `In Progress` | Branch created, work active | Developer starts the branch |
-| `In Review` | PR opened and linked to Issue | PR submitted |
+| `In Review` | PR opened and linked to Issue | PR opened *(automated by `add-pr-to-project.yml`)* |
 | `Done` | Merged and closed | PR merged to `develop` *(automated)* |
 
 ### Automation
 
-Two independent mechanisms handle status transitions:
+Four independent mechanisms handle project automation:
 
 | Trigger | Mechanism | Effect |
 |---------|-----------|--------|
-| PR opened against `develop` | GitHub Projects built-in workflow | PR item moves to **In Review** |
+| PR opened (any branch) | `.github/workflows/add-pr-to-project.yml` | PR added to project board, Sprint set to current sprint, Status set to **In Review** |
+| PR opened (any branch) | `.github/workflows/link-issue-to-pr.yml` | `Closes #N` appended to PR body if branch starts with an issue number and that issue is open |
 | PR merged into `develop` | GitHub Projects built-in workflow | PR item moves to **Done** |
 | PR merged into `develop` with a linked Issue | `.github/workflows/close-issue-on-merge-to-develop.yml` | Linked Issue is closed |
 
-> **Column moves** are handled by GitHub Projects built-in workflow rules triggered by PR events — no action needed from you.
-> **Issue closing** is handled by `.github/workflows/close-issue-on-merge-to-develop.yml` via GitHub's `closingIssuesReferences` GraphQL field, which captures issues linked either through closing keywords (`Closes #N`, `Fixes #N`, `Resolves #N`) in the PR body **or** via the Development sidebar.
+> **Adding PRs to the board** and setting Sprint/Status is handled by `.github/workflows/add-pr-to-project.yml`. Requires a classic PAT with `project` scope stored as the `PROJECT_TOKEN` repository secret.
+> **Issue linking** is handled by `.github/workflows/link-issue-to-pr.yml`, which reads the branch name prefix (e.g. `70-devops-...` → `Closes #70`) and appends it to the PR body.
+> **Issue closing** is handled by `.github/workflows/close-issue-on-merge-to-develop.yml` via closing keywords (`Closes #N`, `Fixes #N`, `Resolves #N`) in the PR body.
 > If no issue is linked by either method, the PR card moves to **Done** but no Issue is closed.
 
 ---
@@ -110,7 +112,9 @@ The milestone progress bar (open vs closed Issues) is the closest equivalent to 
 
 ## Linking an Issue to the Project
 
-Every Issue must be linked to the project and assigned a sprint. Priority and Size are strongly recommended.
+> **PRs are added to the board automatically** by `.github/workflows/add-pr-to-project.yml` when opened — Sprint and Status are set automatically. No manual action needed for PRs.
+
+Every **Issue** must be manually linked to the project and assigned a sprint. Priority and Size are strongly recommended.
 
 ### On the Issue creation page (right sidebar)
 
