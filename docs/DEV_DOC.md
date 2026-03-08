@@ -1,0 +1,135 @@
+# Developer Documentation — ft_transcendence
+
+> See also: [ARCHITECTURE.md](ARCHITECTURE.md) · [MICROSERVICES.md](MICROSERVICES.md) · [CONTRIBUTING.md](CONTRIBUTING.md)
+
+## Prerequisites
+
+| Tool | Minimum version | Check |
+|------|----------------|-------|
+| Docker Engine | 24.x | `docker --version` |
+| Docker Compose v2 | 2.x | `docker compose version` |
+| GNU Make | 4.x | `make --version` |
+| OpenSSL | 3.x | `openssl version` |
+| Git | 2.x | `git --version` |
+
+> On 42 school machines all tools are pre-installed.
+
+---
+
+## First-Time Setup
+
+### 1. Clone the repository
+
+```bash
+git clone <repo-url> ft_transcendence
+cd ft_transcendence
+```
+
+### 2. Create `.env`
+
+```bash
+cp .env.example .env
+$EDITOR .env        # fill in every credential before running make
+```
+
+The file is **never committed** (covered by `.gitignore`).
+
+### 3. Review `.env`
+
+| Variable | Example value | Purpose |
+|----------|--------------|---------|
+| `DB_HOST` | `db` | PostgreSQL hostname (matches container name) |
+| `DB_PORT` | `5432` | PostgreSQL port |
+| `DB_USER` | `transcendence_user` | Database user |
+| `DB_PASSWORD` | *(your choice)* | Database password |
+| `DB_NAME` | `transcendence_db` | Database name |
+| `USER_SERVICE_PORT` | `8001` | user-service internal port |
+| `GAME_SERVICE_PORT` | `8002` | game-service internal port |
+| `CHAT_SERVICE_PORT` | `8003` | chat-service internal port |
+| `FRONTEND_PORT` | `3000` | React dev server internal port |
+| `DOMAIN` | `localhost` | Domain for nginx and health checks |
+
+### 4. Start the stack
+
+```bash
+make
+```
+
+Visit **https://localhost** (click through the self-signed certificate warning).
+
+### Adminer — Database Management UI
+
+Open **http://localhost:8888** and login with:
+
+| Field | Value |
+|-------|-------|
+| System | PostgreSQL |
+| Server | `db` |
+| Username | `DB_USER` from `.env` |
+| Password | `DB_PASSWORD` from `.env` |
+| Database | `DB_NAME` from `.env` |
+
+---
+
+## Build & Launch
+
+All commands run from the **repository root**.
+
+| Command | Action |
+|---------|--------|
+| `make` | Build images + start all containers |
+| `make down` | Stop and remove containers |
+| `make clean` | Stop containers + remove orphans |
+| `make fclean` | Full clean: containers + volumes + images |
+| `make re` | `fclean` then `make` |
+| `make logs` | Tail all container logs |
+| `make ps` | Show container status |
+| `make check` | Run health check, save report to `release.txt` |
+| `make build-base` | Build the `backend-base` image (run once, or after shared deps change) |
+| `make up-frontend` | Rebuild and restart the frontend container only |
+| `make down-frontend` | Stop and remove the frontend container only |
+| `make re-front` | Full reset of frontend container (no-cache rebuild) |
+| `make re-back` | Full reset of all 3 backend services (no-cache rebuild) |
+| `make up-user` | Rebuild and restart user-service only |
+| `make down-user` | Stop and remove user-service only |
+| `make re-user` | Full reset of user-service (no-cache rebuild) |
+| `make up-game` | Rebuild and restart game-service only |
+| `make down-game` | Stop and remove game-service only |
+| `make re-game` | Full reset of game-service (no-cache rebuild) |
+| `make up-chat` | Rebuild and restart chat-service only |
+| `make down-chat` | Stop and remove chat-service only |
+| `make re-chat` | Full reset of chat-service (no-cache rebuild) |
+
+---
+
+## Health Check
+
+Run `bash tests/TranscendenceHealthCheck.sh` — or `make check` to save output to `release.txt`
+
+---
+
+## Open a Shell Inside a Container
+
+```bash
+docker exec -it db sh
+docker exec -it user-service sh
+docker exec -it game-service sh
+docker exec -it chat-service sh
+docker exec -it frontend sh
+docker exec -it nginx sh
+docker exec -it adminer sh
+```
+
+---
+
+## Troubleshooting
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| `user/game/chat-service` exits immediately | DB not ready | Check `make logs` — increase healthcheck `retries` in compose |
+| `nginx` 502 Bad Gateway | Service crashed at startup | Run `make logs` — check for `ModuleNotFoundError` or import errors in the failing service |
+| Port 443 already in use | Another process on host | `sudo lsof -i :443` and stop it |
+| `make: *** missing separator` | Spaces instead of tabs in Makefile | Replace recipe indentation with real tab characters |
+| TLS certificate warning in browser | Self-signed cert (expected) | Click "Advanced" → "Proceed to localhost" |
+| `docker compose config` errors | Invalid `.env` or compose syntax | Run `docker compose config` to see the error |
+| DB password wrong after `make re` | Old volume with different password | Run `make fclean` to wipe the volume, then `make` |

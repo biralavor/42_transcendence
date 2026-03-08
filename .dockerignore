@@ -1,0 +1,16 @@
+.git/
+.claude/
+.github/
+.githooks/
+node_modules/
+dist/
+docs/
+tests/
+Studies/
+services/database/
+services/nginx/
+src/frontend/node_modules/
+src/frontend/dist/
+*.md
+.env
+release.txt

@@ -250,3 +250,30 @@ See [`docs/GitHub-Projects.md`](docs/GitHub-Projects.md) for:
 - Milestones: sprint-level and phase-level
 - Custom fields: Status · Priority · Size · Squad
 - How to handle cross-squad Issues
+
+---
+
+## GitHub Actions
+
+Workflows live in `.github/workflows/`.
+
+| File | Trigger | What it does |
+|------|---------|--------------|
+| `labeler.yml` | PR opened / updated | Auto-applies labels based on branch name and changed file paths (rules in `.github/labeler.yml`) |
+| `close-issue-on-merge-to-develop.yml` | PR merged → `develop` | Parses the PR body for closing keywords and closes the linked issue(s) |
+
+### Closing issues automatically
+
+Add a closing keyword in the PR body referencing the issue number:
+
+```
+Closes #42
+Fixes #10
+Resolves #7
+```
+
+Accepted keywords (case-insensitive): `Close`, `Closes`, `Closed`, `Fix`, `Fixes`, `Fixed`, `Resolve`, `Resolves`, `Resolved`.
+
+> **Why not `closingIssuesReferences` (GraphQL)?**
+> GitHub's built-in API only resolves linked issues when a PR targets the **default branch** (`main`).
+> Since our PRs merge into `develop`, the workflow parses the PR body directly instead.
