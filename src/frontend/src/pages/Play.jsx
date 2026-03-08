@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import NavbarComponent from '../Components/Navbar'
+import PongCanvas from '../Components/PongCanvas'
 
 export default function Play ()
 {
@@ -7,6 +8,7 @@ export default function Play ()
     <main>
         <NavbarComponent></NavbarComponent>
         <h3>hello world from play</h3>
+	<PongCanvas/>
     </main>
     )
 }
