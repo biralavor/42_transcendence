@@ -24,7 +24,8 @@ content-type: application/json
     "password": "bruno123"
 }
 
-POST https://localhost:8443/api/auth/login HTTP/1.1
+###
+POST https://localhost:8443/api/users/auth/login HTTP/1.1
 content-type: application/json
 
 {
@@ -32,7 +33,8 @@ content-type: application/json
     "password": "bruno23"
 }
 
-POST https://localhost:8443/api/auth/login HTTP/1.1
+###
+POST https://localhost:8443/api/users/auth/login HTTP/1.1
 content-type: application/json
 
 {
