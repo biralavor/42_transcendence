@@ -19,10 +19,13 @@ PASS=0
 FAIL=0
 
 # ── Load .env ─────────────────────────────────────────────────────────────────
-DOMAIN=$(grep "^DOMAIN=" .env 2>/dev/null | cut -d= -f2- | tr -d '\r' || echo "localhost")
-DB_USER=$(grep "^DB_USER=" .env 2>/dev/null | cut -d= -f2- | tr -d '\r' || echo "transcendence_user")
-DB_NAME=$(grep "^DB_NAME=" .env 2>/dev/null | cut -d= -f2- | tr -d '\r' || echo "transcendence_db")
-FRONTEND_PORT=$(grep "^FRONTEND_PORT=" .env 2>/dev/null | cut -d= -f2- | tr -d '\r' || echo "3000")
+DOMAIN=$(grep "^DOMAIN=" .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '\r' || echo "localhost")
+DB_USER=$(grep "^DB_USER=" .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '\r' || echo "transcendence_user")
+DB_NAME=$(grep "^DB_NAME=" .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '\r' || echo "transcendence_db")
+FRONTEND_PORT=$(grep "^FRONTEND_PORT=" .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '\r' || echo "3000")
+USER_SERVICE_PORT=$(grep "^USER_SERVICE_PORT=" .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '\r' || echo "8001")
+GAME_SERVICE_PORT=$(grep "^GAME_SERVICE_PORT=" .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '\r' || echo "8002")
+CHAT_SERVICE_PORT=$(grep "^CHAT_SERVICE_PORT=" .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '\r' || echo "8003")
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 pass()    { printf "${GREEN}[PASS]${RESET} %s\n" "$1"; ((++PASS)); }
@@ -274,7 +277,6 @@ fi
 section "Dockerfile Safety"
 dockerfiles=(
     "services/database/Dockerfile"
-    "services/backend/Dockerfile"
     "services/backend-base/Dockerfile"
     "services/user-service/Dockerfile"
     "services/game-service/Dockerfile"
@@ -297,16 +299,20 @@ for df in "${dockerfiles[@]}"; do
 
     from_line=$(grep -m1 "^FROM" "$df" 2>/dev/null || echo "")
     from_image=$(echo "$from_line" | awk '{print $2}')
-    # Local images (no registry host — no dot or slash) don't need a version tag
-    if echo "$from_image" | grep -qE "[./]"; then
-        if echo "$from_line" | grep -qE "^FROM \S+:[0-9a-zA-Z]" && \
-           ! echo "$from_line" | grep -qi ":latest"; then
-            pass "$svc_name/Dockerfile: FROM uses a pinned version tag"
-        else
-            fail "$svc_name/Dockerfile: FROM must use a pinned version tag (got: '${from_line:-empty}')"
-        fi
-    else
+    from_name="${from_image%%:*}"
+    # Explicit allowlist of locally-built base images — skip pinned tag requirement for these only
+    local_images=("backend-base")
+    is_local=false
+    for local_img in "${local_images[@]}"; do
+        [[ "$from_name" == "$local_img" ]] && is_local=true && break
+    done
+    if $is_local; then
         pass "$svc_name/Dockerfile: FROM uses local base image '${from_image}' (no registry tag required)"
+    elif echo "$from_line" | grep -qE "^FROM \S+:[0-9a-zA-Z]" && \
+         ! echo "$from_line" | grep -qi ":latest"; then
+        pass "$svc_name/Dockerfile: FROM uses a pinned version tag"
+    else
+        fail "$svc_name/Dockerfile: FROM must use a pinned version tag (got: '${from_line:-empty}')"
     fi
 
     if grep -iE "(password|passwd|secret)\s*=\s*\S+" "$df" | grep -v "^#" | grep -q .; then
@@ -390,7 +396,7 @@ for f in docker-compose.yml Makefile .env.example; do
     fi
 done
 
-for svc in database backend backend-base user-service game-service chat-service frontend nginx; do
+for svc in database backend-base user-service game-service chat-service frontend nginx; do
     df="services/${svc}/Dockerfile"
     if [[ -f "$df" && -s "$df" ]]; then
         pass "Dockerfile exists and non-empty: services/${svc}/"

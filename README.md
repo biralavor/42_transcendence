@@ -89,7 +89,7 @@ See [docs/DEV_DOC.md](docs/DEV_DOC.md) · [docs/ARCHITECTURE.md](docs/ARCHITECTU
 | Name | Role | GitHub |
 |------|------|--------|
 | Lis | Product Owner · Developer | [@solismesmo](https://github.com/solismesmo) |
-| Mauricio Rodrigues | Technical Lead / Architect · Developer | [@RedJocker](https://github.com/RedJocker) |
-| Bira Lavor | Project Manager / Scrum Master · Developer | [@biralavor](https://github.com/biralavor) |
+| Mauricio Rodrigues | Technical Lead · Architect · Developer | [@RedJocker](https://github.com/RedJocker) |
+| Bira Lavor | Project Manager · Scrum Master · DevOps · Developer | [@biralavor](https://github.com/biralavor) |
 | Bruno Gomes Lameirinha | Developer | [@Bruno-Gomes-Lameirinha](https://github.com/Bruno-Gomes-Lameirinha) |
 | Bruno Thorstensen | Developer | [@brunothors](https://github.com/brunothors) |
