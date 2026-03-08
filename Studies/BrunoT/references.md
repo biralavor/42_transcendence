@@ -7,3 +7,7 @@
 [pydantic doc](https://docs.pydantic.dev/latest/#pydantic-examples)
 
 [mozilla status codes](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Status#client_error_responses)
+
+[JWT viewer](https://www.jwt.io/)
+
+[python JOSE git](https://github.com/mpdavis/python-jose)
