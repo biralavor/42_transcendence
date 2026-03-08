@@ -1,15 +1,14 @@
-from fastapi import FastAPI, status
+from fastapi import FastAPI, status, HTTPException
 from models.credentials import Credentials
 from models.login import Login
 from models.token import Token
+from service import *
 
 app = FastAPI(title="Transcendence API")
-
 
 @app.get("/health")
 def health():
     return {"status": "ok"}
-
 
 @app.get("/")
 def root():
@@ -21,12 +20,8 @@ def test():
 
 @app.post("/auth/register", status_code=status.HTTP_201_CREATED)
 def register(credentials: Credentials):
-    return credentials
+    return register_user(credentials)
 
 @app.post("/auth/login", status_code=status.HTTP_200_OK)
 def login(login: Login):
-    external_data = {
-    'access_token': "token1"
-    }
-    token = Token(**external_data)
-    return token
+    return authenticate(login)
