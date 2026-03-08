@@ -1,0 +1,176 @@
+name: Add PR to project board
+
+# Prerequisites:
+#   1. Create a classic PAT at GitHub → Settings → Developer settings →
+#      Personal access tokens (classic) → Generate new token
+#      Required scope: project
+#   2. Store it as a repository secret named PROJECT_TOKEN
+#      (repo → Settings → Secrets and variables → Actions → New repository secret)
+
+on:
+  pull_request:
+    types: [opened, reopened]
+
+concurrency:
+  group: add-pr-to-project-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  add-to-project:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/github-script@v7
+        env:
+          PROJECT_TOKEN: ${{ secrets.PROJECT_TOKEN }}
+        with:
+          github-token: ${{ secrets.PROJECT_TOKEN }}
+          script: |
+            const PROJECT_OWNER = 'biralavor';
+            const PROJECT_NUMBER = 14;
+
+            // ── Sprint schedule (matches docs/GitHub-Projects.md) ──────────────
+            const sprints = [
+              { name: 'Sprint 01', start: '2026-02-21', end: '2026-02-27' },
+              { name: 'Sprint 02', start: '2026-02-28', end: '2026-03-06' },
+              { name: 'Sprint 03', start: '2026-03-07', end: '2026-03-13' },
+              { name: 'Sprint 04', start: '2026-03-14', end: '2026-03-20' },
+              { name: 'Sprint 05', start: '2026-03-21', end: '2026-03-27' },
+              { name: 'Sprint 06', start: '2026-03-28', end: '2026-04-03' },
+              { name: 'Sprint 07', start: '2026-04-04', end: '2026-04-10' },
+              { name: 'Sprint 08', start: '2026-04-11', end: '2026-04-17' },
+              { name: 'Sprint 09', start: '2026-04-18', end: '2026-04-24' },
+              { name: 'Sprint 10', start: '2026-04-25', end: '2026-05-01' },
+            ];
+
+            const today = new Date().toISOString().slice(0, 10);
+            const currentSprint = sprints.find(s => today >= s.start && today <= s.end);
+            if (!currentSprint) {
+              console.log(`Today (${today}) is outside all sprint windows — skipping.`);
+              return;
+            }
+            console.log(`Current sprint: ${currentSprint.name}`);
+
+            // ── 1. Resolve project node ID + fields ────────────────────────────
+            const projectQuery = await github.graphql(`
+              query($login: String!, $number: Int!) {
+                user(login: $login) {
+                  projectV2(number: $number) {
+                    id
+                    fields(first: 20) {
+                      nodes {
+                        ... on ProjectV2SingleSelectField {
+                          id
+                          name
+                          options { id name }
+                        }
+                        ... on ProjectV2IterationField {
+                          id
+                          name
+                          configuration {
+                            iterations { id title startDate duration }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            `, { login: PROJECT_OWNER, number: PROJECT_NUMBER });
+
+            const project = projectQuery.user.projectV2;
+            const projectId = project.id;
+            console.log(`Project ID: ${projectId}`);
+
+            // ── 2. Locate Sprint field + matching iteration ────────────────────
+            const sprintField = project.fields.nodes.find(
+              f => f.name === 'Sprint' && f.configuration
+            );
+            if (!sprintField) {
+              console.log('Sprint (Iteration) field not found in project — skipping sprint assignment.');
+            }
+
+            let sprintIterationId = null;
+            if (sprintField) {
+              const iteration = sprintField.configuration.iterations.find(
+                i => i.title === currentSprint.name
+              );
+              if (iteration) {
+                sprintIterationId = iteration.id;
+                console.log(`Sprint iteration ID: ${sprintIterationId}`);
+              } else {
+                console.log(`Iteration "${currentSprint.name}" not found in project — skipping sprint assignment.`);
+              }
+            }
+
+            // ── 3. Locate Status field + "In Review" option ───────────────────
+            const statusField = project.fields.nodes.find(f => f.name === 'Status' && f.options);
+            let inReviewOptionId = null;
+            if (statusField) {
+              const option = statusField.options.find(o => o.name === 'In Review');
+              if (option) {
+                inReviewOptionId = option.id;
+                console.log(`"In Review" option ID: ${inReviewOptionId}`);
+              } else {
+                console.log('"In Review" option not found in Status field — skipping status assignment.');
+              }
+            } else {
+              console.log('Status field not found in project — skipping status assignment.');
+            }
+
+            // ── 4. Add PR to the project ───────────────────────────────────────
+            const prNodeId = context.payload.pull_request.node_id;
+            const addResult = await github.graphql(`
+              mutation($projectId: ID!, $contentId: ID!) {
+                addProjectV2ItemById(input: { projectId: $projectId, contentId: $contentId }) {
+                  item { id }
+                }
+              }
+            `, { projectId, contentId: prNodeId });
+
+            const itemId = addResult.addProjectV2ItemById.item.id;
+            console.log(`PR added to project — item ID: ${itemId}`);
+
+            // ── 5. Set Sprint field ────────────────────────────────────────────
+            if (sprintIterationId) {
+              await github.graphql(`
+                mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $iterationId: String!) {
+                  updateProjectV2ItemFieldValue(input: {
+                    projectId: $projectId
+                    itemId: $itemId
+                    fieldId: $fieldId
+                    value: { iterationId: $iterationId }
+                  }) {
+                    projectV2Item { id }
+                  }
+                }
+              `, {
+                projectId,
+                itemId,
+                fieldId: sprintField.id,
+                iterationId: sprintIterationId,
+              });
+              console.log(`Sprint set to "${currentSprint.name}"`);
+            }
+
+            // ── 6. Set Status → In Review ──────────────────────────────────────
+            if (inReviewOptionId) {
+              await github.graphql(`
+                mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
+                  updateProjectV2ItemFieldValue(input: {
+                    projectId: $projectId
+                    itemId: $itemId
+                    fieldId: $fieldId
+                    value: { singleSelectOptionId: $optionId }
+                  }) {
+                    projectV2Item { id }
+                  }
+                }
+              `, {
+                projectId,
+                itemId,
+                fieldId: statusField.id,
+                optionId: inReviewOptionId,
+              });
+              console.log('Status set to "In Review"');
+            }
