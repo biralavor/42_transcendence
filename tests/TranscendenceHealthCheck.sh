@@ -19,13 +19,13 @@ PASS=0
 FAIL=0
 
 # ── Load .env ─────────────────────────────────────────────────────────────────
-DOMAIN=$(grep "^DOMAIN=" .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '\r' || echo "localhost")
-DB_USER=$(grep "^DB_USER=" .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '\r' || echo "transcendence_user")
-DB_NAME=$(grep "^DB_NAME=" .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '\r' || echo "transcendence_db")
-FRONTEND_PORT=$(grep "^FRONTEND_PORT=" .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '\r' || echo "3000")
-USER_SERVICE_PORT=$(grep "^USER_SERVICE_PORT=" .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '\r' || echo "8001")
-GAME_SERVICE_PORT=$(grep "^GAME_SERVICE_PORT=" .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '\r' || echo "8002")
-CHAT_SERVICE_PORT=$(grep "^CHAT_SERVICE_PORT=" .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '\r' || echo "8003")
+DOMAIN=$(grep -m1 "^DOMAIN=" .env 2>/dev/null | cut -d= -f2- | tr -d '\r' || echo "localhost")
+DB_USER=$(grep -m1 "^DB_USER=" .env 2>/dev/null | cut -d= -f2- | tr -d '\r' || echo "transcendence_user")
+DB_NAME=$(grep -m1 "^DB_NAME=" .env 2>/dev/null | cut -d= -f2- | tr -d '\r' || echo "transcendence_db")
+FRONTEND_PORT=$(grep -m1 "^FRONTEND_PORT=" .env 2>/dev/null | cut -d= -f2- | tr -d '\r' || echo "3000")
+USER_SERVICE_PORT=$(grep -m1 "^USER_SERVICE_PORT=" .env 2>/dev/null | cut -d= -f2- | tr -d '\r' || echo "8001")
+GAME_SERVICE_PORT=$(grep -m1 "^GAME_SERVICE_PORT=" .env 2>/dev/null | cut -d= -f2- | tr -d '\r' || echo "8002")
+CHAT_SERVICE_PORT=$(grep -m1 "^CHAT_SERVICE_PORT=" .env 2>/dev/null | cut -d= -f2- | tr -d '\r' || echo "8003")
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 pass()    { printf "${GREEN}[PASS]${RESET} %s\n" "$1"; ((++PASS)); }
