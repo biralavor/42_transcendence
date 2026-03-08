@@ -1,0 +1,2 @@
+# Base deps come from backend-base image.
+# Add only game-service-specific packages here.

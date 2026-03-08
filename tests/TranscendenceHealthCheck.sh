@@ -22,7 +22,6 @@ FAIL=0
 DOMAIN=$(grep "^DOMAIN=" .env 2>/dev/null | cut -d= -f2- | tr -d '\r' || echo "localhost")
 DB_USER=$(grep "^DB_USER=" .env 2>/dev/null | cut -d= -f2- | tr -d '\r' || echo "transcendence_user")
 DB_NAME=$(grep "^DB_NAME=" .env 2>/dev/null | cut -d= -f2- | tr -d '\r' || echo "transcendence_db")
-BACKEND_PORT=$(grep "^BACKEND_PORT=" .env 2>/dev/null | cut -d= -f2- | tr -d '\r' || echo "8080")
 FRONTEND_PORT=$(grep "^FRONTEND_PORT=" .env 2>/dev/null | cut -d= -f2- | tr -d '\r' || echo "3000")
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -38,7 +37,7 @@ container_running() {
 
 # ── 1. Container Status ────────────────────────────────────────────────────────
 section "Container Status"
-for svc in db backend frontend nginx; do
+for svc in db user-service game-service chat-service frontend nginx adminer; do
     if container_running "$svc"; then
         pass "Container '$svc' is running"
     else
@@ -48,7 +47,7 @@ done
 
 # ── 2. Restart Policy ─────────────────────────────────────────────────────────
 section "Restart Policy"
-for svc in db backend frontend nginx; do
+for svc in db user-service game-service chat-service frontend nginx adminer; do
     policy=$(docker inspect --format '{{.HostConfig.RestartPolicy.Name}}' "$svc" 2>/dev/null || echo "N/A")
     if [[ "$policy" =~ ^(unless-stopped|always|on-failure)$ ]]; then
         pass "$svc restart policy: $policy"
@@ -57,18 +56,18 @@ for svc in db backend frontend nginx; do
     fi
 done
 
-# ── 3. nginx TLS (port 443) ───────────────────────────────────────────────────
-section "nginx TLS (port 443)"
+# ── 3. nginx TLS (port 8443) ───────────────────────────────────────────────────
+section "nginx TLS (port 8443)"
 if command -v openssl &>/dev/null; then
     for proto in tls1_2 tls1_3; do
-        if openssl s_client -connect "${DOMAIN}:443" -"${proto}" </dev/null 2>&1 | grep -q "Cipher"; then
+        if openssl s_client -connect "${DOMAIN}:8443" -"${proto}" </dev/null 2>&1 | grep -q "Cipher"; then
             pass "TLS protocol ${proto} accepted"
         else
             fail "TLS protocol ${proto} NOT accepted"
         fi
     done
     for proto in tls1 tls1_1; do
-        result=$(openssl s_client -connect "${DOMAIN}:443" -"${proto}" </dev/null 2>&1) || true
+        result=$(openssl s_client -connect "${DOMAIN}:8443" -"${proto}" </dev/null 2>&1) || true
         if echo "$result" | grep -qiE "alert|error|no protocols"; then
             pass "TLS protocol ${proto} correctly rejected"
         else
@@ -82,11 +81,11 @@ fi
 # ── 4. HTTPS Response ─────────────────────────────────────────────────────────
 section "HTTPS Response"
 if command -v curl &>/dev/null; then
-    http_code=$(curl -sk -o /dev/null -w "%{http_code}" "https://${DOMAIN}/" 2>/dev/null || echo "000")
+    http_code=$(curl -sk -o /dev/null -w "%{http_code}" "https://${DOMAIN}:8443/" 2>/dev/null || echo "000")
     if [[ "$http_code" =~ ^(200|301|302)$ ]]; then
-        pass "nginx responds on https://${DOMAIN}/ (HTTP $http_code)"
+        pass "nginx responds on https://${DOMAIN}:8443/ (HTTP $http_code)"
     else
-        fail "nginx returned unexpected HTTP code on https://${DOMAIN}/: $http_code"
+        fail "nginx returned unexpected HTTP code on https://${DOMAIN}:8443/: $http_code"
     fi
 else
     info "curl not found — skipping HTTPS response check"
@@ -96,13 +95,22 @@ fi
 # Uses `docker compose ps` (scoped to this project) to avoid false positives
 # from other Docker projects (e.g. Inception) running on the same host.
 section "Port Exposure"
-if docker compose ps --format '{{.Ports}}' 2>/dev/null | grep -q '443->443'; then
-    pass "Port 443 is exposed (nginx TLS)"
+# Port 8443 must be exposed (HTTPS)
+if docker compose ps --format '{{.Ports}}' 2>/dev/null | grep -q '8443->443'; then
+    pass "Port 8443 is exposed (nginx HTTPS)"
 else
-    fail "Port 443 is NOT exposed by nginx"
+    fail "Port 8443 is NOT exposed by nginx"
 fi
 
-for port in 80 3000 8080 5432; do
+# Port 8080 must be exposed (HTTP redirect)
+if docker compose ps --format '{{.Ports}}' 2>/dev/null | grep -q '8080->80'; then
+    pass "Port 8080 is exposed (nginx HTTP redirect)"
+else
+    fail "Port 8080 is NOT exposed by nginx"
+fi
+
+# These ports must NOT be exposed
+for port in 3000 5432; do
     if docker compose ps --format '{{.Ports}}' 2>/dev/null | grep -q ":${port}->"; then
         fail "Port ${port} is exposed to the host (must be internal only)"
     else
@@ -114,7 +122,7 @@ done
 section "Domain Resolution"
 local_ip=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "127.0.0.1")
 resolved=$(getent hosts "$DOMAIN" 2>/dev/null | awk '{print $1}' || echo "")
-if [[ "$resolved" == "127.0.0.1" || "$resolved" == "$local_ip" ]]; then
+if [[ "$resolved" == "127.0.0.1" || "$resolved" == "::1" || "$resolved" == "$local_ip" ]]; then
     pass "$DOMAIN resolves to $resolved"
 else
     fail "$DOMAIN does not resolve to local IP (got: '${resolved:-none}') — check /etc/hosts"
@@ -134,7 +142,7 @@ else
 fi
 if [[ -n "$net" ]]; then
     pass "Docker network found: $net"
-    for svc in db backend frontend nginx; do
+    for svc in db user-service game-service chat-service frontend nginx adminer; do
         if docker network inspect "$net" 2>/dev/null | grep -q "\"$svc\""; then
             pass "$svc is connected to $net"
         else
@@ -145,7 +153,7 @@ else
     fail "No transcendence docker network found"
 fi
 
-if docker inspect db backend frontend nginx 2>/dev/null | grep -q '"NetworkMode": "host"'; then
+if docker inspect db user-service game-service chat-service frontend nginx adminer 2>/dev/null | grep -q '"NetworkMode": "host"'; then
     fail "At least one container uses 'network: host' (forbidden)"
 else
     pass "No container uses 'network: host'"
@@ -180,15 +188,37 @@ fi
 
 # ── 9. Backend Health ─────────────────────────────────────────────────────────
 section "Backend Health"
-if container_running backend; then
-    health_response=$(docker exec backend wget -q -O - "http://127.0.0.1:${BACKEND_PORT}/health" 2>/dev/null || echo "")
-    if echo "$health_response" | grep -q '"status".*"ok"'; then
-        pass "Backend /health returns {\"status\":\"ok\"}"
+if container_running user-service; then
+    health_response_user=$(docker exec user-service wget -q -O - "http://127.0.0.1:${USER_SERVICE_PORT:-8001}/health" 2>/dev/null || echo "")
+    if echo "$health_response_user" | grep -q '"status".*"ok"'; then
+        pass "user-service /health returns {\"status\":\"ok\"}"
     else
-        fail "Backend /health did not return expected response (got: '${health_response:-empty}')"
+        fail "user-service /health did not return expected response (got: '${health_response_user:-empty}')"
     fi
 else
-    info "backend container not running — skipping backend health check"
+    info "user-service container not running — skipping user-service health check"
+fi
+
+if container_running game-service; then
+    health_response_game=$(docker exec game-service wget -q -O - "http://127.0.0.1:${GAME_SERVICE_PORT:-8002}/health" 2>/dev/null || echo "")
+    if echo "$health_response_game" | grep -q '"status".*"ok"'; then
+        pass "game-service /health returns {\"status\":\"ok\"}"
+    else
+        fail "game-service /health did not return expected response (got: '${health_response_game:-empty}')"
+    fi
+else
+    info "game-service container not running — skipping game-service health check"
+fi
+
+if container_running chat-service; then
+    health_response_chat=$(docker exec chat-service wget -q -O - "http://127.0.0.1:${CHAT_SERVICE_PORT:-8003}/health" 2>/dev/null || echo "")
+    if echo "$health_response_chat" | grep -q '"status".*"ok"'; then
+        pass "chat-service /health returns {\"status\":\"ok\"}"
+    else
+        fail "chat-service /health did not return expected response (got: '${health_response_chat:-empty}')"
+    fi
+else
+    info "chat-service container not running — skipping chat-service health check"
 fi
 
 # ── 10. Frontend Response ─────────────────────────────────────────────────────
@@ -207,18 +237,18 @@ fi
 # ── 11. nginx Proxy Routes ────────────────────────────────────────────────────
 section "nginx Proxy Routes"
 if command -v curl &>/dev/null; then
-    frontend_via_nginx=$(curl -sk "https://${DOMAIN}/" 2>/dev/null || echo "")
+    frontend_via_nginx=$(curl -sk "https://${DOMAIN}:8443/" 2>/dev/null || echo "")
     if echo "$frontend_via_nginx" | grep -qi "<html\|<h1\|transcendence"; then
-        pass "nginx proxies https://${DOMAIN}/ → frontend (HTML response)"
+        pass "nginx proxies https://${DOMAIN}:8443/ → frontend (HTML response)"
     else
-        fail "nginx proxy to frontend failed on https://${DOMAIN}/"
+        fail "nginx proxy to frontend failed on https://${DOMAIN}:8443/"
     fi
 
-    api_response=$(curl -sk "https://${DOMAIN}/api/health" 2>/dev/null || echo "")
+    api_response=$(curl -sk "https://${DOMAIN}:8443/api/users/health" 2>/dev/null || echo "")
     if echo "$api_response" | grep -q '"status".*"ok"'; then
-        pass "nginx proxies https://${DOMAIN}/api/health → backend ({\"status\":\"ok\"})"
+        pass "nginx proxies https://${DOMAIN}:8443/api/users/health → user-service ({\"status\":\"ok\"})"
     else
-        fail "nginx proxy to backend failed on https://${DOMAIN}/api/health (got: '${api_response:-empty}')"
+        fail "nginx proxy to user-service failed on https://${DOMAIN}:8443/api/users/health (got: '${api_response:-empty}')"
     fi
 else
     info "curl not found — skipping nginx proxy route checks"
@@ -245,6 +275,10 @@ section "Dockerfile Safety"
 dockerfiles=(
     "services/database/Dockerfile"
     "services/backend/Dockerfile"
+    "services/backend-base/Dockerfile"
+    "services/user-service/Dockerfile"
+    "services/game-service/Dockerfile"
+    "services/chat-service/Dockerfile"
     "services/frontend/Dockerfile"
     "services/nginx/Dockerfile"
 )
@@ -262,11 +296,17 @@ for df in "${dockerfiles[@]}"; do
     fi
 
     from_line=$(grep -m1 "^FROM" "$df" 2>/dev/null || echo "")
-    if echo "$from_line" | grep -qE "^FROM \S+:[0-9a-zA-Z]" && \
-       ! echo "$from_line" | grep -qi ":latest"; then
-        pass "$svc_name/Dockerfile: FROM uses a pinned version tag"
+    from_image=$(echo "$from_line" | awk '{print $2}')
+    # Local images (no registry host — no dot or slash) don't need a version tag
+    if echo "$from_image" | grep -qE "[./]"; then
+        if echo "$from_line" | grep -qE "^FROM \S+:[0-9a-zA-Z]" && \
+           ! echo "$from_line" | grep -qi ":latest"; then
+            pass "$svc_name/Dockerfile: FROM uses a pinned version tag"
+        else
+            fail "$svc_name/Dockerfile: FROM must use a pinned version tag (got: '${from_line:-empty}')"
+        fi
     else
-        fail "$svc_name/Dockerfile: FROM must use a pinned version tag (got: '${from_line:-empty}')"
+        pass "$svc_name/Dockerfile: FROM uses local base image '${from_image}' (no registry tag required)"
     fi
 
     if grep -iE "(password|passwd|secret)\s*=\s*\S+" "$df" | grep -v "^#" | grep -q .; then
@@ -322,7 +362,7 @@ else
     fail ".env missing at repository root — run: cp .env.example .env"
 fi
 
-required_vars=(DB_HOST DB_PORT DB_USER DB_PASSWORD DB_NAME BACKEND_PORT FRONTEND_PORT DOMAIN)
+required_vars=(DB_HOST DB_PORT DB_USER DB_PASSWORD DB_NAME USER_SERVICE_PORT GAME_SERVICE_PORT CHAT_SERVICE_PORT FRONTEND_PORT DOMAIN)
 for var in "${required_vars[@]}"; do
     value=$(grep "^${var}=" .env 2>/dev/null | cut -d= -f2- | tr -d '\r' || echo "")
     if [[ -n "$value" ]]; then
@@ -350,7 +390,7 @@ for f in docker-compose.yml Makefile .env.example; do
     fi
 done
 
-for svc in database backend frontend nginx; do
+for svc in database backend backend-base user-service game-service chat-service frontend nginx; do
     df="services/${svc}/Dockerfile"
     if [[ -f "$df" && -s "$df" ]]; then
         pass "Dockerfile exists and non-empty: services/${svc}/"
