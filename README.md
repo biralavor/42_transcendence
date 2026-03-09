@@ -82,6 +82,17 @@ make fclean                  # full teardown
 
 See [docs/DEV_DOC.md](docs/DEV_DOC.md) · [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/MICROSERVICES.md](docs/MICROSERVICES.md) · [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) for developer guides.
 
+## Documentation
+
+| Resource | Description |
+|----------|-------------|
+| [Wiki — Home](https://github.com/biralavor/42_transcendence/wiki/Home) | Project overview and quick start |
+| [Wiki — Milestones](https://github.com/biralavor/42_transcendence/wiki/Milestones) | Sprint plan and delivery timeline |
+| [Wiki — Troubleshooting](https://github.com/biralavor/42_transcendence/wiki/Troubleshooting) | Common setup and runtime issues |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System diagram and service routing |
+| [docs/MICROSERVICES.md](docs/MICROSERVICES.md) | Backend service layout |
+| [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) | Git workflow and branching strategy |
+
 ---
 
 ## Team
