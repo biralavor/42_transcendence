@@ -8,11 +8,33 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from alembic import context
 
 # ---------------------------------------------------------------------------
-# Adjust sys.path so that "shared" (two levels up from this file) is importable.
-# Layout:  src/backend/user-service/alembic/env.py
-#                       ^shared is at src/backend/shared
+# Container layout (entrypoint runs: cd /app/service && alembic upgrade head):
+#
+#   /app/
+#   ├── service/          ← user-service source; CWD when alembic runs
+#   │   ├── alembic/
+#   │   │   └── env.py   ← this file  (__file__ = /app/service/alembic/env.py)
+#   │   └── models/
+#   │       └── user.py
+#   └── shared/           ← shared library
+#       ├── config/
+#       │   └── settings.py
+#       └── database/
+#
+# We need two directories on sys.path:
+#   /app          → makes "shared.*" importable
+#   /app/service  → makes "models.*" importable
+#
+# NOTE: "from service.models..." cannot be used here because user-service has a
+# service.py file that shadows the service/ package when /app/service is on sys.path.
 # ---------------------------------------------------------------------------
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+_here = os.path.dirname(os.path.abspath(__file__))        # /app/service/alembic
+_service_root = os.path.abspath(os.path.join(_here, ".."))  # /app/service
+_app_root = os.path.abspath(os.path.join(_here, "..", ".."))  # /app
+
+for _p in (_app_root, _service_root):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 
 from shared.config.settings import settings  # noqa: E402
 from shared.database import Base             # noqa: E402
