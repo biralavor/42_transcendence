@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     DB_HOST: str = "db"
     DB_PORT: int = 5432
     DB_NAME: str = "transcendence_db"
+    DB_ECHO: bool = False
 
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> str:
