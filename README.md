@@ -92,6 +92,7 @@ See [docs/DEV_DOC.md](docs/DEV_DOC.md) · [docs/ARCHITECTURE.md](docs/ARCHITECTU
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System diagram and service routing |
 | [docs/MICROSERVICES.md](docs/MICROSERVICES.md) | Backend service layout |
 | [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) | Git workflow and branching strategy |
+| [docs/ALEMBIC.md](docs/ALEMBIC.md) | Alembic migration guide — changelog, rollback, workflow |
 
 ---
 
