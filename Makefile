@@ -121,13 +121,14 @@ show-tables:
 
 .PHONY: show-tables-full
 show-tables-full:
-	docker compose exec db sh -c "psql -U \$$POSTGRES_USER -d \$$POSTGRES_DB -c \
-		\"SELECT t.table_name, c.column_name, c.data_type, c.is_nullable, c.column_default \
+	docker compose exec db sh -c \
+		'psql -U $$POSTGRES_USER -d $$POSTGRES_DB -c \
+		"SELECT t.table_name, c.column_name, c.data_type, c.is_nullable, c.column_default \
 		FROM information_schema.tables t \
 		JOIN information_schema.columns c ON t.table_name = c.table_name \
-		WHERE t.table_schema = 'public' \
-		AND t.table_name NOT LIKE 'alembic%%' \
-		ORDER BY t.table_name, c.ordinal_position;\""
+		WHERE t.table_schema = '"'"'public'"'"' \
+		AND t.table_name NOT LIKE '"'"'alembic%'"'"' \
+		ORDER BY t.table_name, c.ordinal_position;"'
 
 # --- chat-service ---
 .PHONY: up-chat
