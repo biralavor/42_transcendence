@@ -1,5 +1,5 @@
 from fastapi import status, HTTPException
-from service.models import Credentials, Login, Token, RegisterRequest
+from service.schemas import Credentials, Login, Token, RegisterRequest
 from datetime import datetime, timedelta, timezone
 import bcrypt
 from jose import jwt
