@@ -12,4 +12,6 @@ class User(Base):
     email = Column(String(100), unique=True)
     password_hash = Column(String)
     status = Column(String(20), default="offline")
+    avatar_url = Column(String, nullable=True)
+    display_name = Column(String(50), nullable=True)
     created_at = Column(TIMESTAMP, default=func.now())
