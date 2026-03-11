@@ -18,7 +18,7 @@ from shared.config.settings import settings  # noqa: E402
 from shared.database import Base             # noqa: E402
 
 # Import the service models so Alembic can detect them in Base.metadata
-from service.models.user import User  # noqa: E402, F401
+from models.user import User  # noqa: E402, F401
 
 # Tables owned by this service — Alembic will ONLY manage these.
 _SERVICE_TABLES = {"users"}

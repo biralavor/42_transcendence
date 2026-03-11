@@ -8,6 +8,9 @@ RUN pip install --no-cache-dir -r service-requirements.txt
 COPY --chown=appuser:appgroup src/backend/shared/ /app/shared/
 COPY --chown=appuser:appgroup src/backend/chat-service/ /app/service/
 
+COPY services/chat-service/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
 EXPOSE 8003
 
-CMD ["sh", "-c", "uvicorn service.main:app --host 0.0.0.0 --port ${CHAT_SERVICE_PORT:-8003} --reload --reload-dir /app/service --reload-dir /app/shared"]
+ENTRYPOINT ["/entrypoint.sh"]
