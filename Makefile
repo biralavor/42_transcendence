@@ -39,6 +39,28 @@ windows:
 check:
 	bash tests/TranscendenceHealthCheck.sh | tee /dev/tty | sed 's/\x1b\[[0-9;]*m//g' > release.txt
 
+# --- alembic migrations ---
+# Usage: make migrate-user MSG=add_avatar_url_to_users
+#        make migrate-game MSG=add_tournaments_table
+#        make migrate-chat MSG=add_room_members
+.PHONY: migrate-user
+migrate-user:
+	docker compose exec user-service sh -c "cd /app/service && alembic revision --autogenerate -m '$(MSG)'"
+
+.PHONY: migrate-game
+migrate-game:
+	docker compose exec game-service sh -c "cd /app/service && alembic revision --autogenerate -m '$(MSG)'"
+
+.PHONY: migrate-chat
+migrate-chat:
+	docker compose exec chat-service sh -c "cd /app/service && alembic revision --autogenerate -m '$(MSG)'"
+
+.PHONY: migrate-upgrade
+migrate-upgrade:
+	docker compose exec user-service sh -c "cd /app/service && alembic upgrade head"
+	docker compose exec game-service sh -c "cd /app/service && alembic upgrade head"
+	docker compose exec chat-service sh -c "cd /app/service && alembic upgrade head"
+
 # --- base image ---
 .PHONY: build-base
 build-base:
@@ -91,6 +113,21 @@ down-game:
 re-game: down-game
 	docker compose build --no-cache game-service
 	docker compose up -d game-service
+
+# --- database ---
+.PHONY: show-tables
+show-tables:
+	docker compose exec db sh -c 'psql -U $$POSTGRES_USER -d $$POSTGRES_DB -c "\dt"'
+
+.PHONY: show-tables-full
+show-tables-full:
+	docker compose exec db sh -c "psql -U \$$POSTGRES_USER -d \$$POSTGRES_DB -c \
+		\"SELECT t.table_name, c.column_name, c.data_type, c.is_nullable, c.column_default \
+		FROM information_schema.tables t \
+		JOIN information_schema.columns c ON t.table_name = c.table_name \
+		WHERE t.table_schema = 'public' \
+		AND t.table_name NOT LIKE 'alembic%%' \
+		ORDER BY t.table_name, c.ordinal_position;\""
 
 # --- chat-service ---
 .PHONY: up-chat
