@@ -1,5 +1,5 @@
 from fastapi import FastAPI, status
-from service.models import Login, RegisterRequest
+from service.schemas import Login, RegisterRequest
 from service.service import register_user, authenticate
 
 app = FastAPI(title="User Service")
