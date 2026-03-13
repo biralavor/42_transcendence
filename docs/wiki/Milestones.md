@@ -47,6 +47,33 @@
 | Basic chat (send/receive messages) | chat-service | Major Web |
 | Game statistics stored per match | game-service + db | Minor UserMgmt |
 
+### Local Pong Game
+- The game can be real-time multiplayer (e.g., Pong, Chess, Tic-Tac-Toe, Card games, etc.).
+- Players must be able to play live matches.
+- The game must have clear rules and win/loss conditions.
+- The game can be 2D or 3D.
+
+### Websocket infrastructure
+- Real-time updates across clients.
+- Handle connection/disconnection gracefully.
+- Efficient message broadcasting.
+
+### User profile
+- View and edit profile information (username, avatar).
+- Store user preferences.
+
+### Basic chat
+- Send and receive messages in real-time.
+- Store chat history in the database.
+- A profile system (view user information).
+- A friends system (add/remove friends, see friends list).
+
+### Game statistics
+- Track user game statistics (wins, losses, ranking, level, etc.).
+- Display match history (1v1 games, dates, results, opponents).
+- Show achievements and progression.
+- Leaderboard integration.
+
 **Exit criteria:** Two people can play Pong on the same keyboard. Chat sends messages. Profiles visible.
 
 ---
