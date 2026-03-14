@@ -1,2 +1,4 @@
 # Base deps come from backend-base image.
 # Add only game-service-specific packages here.
+pytest==8.3.5
+httpx==0.28.1
