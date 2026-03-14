@@ -63,16 +63,16 @@
 - Store user preferences.
 
 ### Basic chat
-- Send and receive messages in real-time.
-- Store chat history in the database.
-- A profile system (view user information).
-- A friends system (add/remove friends, see friends list).
+1. A profile system (view user information).
+2. A friends system (add/remove friends, see friends list).
+3. Send and receive messages in real-time.
+4. Store chat history in the database.
 
 ### Game statistics
-- Track user game statistics (wins, losses, ranking, level, etc.).
-- Display match history (1v1 games, dates, results, opponents).
-- Show achievements and progression.
-- Leaderboard integration.
+1. Track user game statistics (wins, losses, ranking, level, etc.).
+2. Display match history (1v1 games, dates, results, opponents).
+3. Leaderboard integration.
+4. Show achievements and progression.
 
 **Exit criteria:** Two people can play Pong on the same keyboard. Chat sends messages. Profiles visible.
 
