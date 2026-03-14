@@ -1,6 +1,6 @@
 /// <reference lib="dom" />
 
-import { canvasWidth, canvasHeight, GameState, gameLoop } from '../src/game/pongEngine.js'
+import { GameState, gameLoop } from '../src/game/pongEngine.js'
 
 const keyState = {
     'KeyJ': false, // p2 down

@@ -141,10 +141,6 @@ export class GameState {
         this.ball.position.velY = 0;
     }
 
-    move(movements) {
-        this.ball.move(movements.ball);
-    }
-
     collision() {
         const ballIntendedPosition = { ...this.ball.position };
         [ballIntendedPosition.y,
