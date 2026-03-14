@@ -213,8 +213,8 @@ export function render(canvasContext, { player1, player2, ball }) {
 export function gameLoop(canvasContext, gameState, setGameState, getInput) {
     const input = getInput();
 
-    gameState.player1.position.velY *= 0.98;
-    gameState.player2.position.velY *= 0.98;
+    gameState.player1.position.velY *= 0.95;
+    gameState.player2.position.velY *= 0.95;
 
     gameState.player1.position.velY += input.player1.velY;
     gameState.player1.position.velY = gameState.player1.position.velY > 10 ? 10 : gameState.player1.position.velY;
