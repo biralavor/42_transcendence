@@ -405,6 +405,39 @@ for svc in database backend-base user-service game-service chat-service frontend
     fi
 done
 
+# ── 16. WebSocket Connectivity ────────────────────────────────────────────────
+section "WebSocket Connectivity"
+
+# Helper: attempts a WebSocket handshake via curl; succeeds on HTTP 101.
+ws_handshake() {
+    local url="$1"
+    local code
+    code=$(curl -sk -o /dev/null -w "%{http_code}" \
+        --max-time 5 \
+        -H "Upgrade: websocket" \
+        -H "Connection: Upgrade" \
+        -H "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==" \
+        -H "Sec-WebSocket-Version: 13" \
+        "$url" 2>/dev/null)
+    [[ "$code" == "101" ]]
+}
+
+if command -v curl &>/dev/null; then
+    if ws_handshake "https://${DOMAIN}:8443/api/chat/ws/chat/healthcheck"; then
+        pass "WebSocket handshake accepted: /api/chat/ws/chat/healthcheck (101)"
+    else
+        fail "WebSocket handshake failed: /api/chat/ws/chat/healthcheck (expected 101)"
+    fi
+
+    if ws_handshake "https://${DOMAIN}:8443/api/game/ws/game/healthcheck"; then
+        pass "WebSocket handshake accepted: /api/game/ws/game/healthcheck (101)"
+    else
+        fail "WebSocket handshake failed: /api/game/ws/game/healthcheck (expected 101)"
+    fi
+else
+    info "curl not found — skipping WebSocket connectivity checks"
+fi
+
 # ── Summary ───────────────────────────────────────────────────────────────────
 printf "\n${YELLOW}══════════════════════════════════════════${RESET}\n"
 printf "  ${YELLOW}MANDATORY${RESET}  ${GREEN}PASSED: %-3d${RESET}  ${RED}FAILED: %-3d${RESET}\n" "$PASS" "$FAIL"
