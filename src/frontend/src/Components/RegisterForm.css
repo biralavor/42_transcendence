@@ -1,27 +1,31 @@
 .register-page {
-  min-height: calc(100vh - 76px);
-  padding: 1rem 1rem;
-  background: linear-gradient(180deg, #1b1f24 0%, #161a1f 100%);
+  min-height: calc(100vh - 110px);
+  padding: 1.5rem 1rem 3rem;
 }
 
 .form-container {
-  max-width: 600px;
+  max-width: 640px;
 }
 
 .form-box {
   padding: 2rem;
-  border-radius: 1rem;
-  background: rgba(33, 37, 41, 0.92);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+  border-radius: 28px;
 }
 
 .logo {
-  width: 96px;
+  width: 112px;
   height: auto;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.75rem;
+  filter: drop-shadow(0 0 12px rgba(244, 208, 63, 0.25));
 }
 
 .form-check-label {
-  font-size: 0.95rem;
+  font-size: 1.1rem;
+  color: rgba(240, 240, 232, 0.86);
+}
+
+@media (max-width: 575px) {
+  .form-box {
+    padding: 1.2rem;
+  }
 }

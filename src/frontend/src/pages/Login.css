@@ -1,16 +1,25 @@
 .form-container {
-  max-width: 520px;
+  max-width: 640px;
   padding: 1rem;
 }
 
 .form-box {
-  max-width: 320px;
+  max-width: 100%;
   margin: 0 auto;
+  padding: 2rem;
+  border-radius: 28px;
 }
 
 .logo {
-  width: clamp(180px, 30vw, 250px);
+  width: clamp(96px, 18vw, 136px);
   height: auto;
   display: block;
-  margin: 0 auto 12px;
+  margin: 0 auto 14px;
+  filter: drop-shadow(0 0 12px rgba(244, 208, 63, 0.24));
+}
+
+@media (max-width: 575px) {
+  .form-box {
+    padding: 1.2rem;
+  }
 }

@@ -101,130 +101,135 @@ const RegisterForm = () => {
     buttonText = 'Creating account...'
 
   return (
-    <div className="register-page min-vh-100 d-flex align-items-center justify-content-center py-4">
+    <div className="register-page arcade-auth-layout">
       <div className="w-100 m-auto form-container">
-        <form className="form-box" id="registerForm" onSubmit={handleSubmit}>
-          <div className="text-center mb-2">
-            <img
-              src="/logo_tight_square.png"
-              className="logo"
-              alt="ft_transcendence logo"
-            />
-          </div>
-
-          <h1 className="h3 mb-3 fw-normal text-center">Create your account</h1>
-
-          {error && (
-            <div className="alert alert-danger py-2" role="alert">
-              {error}
+        <form className="form-box arcade-screen arcade-form-card" id="registerForm" onSubmit={handleSubmit}>
+          <div className="arcade-panel">
+            <div className="text-center mb-2">
+              <img
+                src="/logo_tight_square.png"
+                className="logo"
+                alt="ft_transcendence logo"
+              />
             </div>
-          )}
 
-          {success && (
-            <div className="alert alert-success py-2" role="alert">
-              {success}
+            <h1 className="arcade-title text-center mb-2" style={{ fontSize: '2.1rem' }}>Create your account</h1>
+            <p className="arcade-form-copy text-center mb-4">
+              Build your player identity, unlock the arena, and start climbing the scoreboard.
+            </p>
+
+            {error && (
+              <div className="alert alert-danger py-2" role="alert">
+                {error}
+              </div>
+            )}
+
+            {success && (
+              <div className="alert alert-success py-2" role="alert">
+                {success}
+              </div>
+            )}
+
+            <div className="form-floating mb-3 arcade-form-control">
+              <input
+                type="text"
+                className="form-control"
+                id="floatingUsername"
+                name="username"
+                placeholder="Username"
+                autoComplete="username"
+                value={formData.username}
+                onChange={handleChange}
+                required
+              />
+              <label htmlFor="floatingUsername">Username</label>
             </div>
-          )}
 
-          <div className="form-floating mb-2">
-            <input
-              type="text"
-              className="form-control"
-              id="floatingUsername"
-              name="username"
-              placeholder="Username"
-              autoComplete="username"
-              value={formData.username}
-              onChange={handleChange}
-              required
-            />
-            <label htmlFor="floatingUsername">Username</label>
+            <div className="form-floating mb-3 arcade-form-control">
+              <input
+                type="email"
+                className="form-control"
+                id="floatingEmail"
+                name="email"
+                placeholder="your_email@example.com"
+                autoComplete="email"
+                value={formData.email}
+                onChange={handleChange}
+                required
+              />
+              <label htmlFor="floatingEmail">E-mail address</label>
+            </div>
+
+            <div className="form-floating mb-3 arcade-form-control">
+              <input
+                type="password"
+                className="form-control"
+                id="floatingPassword"
+                name="password"
+                placeholder="Password"
+                autoComplete="new-password"
+                value={formData.password}
+                onChange={handleChange}
+                required
+              />
+              <label htmlFor="floatingPassword">Password</label>
+            </div>
+
+            <div className="form-floating mb-3 arcade-form-control">
+              <input
+                type="password"
+                className="form-control"
+                id="floatingConfirmPassword"
+                name="confirmPassword"
+                placeholder="Confirm Password"
+                autoComplete="new-password"
+                value={formData.confirmPassword}
+                onChange={handleChange}
+                required
+              />
+              <label htmlFor="floatingConfirmPassword">Confirm password</label>
+            </div>
+
+            <div className="form-check text-start mb-2 arcade-form-check">
+              <input
+                className="form-check-input"
+                type="checkbox"
+                id="termsCheck"
+                name="termsAccepted"
+                checked={formData.termsAccepted}
+                onChange={handleChange}
+              />
+              <label className="form-check-label" htmlFor="termsCheck">
+                I agree to the Terms of Use
+              </label>
+            </div>
+
+            <div className="form-check text-start mb-4 arcade-form-check">
+              <input
+                className="form-check-input"
+                type="checkbox"
+                id="privacyCheck"
+                name="privacyAccepted"
+                checked={formData.privacyAccepted}
+                onChange={handleChange}
+              />
+              <label className="form-check-label" htmlFor="privacyCheck">
+                I agree to the Privacy Policy
+              </label>
+            </div>
+
+            <button
+              className="arcade-btn arcade-btn-primary w-100 mb-3"
+              type="submit"
+              disabled={isSubmitting}
+            >
+              {buttonText}
+            </button>
+
+            <p className="text-center arcade-form-copy mb-0">
+              Already have an account? <Link className="arcade-kicker text-decoration-none" to="/login">Sign in</Link>
+            </p>
           </div>
-
-          <div className="form-floating mb-2">
-            <input
-              type="email"
-              className="form-control"
-              id="floatingEmail"
-              name="email"
-              placeholder="your_email@example.com"
-              autoComplete="email"
-              value={formData.email}
-              onChange={handleChange}
-              required
-            />
-            <label htmlFor="floatingEmail">E-mail address</label>
-          </div>
-
-          <div className="form-floating mb-2">
-            <input
-              type="password"
-              className="form-control"
-              id="floatingPassword"
-              name="password"
-              placeholder="Password"
-              autoComplete="new-password"
-              value={formData.password}
-              onChange={handleChange}
-              required
-            />
-            <label htmlFor="floatingPassword">Password</label>
-          </div>
-
-          <div className="form-floating mb-3">
-            <input
-              type="password"
-              className="form-control"
-              id="floatingConfirmPassword"
-              name="confirmPassword"
-              placeholder="Confirm Password"
-              autoComplete="new-password"
-              value={formData.confirmPassword}
-              onChange={handleChange}
-              required
-            />
-            <label htmlFor="floatingConfirmPassword">Confirm password</label>
-          </div>
-
-          <div className="form-check text-start mb-2">
-            <input
-              className="form-check-input"
-              type="checkbox"
-              id="termsCheck"
-              name="termsAccepted"
-              checked={formData.termsAccepted}
-              onChange={handleChange}
-            />
-            <label className="form-check-label" htmlFor="termsCheck">
-              I agree to the Terms of Use
-            </label>
-          </div>
-
-          <div className="form-check text-start mb-3">
-            <input
-              className="form-check-input"
-              type="checkbox"
-              id="privacyCheck"
-              name="privacyAccepted"
-              checked={formData.privacyAccepted}
-              onChange={handleChange}
-            />
-            <label className="form-check-label" htmlFor="privacyCheck">
-              I agree to the Privacy Policy
-            </label>
-          </div>
-
-          <button
-            className="btn btn-primary w-100 py-2 mb-3"
-            type="submit"
-            disabled={isSubmitting}
-          >
-            {buttonText}
-          </button>
-
-          <p className="text-center small text-body-secondary mb-0">
-            Already have an account? <Link to="/login">Sign in</Link>
-          </p>
         </form>
       </div>
     </div>
