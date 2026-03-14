@@ -3,8 +3,16 @@ events {
 }
 
 http {
-    upstream backend {
-        server backend:${BACKEND_PORT};
+    upstream user-service {
+        server user-service:${USER_SERVICE_PORT};
+    }
+
+    upstream game-service {
+        server game-service:${GAME_SERVICE_PORT};
+    }
+
+    upstream chat-service {
+        server chat-service:${CHAT_SERVICE_PORT};
     }
 
     upstream frontend {
@@ -28,13 +36,31 @@ http {
         ssl_certificate_key /etc/nginx/ssl/nginx.key;
         ssl_protocols       TLSv1.2 TLSv1.3;
 
-        # NOTE: proxy_pass with trailing slash strips the /api prefix.
-        # A request to /api/health becomes /health at the backend.
-        # FastAPI routes must NOT include /api (e.g. @app.get("/health"), not @app.get("/api/health")).
-        location /api/ {
-            proxy_pass         http://backend/;
+        # NOTE: trailing slash on proxy_pass strips the location prefix.
+        # /api/users/profile → /profile at user-service
+        # FastAPI routes must NOT include the /api/<service> prefix.
+        location /api/users/ {
+            proxy_pass         http://user-service/;
             proxy_set_header   Host $host;
             proxy_set_header   X-Real-IP $remote_addr;
+            proxy_set_header   Upgrade $http_upgrade;
+            proxy_set_header   Connection "upgrade";
+        }
+
+        location /api/game/ {
+            proxy_pass         http://game-service/;
+            proxy_set_header   Host $host;
+            proxy_set_header   X-Real-IP $remote_addr;
+            proxy_set_header   Upgrade $http_upgrade;
+            proxy_set_header   Connection "upgrade";
+        }
+
+        location /api/chat/ {
+            proxy_pass         http://chat-service/;
+            proxy_set_header   Host $host;
+            proxy_set_header   X-Real-IP $remote_addr;
+            proxy_set_header   Upgrade $http_upgrade;
+            proxy_set_header   Connection "upgrade";
         }
 
         location / {

@@ -22,20 +22,68 @@ services:
       retries: 5
     restart: unless-stopped
 
-  backend:
+  user-service:
     build:
       context: .
-      dockerfile: services/backend/Dockerfile
-    container_name: backend
+      dockerfile: services/user-service/Dockerfile
+    image: user-service
+    container_name: user-service
     environment:
-      DB_HOST:      ${DB_HOST}
-      DB_PORT:      ${DB_PORT}
-      DB_USER:      ${DB_USER}
-      DB_PASSWORD:  ${DB_PASSWORD}
-      DB_NAME:      ${DB_NAME}
-      BACKEND_PORT: ${BACKEND_PORT}
+      DB_HOST:           ${DB_HOST}
+      DB_PORT:           ${DB_PORT}
+      DB_USER:           ${DB_USER}
+      DB_PASSWORD:       ${DB_PASSWORD}
+      DB_NAME:           ${DB_NAME}
+      USER_SERVICE_PORT: ${USER_SERVICE_PORT}
     volumes:
-      - backend_data:/app
+      - ./src/backend/user-service:/app/service
+      - ./src/backend/shared:/app/shared
+    networks:
+      - transcendence_network
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  game-service:
+    build:
+      context: .
+      dockerfile: services/game-service/Dockerfile
+    image: game-service
+    container_name: game-service
+    environment:
+      DB_HOST:           ${DB_HOST}
+      DB_PORT:           ${DB_PORT}
+      DB_USER:           ${DB_USER}
+      DB_PASSWORD:       ${DB_PASSWORD}
+      DB_NAME:           ${DB_NAME}
+      GAME_SERVICE_PORT: ${GAME_SERVICE_PORT}
+    volumes:
+      - ./src/backend/game-service:/app/service
+      - ./src/backend/shared:/app/shared
+    networks:
+      - transcendence_network
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  chat-service:
+    build:
+      context: .
+      dockerfile: services/chat-service/Dockerfile
+    image: chat-service
+    container_name: chat-service
+    environment:
+      DB_HOST:           ${DB_HOST}
+      DB_PORT:           ${DB_PORT}
+      DB_USER:           ${DB_USER}
+      DB_PASSWORD:       ${DB_PASSWORD}
+      DB_NAME:           ${DB_NAME}
+      CHAT_SERVICE_PORT: ${CHAT_SERVICE_PORT}
+    volumes:
+      - ./src/backend/chat-service:/app/service
+      - ./src/backend/shared:/app/shared
     networks:
       - transcendence_network
     depends_on:
@@ -54,15 +102,18 @@ services:
     environment:
       FRONTEND_PORT: ${FRONTEND_PORT}
     volumes:
-      - frontend_data:/app
+      - ./src/frontend:/app
+      - /app/node_modules
     networks:
       - transcendence_network
     depends_on:
-      - backend
+      - user-service
+      - game-service
+      - chat-service
     restart: unless-stopped
 
   adminer:
-    image: adminer:latest
+    image: adminer:5.4.2
     container_name: adminer
     ports:
       - "8888:8080"
@@ -79,9 +130,11 @@ services:
       dockerfile: Dockerfile
     container_name: nginx
     environment:
-      BACKEND_PORT:  ${BACKEND_PORT}
-      FRONTEND_PORT: ${FRONTEND_PORT}
-      DOMAIN:        ${DOMAIN}
+      USER_SERVICE_PORT: ${USER_SERVICE_PORT}
+      GAME_SERVICE_PORT: ${GAME_SERVICE_PORT}
+      CHAT_SERVICE_PORT: ${CHAT_SERVICE_PORT}
+      FRONTEND_PORT:     ${FRONTEND_PORT}
+      DOMAIN:            ${DOMAIN}
     ports:
       - "8080:80"
       - "8443:443"
@@ -89,13 +142,13 @@ services:
       - transcendence_network
     depends_on:
       - frontend
-      - backend
+      - user-service
+      - game-service
+      - chat-service
     restart: unless-stopped
 
 volumes:
   db_data:
-  backend_data:
-  frontend_data:
 
 networks:
   transcendence_network:

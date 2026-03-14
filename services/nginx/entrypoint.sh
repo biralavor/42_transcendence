@@ -8,8 +8,8 @@ openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
     -subj   "/C=FR/ST=IDF/L=Paris/O=42/CN=${DOMAIN}" \
     -addext "subjectAltName=DNS:${DOMAIN}"
 
-# Substitute BACKEND_PORT, FRONTEND_PORT, DOMAIN — leave nginx vars ($host, $remote_addr, etc.) intact.
-envsubst '${BACKEND_PORT} ${FRONTEND_PORT} ${DOMAIN}' \
+# Substitute service ports and domain — leave nginx vars ($host, $remote_addr, etc.) intact.
+envsubst '${USER_SERVICE_PORT} ${GAME_SERVICE_PORT} ${CHAT_SERVICE_PORT} ${FRONTEND_PORT} ${DOMAIN}' \
     < /etc/nginx/nginx.conf.template \
     > /etc/nginx/nginx.conf
 
