@@ -63,10 +63,14 @@
 - Store user preferences.
 
 ### Basic chat
-1. A profile system (view user information).
-2. A friends system (add/remove friends, see friends list).
-3. Send and receive messages in real-time.
-4. Store chat history in the database.
+> Build sequence is deliberate: real-time messaging first validates the full
+> WebSocket stack end-to-end before adding persistence, then identity and
+> social graph on top of a proven foundation.
+
+1. Send and receive messages in real-time.
+2. Store chat history in the database.
+3. A profile system (view user information).
+4. A friends system (add/remove friends, see friends list).
 
 ### Game statistics
 1. Track user game statistics (wins, losses, ranking, level, etc.).

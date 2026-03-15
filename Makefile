@@ -145,6 +145,25 @@ show-tables-full:
 		AND t.table_name NOT LIKE '"'"'alembic%'"'"' \
 		ORDER BY t.table_name, c.ordinal_position;"'
 
+# --- network access ---
+.PHONY: show-ip
+show-ip:
+	@IP=$$(hostname -I 2>/dev/null | awk '{print $$1}'); \
+	echo ""; \
+	echo "  Host LAN IP: $$IP"; \
+	echo ""; \
+	echo "  To access from another device on the same Wi-Fi:"; \
+	echo "    1. Open https://$$IP:8443 in the browser"; \
+	echo "    2. Accept the certificate warning (self-signed — tap Advanced → Accept the Risk)"; \
+	echo "    3. The cert is issued for 'localhost' by default. To avoid the warning,"; \
+	echo "       set DOMAIN=$$IP in .env and run 'make re-nginx' to reissue the cert for that IP."; \
+	echo ""
+
+.PHONY: re-nginx
+re-nginx:
+	docker compose stop nginx && docker compose rm -f nginx
+	docker compose up --build -d nginx
+
 # --- chat-service ---
 .PHONY: up-chat
 up-chat:
