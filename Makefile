@@ -37,6 +37,7 @@ windows:
 
 .PHONY: wait
 wait:
+	@command -v curl >/dev/null 2>&1 || { echo "Error: curl is required but not installed. Install it and retry."; exit 1; }
 	@echo "Waiting for all services to be ready (up to 60s)..."; \
 	for i in $$(seq 30); do \
 		user=$$(curl -sk -o /dev/null -w "%{http_code}" https://localhost:8443/api/users/health 2>/dev/null); \
