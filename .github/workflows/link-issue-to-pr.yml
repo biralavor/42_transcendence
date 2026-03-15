@@ -77,3 +77,30 @@ jobs:
             });
 
             console.log(`Appended "Closes #${issueNumber}" to PR #${context.payload.pull_request.number}`);
+
+            // Verify GitHub registered the closing reference (populates the Development section).
+            // If the issue does NOT appear here, it means GitHub did not re-parse the body after
+            // the API update — developers should use the PR template so the keyword is present
+            // at PR creation time.
+            const verify = await github.graphql(`
+              query($owner: String!, $repo: String!, $number: Int!) {
+                repository(owner: $owner, name: $repo) {
+                  pullRequest(number: $number) {
+                    closingIssuesReferences(first: 10) {
+                      nodes { number title }
+                    }
+                  }
+                }
+              }
+            `, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              number: context.payload.pull_request.number,
+            });
+
+            const linked = verify.repository.pullRequest.closingIssuesReferences.nodes;
+            if (linked.some(i => i.number === issueNumber)) {
+              console.log(`✓ Development section: issue #${issueNumber} is linked.`);
+            } else {
+              console.log(`⚠ Development section: issue #${issueNumber} not yet visible — GitHub did not re-parse the body. Use the PR template (Closes #) at PR creation time to fix this.`);
+            }
