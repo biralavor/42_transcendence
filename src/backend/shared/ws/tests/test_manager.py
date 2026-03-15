@@ -1,5 +1,7 @@
 import sys
-sys.path.insert(0, "src/backend")
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # .../src/backend
 
 import pytest
 from unittest.mock import AsyncMock, MagicMock
