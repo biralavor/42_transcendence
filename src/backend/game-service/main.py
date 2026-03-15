@@ -1,9 +1,5 @@
-import sys
-sys.path.insert(0, "/app/shared")
-sys.path.insert(0, "/app/service")
-
 from fastapi import FastAPI
-from ws.router import router as ws_router
+from service.ws.router import router as ws_router
 
 app = FastAPI(title="Game Service")
 app.include_router(ws_router)
