@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom'
 const navLinks = [
   { to: '/', label: 'Home' },
   { to: '/play', label: 'Arena' },
+  { to: '/chat/general', label: 'Chat' },
   { to: '/leaderboard', label: 'Ranking' },
   { to: '/about', label: 'About' },
   // Provide easy access to the user's profile.  In a real application you
