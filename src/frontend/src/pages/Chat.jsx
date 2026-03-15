@@ -29,7 +29,8 @@ export default function Chat() {
   useEffect(() => {
     if (!joined) return
 
-    const url = `wss://${window.location.host}/api/chat/ws/chat/${roomId}`
+    const scheme = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const url = `${scheme}//${window.location.host}/api/chat/ws/chat/${roomId}`
     const ws = createWsClient(url, {
       onOpen: () => setConnected(true),
       onClose: () => setConnected(false),
