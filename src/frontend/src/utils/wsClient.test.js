@@ -52,6 +52,19 @@ describe('createWsClient', () => {
     vi.useRealTimers()
   })
 
+  it('close() cancels a reconnect timer already scheduled before close() was called', () => {
+    vi.useFakeTimers()
+    const client = createWsClient('wss://example.com', {})
+    // Unexpected drop schedules a reconnect timer
+    mockWs.simulateClose()
+    // Consumer calls close() before the timer fires
+    client.close()
+    vi.advanceTimersByTime(5000)
+    // Still only one WebSocket — the scheduled reconnect was cancelled
+    expect(vi.mocked(WebSocket)).toHaveBeenCalledTimes(1)
+    vi.useRealTimers()
+  })
+
   it('reconnects automatically on unexpected close', () => {
     vi.useFakeTimers()
     createWsClient('wss://example.com', {})

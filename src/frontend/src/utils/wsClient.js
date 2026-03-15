@@ -10,8 +10,10 @@ export function createWsClient(url, { onMessage, onOpen, onClose } = {}) {
   let ws;
   let retryDelay = 1000;
   let intentionallyClosed = false;
+  let retryTimer = null;
 
   function connect() {
+    if (intentionallyClosed) return;
     ws = new WebSocket(url);
 
     ws.onopen = () => {
@@ -30,7 +32,7 @@ export function createWsClient(url, { onMessage, onOpen, onClose } = {}) {
     ws.onclose = () => {
       onClose?.();
       if (!intentionallyClosed) {
-        setTimeout(connect, retryDelay);
+        retryTimer = setTimeout(connect, retryDelay);
         retryDelay = Math.min(retryDelay * 2, 30_000);
       }
     };
@@ -46,6 +48,7 @@ export function createWsClient(url, { onMessage, onOpen, onClose } = {}) {
     },
     close() {
       intentionallyClosed = true;
+      clearTimeout(retryTimer);
       ws.close();
     },
   };
