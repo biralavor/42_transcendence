@@ -1,4 +1,3 @@
 # Base deps come from backend-base image.
-# Add only game-service-specific packages here.
-pytest==8.3.5
-httpx==0.28.1
+# Add only game-service-specific RUNTIME packages here.
+# Test-only deps (pytest, httpx) live in requirements-test.txt.
