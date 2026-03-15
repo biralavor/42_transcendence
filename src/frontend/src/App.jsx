@@ -6,7 +6,7 @@ import Play from './pages/Play'
 import Leaderboard from './pages/Leaderboard'
 import Register from './pages/Register'
 import ForgotPassword from './pages/ForgotPassword'
-
+import Chat from './pages/Chat'
 
 export default function App() {
   return (
@@ -19,6 +19,7 @@ export default function App() {
         <Route path="/leaderboard" element={<Leaderboard />} />
         <Route path="/register" element={<Register />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/chat/:roomId" element={<Chat />} />
       </Routes>
     </BrowserRouter>
   )

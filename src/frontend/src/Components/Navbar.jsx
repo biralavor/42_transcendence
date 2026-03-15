@@ -29,6 +29,10 @@ const NavbarComponent =  () => {
               <Link className="nav-link" to="/play">Play</Link>
             </li>
             <li className="nav-item">
+              {/* "general" is the shared lobby room — users can navigate to any room via URL */}
+              <Link className="nav-link" to="/chat/general">Chat</Link>
+            </li>
+            <li className="nav-item">
               <Link className="nav-link" to="/leaderboard">Leaderboard</Link>
             </li>
             <li className="nav-item">
@@ -36,7 +40,7 @@ const NavbarComponent =  () => {
             </li>
           </ul>
           <Link className="btn btn-outline-success" to="/register">Register</Link>
-          <Link className="btn btn-outline-success ms-2" to="/login">login</Link>
+          <Link className="btn btn-outline-success ms-2" to="/login">Login</Link>
         </div>
       </div>
     </nav>
