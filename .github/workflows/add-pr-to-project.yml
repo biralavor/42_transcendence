@@ -113,12 +113,12 @@ jobs:
             const statusField = project.fields.nodes.find(f => f.name === 'Status' && f.options);
             let inReviewOptionId = null;
             if (statusField) {
-              const option = statusField.options.find(o => o.name === 'In Review');
+              const option = statusField.options.find(o => o.name === 'In review');
               if (option) {
                 inReviewOptionId = option.id;
-                console.log(`"In Review" option ID: ${inReviewOptionId}`);
+                console.log(`"In review" option ID: ${inReviewOptionId}`);
               } else {
-                console.log('"In Review" option not found in Status field — skipping status assignment.');
+                console.log('"In review" option not found in Status field — skipping status assignment.');
               }
             } else {
               console.log('Status field not found in project — skipping status assignment.');
@@ -178,5 +178,5 @@ jobs:
                 fieldId: statusField.id,
                 optionId: inReviewOptionId,
               });
-              console.log('Status set to "In Review"');
+              console.log('Status set to "In review"');
             }
