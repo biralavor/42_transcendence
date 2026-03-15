@@ -14,4 +14,6 @@ async def game_websocket(websocket: WebSocket, game_id: str) -> None:
             data = await websocket.receive_json()
             await manager.broadcast(game_id, data)
     except WebSocketDisconnect:
+        pass
+    finally:
         manager.disconnect(game_id, websocket)

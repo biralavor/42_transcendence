@@ -14,4 +14,6 @@ async def chat_websocket(websocket: WebSocket, room_id: str) -> None:
             data = await websocket.receive_json()
             await manager.broadcast(room_id, data)
     except WebSocketDisconnect:
+        pass
+    finally:
         manager.disconnect(room_id, websocket)
