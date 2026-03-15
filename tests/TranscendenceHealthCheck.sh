@@ -450,6 +450,99 @@ else
     info "frontend container not running — skipping unit tests"
 fi
 
+# ── 18. Chat Message Suite ────────────────────────────────────────────────────
+section "Chat Message Suite"
+
+# Runs inside the chat-service container where websockets is installed.
+# Tests connect directly to the service (ws://127.0.0.1:<port>) to avoid TLS
+# and nginx overhead — the WS proxy path is already covered in section 16.
+_chat_ws_test() {
+    local port="$1"
+    local room="$2"
+    local test_name="$3"
+    local script="$4"
+    local err
+    err=$(docker exec chat-service python3 -c "$script" 2>&1)
+    local rc=$?
+    if [[ $rc -eq 0 ]]; then
+        pass "$test_name"
+    else
+        fail "$test_name — $err"
+    fi
+}
+
+if container_running chat-service; then
+    _PORT="${CHAT_SERVICE_PORT:-8003}"
+
+    # ── 17a. Single-client round-trip ─────────────────────────────────────────
+    # One client sends a JSON message and receives its own broadcast.
+    _chat_ws_test "$_PORT" "hc-roundtrip" \
+        "Chat: single-client message round-trip" \
+"
+import asyncio, websockets, json, sys
+
+async def test():
+    uri = 'ws://127.0.0.1:${_PORT}/ws/chat/hc-roundtrip'
+    async with websockets.connect(uri) as ws:
+        payload = {'content': 'hello', 'sender': 'healthcheck'}
+        await ws.send(json.dumps(payload))
+        raw = await asyncio.wait_for(ws.recv(), timeout=5)
+        data = json.loads(raw)
+        assert data.get('content') == 'hello', f'wrong content: {data}'
+        assert data.get('sender') == 'healthcheck', f'wrong sender: {data}'
+
+asyncio.run(test())
+"
+
+    # ── 17b. Two-client broadcast ──────────────────────────────────────────────
+    # Client A sends; client B (connected to the same room) receives the broadcast.
+    _chat_ws_test "$_PORT" "hc-broadcast" \
+        "Chat: two-client broadcast (A sends, B receives)" \
+"
+import asyncio, websockets, json, sys
+
+async def test():
+    uri = 'ws://127.0.0.1:${_PORT}/ws/chat/hc-broadcast'
+    async with websockets.connect(uri) as ws_a, \
+               websockets.connect(uri) as ws_b:
+        await ws_a.send(json.dumps({'content': 'broadcast-test', 'sender': 'Alice'}))
+        # ws_a receives its own echo; ws_b receives the broadcast
+        await asyncio.wait_for(ws_a.recv(), timeout=5)
+        raw_b = await asyncio.wait_for(ws_b.recv(), timeout=5)
+        data = json.loads(raw_b)
+        assert data.get('content') == 'broadcast-test', f'wrong content on B: {data}'
+        assert data.get('sender') == 'Alice', f'wrong sender on B: {data}'
+
+asyncio.run(test())
+"
+
+    # ── 17c. Disconnect handling ───────────────────────────────────────────────
+    # Client A connects, then disconnects. Client B (still connected) must not crash —
+    # it can still send and receive messages after A leaves.
+    _chat_ws_test "$_PORT" "hc-disconnect" \
+        "Chat: remaining client survives peer disconnect" \
+"
+import asyncio, websockets, json, sys
+
+async def test():
+    uri = 'ws://127.0.0.1:${_PORT}/ws/chat/hc-disconnect'
+    async with websockets.connect(uri) as ws_b:
+        # A joins and immediately leaves
+        ws_a = await websockets.connect(uri)
+        await ws_a.close()
+        await asyncio.sleep(0.1)   # let the server process the disconnect
+        # B should still be functional
+        await ws_b.send(json.dumps({'content': 'still-alive', 'sender': 'Bob'}))
+        raw = await asyncio.wait_for(ws_b.recv(), timeout=5)
+        data = json.loads(raw)
+        assert data.get('content') == 'still-alive', f'B failed after A disconnected: {data}'
+
+asyncio.run(test())
+"
+else
+    info "chat-service container not running — skipping chat message suite"
+fi
+
 # ── Summary ───────────────────────────────────────────────────────────────────
 printf "\n${YELLOW}══════════════════════════════════════════${RESET}\n"
 printf "  ${YELLOW}MANDATORY${RESET}  ${GREEN}PASSED: %-3d${RESET}  ${RED}FAILED: %-3d${RESET}\n" "$PASS" "$FAIL"
