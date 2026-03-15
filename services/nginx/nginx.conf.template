@@ -3,6 +3,14 @@ events {
 }
 
 http {
+    # Correctly handles both WebSocket upgrades and plain HTTP:
+    # - $http_upgrade non-empty (e.g. "websocket") → Connection: upgrade
+    # - $http_upgrade empty (regular request)       → Connection: close
+    map $http_upgrade $connection_upgrade {
+        default upgrade;
+        ''      close;
+    }
+
     upstream user-service {
         server user-service:${USER_SERVICE_PORT};
     }
@@ -45,7 +53,7 @@ http {
             proxy_set_header       Host $host;
             proxy_set_header       X-Real-IP $remote_addr;
             proxy_set_header       Upgrade $http_upgrade;
-            proxy_set_header       Connection "upgrade";
+            proxy_set_header       Connection $connection_upgrade;
         }
 
         location /api/game/ {
@@ -54,7 +62,7 @@ http {
             proxy_set_header       Host $host;
             proxy_set_header       X-Real-IP $remote_addr;
             proxy_set_header       Upgrade $http_upgrade;
-            proxy_set_header       Connection "upgrade";
+            proxy_set_header       Connection $connection_upgrade;
         }
 
         location /api/chat/ {
@@ -63,7 +71,7 @@ http {
             proxy_set_header       Host $host;
             proxy_set_header       X-Real-IP $remote_addr;
             proxy_set_header       Upgrade $http_upgrade;
-            proxy_set_header       Connection "upgrade";
+            proxy_set_header       Connection $connection_upgrade;
         }
 
         location / {
@@ -72,7 +80,7 @@ http {
             proxy_set_header       Host $host;
             proxy_set_header       X-Real-IP $remote_addr;
             proxy_set_header       Upgrade $http_upgrade;
-            proxy_set_header       Connection "upgrade";
+            proxy_set_header       Connection $connection_upgrade;
         }
     }
 }
