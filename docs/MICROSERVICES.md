@@ -63,6 +63,32 @@ Test files themselves do **not** manipulate `sys.path` — conftest owns it.
 > **When adding a new service**, copy this conftest pattern into its
 > `tests/conftest.py`.  See `chat-service/tests/conftest.py` as the reference.
 
+### Running service tests locally
+
+Each service has a `requirements-test.txt` with test-only deps (`pytest`,
+`httpx`) that are **not** installed in the production container image.
+Install them before running tests:
+
+```bash
+# One-time install (from repo root)
+pip install \
+    -r src/backend/shared/requirements-test.txt \
+    -r src/backend/chat-service/requirements-test.txt
+
+pytest src/backend/chat-service/tests/
+
+# Same pattern for game-service
+pip install \
+    -r src/backend/shared/requirements-test.txt \
+    -r src/backend/game-service/requirements-test.txt
+
+pytest src/backend/game-service/tests/
+
+# shared/ws unit tests only need the shared test deps
+pip install -r src/backend/shared/requirements-test.txt
+pytest src/backend/shared/ws/tests/
+```
+
 ## backend-base Image
 
 `services/backend-base/Dockerfile` installs all shared Python dependencies once.
