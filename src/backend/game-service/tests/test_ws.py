@@ -1,6 +1,10 @@
 import sys
-sys.path.insert(0, "src/backend/game-service")
-sys.path.insert(0, "src/backend")
+from pathlib import Path
+
+_service = Path(__file__).resolve().parents[1]   # .../game-service
+_backend = _service.parent                        # .../src/backend
+sys.path.insert(0, str(_backend))
+sys.path.insert(0, str(_service))
 
 import threading
 import queue
