@@ -66,7 +66,10 @@ async def test_broadcast_continues_after_failed_send(manager):
     await manager.connect("room1", ws1)
     await manager.connect("room1", ws2)
     await manager.broadcast("room1", {"msg": "hello"})
+    # Good socket still receives the message
     ws2.send_json.assert_awaited_once_with({"msg": "hello"})
+    # Dead socket is evicted — no repeated exceptions on future broadcasts
+    assert manager.active_connections("room1") == 1
 
 
 @pytest.mark.asyncio

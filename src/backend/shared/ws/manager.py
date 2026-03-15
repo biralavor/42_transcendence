@@ -27,7 +27,7 @@ class ConnectionManager:
             try:
                 await ws.send_json(message)
             except Exception:
-                pass
+                self.disconnect(room_id, ws)
 
     def active_connections(self, room_id: str) -> int:
         return len(self._rooms.get(room_id, set()))
