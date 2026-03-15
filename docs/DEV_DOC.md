@@ -84,7 +84,8 @@ All commands run from the **repository root**.
 | `make re` | `fclean` then `make` |
 | `make logs` | Tail all container logs |
 | `make ps` | Show container status |
-| `make check` | Run health check, save report to `release.txt` |
+| `make wait` | Poll health endpoints until all 3 services respond 200 (60s timeout) |
+| `make check` | Wait for services, run full health check, save report to `release.txt` |
 | `make build-base` | Build the `backend-base` image (run once, or after shared deps change) |
 | `make up-frontend` | Rebuild and restart the frontend container only |
 | `make down-frontend` | Stop and remove the frontend container only |
@@ -104,7 +105,14 @@ All commands run from the **repository root**.
 
 ## Health Check
 
-Run `bash tests/TranscendenceHealthCheck.sh` — or `make check` to save output to `release.txt`
+```bash
+make check          # waits for all services, then runs the full check and saves release.txt
+make wait           # just waits — useful before other commands that need services up
+```
+
+`make check` automatically calls `make wait` first, so it is safe to run immediately after `make`. The wait target polls `user-service`, `game-service`, and `chat-service` health endpoints every 2 seconds and exits once all three return HTTP 200. Timeout is 60 seconds.
+
+The report is saved to `release.txt` (ANSI colours stripped) and also printed to the terminal.
 
 ---
 
@@ -126,6 +134,7 @@ docker exec -it adminer sh
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
+| `make check` WebSocket tests fail right after `make` | Services still starting up | `make check` calls `make wait` automatically; if it still fails, run `make logs` to check for import errors |
 | `user/game/chat-service` exits immediately | DB not ready | Check `make logs` — increase healthcheck `retries` in compose |
 | `nginx` 502 Bad Gateway | Service crashed at startup | Run `make logs` — check for `ModuleNotFoundError` or import errors in the failing service |
 | Port 443 already in use | Another process on host | `sudo lsof -i :443` and stop it |

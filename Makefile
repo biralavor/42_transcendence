@@ -35,8 +35,23 @@ windows:
 	docker build -f services/backend-base/Dockerfile -t backend-base .
 	docker compose up --build -d
 
+.PHONY: wait
+wait:
+	@command -v curl >/dev/null 2>&1 || { echo "Error: curl is required but not installed. Install it and retry."; exit 1; }
+	@echo "Waiting for all services to be ready (up to 60s)..."; \
+	for i in $$(seq 30); do \
+		user=$$(curl -sk -o /dev/null -w "%{http_code}" https://localhost:8443/api/users/health 2>/dev/null); \
+		game=$$(curl -sk -o /dev/null -w "%{http_code}" https://localhost:8443/api/game/health 2>/dev/null); \
+		chat=$$(curl -sk -o /dev/null -w "%{http_code}" https://localhost:8443/api/chat/health 2>/dev/null); \
+		if [ "$$user" = "200" ] && [ "$$game" = "200" ] && [ "$$chat" = "200" ]; then \
+			echo "All services ready."; exit 0; \
+		fi; \
+		printf "."; sleep 2; \
+	done; \
+	echo ""; echo "Timeout: services not ready after 60s."; exit 1
+
 .PHONY: check
-check:
+check: wait
 	bash tests/TranscendenceHealthCheck.sh | tee /dev/tty | sed 's/\x1b\[[0-9;]*m//g' > release.txt
 
 # --- alembic migrations ---

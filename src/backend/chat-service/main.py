@@ -1,9 +1,8 @@
-import sys
-sys.path.insert(0, "/app/shared")
-
 from fastapi import FastAPI
+from service.ws.router import router as ws_router
 
 app = FastAPI(title="Chat Service")
+app.include_router(ws_router)
 
 
 @app.get("/health")
