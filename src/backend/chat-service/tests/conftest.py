@@ -27,3 +27,24 @@ if "service" not in sys.modules:
     _mod.__path__ = [str(_service_dir)]
     _mod.__package__ = "service"
     sys.modules["service"] = _mod
+
+# Patch the shared database engine to use NullPool so that concurrent
+# WebSocket handlers in tests each get a fresh connection (avoids the
+# asyncpg "another operation is in progress" error when two WS sessions
+# open at the same time and the pool hands them the same connection).
+from sqlalchemy.pool import NullPool
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+import shared.database as _db
+from shared.config.settings import settings
+
+_test_engine = create_async_engine(
+    settings.SQLALCHEMY_DATABASE_URI,
+    echo=settings.DB_ECHO,
+    poolclass=NullPool,
+)
+_db.engine = _test_engine
+_db.AsyncSessionLocal = async_sessionmaker(
+    _test_engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
+)

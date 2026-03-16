@@ -4,7 +4,7 @@ all: up
 .PHONY: up
 up:
 	docker build -f services/backend-base/Dockerfile -t backend-base .
-	docker compose up --build -d
+	DOMAIN=$$(hostname -I 2>/dev/null | awk '{print $$1}') docker compose up --build -d
 
 .PHONY: down
 down:
@@ -33,7 +33,7 @@ ps:
 .PHONY: windows
 windows:
 	docker build -f services/backend-base/Dockerfile -t backend-base .
-	docker compose up --build -d
+	DOMAIN=$$(hostname -I 2>/dev/null | awk '{print $$1}') docker compose up --build -d
 
 .PHONY: wait
 wait:

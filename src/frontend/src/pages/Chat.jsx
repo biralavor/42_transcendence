@@ -127,7 +127,7 @@ export default function Chat() {
         </div>
 
         <p className="text-muted mt-2 chat-share-url">
-          Share this URL to invite others: <code>{window.location.href}</code>
+          Share this URL to invite others: <code>{window.location.href.replace(window.location.hostname, import.meta.env.VITE_DOMAIN || window.location.hostname)}</code>
         </p>
       </div>
     </>
