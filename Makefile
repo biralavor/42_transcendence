@@ -134,6 +134,20 @@ re-game: down-game
 show-tables:
 	docker compose exec db sh -c 'psql -U $$POSTGRES_USER -d $$POSTGRES_DB -c "\dt"'
 
+.PHONY: show-table-contents
+show-table-contents:
+	@docker compose exec db sh -c \
+		'for tbl in $$(psql -U $$POSTGRES_USER -d $$POSTGRES_DB -At \
+		-c "SELECT table_name FROM information_schema.tables \
+		WHERE table_schema='"'"'public'"'"' \
+		AND table_name NOT LIKE '"'"'alembic%'"'"' \
+		ORDER BY table_name"); \
+		do \
+			echo ""; \
+			echo "=== $$tbl ==="; \
+			psql -U $$POSTGRES_USER -d $$POSTGRES_DB -c "SELECT * FROM $$tbl;"; \
+		done'
+
 .PHONY: show-tables-full
 show-tables-full:
 	docker compose exec db sh -c \
