@@ -144,7 +144,19 @@ is reflected inside the container immediately — no rebuild needed.
 
 5. Add `<NAME>_SERVICE_PORT` to `.env.example` and `.env`
 
-6. Add make targets: `up-<name>`, `down-<name>`, `re-<name>` to `Makefile`
+6. Add make targets to `Makefile`: `up-<name>`, `down-<name>`, `re-<name>`, `migrate-<name>`
+
+7. Set up Alembic inside the service directory:
+   ```bash
+   # inside the container or with alembic installed locally
+   cd src/backend/<name>-service
+   alembic init alembic
+   ```
+   - Point `alembic.ini` `sqlalchemy.url` to use the `DATABASE_URL` env var
+   - Update `alembic/env.py` to import your `Base` metadata (see `chat-service/alembic/env.py` as reference)
+   - Add `alembic upgrade head` to the service entrypoint so migrations run at container startup
+
+8. Add `tests/conftest.py` using the `sys.modules` shim (see "Testing Services on the Host" above)
 
 ## Adding Dependencies
 
