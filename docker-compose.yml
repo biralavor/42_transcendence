@@ -101,6 +101,7 @@ services:
       - 8.8.4.4
     environment:
       FRONTEND_PORT: ${FRONTEND_PORT}
+      VITE_DOMAIN: ${DOMAIN}
     volumes:
       - ./src/frontend:/app
       - /app/node_modules
