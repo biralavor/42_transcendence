@@ -47,7 +47,7 @@ const RegisterForm = () => {
     try {
       setIsSubmitting(true)
 
-      const response = await fetch('/api/auth/register', {
+      const response = await fetch('/api/users/auth/register', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
