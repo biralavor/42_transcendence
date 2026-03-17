@@ -7,20 +7,35 @@ export default function Login() {
     <div className="arcade-shell">
       <NavbarComponent />
 
-      <main className="arcade-auth-layout">
-        <div className="w-100 m-auto form-container">
-          <form id="loginForm" className="form-box arcade-screen arcade-form-card">
-            <div className="arcade-panel">
-              <div className="text-center mb-2">
-                <img src="/logo_tight_square.png" className="logo" alt="ft_transcendence logo" />
+      <main className="arcade-auth-layout auth-page">
+        <div className="form-container auth-container">
+          <form id="loginForm" className="form-box arcade-screen arcade-form-card auth-card">
+            <div className="arcade-panel auth-panel">
+              <div className="auth-header text-center">
+                <span className="auth-eyebrow">Player access</span>
+                <img src="/logo_tight_square.png" className="logo auth-logo" alt="ft_transcendence logo" />
+                <h1 className="arcade-title auth-title text-center">Welcome back</h1>
+                <p className="arcade-form-copy auth-subtitle text-center mb-0">
+                  Sign in to continue your run, track your stats, and jump back into the arena.
+                </p>
               </div>
 
-              <h1 className="arcade-title text-center mb-2" style={{ fontSize: '2.15rem' }}>Please sign in</h1>
-              <p className="arcade-form-copy text-center mb-4">
-                Return to the cabinet, enter your credentials, and jump straight back into the arena.
-              </p>
+              <div className="auth-meta-grid">
+                <div className="auth-meta-item">
+                  <span className="auth-meta-value">Ranked</span>
+                  <span className="auth-meta-label">Competitive queue</span>
+                </div>
+                <div className="auth-meta-item">
+                  <span className="auth-meta-value">Profile</span>
+                  <span className="auth-meta-label">Progress saved</span>
+                </div>
+                <div className="auth-meta-item">
+                  <span className="auth-meta-value">Fast</span>
+                  <span className="auth-meta-label">Quick access</span>
+                </div>
+              </div>
 
-              <div className="form-floating mb-3 arcade-form-control">
+              <div className="form-floating mb-3 arcade-form-control auth-form-control">
                 <input
                   type="email"
                   className="form-control"
@@ -33,7 +48,7 @@ export default function Login() {
                 <label htmlFor="floatingEmail">E-mail address</label>
               </div>
 
-              <div className="form-floating mb-3 arcade-form-control">
+              <div className="form-floating mb-2 arcade-form-control auth-form-control">
                 <input
                   type="password"
                   className="form-control"
@@ -46,23 +61,26 @@ export default function Login() {
                 <label htmlFor="floatingPassword">Password</label>
               </div>
 
-              <div className="form-check text-start my-3 arcade-form-check">
-                <input className="form-check-input" type="checkbox" id="flexCheckDefault" />
-                <label className="form-check-label" htmlFor="flexCheckDefault">Remember me</label>
-              </div>
-              <div className="mb-4">
-                <Link to="/forgot-password" className="small text-decoration-none arcade-kicker">
+              <div className="auth-options">
+                <div className="form-check arcade-form-check">
+                  <input className="form-check-input" type="checkbox" id="flexCheckDefault" />
+                  <label className="form-check-label" htmlFor="flexCheckDefault">Remember me</label>
+                </div>
+                <Link to="/forgot-password" className="auth-link small text-decoration-none">
                   Forgot password?
                 </Link>
               </div>
-              <button className="arcade-btn arcade-btn-primary w-100 mb-3" type="submit">Sign in</button>
-              <p className="text-center mt-3 mb-0 arcade-form-copy">
+
+              <button className="arcade-btn arcade-btn-primary w-100 auth-submit mb-3" type="submit">
+                Sign in
+              </button>
+
+              <p className="text-center arcade-form-copy auth-footer-copy mb-0">
                 Don&apos;t have an account?{' '}
-                <Link to="/register" className="text-decoration-none arcade-kicker">
+                <Link to="/register" className="auth-link text-decoration-none">
                   Create one
                 </Link>
               </p>
-              <p className="arcade-footer-note mt-4 mb-0 text-center">© 2026</p>
             </div>
           </form>
         </div>
