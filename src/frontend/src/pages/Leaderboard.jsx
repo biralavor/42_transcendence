@@ -1,14 +1,57 @@
 import NavbarComponent from '../Components/Navbar'
 
+// Top players are mocked here until real API integration is ready
 const topPlayers = [
-  { rank: 1, player: 'vector_viper', wins: 128, streak: '12W', score: 9820 },
-  { rank: 2, player: 'pongmaster42', wins: 121, streak: '7W', score: 9450 },
-  { rank: 3, player: 'crt-champion', wins: 113, streak: '5W', score: 9010 },
-  { rank: 4, player: 'bgomes-l', wins: 108, streak: '3W', score: 8785 },
-  { rank: 5, player: 'pixelspin', wins: 98, streak: '2W', score: 8420 },
+  {
+    rank: 1,
+    player: 'vector_viper',
+    avatar: 'https://i.pravatar.cc/40?u=vector_viper',
+    wins: 128,
+    streak: '12W',
+    score: 9820,
+  },
+  {
+    rank: 2,
+    player: 'pongmaster42',
+    avatar: 'https://i.pravatar.cc/40?u=pongmaster42',
+    wins: 121,
+    streak: '7W',
+    score: 9450,
+  },
+  {
+    rank: 3,
+    player: 'crt-champion',
+    avatar: 'https://i.pravatar.cc/40?u=crt-champion',
+    wins: 113,
+    streak: '5W',
+    score: 9010,
+  },
+  {
+    rank: 4,
+    player: 'bgomes-l',
+    avatar: 'https://i.pravatar.cc/40?u=bgomes-l',
+    wins: 108,
+    streak: '3W',
+    score: 8785,
+  },
+  {
+    rank: 5,
+    player: 'pixelspin',
+    avatar: 'https://i.pravatar.cc/40?u=pixelspin',
+    wins: 98,
+    streak: '2W',
+    score: 8420,
+  },
 ]
 
 export default function Leaderboard() {
+  // Trophy icons for the top three positions
+  const trophyIcons = {
+    1: '🥇',
+    2: '🥈',
+    3: '🥉',
+  }
+
   return (
     <div className="arcade-shell">
       <NavbarComponent />
@@ -16,6 +59,7 @@ export default function Leaderboard() {
       <main className="arcade-content py-4">
         <section className="arcade-screen">
           <div className="arcade-panel p-4 p-lg-5">
+            {/* Header section */}
             <div className="d-flex flex-column flex-lg-row justify-content-between align-items-lg-end gap-3 mb-4">
               <div>
                 <span className="arcade-display mb-3">Global scoreboard</span>
@@ -30,6 +74,7 @@ export default function Leaderboard() {
               </div>
             </div>
 
+            {/* Highlighted metrics */}
             <div className="row g-4 mb-4">
               <div className="col-12 col-md-4">
                 <article className="arcade-card h-100 text-center">
@@ -51,29 +96,30 @@ export default function Leaderboard() {
               </div>
             </div>
 
-            <div className="arcade-card arcade-table-wrap">
-              <table className="arcade-table">
-                <thead>
-                  <tr>
-                    <th>Rank</th>
-                    <th>Player</th>
-                    <th>Wins</th>
-                    <th>Streak</th>
-                    <th>Score</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {topPlayers.map((player) => (
-                    <tr key={player.rank}>
-                      <td>#{player.rank}</td>
-                      <td>{player.player}</td>
-                      <td>{player.wins}</td>
-                      <td><span className="arcade-chip">{player.streak}</span></td>
-                      <td>{player.score}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            {/* Rankings list */}
+            <div className="leaderboard-list">
+              {topPlayers.map((player) => {
+                const rowClass = player.rank <= 3 ? `leaderboard-top-${player.rank}` : ''
+                const displayRank = player.rank <= 3 ? trophyIcons[player.rank] : `#${player.rank}`
+                return (
+                  <div key={player.rank} className={`leaderboard-entry ${rowClass}`}>
+                    <div className="leaderboard-rank">{displayRank}</div>
+                    <img
+                      src={player.avatar}
+                      alt={`${player.player} avatar`}
+                      className="leaderboard-avatar"
+                    />
+                    <div className="leaderboard-info">
+                      <div className="leaderboard-player">{player.player}</div>
+                      <div className="leaderboard-stats">
+                        <span>{player.wins} wins</span>
+                        <span className="arcade-chip">{player.streak}</span>
+                        <span>{player.score} pts</span>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           </div>
         </section>

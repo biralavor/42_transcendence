@@ -16,8 +16,10 @@ const NavbarComponent = () => {
         <nav className="arcade-screen">
           <div className="arcade-navbar arcade-panel">
             <Link to="/" className="navbar-brand-link">
+              {/* Wordmark emphasises the retro nature of the project */}
               <span className="navbar-wordmark">PONG</span>
-              <span className="navbar-tagline">ft_transcendence arena</span>
+              {/* Updated tagline to clearly communicate the visual identity */}
+              <span className="navbar-tagline">Retro Arcade&nbsp;70s</span>
             </Link>
 
             <div className="arcade-nav-links">
@@ -37,11 +39,13 @@ const NavbarComponent = () => {
             </div>
 
             <div className="arcade-nav-actions">
-              <Link className="arcade-btn arcade-btn-secondary" to="/about">
-                About
+              {/* Secondary action encourages new players to join */}
+              <Link className="arcade-btn arcade-btn-secondary" to="/register">
+                Join
               </Link>
+              {/* Primary action drives returning users to sign in */}
               <Link className="arcade-btn arcade-btn-primary" to="/login">
-                Enter arena
+                Sign&nbsp;in
               </Link>
             </div>
           </div>

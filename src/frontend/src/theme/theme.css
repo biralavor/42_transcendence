@@ -255,16 +255,17 @@
   --font-mono: 'VT323', monospace;
   
   /* Pong Arcade Cabinet color palette */
-  --arcade-yellow: #f4d03f;
-  --arcade-yellow-dark: #d4a817;
-  --arcade-brown: #3e2723;
-  --arcade-wood: #5d4037;
-  --arcade-wood-light: #6d4c41;
-  --crt-screen: #1a1410;
-  --crt-white: #f0f0e8;
-  --crt-glow: rgba(240, 240, 232, 0.3);
-  --metal-silver: #8d8d8d;
-  --metal-dark: #4a4a4a;
+  /* Refreshed 70s palette for a more polished retro look */
+  --arcade-yellow: #fbc02d;            /* softer arcade yellow inspired by vintage panels */
+  --arcade-yellow-dark: #e0a800;       /* deeper golden tone for accents */
+  --arcade-brown: #4e342e;             /* richer brown reminiscent of wood cabinets */
+  --arcade-wood: #795548;              /* medium wood grain colour */
+  --arcade-wood-light: #8d6e63;        /* lighter wood shade for panels */
+  --crt-screen: #1d140f;               /* slightly lighter CRT background for contrast */
+  --crt-white: #f5f5f2;                /* warmer off‑white */
+  --crt-glow: rgba(240, 240, 232, 0.4); /* increased glow for subtle screen bloom */
+  --metal-silver: #b0b0b0;             /* lighter steel for muted text */
+  --metal-dark: #5c4a41;               /* darker metallic accent */
   
   --background: var(--arcade-brown);
   --foreground: var(--crt-white);

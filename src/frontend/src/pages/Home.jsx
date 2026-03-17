@@ -18,7 +18,7 @@ export default function Home() {
                   <h1 className="hero-title arcade-title">
                     Play Pong.
                     <br />
-                    Climb the ladder.
+                    Compete &amp; rise.
                     <br />
                     Own the arena.
                   </h1>
