@@ -2,9 +2,6 @@ import { useRef, useEffect, useState } from 'react'
 import './PongCanvas.css'
 import { GameState, gameLoop, CanvasGameContext } from '../game/pongEngine.js'
 
-const canvasWidth = 1000;
-const canvasHeight = 600;
-
 export default function PongCanvas()
 {
     console.log("rendered")
@@ -45,31 +42,49 @@ export default function PongCanvas()
 	}
     }
 
+    function updateCanvasDimensions() {
+	const canvas = canvasRef.current;
+	if (!canvas) return;
+
+	// Compute CSS defined dimensions
+	const computedStyle = window.getComputedStyle(canvas);
+	const width = parseFloat(computedStyle.width);
+	const height = parseFloat(computedStyle.height);
+
+	canvas.width = width;
+	canvas.height = height;
+    }
+
     useEffect(() => {
 
 	const targetFrameRate = 30; //frame per second
 	const timeFrameMillis = 1000 / targetFrameRate; //millis per frame
-        const canvas = canvasRef.current;
-        const renderingContext = canvas.getContext('2d');
-	const canvasContext = new CanvasGameContext(
-	    canvasWidth, canvasHeight, renderingContext)
-
+	/** @type {HTMLCanvasElement} */
+	const canvas = canvasRef.current;
+	const renderingContext = canvas.getContext('2d');
+	updateCanvasDimensions()
+	const canvasContext = new CanvasGameContext(canvas, renderingContext)
+	function onResize(event) {
+	    updateCanvasDimensions()
+	}
+	window.addEventListener('resize', onResize);
 	const interval = setInterval(gameLoop, timeFrameMillis,
 			canvasContext, gameState, setGameState, getInput);
 
 	window.addEventListener('keydown', onKeydown)
 	window.addEventListener('keyup', onKeyup);
 
-        return () => {
+	return () => {
 	    clearInterval(interval);
+	    window.removeEventListener('resize', onResize);
 	    window.removeEventListener('keydown', onKeydown);
 	    window.removeEventListener('keyup', onKeyup);
-	}
+        }
     }, []);
 
     return(
-        <div className='canvas-container'>
-            <canvas ref={canvasRef} width={canvasWidth} height={canvasHeight}></canvas>
-        </div>
+	<div className='canvas-container'>
+	    <canvas ref={canvasRef}></canvas>
+	</div>
     );
 }

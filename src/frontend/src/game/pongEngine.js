@@ -7,9 +7,6 @@
 
 import System from './pongSystem.js';
 
-export const canvasWidth = 1000;
-export const canvasHeight = 600;
-
 /**
  * For string based color follow reference
  * https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Values/color_value
@@ -148,18 +145,28 @@ export class GameState {
 }
 
 export class CanvasGameContext {
+
+    /** @type {HTMLCanvasElement} */
+    #canvas;
     /**
      * @param {number} canvasWidth
      * @param {number} canvasHeight
      * @param {CanvasRenderingContext2D} renderingContext2d
      */
-    constructor(canvasWidth, canvasHeight, renderingContext2d) {
-	/** @type {number} */
-	this.width = canvasWidth
-	/** @type {number} */
-	this.height = canvasHeight
+    constructor(canvas, renderingContext2d) {
 	/** @type {CanvasRenderingContext2D} */
 	this.rendering2d = renderingContext2d
+	this.#canvas = canvas
+    }
+
+    /** @property {number} */
+    get width() {
+	return this.#canvas.width;
+    }
+
+    /** @property {number} */
+    get height() {
+	return this.#canvas.height;
     }
 }
 

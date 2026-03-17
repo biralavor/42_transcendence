@@ -7,4 +7,7 @@
 canvas {
   border: solid white;
   margin: auto;
+  width: auto;
+  height: 70vh;
+  aspect-ratio: 16/9;
 }
