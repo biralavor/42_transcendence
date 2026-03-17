@@ -14,7 +14,7 @@ const NavbarComponent = () => {
     <header className="arcade-nav">
       <div className="arcade-content">
         <nav className="arcade-screen">
-          <div className="arcade-navbar arcade-panel">
+          <div className="arcade-navbar">
             <Link to="/" className="navbar-brand-link">
               {/* Wordmark emphasises the retro nature of the project */}
               <span className="navbar-wordmark">PONG</span>

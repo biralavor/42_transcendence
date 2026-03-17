@@ -70,6 +70,7 @@
   transition: 0.2s ease;
   letter-spacing: 0.12em;
   text-transform: uppercase;
+  position: relative;
 }
 
 .arcade-nav-link:hover {
@@ -79,8 +80,29 @@
 
 .arcade-nav-link.active {
   color: #3e2723;
-  background: rgba(62, 39, 35, 0.14);
-  box-shadow: inset 0 0 0 2px #3e2723;
+  background: transparent;
+  box-shadow: none;
+}
+
+.arcade-nav-link::after {
+  content: '';
+  position: absolute;
+  left: 0.5rem;
+  right: 0.5rem;
+  bottom: -0.35rem;
+  height: 3px;
+  border-radius: 999px;
+  background: transparent;
+  transition: background 0.18s ease, transform 0.18s ease;
+}
+
+.arcade-nav-link:hover::after {
+  background: rgba(62, 39, 35, 0.35);
+}
+
+.arcade-nav-link.active::after {
+  background: #3e2723;
+  transform: translateY(1px);
 }
 
 .arcade-nav-actions {
