@@ -10,36 +10,36 @@ export default function PongCanvas()
     const [gameState, setGameState] = useState(new GameState())
 
     function onKeyup(event) {
-	console.log(`keyup ${event}`)
-	if (event.code === 'KeyJ'
-	    || event.code === 'KeyK'
-	    || event.code === 'KeyW'
-	    || event.code === 'KeyS'
-	   ) {
-	    keyStateRef.current[event.code] = false;
-	}
+        console.log(`keyup ${event}`)
+        if (event.code === 'KeyJ'
+            || event.code === 'KeyK'
+            || event.code === 'KeyW'
+            || event.code === 'KeyS'
+           ) {
+            keyStateRef.current[event.code] = false;
+        }
     }
 
     function onKeydown(event) {
-	console.log(`keydown ${event}`)
-	if (event.code === 'KeyJ'
-	    || event.code === 'KeyK'
-	    || event.code === 'KeyW'
-	    || event.code === 'KeyS'
-	   ) {
-	    keyStateRef.current[event.code] = true;
-	}
+        console.log(`keydown ${event}`)
+        if (event.code === 'KeyJ'
+            || event.code === 'KeyK'
+            || event.code === 'KeyW'
+            || event.code === 'KeyS'
+           ) {
+            keyStateRef.current[event.code] = true;
+        }
     }
 
     function getInput() {
-	let p1VelY = keyStateRef.current['KeyS'] ? 1 : 0;
-	p1VelY -= keyStateRef.current['KeyW'] ? 1 : 0;
-	let p2VelY = keyStateRef.current['KeyJ'] ? 1 : 0;
-	p2VelY -= keyStateRef.current['KeyK'] ? 1 : 0;
-	return {
+        let p1VelY = keyStateRef.current['KeyS'] ? 1 : 0;
+        p1VelY -= keyStateRef.current['KeyW'] ? 1 : 0;
+        let p2VelY = keyStateRef.current['KeyJ'] ? 1 : 0;
+        p2VelY -= keyStateRef.current['KeyK'] ? 1 : 0;
+        return {
             player1: {velY: p1VelY, velX: 0},
             player2: {velY: p2VelY, velX: 0},
-	}
+        }
     }
 
     function updateCanvasDimensions() {
@@ -69,7 +69,7 @@ export default function PongCanvas()
         }
         window.addEventListener('resize', onResize);
         const interval = setInterval(gameLoop, timeFrameMillis,
-                        canvasContext, gameState, setGameState, getInput);
+                                     canvasContext, gameState, setGameState, getInput);
 
         window.addEventListener('keydown', onKeydown)
         window.addEventListener('keyup', onKeyup);

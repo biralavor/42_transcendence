@@ -17,8 +17,8 @@ const PLAYER_VEL_INPUT_FACTOR = 0.33;
  */
 
 /**
-* @param {GameState} gameState
-*/
+ * @param {GameState} gameState
+ */
 function desaceleratePlayers(gameState) {
     gameState.player1.position.velY *= PLAYER_VEL_RESISTENCE_FACTOR;
     gameState.player2.position.velY *= PLAYER_VEL_RESISTENCE_FACTOR;
@@ -39,22 +39,22 @@ function applyInput(gameState, input) {
  */
 function clampMaxVelocity(gameState) {
     gameState.player1.position.velY =
-	gameState.player1.position.velY > MAX_PLAYER_VEL
-	? MAX_PLAYER_VEL
-	: gameState.player1.position.velY;
+	    gameState.player1.position.velY > MAX_PLAYER_VEL
+	    ? MAX_PLAYER_VEL
+	    : gameState.player1.position.velY;
     gameState.player1.position.velY =
-	gameState.player1.position.velY < -MAX_PLAYER_VEL
-	? -MAX_PLAYER_VEL
-	: gameState.player1.position.velY;
+	    gameState.player1.position.velY < -MAX_PLAYER_VEL
+	    ? -MAX_PLAYER_VEL
+	    : gameState.player1.position.velY;
 
     gameState.player2.position.velY =
-	gameState.player2.position.velY > MAX_PLAYER_VEL
-	? MAX_PLAYER_VEL
-	: gameState.player2.position.velY;
+	    gameState.player2.position.velY > MAX_PLAYER_VEL
+	    ? MAX_PLAYER_VEL
+	    : gameState.player2.position.velY;
     gameState.player2.position.velY =
-	gameState.player2.position.velY < -MAX_PLAYER_VEL
-	? -MAX_PLAYER_VEL
-	: gameState.player2.position.velY;
+	    gameState.player2.position.velY < -MAX_PLAYER_VEL
+	    ? -MAX_PLAYER_VEL
+	    : gameState.player2.position.velY;
 }
 
 /**
@@ -113,18 +113,18 @@ export default class System {
      * @param {GameInput} input
      */
     static playerMovement(gameState, input) {
-	desaceleratePlayers(gameState);
-	applyInput(gameState, input);
-	clampMaxVelocity(gameState);
-	gameState.player1.move();
-	gameState.player2.move();
+        desaceleratePlayers(gameState);
+        applyInput(gameState, input);
+        clampMaxVelocity(gameState);
+        gameState.player1.move();
+        gameState.player2.move();
     }
 
     /**
      * @param {GameState} gameState
      */
     static ballCollision(gameState, canvasContext) {
-	const ballAfterCollision = collision(gameState, canvasContext);
-	gameState.ball = ballAfterCollision;
+		const ballAfterCollision = collision(gameState, canvasContext);
+		gameState.ball = ballAfterCollision;
     }
 }

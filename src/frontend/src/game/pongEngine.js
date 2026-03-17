@@ -97,26 +97,26 @@ export class Player extends Entity {
      * @enum {(1|2)}
      */
     static Type = Object.freeze({
-	ONE: 1,
-	TWO: 2
+        ONE: 1,
+        TWO: 2
     });
 
     /**
      * @param {Player.Type} type
      */
     constructor(type) {
-	super();
-	this.type = type;
-	this.size = new Size(5, 15);
-	if (type === Player.Type.ONE) {
-	    this.position = new Position(2 * this.size.width,
-					 heightRatio / 2 - (this.size.height / 2));
-	    this.color = 'red';
-	} else {
-	    this.position = new Position(widthRatio - 3 * this.size.width,
-					 heightRatio / 2 - (this.size.height / 2));
-	    this.color = 'blue';
-	}
+        super();
+        this.type = type;
+        this.size = new Size(5, 15);
+        if (type === Player.Type.ONE) {
+            this.position = new Position(2 * this.size.width,
+                                         heightRatio / 2 - (this.size.height / 2));
+            this.color = 'red';
+        } else {
+            this.position = new Position(widthRatio - 3 * this.size.width,
+                                         heightRatio / 2 - (this.size.height / 2));
+            this.color = 'blue';
+        }
 
     }
 }
@@ -125,9 +125,9 @@ export class Ball extends Entity {
     constructor() {
         super();
         this.color = 'white';
-	this.size = new Size(5, 5);
+        this.size = new Size(5, 5);
         this.position = new Position(widthRatio / 2 - (this.size.width / 2),
-				     heightRatio / 2 - (this.size.height / 2));
+                                     heightRatio / 2 - (this.size.height / 2));
     }
 
     static copy(other) {
@@ -141,11 +141,11 @@ export class Ball extends Entity {
 
 export class GameState {
     constructor() {
-	/** @type {Player} */
+        /** @type {Player} */
         this.player1 = new Player(Player.Type.ONE);
-	/** @type {Player} */
+        /** @type {Player} */
         this.player2 = new Player(Player.Type.TWO);
-	/** @type {Ball} */
+        /** @type {Ball} */
         this.ball = new Ball();
         this.ball.position.velX = 4;
         this.ball.position.velY = 0;
@@ -162,39 +162,39 @@ export class CanvasGameContext {
      * @param {CanvasRenderingContext2D} renderingContext2d
      */
     constructor(canvas, renderingContext2d) {
-	/** @type {CanvasRenderingContext2D} */
-	this.rendering2d = renderingContext2d
-	this.#canvas = canvas
+        /** @type {CanvasRenderingContext2D} */
+        this.rendering2d = renderingContext2d
+        this.#canvas = canvas
     }
 
     /** @property {number} */
     get width() {
-	return this.#canvas.width;
+        return this.#canvas.width;
     }
 
     /** @property {number} */
     get height() {
-	return this.#canvas.height;
+        return this.#canvas.height;
     }
 
     /** @property {number} */
     get widthScale() {
-	return this.#canvas.width / widthRatio;
+        return this.#canvas.width / widthRatio;
     }
 
     /** @property {number} */
     get heightScale() {
-	return this.#canvas.height / heightRatio;
+        return this.#canvas.height / heightRatio;
     }
 
     /** @property {number} */
     get widthRatio() {
-	return widthRatio;
+        return widthRatio;
     }
 
     /** @property {number} */
     get heightRatio() {
-	return heightRatio;
+        return heightRatio;
     }
 }
 
@@ -208,21 +208,21 @@ export function render(canvasContext, { player1, player2, ball }) {
 
     renderingCanvas.fillStyle = player1.color;
     renderingCanvas.fillRect(player1.position.x  * canvasContext.widthScale,
-			     player1.position.y  * canvasContext.heightScale,
-			     player1.size.width  * canvasContext.widthScale,
-			     player1.size.height * canvasContext.heightScale);
+                             player1.position.y  * canvasContext.heightScale,
+                             player1.size.width  * canvasContext.widthScale,
+                             player1.size.height * canvasContext.heightScale);
 
     renderingCanvas.fillStyle = player2.color;
     renderingCanvas.fillRect(player2.position.x  * canvasContext.widthScale,
-			     player2.position.y  * canvasContext.heightScale,
-			     player2.size.width  * canvasContext.widthScale,
-			     player2.size.height * canvasContext.heightScale);
+                             player2.position.y  * canvasContext.heightScale,
+                             player2.size.width  * canvasContext.widthScale,
+                             player2.size.height * canvasContext.heightScale);
 
     renderingCanvas.fillStyle = ball.color;
     renderingCanvas.fillRect(ball.position.x  * canvasContext.widthScale,
-			     ball.position.y  * canvasContext.heightScale,
-			     ball.size.width  * canvasContext.widthScale,
-			     ball.size.height * canvasContext.heightScale);
+                             ball.position.y  * canvasContext.heightScale,
+                             ball.size.width  * canvasContext.widthScale,
+                             ball.size.height * canvasContext.heightScale);
 }
 
 
