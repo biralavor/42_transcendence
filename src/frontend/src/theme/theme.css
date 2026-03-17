@@ -1,3 +1,254 @@
+.home-container {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #3e2723 0%, #5d4037 100%);
+  display: flex;
+  flex-direction: column;
+  overflow-x: hidden;
+}
+
+/* ===== HERO SECTION ===== */
+.hero {
+  height: 70vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 2rem;
+  position: relative;
+}
+
+.hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0.08),
+    rgba(0, 0, 0, 0.08) 1px,
+    transparent 1px,
+    transparent 2px
+  );
+  pointer-events: none;
+}
+
+.hero-content {
+  position: relative;
+  z-index: 1;
+  max-width: 800px;
+}
+
+.hero-title {
+  font-family: 'Press Start 2P', monospace;
+  font-size: clamp(4rem, 15vw, 10rem);
+  color: var(--arcade-yellow);
+  margin: 0;
+  line-height: 1;
+  text-shadow: 
+    0 0 20px rgba(244, 208, 63, 0.5),
+    0 0 40px rgba(244, 208, 63, 0.3),
+    4px 4px 0px rgba(0, 0, 0, 0.5);
+  letter-spacing: 3px;
+  animation: pong-glow 2s ease-in-out infinite;
+}
+
+@keyframes pong-glow {
+  0%, 100% {
+    text-shadow: 
+      0 0 20px rgba(244, 208, 63, 0.5),
+      0 0 40px rgba(244, 208, 63, 0.3),
+      4px 4px 0px rgba(0, 0, 0, 0.5);
+  }
+  50% {
+    text-shadow: 
+      0 0 30px rgba(244, 208, 63, 0.8),
+      0 0 60px rgba(244, 208, 63, 0.5),
+      4px 4px 0px rgba(0, 0, 0, 0.5);
+  }
+}
+
+.hero-subtitle {
+  font-family: 'VT323', monospace;
+  font-size: clamp(1.5rem, 5vw, 2.5rem);
+  color: var(--crt-white);
+  margin: 2rem 0 4rem 0;
+  letter-spacing: 2px;
+  opacity: 0.9;
+}
+
+.hero-buttons {
+  display: flex;
+  gap: 2rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+/* ===== BUTTONS ===== */
+.btn {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 0.75rem;
+  letter-spacing: 1px;
+  padding: 1rem 2rem;
+  border: 3px solid var(--arcade-yellow);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-transform: uppercase;
+  font-weight: bold;
+}
+
+.btn-primary {
+  background: var(--arcade-yellow);
+  color: var(--arcade-brown);
+  box-shadow: inset 0 -4px 0 rgba(0, 0, 0, 0.3);
+}
+
+.btn-primary:hover {
+  transform: translate(0, -2px);
+  box-shadow: 
+    inset 0 -4px 0 rgba(0, 0, 0, 0.3),
+    0 8px 16px rgba(244, 208, 63, 0.3);
+}
+
+.btn-primary:active {
+  transform: translate(0, 0);
+  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.3);
+}
+
+.btn-secondary {
+  background: transparent;
+  color: var(--arcade-yellow);
+  box-shadow: inset 0 0 0 3px var(--arcade-yellow);
+}
+
+.btn-secondary:hover {
+  background: var(--arcade-yellow);
+  color: var(--arcade-brown);
+  transform: translate(0, -2px);
+}
+
+.btn-large {
+  font-size: 1rem;
+  padding: 1.5rem 3rem;
+}
+
+/* ===== FEATURES SECTION ===== */
+.features {
+  padding: 4rem 2rem;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.feature-card {
+  background: var(--arcade-wood);
+  border: 3px solid var(--arcade-yellow);
+  padding: 2rem;
+  text-align: center;
+  transition: all 0.3s ease;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+}
+
+.feature-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0.05),
+    rgba(0, 0, 0, 0.05) 1px,
+    transparent 1px,
+    transparent 2px
+  );
+  pointer-events: none;
+}
+
+.feature-card:hover {
+  transform: translateY(-8px);
+  box-shadow: 
+    0 0 20px rgba(244, 208, 63, 0.4),
+    0 12px 24px rgba(0, 0, 0, 0.4);
+  border-color: var(--arcade-yellow);
+}
+
+.feature-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+  display: inline-block;
+  transition: transform 0.3s ease;
+}
+
+.feature-card:hover .feature-icon {
+  transform: scale(1.2) rotate(-5deg);
+}
+
+.feature-card h3 {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 1.25rem;
+  color: var(--arcade-yellow);
+  margin: 1rem 0 0.5rem 0;
+  letter-spacing: 1px;
+}
+
+.feature-card p {
+  font-family: 'VT323', monospace;
+  color: var(--crt-white);
+  font-size: 0.9rem;
+  margin: 0;
+  opacity: 0.85;
+}
+
+/* ===== CTA SECTION ===== */
+.cta {
+  padding: 4rem 2rem;
+  text-align: center;
+  background: linear-gradient(135deg, #5d4037 0%, #3e2723 100%);
+}
+
+.cta h2 {
+  font-family: 'Press Start 2P', monospace;
+  font-size: clamp(1.5rem, 5vw, 2.5rem);
+  color: var(--arcade-yellow);
+  margin: 0 0 2rem 0;
+  letter-spacing: 2px;
+}
+
+/* ===== RESPONSIVE ===== */
+@media (max-width: 768px) {
+  .hero-title {
+    font-size: 3rem;
+  }
+
+  .hero-subtitle {
+    font-size: 1.25rem;
+    margin: 1rem 0 2rem 0;
+  }
+
+  .hero-buttons {
+    gap: 1rem;
+  }
+
+  .btn {
+    padding: 0.75rem 1.5rem;
+    font-size: 0.65rem;
+  }
+
+  .features-grid {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+
+  .cta {
+    padding: 2rem 1rem;
+  }
+}
+
 :root {
   --font-size: 16px;
   --font-retro: 'Press Start 2P', monospace;

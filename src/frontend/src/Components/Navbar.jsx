@@ -15,16 +15,9 @@ const NavbarComponent = () => {
       <div className="arcade-content">
         <nav className="arcade-screen">
           <div className="arcade-navbar arcade-panel">
-            <Link to="/" className="d-inline-flex align-items-center gap-3 text-decoration-none">
-              <img
-                src="/logo_tight_square.png"
-                alt="ft_transcendence logo"
-                className="navbar-logo"
-              />
-              <div className="text-start">
-                <strong className="arcade-kicker d-block">Arcade cabinet</strong>
-                <span className="arcade-muted">Retro Pong platform</span>
-              </div>
+            <Link to="/" className="navbar-brand-link">
+              <span className="navbar-wordmark">PONG</span>
+              <span className="navbar-tagline">ft_transcendence arena</span>
             </Link>
 
             <div className="arcade-nav-links">
@@ -44,11 +37,11 @@ const NavbarComponent = () => {
             </div>
 
             <div className="arcade-nav-actions">
-              <Link className="arcade-btn arcade-btn-secondary" to="/register">
-                Register
+              <Link className="arcade-btn arcade-btn-secondary" to="/about">
+                About
               </Link>
               <Link className="arcade-btn arcade-btn-primary" to="/login">
-                Login
+                Enter arena
               </Link>
             </div>
           </div>

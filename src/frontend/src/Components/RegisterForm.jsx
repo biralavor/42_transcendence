@@ -39,11 +39,6 @@ const RegisterForm = () => {
       return
     }
 
-    if (!formData.termsAccepted || !formData.privacyAccepted) {
-      setError('You must accept the Terms of Use and Privacy Policy.')
-      return
-    }
-
     try {
       setIsSubmitting(true)
 
@@ -101,10 +96,9 @@ const RegisterForm = () => {
     buttonText = 'Creating account...'
 
   return (
-    <div className="register-page arcade-auth-layout">
-      <div className="w-100 m-auto form-container">
-        <form className="form-box arcade-screen arcade-form-card" id="registerForm" onSubmit={handleSubmit}>
-          <div className="arcade-panel">
+    <div className="w-100 m-auto form-container">
+      <form className="form-box arcade-screen arcade-form-card" id="registerForm" onSubmit={handleSubmit}>
+        <div className="arcade-panel">
             <div className="text-center mb-2">
               <img
                 src="/logo_tight_square.png"
@@ -232,7 +226,6 @@ const RegisterForm = () => {
           </div>
         </form>
       </div>
-    </div>
   )
 }
 
