@@ -5,6 +5,8 @@
  *   - html/pong.js                   (standalone page)
  */
 
+import System from './pongSystem.js';
+
 export const canvasWidth = 1000;
 export const canvasHeight = 600;
 
@@ -140,48 +142,8 @@ export class GameState {
         this.ball.position.velX = 10;
         this.ball.position.velY = 0;
     }
-
-    collision() {
-        const ballIntendedPosition = { ...this.ball.position };
-        [ballIntendedPosition.y,
-         ballIntendedPosition.x] = this.ball.position.moveIntent();
-
-        const newBall = Ball.copy(this.ball);
-        newBall.position.x = ballIntendedPosition.x;
-        newBall.position.y = ballIntendedPosition.y;
-
-        // vertical collision
-        if (ballIntendedPosition.y <= 0) {
-            const overflow = 0 - ballIntendedPosition.y;
-            newBall.position.y = overflow;
-            newBall.position.velY = ballIntendedPosition.velY * (-1.0);
-        } else if (ballIntendedPosition.y >= canvasHeight - newBall.size.height) {
-            const overflow = ballIntendedPosition.y - (canvasHeight - newBall.size.height);
-            newBall.position.y = (canvasHeight - newBall.size.height) - overflow;
-            newBall.position.velY = -this.ball.position.velY;
-        }
-
-        // horizontal collision
-        // TODO improve collision detection logic to handle better non-frontal collisions
-        if (this.player1.isCollidingWith(newBall)) {
-            const p1Surface = this.player1.position.x + this.player1.size.width;
-            const ballSurface = ballIntendedPosition.x;
-            const overflow = p1Surface - ballSurface;
-            newBall.position.x = p1Surface + overflow;
-            newBall.position.velX = -ballIntendedPosition.velX;
-            newBall.position.velY += 0.4 * this.player1.position.velY;
-        } else if (this.player2.isCollidingWith(newBall)) {
-            const p2Surface = this.player2.position.x;
-            const ballSurface = ballIntendedPosition.x + newBall.size.width;
-            const overflow = p2Surface - ballSurface;
-            newBall.position.x = p2Surface + overflow - newBall.size.width;
-            newBall.position.velX = -ballIntendedPosition.velX;
-            newBall.position.velY += 0.4 * this.player2.position.velY;
-        }
-
-        return newBall;
-    }
 }
+
 
 /**
  * @param {CanvasRenderingContext2D} canvasContext
@@ -191,14 +153,18 @@ export function render(canvasContext, { player1, player2, ball }) {
     canvasContext.reset();
 
     canvasContext.fillStyle = player1.color;
-    canvasContext.fillRect(player1.position.x, player1.position.y, player1.size.width, player1.size.height);
+    canvasContext.fillRect(player1.position.x, player1.position.y,
+                           player1.size.width, player1.size.height);
 
     canvasContext.fillStyle = player2.color;
-    canvasContext.fillRect(player2.position.x, player2.position.y, player2.size.width, player2.size.height);
+    canvasContext.fillRect(player2.position.x, player2.position.y,
+                           player2.size.width, player2.size.height);
 
     canvasContext.fillStyle = ball.color;
-    canvasContext.fillRect(ball.position.x, ball.position.y, ball.size.width, ball.size.height);
+    canvasContext.fillRect(ball.position.x, ball.position.y,
+                           ball.size.width, ball.size.height);
 }
+
 
 /**
  * @param {CanvasRenderingContext2D} canvasContext
@@ -207,24 +173,11 @@ export function render(canvasContext, { player1, player2, ball }) {
  * @param {Function} getInput - returns {player1: {velY, velX}, player2: {velY, velX}}
  */
 export function gameLoop(canvasContext, gameState, setGameState, getInput) {
+    /** @type {import('./pongSystem').GameInput} input */
     const input = getInput();
 
-    gameState.player1.position.velY *= 0.95;
-    gameState.player2.position.velY *= 0.95;
-
-    gameState.player1.position.velY += input.player1.velY;
-    gameState.player1.position.velY = gameState.player1.position.velY > 10 ? 10 : gameState.player1.position.velY;
-    gameState.player1.position.velY = gameState.player1.position.velY < -10 ? -10 : gameState.player1.position.velY;
-
-    gameState.player2.position.velY += input.player2.velY;
-    gameState.player2.position.velY = gameState.player2.position.velY > 10 ? 10 : gameState.player2.position.velY;
-    gameState.player2.position.velY = gameState.player2.position.velY < -10 ? -10 : gameState.player2.position.velY;
-
-    gameState.player1.move();
-    gameState.player2.move();
-
-    const ballAfterCollision = gameState.collision();
-    gameState.ball = ballAfterCollision;
+    System.playerMovement(gameState, input);
+    System.ballCollision(gameState)
 
     render(canvasContext, gameState);
     setGameState(gameState);
