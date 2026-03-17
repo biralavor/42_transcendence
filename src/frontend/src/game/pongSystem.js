@@ -1,4 +1,4 @@
-import { Ball } from "./pongEngine";
+import { Ball, CanvasGameContext } from "./pongEngine";
 
 const MAX_PLAYER_VEL = 15;
 
@@ -57,9 +57,12 @@ function clampMaxVelocity(gameState) {
 
 /**
  * @param {GameState} gameState
+ * @param {CanvasGameContext} canvasContext
  * @returns {Ball} - a new ball derived from gameState with collisions applied
  */
-function collision(gameState) {
+function collision(gameState, canvasContext) {
+    const canvasWidth = canvasContext.width;
+    const canvasHeight = canvasContext.height;
     const ballIntendedPosition = { ...gameState.ball.position };
     [ballIntendedPosition.y,
      ballIntendedPosition.x] = gameState.ball.position.moveIntent();
@@ -118,8 +121,8 @@ export default class System {
     /**
      * @param {GameState} gameState
      */
-    static ballCollision(gameState) {
-	const ballAfterCollision = collision(gameState);
+    static ballCollision(gameState, canvasContext) {
+	const ballAfterCollision = collision(gameState, canvasContext);
 	gameState.ball = ballAfterCollision;
     }
 }

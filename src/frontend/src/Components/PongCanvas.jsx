@@ -1,6 +1,9 @@
 import { useRef, useEffect, useState } from 'react'
 import './PongCanvas.css'
-import { canvasWidth, canvasHeight, GameState, gameLoop } from '../game/pongEngine.js'
+import { GameState, gameLoop, CanvasGameContext } from '../game/pongEngine.js'
+
+const canvasWidth = 1000;
+const canvasHeight = 600;
 
 export default function PongCanvas()
 {
@@ -47,7 +50,9 @@ export default function PongCanvas()
 	const targetFrameRate = 30; //frame per second
 	const timeFrameMillis = 1000 / targetFrameRate; //millis per frame
         const canvas = canvasRef.current;
-        const canvasContext = canvas.getContext('2d');
+        const renderingContext = canvas.getContext('2d');
+	const canvasContext = new CanvasGameContext(
+	    canvasWidth, canvasHeight, renderingContext)
 
 	const interval = setInterval(gameLoop, timeFrameMillis,
 			canvasContext, gameState, setGameState, getInput);

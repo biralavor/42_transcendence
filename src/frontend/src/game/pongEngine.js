@@ -136,38 +136,57 @@ export class Ball extends Entity {
 
 export class GameState {
     constructor() {
+	/** @type {Player} */
         this.player1 = new Player(Player.Type.ONE);
+	/** @type {Player} */
         this.player2 = new Player(Player.Type.TWO);
+	/** @type {Ball} */
         this.ball = new Ball();
         this.ball.position.velX = 10;
         this.ball.position.velY = 0;
     }
 }
 
+export class CanvasGameContext {
+    /**
+     * @param {number} canvasWidth
+     * @param {number} canvasHeight
+     * @param {CanvasRenderingContext2D} renderingContext2d
+     */
+    constructor(canvasWidth, canvasHeight, renderingContext2d) {
+	/** @type {number} */
+	this.width = canvasWidth
+	/** @type {number} */
+	this.height = canvasHeight
+	/** @type {CanvasRenderingContext2D} */
+	this.rendering2d = renderingContext2d
+    }
+}
 
 /**
- * @param {CanvasRenderingContext2D} canvasContext
- * @param {{player1: Player, player2: Player, ball: Ball}} gameState
+ * @param {CanvasGameContext} canvasContext
+ * @param {GameState} gameState
  */
 export function render(canvasContext, { player1, player2, ball }) {
-    canvasContext.reset();
+    const renderingCanvas = canvasContext.rendering2d;
+    renderingCanvas.reset();
 
-    canvasContext.fillStyle = player1.color;
-    canvasContext.fillRect(player1.position.x, player1.position.y,
+    renderingCanvas.fillStyle = player1.color;
+    renderingCanvas.fillRect(player1.position.x, player1.position.y,
                            player1.size.width, player1.size.height);
 
-    canvasContext.fillStyle = player2.color;
-    canvasContext.fillRect(player2.position.x, player2.position.y,
+    renderingCanvas.fillStyle = player2.color;
+    renderingCanvas.fillRect(player2.position.x, player2.position.y,
                            player2.size.width, player2.size.height);
 
-    canvasContext.fillStyle = ball.color;
-    canvasContext.fillRect(ball.position.x, ball.position.y,
+    renderingCanvas.fillStyle = ball.color;
+    renderingCanvas.fillRect(ball.position.x, ball.position.y,
                            ball.size.width, ball.size.height);
 }
 
 
 /**
- * @param {CanvasRenderingContext2D} canvasContext
+ * @param {CanvasGameContext} canvasContext
  * @param {GameState} gameState
  * @param {Function} setGameState - callback after state update (no-op for standalone)
  * @param {Function} getInput - returns {player1: {velY, velX}, player2: {velY, velX}}
@@ -177,7 +196,7 @@ export function gameLoop(canvasContext, gameState, setGameState, getInput) {
     const input = getInput();
 
     System.playerMovement(gameState, input);
-    System.ballCollision(gameState)
+    System.ballCollision(gameState, canvasContext)
 
     render(canvasContext, gameState);
     setGameState(gameState);
