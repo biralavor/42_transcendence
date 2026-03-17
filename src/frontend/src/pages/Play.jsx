@@ -34,13 +34,19 @@ export default function Play() {
             <div className="arcade-card soft mb-4">
               <div className="row g-4 align-items-center">
                 <div className="col-12 col-lg-7">
-                  <div className="pong-board" style={{ height: '320px' }}>
-                    <div className="paddle paddle-left"></div>
-                    <div className="pong-ball"></div>
-                    <div className="paddle paddle-right"></div>
-                    <div className="center-line"></div>
+                  <div
+                    className="pong-board"
+                    style={{
+                      height: '320px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <PongCanvas />
                   </div>
                 </div>
+
                 <div className="col-12 col-lg-5">
                   <h2 className="arcade-section-title">How this page can evolve</h2>
                   <ul className="arcade-list mb-0">
