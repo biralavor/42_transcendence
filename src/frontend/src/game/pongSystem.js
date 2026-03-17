@@ -39,22 +39,22 @@ function applyInput(gameState, input) {
  */
 function clampMaxVelocity(gameState) {
     gameState.player1.position.velY =
-	    gameState.player1.position.velY > MAX_PLAYER_VEL
-	    ? MAX_PLAYER_VEL
-	    : gameState.player1.position.velY;
+        gameState.player1.position.velY > MAX_PLAYER_VEL
+        ? MAX_PLAYER_VEL
+        : gameState.player1.position.velY;
     gameState.player1.position.velY =
-	    gameState.player1.position.velY < -MAX_PLAYER_VEL
-	    ? -MAX_PLAYER_VEL
-	    : gameState.player1.position.velY;
+        gameState.player1.position.velY < -MAX_PLAYER_VEL
+        ? -MAX_PLAYER_VEL
+        : gameState.player1.position.velY;
 
     gameState.player2.position.velY =
-	    gameState.player2.position.velY > MAX_PLAYER_VEL
-	    ? MAX_PLAYER_VEL
-	    : gameState.player2.position.velY;
+        gameState.player2.position.velY > MAX_PLAYER_VEL
+        ? MAX_PLAYER_VEL
+        : gameState.player2.position.velY;
     gameState.player2.position.velY =
-	    gameState.player2.position.velY < -MAX_PLAYER_VEL
-	    ? -MAX_PLAYER_VEL
-	    : gameState.player2.position.velY;
+        gameState.player2.position.velY < -MAX_PLAYER_VEL
+        ? -MAX_PLAYER_VEL
+        : gameState.player2.position.velY;
 }
 
 /**

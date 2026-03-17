@@ -2,7 +2,6 @@
  * pongEngine.js — pure game logic, no DOM, no React.
  * Consumed by:
  *   - src/Components/PongCanvas.jsx  (React SPA)
- *   - html/pong.js                   (standalone page)
  */
 
 import System from './pongSystem.js';
@@ -157,8 +156,7 @@ export class CanvasGameContext {
     /** @type {HTMLCanvasElement} */
     #canvas;
     /**
-     * @param {number} canvasWidth
-     * @param {number} canvasHeight
+     * @param {HTMLCanvasElement} canvas
      * @param {CanvasRenderingContext2D} renderingContext2d
      */
     constructor(canvas, renderingContext2d) {
