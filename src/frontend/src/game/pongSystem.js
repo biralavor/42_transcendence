@@ -1,4 +1,4 @@
-import { Ball, CanvasGameContext } from "./pongEngine";
+import { Ball, CanvasGameContext } from "./pongEngine.js";
 
 const MAX_PLAYER_VEL = 2;
 const PLAYER_VEL_RESISTENCE_FACTOR = 0.95;
