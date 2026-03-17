@@ -229,7 +229,7 @@ export function render(canvasContext, { player1, player2, ball }) {
 /**
  * @param {CanvasGameContext} canvasContext
  * @param {GameState} gameState
- * @param {Function} setGameState - callback after state update (no-op for standalone)
+ * @param {Function} setGameState - callback after state update
  * @param {Function} getInput - returns {player1: {velY, velX}, player2: {velY, velX}}
  */
 export function gameLoop(canvasContext, gameState, setGameState, getInput) {
