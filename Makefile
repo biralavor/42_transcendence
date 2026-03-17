@@ -4,7 +4,7 @@ all: up
 .PHONY: up
 up:
 	docker build -f services/backend-base/Dockerfile -t backend-base .
-	docker compose up --build -d
+	DOMAIN=$$(hostname -I 2>/dev/null | awk '{print $$1}') docker compose up --build -d
 
 .PHONY: down
 down:
@@ -33,7 +33,7 @@ ps:
 .PHONY: windows
 windows:
 	docker build -f services/backend-base/Dockerfile -t backend-base .
-	docker compose up --build -d
+	DOMAIN=$$(hostname -I 2>/dev/null | awk '{print $$1}') docker compose up --build -d
 
 .PHONY: wait
 wait:
@@ -133,6 +133,20 @@ re-game: down-game
 .PHONY: show-tables
 show-tables:
 	docker compose exec db sh -c 'psql -U $$POSTGRES_USER -d $$POSTGRES_DB -c "\dt"'
+
+.PHONY: show-table-contents
+show-table-contents:
+	@docker compose exec db sh -c \
+		'for tbl in $$(psql -U $$POSTGRES_USER -d $$POSTGRES_DB -At \
+		-c "SELECT table_name FROM information_schema.tables \
+		WHERE table_schema='"'"'public'"'"' \
+		AND table_name NOT LIKE '"'"'alembic%'"'"' \
+		ORDER BY table_name"); \
+		do \
+			echo ""; \
+			echo "=== $$tbl ==="; \
+			psql -U $$POSTGRES_USER -d $$POSTGRES_DB -c "SELECT * FROM $$tbl;"; \
+		done'
 
 .PHONY: show-tables-full
 show-tables-full:
