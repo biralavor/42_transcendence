@@ -1,6 +1,8 @@
 import { Ball, CanvasGameContext } from "./pongEngine";
 
-const MAX_PLAYER_VEL = 15;
+const MAX_PLAYER_VEL = 2;
+const PLAYER_VEL_RESISTENCE_FACTOR = 0.95;
+const PLAYER_VEL_INPUT_FACTOR = 0.33;
 
 /**
  * @typedef {Object} PlayerInput
@@ -18,8 +20,8 @@ const MAX_PLAYER_VEL = 15;
 * @param {GameState} gameState
 */
 function desaceleratePlayers(gameState) {
-    gameState.player1.position.velY *= 0.98;
-    gameState.player2.position.velY *= 0.98;
+    gameState.player1.position.velY *= PLAYER_VEL_RESISTENCE_FACTOR;
+    gameState.player2.position.velY *= PLAYER_VEL_RESISTENCE_FACTOR;
 }
 
 /**
@@ -27,8 +29,8 @@ function desaceleratePlayers(gameState) {
  * @param {GameInput} input
  */
 function applyInput(gameState, input) {
-    gameState.player1.position.velY += input.player1.velY;
-    gameState.player2.position.velY += input.player2.velY;
+    gameState.player1.position.velY += (input.player1.velY * PLAYER_VEL_INPUT_FACTOR);
+    gameState.player2.position.velY += (input.player2.velY * PLAYER_VEL_INPUT_FACTOR);
 }
 
 
@@ -61,8 +63,8 @@ function clampMaxVelocity(gameState) {
  * @returns {Ball} - a new ball derived from gameState with collisions applied
  */
 function collision(gameState, canvasContext) {
-    const canvasWidth = canvasContext.width;
-    const canvasHeight = canvasContext.height;
+    const gridWidth = canvasContext.widthRatio;
+    const gridHeight = canvasContext.heightRatio;
     const ballIntendedPosition = { ...gameState.ball.position };
     [ballIntendedPosition.y,
      ballIntendedPosition.x] = gameState.ball.position.moveIntent();
@@ -76,9 +78,9 @@ function collision(gameState, canvasContext) {
         const overflow = 0 - ballIntendedPosition.y;
         newBall.position.y = overflow;
         newBall.position.velY = ballIntendedPosition.velY * (-1.0);
-    } else if (ballIntendedPosition.y >= canvasHeight - newBall.size.height) {
-        const overflow = ballIntendedPosition.y - (canvasHeight - newBall.size.height);
-        newBall.position.y = (canvasHeight - newBall.size.height) - overflow;
+    } else if (ballIntendedPosition.y >= gridHeight - newBall.size.height) {
+        const overflow = ballIntendedPosition.y - (gridHeight - newBall.size.height);
+        newBall.position.y = (gridHeight - newBall.size.height) - overflow;
         newBall.position.velY = -gameState.ball.position.velY;
     }
 

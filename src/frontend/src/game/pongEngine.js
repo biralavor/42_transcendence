@@ -13,6 +13,10 @@ import System from './pongSystem.js';
  * @typedef {(string|CanvasGradient|CanvasPattern)} Color
  */
 
+const widthRatio = 160;
+const heightRatio = 90;
+const aspectRatio = (widthRatio/heightRatio);
+
 export class Position {
     /**
      * @param {number} x - initial horizontal position
@@ -93,24 +97,27 @@ export class Player extends Entity {
      * @enum {(1|2)}
      */
     static Type = Object.freeze({
-        ONE: 1,
-        TWO: 2
+	ONE: 1,
+	TWO: 2
     });
 
     /**
      * @param {Player.Type} type
      */
     constructor(type) {
-        super();
-        this.type = type;
-        if (type === Player.Type.ONE) {
-            this.position = new Position(10, 300 - 45);
-            this.color = 'red';
-        } else {
-            this.position = new Position(960, 300 - 45);
-            this.color = 'blue';
-        }
-        this.size = new Size(30, 90);
+	super();
+	this.type = type;
+	this.size = new Size(5, 15);
+	if (type === Player.Type.ONE) {
+	    this.position = new Position(2 * this.size.width,
+					 heightRatio / 2 - (this.size.height / 2));
+	    this.color = 'red';
+	} else {
+	    this.position = new Position(widthRatio - 3 * this.size.width,
+					 heightRatio / 2 - (this.size.height / 2));
+	    this.color = 'blue';
+	}
+
     }
 }
 
@@ -118,8 +125,9 @@ export class Ball extends Entity {
     constructor() {
         super();
         this.color = 'white';
-        this.position = new Position(485, 285);
-        this.size = new Size(30, 30);
+	this.size = new Size(5, 5);
+        this.position = new Position(widthRatio / 2 - (this.size.width / 2),
+				     heightRatio / 2 - (this.size.height / 2));
     }
 
     static copy(other) {
@@ -139,7 +147,7 @@ export class GameState {
         this.player2 = new Player(Player.Type.TWO);
 	/** @type {Ball} */
         this.ball = new Ball();
-        this.ball.position.velX = 10;
+        this.ball.position.velX = 4;
         this.ball.position.velY = 0;
     }
 }
@@ -168,6 +176,26 @@ export class CanvasGameContext {
     get height() {
 	return this.#canvas.height;
     }
+
+    /** @property {number} */
+    get widthScale() {
+	return this.#canvas.width / widthRatio;
+    }
+
+    /** @property {number} */
+    get heightScale() {
+	return this.#canvas.height / heightRatio;
+    }
+
+    /** @property {number} */
+    get widthRatio() {
+	return widthRatio;
+    }
+
+    /** @property {number} */
+    get heightRatio() {
+	return heightRatio;
+    }
 }
 
 /**
@@ -179,16 +207,22 @@ export function render(canvasContext, { player1, player2, ball }) {
     renderingCanvas.reset();
 
     renderingCanvas.fillStyle = player1.color;
-    renderingCanvas.fillRect(player1.position.x, player1.position.y,
-                           player1.size.width, player1.size.height);
+    renderingCanvas.fillRect(player1.position.x  * canvasContext.widthScale,
+			     player1.position.y  * canvasContext.heightScale,
+			     player1.size.width  * canvasContext.widthScale,
+			     player1.size.height * canvasContext.heightScale);
 
     renderingCanvas.fillStyle = player2.color;
-    renderingCanvas.fillRect(player2.position.x, player2.position.y,
-                           player2.size.width, player2.size.height);
+    renderingCanvas.fillRect(player2.position.x  * canvasContext.widthScale,
+			     player2.position.y  * canvasContext.heightScale,
+			     player2.size.width  * canvasContext.widthScale,
+			     player2.size.height * canvasContext.heightScale);
 
     renderingCanvas.fillStyle = ball.color;
-    renderingCanvas.fillRect(ball.position.x, ball.position.y,
-                           ball.size.width, ball.size.height);
+    renderingCanvas.fillRect(ball.position.x  * canvasContext.widthScale,
+			     ball.position.y  * canvasContext.heightScale,
+			     ball.size.width  * canvasContext.widthScale,
+			     ball.size.height * canvasContext.heightScale);
 }
 
 
