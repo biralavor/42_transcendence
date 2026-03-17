@@ -148,6 +148,8 @@ export class GameState {
         this.ball = new Ball();
         this.ball.position.velX = 4;
         this.ball.position.velY = 0;
+        /** @type {{ player1: number, player2: number }} */
+        this.score = { player1: 0, player2: 0 };
     }
 }
 
@@ -235,8 +237,12 @@ export function gameLoop(canvasContext, gameState, setGameState, getInput) {
     const input = getInput();
 
     System.playerMovement(gameState, input);
-    System.ballCollision(gameState, canvasContext)
+    System.ballCollision(gameState, canvasContext);
+    System.goalDetection(gameState, canvasContext);
 
     render(canvasContext, gameState);
-    setGameState(gameState);
+    // Shallow spread creates a new object reference so React detects the change.
+    // Top-level mutations (score) trigger re-renders; nested mutations (ball, players)
+    // are rendered via canvas and don't need deep cloning.
+    setGameState({ ...gameState });
 }

@@ -105,6 +105,41 @@ function collision(gameState, canvasContext) {
     return newBall;
 }
 
+/**
+ * Resets the ball to the center of the grid with initial velocity.
+ * @param {GameState} gameState
+ * @param {CanvasGameContext} canvasContext
+ */
+function resetBall(gameState, canvasContext) {
+    const gridWidth = canvasContext.widthRatio;
+    const gridHeight = canvasContext.heightRatio;
+    gameState.ball.position.x = gridWidth / 2 - gameState.ball.size.width / 2;
+    gameState.ball.position.y = gridHeight / 2 - gameState.ball.size.height / 2;
+    gameState.ball.position.velX = 4;
+    gameState.ball.position.velY = 0;
+}
+
+/**
+ * Detects if the ball has fully exited the left or right boundary.
+ * Awards a point to the scoring player and resets the ball to center.
+ * Left exit  → player2 scores (ball passed player1's goal line).
+ * Right exit → player1 scores (ball passed player2's goal line).
+ * @param {GameState} gameState
+ * @param {CanvasGameContext} canvasContext
+ */
+function goalDetection(gameState, canvasContext) {
+    const gridWidth = canvasContext.widthRatio;
+    const ball = gameState.ball;
+
+    if (ball.position.x + ball.size.width <= 0) {
+        gameState.score.player2 += 1;
+        resetBall(gameState, canvasContext);
+    } else if (ball.position.x >= gridWidth) {
+        gameState.score.player1 += 1;
+        resetBall(gameState, canvasContext);
+    }
+}
+
 
 export default class System {
 
@@ -127,5 +162,13 @@ export default class System {
     static ballCollision(gameState, canvasContext) {
 		const ballAfterCollision = collision(gameState, canvasContext);
 		gameState.ball = ballAfterCollision;
+    }
+
+    /**
+     * @param {GameState} gameState
+     * @param {CanvasGameContext} canvasContext
+     */
+    static goalDetection(gameState, canvasContext) {
+        goalDetection(gameState, canvasContext);
     }
 }

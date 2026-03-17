@@ -82,8 +82,12 @@ export default function PongCanvas()
         }
     }, []);
 
-    return(
+    return (
         <div className='canvas-container'>
+            <div className='score'>
+                <span className='score-player1'>{gameState.score.player1}</span>
+                <span className='score-player2'>{gameState.score.player2}</span>
+            </div>
             <canvas ref={canvasRef}></canvas>
         </div>
     );
