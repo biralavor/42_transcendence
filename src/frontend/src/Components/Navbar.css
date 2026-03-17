@@ -1,0 +1,89 @@
+/* Navbar Arcade Styles */
+.navbar-logo {
+  width: 54px;
+  height: 54px;
+  object-fit: contain;
+  border-radius: 0;
+  border: 2px solid var(--primary);
+  background: var(--input-background);
+  padding: 0.25rem;
+  transition: all 0.3s ease;
+}
+
+.navbar-logo:hover {
+  box-shadow: 0 0 15px var(--primary);
+  transform: scale(1.05);
+}
+
+.arcade-kicker {
+  font-family: var(--font-retro);
+  font-size: 0.9rem;
+  color: var(--primary);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  text-shadow: 0 0 10px var(--primary);
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.arcade-muted {
+  color: var(--metal-silver);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  display: block;
+}
+
+.arcade-nav-link {
+  color: var(--foreground);
+  text-decoration: none;
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  padding: 0.75rem 1rem;
+  border-radius: 0;
+  transition: all 0.3s ease;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  border: 2px solid transparent;
+}
+
+.arcade-nav-link:hover {
+  color: var(--primary);
+  background: rgba(244, 208, 63, 0.1);
+  border-color: var(--primary);
+}
+
+.arcade-nav-link.active {
+  color: var(--primary);
+  background: rgba(244, 208, 63, 0.2);
+  border-color: var(--primary);
+  box-shadow: 0 0 15px var(--primary);
+}
+
+.arcade-nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 768px) {
+  .arcade-nav-link {
+    font-size: 0.85rem;
+    padding: 0.5rem 0.75rem;
+  }
+
+  .navbar-logo {
+    width: 40px;
+    height: 40px;
+  }
+
+  .arcade-kicker {
+    font-size: 0.75rem;
+  }
+
+  .arcade-muted {
+    font-size: 0.7rem;
+  }
+}
