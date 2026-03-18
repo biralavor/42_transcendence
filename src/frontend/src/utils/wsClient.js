@@ -30,8 +30,8 @@ export function createWsClient(url, { onMessage, onOpen, onClose } = {}) {
     };
 
     ws.onclose = () => {
+      onClose?.();
       if (!intentionallyClosed) {
-        onClose?.();
         retryTimer = setTimeout(connect, retryDelay);
         retryDelay = Math.min(retryDelay * 2, 30_000);
       }
