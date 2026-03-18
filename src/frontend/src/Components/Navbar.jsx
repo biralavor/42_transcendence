@@ -5,6 +5,11 @@ const navLinks = [
   { to: '/play', label: 'Arena' },
   { to: '/leaderboard', label: 'Ranking' },
   { to: '/about', label: 'About' },
+  // Provide easy access to the user's profile.  In a real application you
+  // would likely hide this link until the user is authenticated and show it
+  // alongside the avatar or username, but for the purposes of mock data it
+  // is always visible.
+  { to: '/profile', label: 'Profile' },
 ]
 
 const NavbarComponent = () => {

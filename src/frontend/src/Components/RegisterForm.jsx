@@ -4,8 +4,9 @@ import './RegisterForm.css'
 
 const RegisterForm = () => {
   const [formData, setFormData] = useState({
+    // capture only the fields needed for account creation. Email is no
+    // longer collected in this simplified registration flow.
     username: '',
-    email: '',
     password: '',
     confirmPassword: '',
     termsAccepted: false,
@@ -50,7 +51,8 @@ const RegisterForm = () => {
         credentials: 'include',
         body: JSON.stringify({
           username: formData.username,
-          email: formData.email,
+          // email is intentionally omitted from the payload; the backend no longer
+          // requires it for registration.
           password: formData.password,
         }),
       })
@@ -78,7 +80,6 @@ const RegisterForm = () => {
 
       setFormData({
         username: '',
-        email: '',
         password: '',
         confirmPassword: '',
         termsAccepted: false,
@@ -154,20 +155,8 @@ const RegisterForm = () => {
             <label htmlFor="floatingUsername">Username</label>
           </div>
 
-          <div className="form-floating mb-3 arcade-form-control auth-form-control">
-            <input
-              type="email"
-              className="form-control"
-              id="floatingEmail"
-              name="email"
-              placeholder="your_email@example.com"
-              autoComplete="email"
-              value={formData.email}
-              onChange={handleChange}
-              required
-            />
-            <label htmlFor="floatingEmail">E-mail address</label>
-          </div>
+          {/* Email collection has been removed to streamline registration. If email
+              support is added back in the future, reintroduce an email field here. */}
 
           <div className="register-password-grid">
             <div className="form-floating mb-3 arcade-form-control auth-form-control">

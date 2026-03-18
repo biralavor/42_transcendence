@@ -37,15 +37,15 @@ export default function Login() {
 
               <div className="form-floating mb-3 arcade-form-control auth-form-control">
                 <input
-                  type="email"
+                  type="text"
                   className="form-control"
-                  id="floatingEmail"
-                  name="email"
-                  placeholder="your_email@example.com"
+                  id="floatingUsername"
+                  name="username"
+                  placeholder="Username"
                   autoComplete="username"
                   required
                 />
-                <label htmlFor="floatingEmail">E-mail address</label>
+                <label htmlFor="floatingUsername">Username</label>
               </div>
 
               <div className="form-floating mb-2 arcade-form-control auth-form-control">
@@ -66,9 +66,8 @@ export default function Login() {
                   <input className="form-check-input" type="checkbox" id="flexCheckDefault" />
                   <label className="form-check-label" htmlFor="flexCheckDefault">Remember me</label>
                 </div>
-                <Link to="/forgot-password" className="auth-link small text-decoration-none">
-                  Forgot password?
-                </Link>
+                {/* Forgot password functionality has been removed along with email
+                    confirmations; if needed in the future, restore a link here. */}
               </div>
 
               <button className="arcade-btn arcade-btn-primary w-100 auth-submit mb-3" type="submit">
