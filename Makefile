@@ -4,7 +4,9 @@ all: up
 .PHONY: up
 up:
 	docker build -f services/backend-base/Dockerfile -t backend-base .
-	DOMAIN=$$(hostname -I 2>/dev/null | awk '{print $$1}') docker compose up --build -d
+	DOMAIN=$${DOMAIN:-$$(hostname -I 2>/dev/null | awk '{print $$1}')} ; \
+	DOMAIN=$${DOMAIN:-localhost} ; \
+	DOMAIN=$$DOMAIN docker compose up --build -d
 
 .PHONY: down
 down:
@@ -163,14 +165,16 @@ show-tables-full:
 .PHONY: show-ip
 show-ip:
 	@IP=$$(hostname -I 2>/dev/null | awk '{print $$1}'); \
+	IP=$${IP:-localhost}; \
 	echo ""; \
 	echo "  Host LAN IP: $$IP"; \
 	echo ""; \
 	echo "  To access from another device on the same Wi-Fi:"; \
 	echo "    1. Open https://$$IP:8443 in the browser"; \
 	echo "    2. Accept the certificate warning (self-signed — tap Advanced → Accept the Risk)"; \
-	echo "    3. The cert is issued for 'localhost' by default. To avoid the warning,"; \
-	echo "       set DOMAIN=$$IP in .env and run 'make re-nginx' to reissue the cert for that IP."; \
+	echo "    3. 'make up' auto-detects your LAN IP and issues the TLS cert for it."; \
+	echo "       If detection fails (macOS/Windows), DOMAIN defaults to 'localhost'."; \
+	echo "       Override anytime: set DOMAIN=<ip> in .env and run 'make re-nginx'."; \
 	echo ""
 
 .PHONY: re-nginx
