@@ -1,8 +1,9 @@
 from fastapi import status, HTTPException
-from service.schemas import Login, RegisterRequest, RegisterResponse
+from service.schemas import Login, LoginResponse, RegisterRequest, RegisterResponse
 from service.models.credentials import Credentials, Tokens
 from datetime import datetime, timedelta, timezone
 import bcrypt
+import hashlib
 import secrets
 from jose import jwt
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,7 +28,7 @@ def hash_password(password: str) -> bytes:
     return bcrypt.hashpw(password_bytes, salt)
 
 
-async def authenticate(login: Login, session: AsyncSession) -> Tokens:
+async def authenticate(login: Login, session: AsyncSession) -> LoginResponse:
     password_bytes = login.password.encode('utf-8')
     result = await session.execute(select(Credentials).where(Credentials.username == login.username))
     credential = result.scalars().first()
@@ -42,16 +43,21 @@ async def authenticate(login: Login, session: AsyncSession) -> Tokens:
     access_token = create_access_token(
         data={"sub": credential.username}, expires_delta=access_token_expires
     )
+    raw_refresh_token = secrets.token_hex(32)
+    refresh_token_hash = hashlib.sha256(raw_refresh_token.encode()).hexdigest()
     tokens = Tokens(
         credential_id=credential.id,
-        access_token=access_token,
         token_type="bearer",
-        refresh_token=secrets.token_hex(32),
+        refresh_token_hash=refresh_token_hash,
+        expires_at=datetime.now(timezone.utc) + timedelta(days=30),
     )
     session.add(tokens)
     await session.commit()
-    await session.refresh(tokens)
-    return tokens
+    return LoginResponse(
+        access_token=access_token,
+        token_type="bearer",
+        refresh_token=raw_refresh_token,
+    )
 
 
 async def register_credentials(register_request: RegisterRequest, session: AsyncSession) -> RegisterResponse:

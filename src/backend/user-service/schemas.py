@@ -6,9 +6,10 @@ class Login(BaseModel):
     password: str
 
 
-class Token(BaseModel):
+class LoginResponse(BaseModel):
     access_token: str
     token_type: str
+    refresh_token: str
 
 
 class RegisterRequest(BaseModel):

@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import FastAPI, status, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from service.schemas import Login, RegisterRequest
+from service.schemas import Login, LoginResponse, RegisterRequest, RegisterResponse
 from service.service import authenticate, register_credentials
 from shared.database import get_db
 
@@ -22,11 +22,11 @@ def root():
     return {"message": "User Service"}
 
 
-@app.post("/auth/login", status_code=status.HTTP_200_OK)
+@app.post("/auth/login", status_code=status.HTTP_200_OK, response_model=LoginResponse)
 async def login(login: Login, session: SessionDependency):
     return await authenticate(login, session)
 
 
-@app.post("/auth/register", status_code=status.HTTP_201_CREATED)
+@app.post("/auth/register", status_code=status.HTTP_201_CREATED, response_model=RegisterResponse)
 async def create_credentials(register_request: RegisterRequest, session: SessionDependency):
     return await register_credentials(register_request, session)

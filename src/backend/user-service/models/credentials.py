@@ -1,4 +1,5 @@
-from sqlalchemy import Column, ForeignKey, Integer, String
+from sqlalchemy import Column, ForeignKey, Integer, String, TIMESTAMP
+from sqlalchemy.sql import func
 
 from shared.database import Base
 
@@ -16,6 +17,7 @@ class Tokens(Base):
 
     id = Column(Integer, primary_key=True)
     credential_id = Column(Integer, ForeignKey("credentials.id"), nullable=False)
-    access_token = Column(String, nullable=False)
     token_type = Column(String, nullable=False)
-    refresh_token = Column(String, nullable=False)
+    refresh_token_hash = Column(String, nullable=False)
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
+    expires_at = Column(TIMESTAMP(timezone=True), nullable=False)
