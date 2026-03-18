@@ -9,12 +9,13 @@ export default function PongCanvas()
     const keyStateRef = useRef({ 'KeyJ': false, 'KeyK': false, 'KeyW': false, 'KeyS': false })
     const [gameState, setGameState] = useState(new GameState())
     const pauseRef = useRef(false);
+    const goalTimerRef = useRef(null);
     const [showGoal, setShowGoal] = useState(false);
 
     function onGoal() {
         pauseRef.current = true;
         setShowGoal(true);
-        setTimeout(() => {
+        goalTimerRef.current = setTimeout(() => {
             pauseRef.current = false;
             setShowGoal(false);
         }, 2000);
@@ -59,13 +60,12 @@ export default function PongCanvas()
         const canvas = canvasRef.current;
         if (!canvas) return;
 
-        // Compute CSS defined dimensions
-        const computedStyle = window.getComputedStyle(canvas);
-        const width = parseFloat(computedStyle.width);
-        const height = parseFloat(computedStyle.height);
-
-        canvas.width = width;
-        canvas.height = height;
+        // Use getBoundingClientRect so we get actual rendered pixels,
+        // not the browser's default 300×150 that getComputedStyle returns
+        // when no explicit width/height is set on the element.
+        const { width, height } = canvas.getBoundingClientRect();
+        canvas.width = Math.round(width);
+        canvas.height = Math.round(height);
     }
 
     useEffect(() => {
@@ -90,6 +90,7 @@ export default function PongCanvas()
 
         return () => {
             clearInterval(interval);
+            clearTimeout(goalTimerRef.current);
             window.removeEventListener('resize', onResize);
             window.removeEventListener('keydown', onKeydown);
             window.removeEventListener('keyup', onKeyup);
