@@ -164,8 +164,8 @@ export default class System {
      * @param {CanvasGameContext} canvasContext
      */
     static ballCollision(gameState, canvasContext) {
-		const ballAfterCollision = collision(gameState, canvasContext);
-		gameState.ball = ballAfterCollision;
+        const ballAfterCollision = collision(gameState, canvasContext);
+        gameState.ball = ballAfterCollision;
     }
 
     /**

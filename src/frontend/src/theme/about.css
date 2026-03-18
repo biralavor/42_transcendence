@@ -1,0 +1,78 @@
+/*
+ * About page enhancements
+ *
+ * This stylesheet defines bespoke styles for the About page to give it
+ * a more polished and professional feel while maintaining the retro
+ * arcade aesthetic. Cards use the same heavy borders and shadows seen
+ * throughout the rest of the application, with subtle hover
+ * interactions to bring them to life. Typography choices align with
+ * the existing theme to ensure cohesion.
+ */
+
+/* Intro panel tweaks: reinforce the bezel look on the CRT screen */
+.about-intro .arcade-panel {
+  border: 4px solid var(--border);
+  box-shadow: 6px 6px 0 var(--border);
+}
+
+/* Grid cards styling */
+.about-details .about-card {
+  background: var(--card);
+  border: 4px solid var(--border);
+  border-radius: 1rem;
+  padding: 1.5rem 1.75rem;
+  box-shadow: 6px 6px 0 var(--border);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  height: 100%;
+}
+
+.about-details .about-card:hover {
+  transform: translate(3px, 3px);
+  box-shadow: 3px 3px 0 var(--border);
+}
+
+/* Card headings */
+.about-card-title {
+  font-family: 'Righteous', cursive;
+  font-size: 1.4rem;
+  color: var(--primary);
+  margin-bottom: 1rem;
+  letter-spacing: 0.05em;
+}
+
+/* Unordered list styling */
+.about-list {
+  list-style: none;
+  padding-left: 0;
+  margin: 0;
+}
+
+.about-list li {
+  font-family: 'VT323', monospace;
+  font-size: 1.3rem;
+  color: var(--crt-white);
+  margin-bottom: 0.6rem;
+  line-height: 1.4;
+}
+
+.about-list li:last-child {
+  margin-bottom: 0;
+}
+
+/* Call‑to‑action card */
+.about-cta .arcade-card.soft {
+  border: 4px solid var(--border);
+  box-shadow: 6px 6px 0 var(--border);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.about-cta .arcade-card.soft:hover {
+  transform: translate(3px, 3px);
+  box-shadow: 3px 3px 0 var(--border);
+}
+
+/* CTA title inherits card styling */
+.about-cta .about-card-title {
+  color: var(--primary);
+  font-family: 'Righteous', cursive;
+}

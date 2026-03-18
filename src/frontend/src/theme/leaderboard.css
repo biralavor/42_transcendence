@@ -1,0 +1,118 @@
+/*
+ * Leaderboard enhancements
+ *
+ * This stylesheet adds player avatars and row highlighting to the
+ * scoreboard component. It lives in its own file so it can be
+ * imported independently without cluttering the main arcade theme.
+ */
+
+.player-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.player-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--primary);
+}
+
+/* Top 3 shared background tints (applies to both table rows and cards) */
+.leaderboard-top-1 {
+  background: rgba(251, 192, 45, 0.25);
+}
+
+.leaderboard-top-2 {
+  background: rgba(224, 168, 0, 0.20);
+}
+
+.leaderboard-top-3 {
+  background: rgba(141, 110, 99, 0.20);
+}
+
+/* Table-specific: emphasise the ranking cell for highlighted rows */
+.leaderboard-top-1 td:first-child,
+.leaderboard-top-2 td:first-child,
+.leaderboard-top-3 td:first-child {
+  font-weight: 700;
+}
+
+/*
+ * Enhanced leaderboard layout
+ *
+ * In addition to the simple table styling above, we introduce a
+ * flexible card‑based list to display player rankings. Each entry
+ * becomes its own card with heavy borders and shadows to echo the
+ * arcade cabinet aesthetic. These classes are used when the
+ * Leaderboard.jsx component renders the ranking as a series of
+ * <div> elements rather than table rows.
+ */
+
+.leaderboard-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.leaderboard-entry {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  background: var(--card);
+  border: 4px solid var(--border);
+  border-radius: 1rem;
+  padding: 1rem 1.5rem;
+  box-shadow: 6px 6px 0 var(--border);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.leaderboard-entry:hover {
+  transform: translate(3px, 3px);
+  box-shadow: 3px 3px 0 var(--border);
+}
+
+.leaderboard-entry .leaderboard-rank {
+  font-family: 'Bungee', cursive;
+  font-size: 1.6rem;
+  color: var(--primary);
+  width: 3rem;
+  text-align: center;
+}
+
+.leaderboard-entry .leaderboard-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid var(--primary);
+}
+
+.leaderboard-entry .leaderboard-info {
+  flex: 1;
+}
+
+.leaderboard-entry .leaderboard-player {
+  font-family: 'Righteous', cursive;
+  font-size: 1.4rem;
+  color: var(--primary);
+  margin-bottom: 0.25rem;
+  letter-spacing: 0.05em;
+}
+
+.leaderboard-entry .leaderboard-stats {
+  display: flex;
+  gap: 1rem;
+  font-family: 'VT323', monospace;
+  font-size: 1.3rem;
+  color: var(--crt-white);
+}
+
+/* Card-specific: enlarge the rank label for top entries */
+.leaderboard-top-1 .leaderboard-rank,
+.leaderboard-top-2 .leaderboard-rank,
+.leaderboard-top-3 .leaderboard-rank {
+  font-size: 1.8rem;
+}

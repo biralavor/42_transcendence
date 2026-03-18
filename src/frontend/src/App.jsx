@@ -5,7 +5,7 @@ import About from './pages/About'
 import Play from './pages/Play'
 import Leaderboard from './pages/Leaderboard'
 import Register from './pages/Register'
-import ForgotPassword from './pages/ForgotPassword'
+import Profile from './pages/Profile'
 
 
 export default function App() {
@@ -18,7 +18,9 @@ export default function App() {
         <Route path="/play" element={<Play />} />
         <Route path="/leaderboard" element={<Leaderboard />} />
         <Route path="/register" element={<Register />} />
-        <Route path="/forgot-password" element={<ForgotPassword />} />
+        {/* Route to the profile page; this page shows user information, settings
+            and match history. */}
+        <Route path="/profile" element={<Profile />} />
       </Routes>
     </BrowserRouter>
   )
