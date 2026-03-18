@@ -8,6 +8,19 @@ export default function PongCanvas()
     const canvasRef = useRef(null);
     const keyStateRef = useRef({ 'KeyJ': false, 'KeyK': false, 'KeyW': false, 'KeyS': false })
     const [gameState, setGameState] = useState(new GameState())
+    const pauseRef = useRef(false);
+    const [showGoal, setShowGoal] = useState(false);
+
+    function onGoal() {
+        pauseRef.current = true;
+        setShowGoal(true);
+        setTimeout(() => {
+            pauseRef.current = false;
+            setShowGoal(false);
+        }, 2000);
+    }
+
+    const isPaused = () => pauseRef.current;
 
     function onKeyup(event) {
         console.log(`keyup ${event}`)
@@ -68,8 +81,9 @@ export default function PongCanvas()
             updateCanvasDimensions()
         }
         window.addEventListener('resize', onResize);
-        const interval = setInterval(gameLoop, timeFrameMillis,
-                                     canvasContext, gameState, setGameState, getInput);
+        const interval = setInterval(() => {
+            gameLoop(canvasContext, gameState, setGameState, getInput, isPaused, onGoal);
+        }, timeFrameMillis);
 
         window.addEventListener('keydown', onKeydown)
         window.addEventListener('keyup', onKeyup);
@@ -88,6 +102,11 @@ export default function PongCanvas()
                 <span className='score-player1'>{gameState.score.player1}</span>
                 <span className='score-player2'>{gameState.score.player2}</span>
             </div>
+            {showGoal && (
+                <div className='goal-overlay'>
+                    <span className='goal-text'>GOOOAL!</span>
+                </div>
+            )}
             <canvas ref={canvasRef}></canvas>
         </div>
     );

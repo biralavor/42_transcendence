@@ -231,14 +231,18 @@ export function render(canvasContext, { player1, player2, ball }) {
  * @param {GameState} gameState
  * @param {Function} setGameState - callback after state update
  * @param {Function} getInput - returns {player1: {velY, velX}, player2: {velY, velX}}
+ * @param {Function} isPaused - returns true when physics should be skipped
+ * @param {Function} onGoal - called once when a goal is scored
  */
-export function gameLoop(canvasContext, gameState, setGameState, getInput) {
-    /** @type {import('./pongSystem').GameInput} input */
-    const input = getInput();
-
-    System.playerMovement(gameState, input);
-    System.ballCollision(gameState, canvasContext);
-    System.goalDetection(gameState, canvasContext);
+export function gameLoop(canvasContext, gameState, setGameState, getInput, isPaused, onGoal) {
+    if (!isPaused()) {
+        /** @type {import('./pongSystem').GameInput} input */
+        const input = getInput();
+        System.playerMovement(gameState, input);
+        System.ballCollision(gameState, canvasContext);
+        const scored = System.goalDetection(gameState, canvasContext);
+        if (scored) onGoal();
+    }
 
     render(canvasContext, gameState);
     // Shallow spread creates a new object reference so React detects the change.

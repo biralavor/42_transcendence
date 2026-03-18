@@ -20,14 +20,16 @@ describe('System.goalDetection', () => {
 
     it('awards player2 a point when ball exits the left boundary', () => {
         state.ball.position.x = -state.ball.size.width - 1  // fully off left
-        System.goalDetection(state, mockCanvasContext)
+        const scored = System.goalDetection(state, mockCanvasContext)
+        expect(scored).toBe(true)
         expect(state.score.player2).toBe(1)
         expect(state.score.player1).toBe(0)
     })
 
     it('awards player1 a point when ball exits the right boundary', () => {
         state.ball.position.x = mockCanvasContext.widthRatio + 1  // fully off right
-        System.goalDetection(state, mockCanvasContext)
+        const scored = System.goalDetection(state, mockCanvasContext)
+        expect(scored).toBe(true)
         expect(state.score.player1).toBe(1)
         expect(state.score.player2).toBe(0)
     })
@@ -70,7 +72,8 @@ describe('System.goalDetection', () => {
 
     it('does nothing when ball is in play', () => {
         state.ball.position.x = 80  // mid-field
-        System.goalDetection(state, mockCanvasContext)
+        const scored = System.goalDetection(state, mockCanvasContext)
+        expect(scored).toBe(false)
         expect(state.score.player1).toBe(0)
         expect(state.score.player2).toBe(0)
     })

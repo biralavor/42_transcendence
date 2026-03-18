@@ -126,6 +126,7 @@ function resetBall(gameState, canvasContext) {
  * Right exit → player1 scores (ball passed player2's goal line).
  * @param {GameState} gameState
  * @param {CanvasGameContext} canvasContext
+ * @returns {boolean} true if a goal was scored this tick, false otherwise
  */
 function goalDetection(gameState, canvasContext) {
     const gridWidth = canvasContext.widthRatio;
@@ -134,10 +135,13 @@ function goalDetection(gameState, canvasContext) {
     if (ball.position.x + ball.size.width <= 0) {
         gameState.score.player2 += 1;
         resetBall(gameState, canvasContext);
+        return true;
     } else if (ball.position.x >= gridWidth) {
         gameState.score.player1 += 1;
         resetBall(gameState, canvasContext);
+        return true;
     }
+    return false;
 }
 
 
@@ -167,8 +171,9 @@ export default class System {
     /**
      * @param {GameState} gameState
      * @param {CanvasGameContext} canvasContext
+     * @returns {boolean} true if a goal was scored this tick, false otherwise
      */
     static goalDetection(gameState, canvasContext) {
-        goalDetection(gameState, canvasContext);
+        return goalDetection(gameState, canvasContext);
     }
 }
