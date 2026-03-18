@@ -1,8 +1,9 @@
 from fastapi import status, HTTPException
-from service.schemas import Credentials, Login, Token, RegisterRequest
+from service.schemas import Credentials, Login, Tokens, RegisterRequest
 from datetime import datetime, timedelta, timezone
 import bcrypt
 from jose import jwt
+from sqlmodel import Field, Session, SQLModel, create_engine, select
 
 SECRET_KEY = "secret"
 ALGORITHM = "HS256"
@@ -22,30 +23,12 @@ def hash_password(password: str) -> bytes:
     hashed = bcrypt.hashpw(password_bytes, salt)
     return hashed
 
-def create_database():
-    user = {
-        'username': "bruno",
-        'email': "bruno@example.com",
-        'password': hash_password("bruno123")
-    }
-    credentials = Credentials(**user) 
-    database = [credentials]
-    return database
-
-database = create_database()
-
-def find_user_by_name(username, database):
-    for user in database:
-        if user.username == username:
-            return user
-    return None
-
-def authenticate(login: Login) -> Token:
+def authenticate(login: Login, session: Session) -> Tokens:
     password_bytes = login.password.encode('utf-8')
-    user = find_user_by_name(login.username, database)
-    is_authenticated = (user is not None 
-        and login.username == user.username 
-        and bcrypt.checkpw(password_bytes, user.password))
+    credential = session.exec(select(Credentials).where(Credentials.username == login.username)).first()
+    is_authenticated = (credential is not None
+        and login.username == credential.username
+        and bcrypt.checkpw(password_bytes, credential.password))
     if (not is_authenticated):
         raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -53,22 +36,26 @@ def authenticate(login: Login) -> Token:
         )
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={"sub": user.username}, expires_delta=access_token_expires
+        data={"sub": credential.username}, expires_delta=access_token_expires
     )
-    token = Token(access_token=access_token, token_type="bearer")
-    return token
+    tokens = Tokens(credential_id=credential.id, access_token=access_token, token_type="bearer", refresh_token="refresh_token")
+    session.add(tokens)
+    session.commit()
+    session.refresh(tokens)
+    return tokens
 
-def register_user(register_request: RegisterRequest):
-    if find_user_by_name(register_request.username, database) is not None:
+def register_credentials(register_request: RegisterRequest, session: Session) -> Credentials:
+    credentials = Credentials(
+        username=register_request.username
+    )
+    entity = session.exec(select(Credentials).where(Credentials.username == register_request.username)).first()
+    if entity:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="User already exists"
         )
-    credentials = Credentials(
-        username=register_request.username,
-        email=register_request.email,
-        password=hash_password(register_request.password)
-    )
-    database.append(credentials)
-    print(database)
+    credentials.password = hash_password(register_request.password)
+    session.add(credentials)
+    session.commit()
+    session.refresh(credentials)
     return { "username": credentials.username }

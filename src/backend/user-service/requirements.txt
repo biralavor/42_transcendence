@@ -2,3 +2,4 @@
 # Add only user-service-specific packages here.
 bcrypt==4.2.1
 python-jose[cryptography]==3.5.0
+sqlmodel==0.0.37

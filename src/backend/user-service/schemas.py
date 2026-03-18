@@ -1,10 +1,18 @@
 from pydantic import BaseModel
+from typing import Annotated
+from sqlmodel import Field, SQLModel
 
-
-class Credentials(BaseModel):
+class Credentials(SQLModel, table=True):
+    id: Annotated[int, Field(primary_key=True)]
     username: str
-    email: str
-    password: bytes
+    password: str
+
+class Tokens(SQLModel, table=True):
+    id: Annotated[int, Field(primary_key=True)]
+    credential_id: int = Field(foreign_key="credentials.id")
+    access_token: str
+    token_type: str
+    refresh_token: str
 
 class Login(BaseModel):
     username: str
@@ -14,11 +22,6 @@ class Token(BaseModel):
     access_token: str
     token_type: str
 
-
-class TokenData(BaseModel):
-    username: str | None = None
-
 class RegisterRequest(BaseModel):
     username: str
-    email: str
     password: str
