@@ -1,74 +1,85 @@
 from fastapi import status, HTTPException
-from service.schemas import Credentials, Login, Token, RegisterRequest
+from service.schemas import Login, LoginResponse, RegisterRequest, RegisterResponse
+from service.models.credentials import Credentials, Tokens
 from datetime import datetime, timedelta, timezone
 import bcrypt
+import hashlib
+import secrets
 from jose import jwt
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 SECRET_KEY = "secret"
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30 
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
+
 
 def create_access_token(data: dict, expires_delta: timedelta):
     to_encode = data.copy()
-    
     expire = datetime.now(timezone.utc) + expires_delta
     to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
 
 def hash_password(password: str) -> bytes:
     password_bytes = password.encode('utf-8')
     salt = bcrypt.gensalt()
-    hashed = bcrypt.hashpw(password_bytes, salt)
-    return hashed
+    return bcrypt.hashpw(password_bytes, salt)
 
-def create_database():
-    user = {
-        'username': "bruno",
-        'email': "bruno@example.com",
-        'password': hash_password("bruno123")
-    }
-    credentials = Credentials(**user) 
-    database = [credentials]
-    return database
 
-database = create_database()
-
-def find_user_by_name(username, database):
-    for user in database:
-        if user.username == username:
-            return user
-    return None
-
-def authenticate(login: Login) -> Token:
+async def authenticate(login: Login, session: AsyncSession) -> LoginResponse:
     password_bytes = login.password.encode('utf-8')
-    user = find_user_by_name(login.username, database)
-    is_authenticated = (user is not None 
-        and login.username == user.username 
-        and bcrypt.checkpw(password_bytes, user.password))
-    if (not is_authenticated):
+    result = await session.execute(select(Credentials).where(Credentials.username == login.username))
+    credential = result.scalars().first()
+    is_authenticated = (credential is not None
+        and bcrypt.checkpw(password_bytes, credential.password.encode('utf-8')))
+    if not is_authenticated:
         raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid credentials"
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials"
         )
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={"sub": user.username}, expires_delta=access_token_expires
+        data={"sub": credential.username}, expires_delta=access_token_expires
     )
-    token = Token(access_token=access_token, token_type="bearer")
-    return token
+    raw_refresh_token = secrets.token_hex(32)
+    refresh_token_hash = hashlib.sha256(raw_refresh_token.encode()).hexdigest()
+    tokens = Tokens(
+        credential_id=credential.id,
+        token_type="bearer",
+        refresh_token_hash=refresh_token_hash,
+        expires_at=datetime.now(timezone.utc) + timedelta(days=30),
+    )
+    session.add(tokens)
+    await session.commit()
+    return LoginResponse(
+        access_token=access_token,
+        token_type="bearer",
+        refresh_token=raw_refresh_token,
+    )
 
-def register_user(register_request: RegisterRequest):
-    if find_user_by_name(register_request.username, database) is not None:
+
+async def register_credentials(register_request: RegisterRequest, session: AsyncSession) -> RegisterResponse:
+    result = await session.execute(select(Credentials).where(Credentials.username == register_request.username))
+    entity = result.scalars().first()
+    if entity:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="User already exists"
         )
     credentials = Credentials(
         username=register_request.username,
-        email=register_request.email,
-        password=hash_password(register_request.password)
+        password=hash_password(register_request.password).decode('utf-8'),
     )
-    database.append(credentials)
-    print(database)
-    return { "username": credentials.username }
+    try:
+        session.add(credentials)
+        await session.commit()
+        await session.refresh(credentials)
+    except IntegrityError:
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="User already exists"
+        )
+    return RegisterResponse(username=credentials.username)

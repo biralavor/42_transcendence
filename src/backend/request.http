@@ -1,20 +1,6 @@
 ### Health check
 GET https://localhost:8443/api/users/health HTTP/1.1
 
-###
-
-### Register
-POST https://localhost:8443/api/users/auth/register HTTP/1.1
-content-type: application/json
-
-{
-    "username": "maurodri",
-    "email": "maurodri@example.com",
-    "password": "maurodri123"
-}
-
-###
-
 ### Login
 POST https://localhost:8443/api/users/auth/login HTTP/1.1
 content-type: application/json
@@ -40,4 +26,28 @@ content-type: application/json
 {
     "username": "maurodri",
     "password": "maurodri123"
+}
+### Register
+POST https://localhost:8443/api/users/auth/register HTTP/1.1
+content-type: application/json
+
+{
+    "username": "maurodri",
+    "password": "maurodri123"
+}
+###
+POST https://localhost:8443/api/users/auth/register HTTP/1.1
+content-type: application/json
+
+{
+    "username": "bruno",
+    "password": "bruno123"
+}
+###
+POST https://localhost:8443/api/users/auth/register HTTP/1.1
+content-type: application/json
+
+{
+    "username": "bira",
+    "password": "bira123"
 }

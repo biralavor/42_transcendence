@@ -1,24 +1,21 @@
 from pydantic import BaseModel
 
 
-class Credentials(BaseModel):
-    username: str
-    email: str
-    password: bytes
-
 class Login(BaseModel):
     username: str
     password: str
 
-class Token(BaseModel):
+
+class LoginResponse(BaseModel):
     access_token: str
     token_type: str
+    refresh_token: str
 
-
-class TokenData(BaseModel):
-    username: str | None = None
 
 class RegisterRequest(BaseModel):
     username: str
-    email: str
     password: str
+
+
+class RegisterResponse(BaseModel):
+    username: str
