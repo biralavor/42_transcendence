@@ -1,17 +1,17 @@
 from typing import Annotated
-from sqlmodel import Field, Session, SQLModel, create_engine, select
+from sqlmodel import Session, create_engine
 
 from fastapi import FastAPI, status, Depends
-from service.schemas import Login, RegisterRequest, Credentials
+from service.schemas import Login, RegisterRequest
 from service.service import authenticate, register_credentials
+from shared.config.settings import settings
 
-sqlite_file_name = "database.db"
-sqlite_url = f"sqlite:///{sqlite_file_name}"
+DATABASE_URL = (
+    f"postgresql+psycopg2://{settings.DB_USER}:{settings.DB_PASSWORD}"
+    f"@{settings.DB_HOST}:{settings.DB_PORT}/{settings.DB_NAME}"
+)
 
-engine = create_engine(sqlite_url, echo=True)
-
-def create_db_and_tables():
-    SQLModel.metadata.create_all(engine)
+engine = create_engine(DATABASE_URL, echo=settings.DB_ECHO)
 
 def get_session():
     with Session(engine) as session:
@@ -32,10 +32,6 @@ def root():
 @app.post("/auth/login", status_code=status.HTTP_200_OK)
 def login(login: Login, session: SessionDependency):
     return authenticate(login, session)
-
-@app.on_event("startup")
-def on_startup():
-    create_db_and_tables()
 
 @app.post("/auth/register", status_code=status.HTTP_201_CREATED)
 def create_credentials(register_request: RegisterRequest, session: SessionDependency):
