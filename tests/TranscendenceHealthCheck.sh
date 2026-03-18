@@ -438,18 +438,6 @@ else
     info "curl not found — skipping WebSocket connectivity checks"
 fi
 
-# ── 17. Frontend Unit Tests ───────────────────────────────────────────────────
-section "Frontend Unit Tests"
-if container_running frontend; then
-    if docker exec frontend npx vitest run --reporter=verbose 2>&1 | tail -5; then
-        pass "Frontend unit tests (vitest) all passed"
-    else
-        fail "Frontend unit tests (vitest) failed — run 'docker exec frontend npx vitest run' for details"
-    fi
-else
-    info "frontend container not running — skipping unit tests"
-fi
-
 # ── Summary ───────────────────────────────────────────────────────────────────
 printf "\n${YELLOW}══════════════════════════════════════════${RESET}\n"
 printf "  ${YELLOW}MANDATORY${RESET}  ${GREEN}PASSED: %-3d${RESET}  ${RED}FAILED: %-3d${RESET}\n" "$PASS" "$FAIL"

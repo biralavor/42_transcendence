@@ -2,19 +2,17 @@
  * pongEngine.js — pure game logic, no DOM, no React.
  * Consumed by:
  *   - src/Components/PongCanvas.jsx  (React SPA)
+ *   - html/pong.js                   (standalone page)
  */
 
-import System from './pongSystem.js';
+export const canvasWidth = 1000;
+export const canvasHeight = 600;
 
 /**
  * For string based color follow reference
  * https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Values/color_value
  * @typedef {(string|CanvasGradient|CanvasPattern)} Color
  */
-
-const widthRatio = 160;
-const heightRatio = 90;
-const aspectRatio = (widthRatio/heightRatio);
 
 export class Position {
     /**
@@ -106,17 +104,14 @@ export class Player extends Entity {
     constructor(type) {
         super();
         this.type = type;
-        this.size = new Size(5, 15);
         if (type === Player.Type.ONE) {
-            this.position = new Position(2 * this.size.width,
-                                         heightRatio / 2 - (this.size.height / 2));
+            this.position = new Position(10, 300 - 45);
             this.color = 'red';
         } else {
-            this.position = new Position(widthRatio - 3 * this.size.width,
-                                         heightRatio / 2 - (this.size.height / 2));
+            this.position = new Position(960, 300 - 45);
             this.color = 'blue';
         }
-
+        this.size = new Size(30, 90);
     }
 }
 
@@ -124,9 +119,8 @@ export class Ball extends Entity {
     constructor() {
         super();
         this.color = 'white';
-        this.size = new Size(5, 5);
-        this.position = new Position(widthRatio / 2 - (this.size.width / 2),
-                                     heightRatio / 2 - (this.size.height / 2));
+        this.position = new Position(485, 285);
+        this.size = new Size(30, 30);
     }
 
     static copy(other) {
@@ -140,113 +134,98 @@ export class Ball extends Entity {
 
 export class GameState {
     constructor() {
-        /** @type {Player} */
         this.player1 = new Player(Player.Type.ONE);
-        /** @type {Player} */
         this.player2 = new Player(Player.Type.TWO);
-        /** @type {Ball} */
         this.ball = new Ball();
-        this.ball.position.velX = 4;
+        this.ball.position.velX = 10;
         this.ball.position.velY = 0;
-        /** @type {{ player1: number, player2: number }} */
-        this.score = { player1: 0, player2: 0 };
-    }
-}
-
-export class CanvasGameContext {
-
-    /** @type {HTMLCanvasElement} */
-    #canvas;
-    /**
-     * @param {HTMLCanvasElement} canvas
-     * @param {CanvasRenderingContext2D} renderingContext2d
-     */
-    constructor(canvas, renderingContext2d) {
-        /** @type {CanvasRenderingContext2D} */
-        this.rendering2d = renderingContext2d
-        this.#canvas = canvas
     }
 
-    /** @property {number} */
-    get width() {
-        return this.#canvas.width;
-    }
+    collision() {
+        const ballIntendedPosition = { ...this.ball.position };
+        [ballIntendedPosition.y,
+         ballIntendedPosition.x] = this.ball.position.moveIntent();
 
-    /** @property {number} */
-    get height() {
-        return this.#canvas.height;
-    }
+        const newBall = Ball.copy(this.ball);
+        newBall.position.x = ballIntendedPosition.x;
+        newBall.position.y = ballIntendedPosition.y;
 
-    /** @property {number} */
-    get widthScale() {
-        return this.#canvas.width / widthRatio;
-    }
+        // vertical collision
+        if (ballIntendedPosition.y <= 0) {
+            const overflow = 0 - ballIntendedPosition.y;
+            newBall.position.y = overflow;
+            newBall.position.velY = ballIntendedPosition.velY * (-1.0);
+        } else if (ballIntendedPosition.y >= canvasHeight - newBall.size.height) {
+            const overflow = ballIntendedPosition.y - (canvasHeight - newBall.size.height);
+            newBall.position.y = (canvasHeight - newBall.size.height) - overflow;
+            newBall.position.velY = -this.ball.position.velY;
+        }
 
-    /** @property {number} */
-    get heightScale() {
-        return this.#canvas.height / heightRatio;
-    }
+        // horizontal collision
+        // TODO improve collision detection logic to handle better non-frontal collisions
+        if (this.player1.isCollidingWith(newBall)) {
+            const p1Surface = this.player1.position.x + this.player1.size.width;
+            const ballSurface = ballIntendedPosition.x;
+            const overflow = p1Surface - ballSurface;
+            newBall.position.x = p1Surface + overflow;
+            newBall.position.velX = -ballIntendedPosition.velX;
+            newBall.position.velY += 0.4 * this.player1.position.velY;
+        } else if (this.player2.isCollidingWith(newBall)) {
+            const p2Surface = this.player2.position.x;
+            const ballSurface = ballIntendedPosition.x + newBall.size.width;
+            const overflow = p2Surface - ballSurface;
+            newBall.position.x = p2Surface + overflow - newBall.size.width;
+            newBall.position.velX = -ballIntendedPosition.velX;
+            newBall.position.velY += 0.4 * this.player2.position.velY;
+        }
 
-    /** @property {number} */
-    get widthRatio() {
-        return widthRatio;
-    }
-
-    /** @property {number} */
-    get heightRatio() {
-        return heightRatio;
+        return newBall;
     }
 }
 
 /**
- * @param {CanvasGameContext} canvasContext
- * @param {GameState} gameState
+ * @param {CanvasRenderingContext2D} canvasContext
+ * @param {{player1: Player, player2: Player, ball: Ball}} gameState
  */
 export function render(canvasContext, { player1, player2, ball }) {
-    const renderingCanvas = canvasContext.rendering2d;
-    renderingCanvas.reset();
+    canvasContext.reset();
 
-    renderingCanvas.fillStyle = player1.color;
-    renderingCanvas.fillRect(player1.position.x  * canvasContext.widthScale,
-                             player1.position.y  * canvasContext.heightScale,
-                             player1.size.width  * canvasContext.widthScale,
-                             player1.size.height * canvasContext.heightScale);
+    canvasContext.fillStyle = player1.color;
+    canvasContext.fillRect(player1.position.x, player1.position.y, player1.size.width, player1.size.height);
 
-    renderingCanvas.fillStyle = player2.color;
-    renderingCanvas.fillRect(player2.position.x  * canvasContext.widthScale,
-                             player2.position.y  * canvasContext.heightScale,
-                             player2.size.width  * canvasContext.widthScale,
-                             player2.size.height * canvasContext.heightScale);
+    canvasContext.fillStyle = player2.color;
+    canvasContext.fillRect(player2.position.x, player2.position.y, player2.size.width, player2.size.height);
 
-    renderingCanvas.fillStyle = ball.color;
-    renderingCanvas.fillRect(ball.position.x  * canvasContext.widthScale,
-                             ball.position.y  * canvasContext.heightScale,
-                             ball.size.width  * canvasContext.widthScale,
-                             ball.size.height * canvasContext.heightScale);
+    canvasContext.fillStyle = ball.color;
+    canvasContext.fillRect(ball.position.x, ball.position.y, ball.size.width, ball.size.height);
 }
 
-
 /**
- * @param {CanvasGameContext} canvasContext
+ * @param {CanvasRenderingContext2D} canvasContext
  * @param {GameState} gameState
- * @param {Function} setGameState - callback after state update
+ * @param {Function} setGameState - callback after state update (no-op for standalone)
  * @param {Function} getInput - returns {player1: {velY, velX}, player2: {velY, velX}}
- * @param {Function} isPaused - returns true when physics should be skipped
- * @param {Function} onGoal - called once when a goal is scored
  */
-export function gameLoop(canvasContext, gameState, setGameState, getInput, isPaused, onGoal) {
-    if (!isPaused()) {
-        /** @type {import('./pongSystem').GameInput} input */
-        const input = getInput();
-        System.playerMovement(gameState, input);
-        System.ballCollision(gameState, canvasContext);
-        const scored = System.goalDetection(gameState, canvasContext);
-        if (scored) onGoal();
-    }
+export function gameLoop(canvasContext, gameState, setGameState, getInput) {
+    const input = getInput();
+
+    gameState.player1.position.velY *= 0.95;
+    gameState.player2.position.velY *= 0.95;
+
+    gameState.player1.position.velY += input.player1.velY;
+    gameState.player1.position.velY = gameState.player1.position.velY > 10 ? 10 : gameState.player1.position.velY;
+    gameState.player1.position.velY = gameState.player1.position.velY < -10 ? -10 : gameState.player1.position.velY;
+
+    gameState.player2.position.velY += input.player2.velY;
+    gameState.player2.position.velY = gameState.player2.position.velY > 10 ? 10 : gameState.player2.position.velY;
+    gameState.player2.position.velY = gameState.player2.position.velY < -10 ? -10 : gameState.player2.position.velY;
+
+    gameState.player1.move();
+    gameState.player2.move();
+
+    const ballAfterCollision = gameState.collision();
+    gameState.ball = ballAfterCollision;
 
     render(canvasContext, gameState);
-    // Shallow spread creates a new object reference so React detects the change.
-    // Top-level mutations (score) trigger re-renders; nested mutations (ball, players)
-    // are rendered via canvas and don't need deep cloning.
-    setGameState({ ...gameState });
+    setGameState(gameState);
 }
