@@ -1,10 +1,50 @@
 .canvas-container {
+  position: relative;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+}
+
+.score {
+  display: flex;
+  justify-content: center;
+  gap: 4rem;
+  font-size: 2rem;
+  font-weight: bold;
+  color: white;
+  margin-bottom: 0.5rem;
 }
 
 canvas {
   border: solid white;
   margin: auto;
+  width: auto;
+  height: 70vh;
+  aspect-ratio: 16/9;
+}
+
+.goal-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+}
+
+.goal-text {
+    font-size: 4rem;
+    font-weight: bold;
+    color: white;
+    text-shadow: 0 0 20px rgba(255, 255, 255, 0.8);
+    animation: goalScale 2s ease-out forwards;
+}
+
+@keyframes goalScale {
+    0%   { transform: scale(0);    opacity: 0; }
+    20%  { transform: scale(1.15); opacity: 1; }
+    40%  { transform: scale(1);    opacity: 1; }
+    80%  { transform: scale(1);    opacity: 1; }
+    100% { transform: scale(1);    opacity: 0; }
 }
