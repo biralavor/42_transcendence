@@ -4,7 +4,7 @@ from sqlmodel import Field, SQLModel
 
 class Credentials(SQLModel, table=True):
     id: Annotated[int, Field(primary_key=True)]
-    username: str
+    username: str = Field(unique=True)
     password: str
 
 class Tokens(SQLModel, table=True):

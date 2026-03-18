@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 import bcrypt
 from jose import jwt
 from sqlmodel import Field, Session, SQLModel, create_engine, select
+from sqlalchemy.exc import IntegrityError
 
 SECRET_KEY = "secret"
 ALGORITHM = "HS256"
@@ -55,7 +56,14 @@ def register_credentials(register_request: RegisterRequest, session: Session) ->
             detail="User already exists"
         )
     credentials.password = hash_password(register_request.password)
-    session.add(credentials)
-    session.commit()
-    session.refresh(credentials)
+    try:
+        session.add(credentials)
+        session.commit()
+        session.refresh(credentials)
+    except IntegrityError:
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="User already exists"
+        )
     return { "username": credentials.username }
