@@ -35,6 +35,11 @@ const RegisterForm = () => {
     setError('')
     setSuccess('')
 
+    if (!formData.termsAccepted || !formData.privacyAccepted) {
+      setError('You must accept the Terms of Service and Privacy Policy to create an account.')
+      return
+    }
+
     if (formData.password !== formData.confirmPassword) {
       setError('Passwords do not match.')
       return

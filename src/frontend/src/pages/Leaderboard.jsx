@@ -5,7 +5,7 @@ const topPlayers = [
   {
     rank: 1,
     player: 'vector_viper',
-    avatar: 'https://i.pravatar.cc/40?u=vector_viper',
+    avatar: '/avatar_placeholder.jpg',
     wins: 128,
     streak: '12W',
     score: 9820,
@@ -13,7 +13,7 @@ const topPlayers = [
   {
     rank: 2,
     player: 'pongmaster42',
-    avatar: 'https://i.pravatar.cc/40?u=pongmaster42',
+    avatar: '/avatar_placeholder.jpg',
     wins: 121,
     streak: '7W',
     score: 9450,
@@ -21,7 +21,7 @@ const topPlayers = [
   {
     rank: 3,
     player: 'crt-champion',
-    avatar: 'https://i.pravatar.cc/40?u=crt-champion',
+    avatar: '/avatar_placeholder.jpg',
     wins: 113,
     streak: '5W',
     score: 9010,
@@ -29,7 +29,7 @@ const topPlayers = [
   {
     rank: 4,
     player: 'bgomes-l',
-    avatar: 'https://i.pravatar.cc/40?u=bgomes-l',
+    avatar: '/avatar_placeholder.jpg',
     wins: 108,
     streak: '3W',
     score: 8785,
@@ -37,7 +37,7 @@ const topPlayers = [
   {
     rank: 5,
     player: 'pixelspin',
-    avatar: 'https://i.pravatar.cc/40?u=pixelspin',
+    avatar: '/avatar_placeholder.jpg',
     wins: 98,
     streak: '2W',
     score: 8420,

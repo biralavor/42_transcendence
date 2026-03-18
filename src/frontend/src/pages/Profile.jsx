@@ -77,7 +77,7 @@ export default function Profile() {
           <div className="profile-header">
             <div className="profile-avatar-wrapper">
               {/* Placeholder avatar; replace with user avatar once available */}
-              <img src="/avatar_placeholder.png" alt="User avatar" className="profile-avatar" />
+              <img src="/avatar_placeholder.jpg" alt="User avatar" className="profile-avatar" />
             </div>
             <div className="profile-info">
               <h1 className="profile-display-name">{profile.displayName}</h1>

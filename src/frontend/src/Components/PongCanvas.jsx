@@ -63,8 +63,10 @@ export default function PongCanvas()
     }, []);
 
     return(
-        <div className='canvas-container'>
-            <canvas ref={canvasRef} width={canvasWidth} height={canvasHeight}></canvas>
+        <div className='pong-canvas-container'>
+            <div className='pong-canvas-wrapper'>
+                <canvas ref={canvasRef} width={canvasWidth} height={canvasHeight}></canvas>
+            </div>
         </div>
     );
 }
