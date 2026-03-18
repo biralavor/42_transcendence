@@ -1,6 +1,8 @@
 # Developer Documentation — ft_transcendence
 
 > See also: [ARCHITECTURE.md](ARCHITECTURE.md) · [MICROSERVICES.md](MICROSERVICES.md) · [CONTRIBUTING.md](CONTRIBUTING.md)
+>
+> Deep-dives: [about/ABOUT_AUTHENTICATION.md](about/ABOUT_AUTHENTICATION.md) · [about/About_webSockets.md](about/About_webSockets.md)
 
 ## Prerequisites
 
@@ -127,6 +129,72 @@ docker exec -it frontend sh
 docker exec -it nginx sh
 docker exec -it adminer sh
 ```
+
+---
+
+## Adding a New Database Table
+
+All schema changes **must** go through Alembic migrations. Never use `SQLModel.metadata.create_all()` or `Base.metadata.create_all()` in application code — those bypass migration history and cause drift between environments.
+
+### Step-by-step
+
+**1. Define the model** in the service's `models/` directory using SQLAlchemy `Base`:
+
+```python
+# src/backend/user-service/models/my_model.py
+from sqlalchemy import Column, Integer, String
+from shared.database import Base
+
+class MyModel(Base):
+    __tablename__ = "my_table"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), nullable=False, unique=True)
+```
+
+> Primary keys intended for DB autoincrement must **not** be required fields.
+> Use `nullable=False` for required columns and `unique=True` for natural keys.
+
+**2. Import the model** in the service's `models/__init__.py` so Alembic's `env.py` can see it:
+
+```python
+from .my_model import MyModel  # noqa: F401
+```
+
+**3. Generate the migration** (service must be running):
+
+```bash
+make migrate-user MSG=add_my_table
+# or for other services:
+make migrate-game MSG=add_my_table
+make migrate-chat MSG=add_my_table
+```
+
+This creates a new file in `alembic/versions/`. Always review it before applying.
+
+**4. Apply the migration**:
+
+```bash
+make migrate-upgrade
+```
+
+The entrypoint (`services/<service>/entrypoint.sh`) also runs `alembic upgrade head` automatically on container start, so a `make re-user` (or equivalent) is enough in most workflows.
+
+**5. Verify**:
+
+```bash
+make show-tables       # lists all tables
+make db-dump           # shows full content of every table
+```
+
+### Rules
+
+| Rule | Why |
+|------|-----|
+| Never call `create_all()` in app code | Bypasses migration history; table won't exist in other envs |
+| Always review generated migration files | Autogenerate can miss constraints or produce wrong SQL |
+| One concern per migration | Easier to revert; cleaner git history |
+| Downgrade must undo upgrade completely | Required for safe rollbacks |
+| Never edit a migration that has already been applied in production | Create a new migration instead |
 
 ---
 
