@@ -22,6 +22,8 @@ const handleChange = (e) => {
   if(type === 'checkbox')
     newValue = checked
 
+  setError('')
+  setSuccess('')
   setFormData(prev => ({...prev, 
     [name]: newValue}))
 }
@@ -47,14 +49,20 @@ const handleSubmit =  async(e) => {
        }),
     })
     const data = await response.json()
-    console.log('login response:', data)
 
      if (!response.ok) {
         setError(data.detail || 'Login failed.')
         return
       }
 
-      setSuccess('Login successful.')
+    setFormData((prev) => ({
+      ...prev,
+      password: '',
+    }))
+    localStorage.setItem('access_token', data.access_token)
+    localStorage.setItem('refresh_token', data.refresh_token)
+    localStorage.setItem('token_type', data.token_type)
+    setSuccess('Login successful.')
     } catch (err) {
       console.error(err)
       setError('Unable to connect to the server.')
@@ -140,11 +148,15 @@ const handleSubmit =  async(e) => {
                 {/* Forgot password functionality has been removed along with email
                     confirmations; if needed in the future, restore a link here. */}
               </div>
-              {error && <p>{error}</p>}
-              {success &&   <p>{success}</p>}
-              <button className="arcade-btn arcade-btn-primary w-100 auth-submit mb-3" type="submit" disabled={isSubmitting}>
-                Sign in
-              {isSubmitting? 'Signing in' : 'Sign in'}
+              {error && <p className="text-danger text-center mb-2">{error}</p>}
+              {success && <p className="text-success text-center mb-2">{success}</p>}
+
+              <button
+                className="arcade-btn arcade-btn-primary w-100 auth-submit mb-3"
+                type="submit"
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? 'Signing in...' : 'Sign in'}
               </button>
 
               <p className="text-center arcade-form-copy auth-footer-copy mb-0">
