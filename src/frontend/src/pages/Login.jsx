@@ -1,15 +1,35 @@
 import { Link } from 'react-router-dom'
 import './Login.css'
 import NavbarComponent from '../Components/Navbar'
+import { useState } from 'react'
 
 export default function Login() {
+
+const[formData, setFormData] = useState({
+  username: '', 
+  password: ''
+})
+
+const handleChange = (e) => {
+  const{name, value} = e.target
+
+  setFormData(prev => ({...prev, 
+    [name]: value}))
+}
+
+const handleSubmit = (e) => {
+  e.preventDefault()
+
+  console.log('formData:', formData)
+}
+
   return (
     <div className="arcade-shell">
       <NavbarComponent />
 
       <main className="arcade-auth-layout auth-page">
         <div className="form-container auth-container">
-          <form id="loginForm" className="form-box arcade-screen arcade-form-card auth-card">
+          <form id="loginForm" className="form-box arcade-screen arcade-form-card auth-card" onSubmit={handleSubmit}>
             <div className="arcade-panel auth-panel">
               <div className="auth-header text-center">
                 <span className="auth-eyebrow">Player access</span>
@@ -43,6 +63,8 @@ export default function Login() {
                   name="username"
                   placeholder="Username"
                   autoComplete="username"
+                  value={formData.username}
+                  onChange={handleChange}
                   required
                 />
                 <label htmlFor="floatingUsername">Username</label>
@@ -56,6 +78,8 @@ export default function Login() {
                   name="password"
                   placeholder="Password"
                   autoComplete="current-password"
+                  value={formData.password}
+                  onChange={handleChange}
                   required
                 />
                 <label htmlFor="floatingPassword">Password</label>
