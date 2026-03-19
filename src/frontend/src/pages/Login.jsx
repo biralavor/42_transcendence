@@ -48,12 +48,17 @@ const handleSubmit =  async(e) => {
         password: formData.password
        }),
     })
-    const data = await response.json()
+    if (!response.ok) {
+      let detail = 'Login failed.'
+      try {
+        const errData = await response.json()
+        if (errData.detail) detail = errData.detail
+      } catch { /* non-JSON error body (e.g. 502 HTML) — keep default message */ }
+      setError(detail)
+      return
+    }
 
-     if (!response.ok) {
-        setError(data.detail || 'Login failed.')
-        return
-      }
+    const data = await response.json()
 
     setFormData((prev) => ({
       ...prev,
