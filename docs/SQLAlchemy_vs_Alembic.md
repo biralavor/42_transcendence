@@ -1,5 +1,88 @@
 # Alembic — Database Migration Guide
 
+## SQLAlchemy vs Alembic — Two Tools, One Job Each
+
+These are two separate libraries that work together. Confusing them is the most
+common source of "why didn't my migration pick up my model?" questions.
+
+### SQLAlchemy — the ORM (Object-Relational Mapper)
+
+An ORM is the bridge between Python code and the database. Instead of writing raw SQL,
+you define Python classes (models) and SQLAlchemy translates operations on those objects
+into SQL queries automatically.
+
+```python
+# Without ORM — raw SQL
+await db.execute("SELECT * FROM credentials WHERE username = $1", username)
+
+# With SQLAlchemy ORM — plain Python
+await db.execute(select(Credentials).where(Credentials.username == username))
+```
+
+```python
+# Without ORM — raw SQL (INSERT a new user)
+await db.execute(
+    "INSERT INTO credentials (username, password) VALUES ($1, $2)",
+    username, hashed_password
+)
+await db.execute("COMMIT")
+
+# With SQLAlchemy ORM — plain Python
+credential = Credentials(username=username, password=hashed_password)
+db.add(credential)
+await db.commit()
+await db.refresh(credential)  # populates credential.id from the DB
+```
+
+```python
+# Without ORM — raw SQL (INSERT with unique-constraint collision guard)
+try:
+    await db.execute(
+        "INSERT INTO credentials (username, password) VALUES ($1, $2)",
+        username, hashed_password
+    )
+    await db.execute("COMMIT")
+except asyncpg.UniqueViolationError:
+    await db.execute("ROLLBACK")
+    raise HTTPException(status_code=409, detail="Username already taken")
+
+# With SQLAlchemy ORM — plain Python
+try:
+    db.add(Credentials(username=username, password=hashed_password))
+    await db.commit()
+except IntegrityError:
+    await db.rollback()
+    raise HTTPException(status_code=409, detail="Username already taken")
+```
+
+The model class *describes* the table — its columns, types, constraints, and
+relationships. SQLAlchemy uses that description both to query the DB at runtime and
+to let Alembic know what the schema *should* look like.
+
+### Alembic — the migration tool
+
+Alembic manages the **version history of the DB schema**. It compares the current
+state of SQLAlchemy models against the live database and generates a migration file
+(a Python script with `upgrade()` and `downgrade()` functions) describing what SQL
+to run to bring the DB in sync.
+
+Each applied migration is recorded in a version table (e.g. `alembic_version_user`),
+so Alembic always knows which revisions have already been applied and which are pending.
+
+### The analogy
+
+| Concept | Git | This project |
+|---|---|---|
+| Track file content | File system | SQLAlchemy models |
+| Record change history | Git commits | Alembic migrations |
+| Tool | Git | Alembic |
+| Underlying storage | `.git/` | `alembic_version_*` tables |
+
+SQLAlchemy is the file system — it knows what exists right now.
+Alembic is Git — it knows how you got here and how to go back.
+
+---
+
 Alembic is the **single source of truth** for the database schema in this project.
 `services/database/init.sql` no longer creates tables — Alembic does.
 
