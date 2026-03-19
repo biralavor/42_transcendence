@@ -201,10 +201,28 @@ export class CanvasGameContext {
 /**
  * @param {CanvasGameContext} canvasContext
  * @param {GameState} gameState
+ * @param {Function} isPaused - returns true game is paused after goal
  */
-export function render(canvasContext, { player1, player2, ball }) {
+export function render(canvasContext, gameState, isPaused) {
     const renderingCanvas = canvasContext.rendering2d;
+    const player1 = gameState.player1;
+    const player2 = gameState.player2;
+    const ball = gameState.ball;
+    const score = gameState.score;
+
+    const fontSize = canvasContext.widthScale * 16;
     renderingCanvas.reset();
+    renderingCanvas.fillStyle = 'white';
+
+
+    renderingCanvas.font = `bold ${fontSize}px Bungee sans-serif`
+    renderingCanvas.fillText(`${score.player1}`,
+                             55 * canvasContext.widthScale,
+                             15 * canvasContext.heightScale, fontSize * 10);
+
+    renderingCanvas.fillText(`${score.player2}`,
+                             90 * canvasContext.widthScale,
+                             15 * canvasContext.heightScale, fontSize * 10);
 
     renderingCanvas.fillStyle = player1.color;
     renderingCanvas.fillRect(player1.position.x  * canvasContext.widthScale,
@@ -217,6 +235,9 @@ export function render(canvasContext, { player1, player2, ball }) {
                              player2.position.y  * canvasContext.heightScale,
                              player2.size.width  * canvasContext.widthScale,
                              player2.size.height * canvasContext.heightScale);
+
+    if (isPaused())
+        return ;
 
     renderingCanvas.fillStyle = ball.color;
     renderingCanvas.fillRect(ball.position.x  * canvasContext.widthScale,
@@ -231,7 +252,7 @@ export function render(canvasContext, { player1, player2, ball }) {
  * @param {GameState} gameState
  * @param {Function} setGameState - callback after state update
  * @param {Function} getInput - returns {player1: {velY, velX}, player2: {velY, velX}}
- * @param {Function} isPaused - returns true when physics should be skipped
+ * @param {Function} isPaused - returns true when game is paused after goal
  * @param {Function} onGoal - called once when a goal is scored
  */
 export function gameLoop(canvasContext, gameState, setGameState, getInput, isPaused, onGoal) {
@@ -244,9 +265,9 @@ export function gameLoop(canvasContext, gameState, setGameState, getInput, isPau
         if (scored) onGoal();
     }
 
-    render(canvasContext, gameState);
     // Shallow spread creates a new object reference so React detects the change.
     // Top-level mutations (score) trigger re-renders; nested mutations (ball, players)
     // are rendered via canvas and don't need deep cloning.
     setGameState({ ...gameState });
+    render(canvasContext, gameState, isPaused);
 }

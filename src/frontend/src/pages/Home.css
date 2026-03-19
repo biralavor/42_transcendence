@@ -280,8 +280,7 @@
 
 .pong-board {
   position: relative;
-  margin: 1rem 0;
-  height: 360px;
+  padding: 32px;
   border-radius: 24px;
   overflow: hidden;
   background:
@@ -457,9 +456,5 @@
 @media (max-width: 767px) {
   .side-panels {
     grid-template-columns: 1fr;
-  }
-
-  .pong-board {
-    height: 280px;
   }
 }

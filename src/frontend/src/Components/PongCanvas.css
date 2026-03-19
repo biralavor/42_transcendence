@@ -1,26 +1,24 @@
 /* PongCanvas Arcade Styles */
 .pong-canvas-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2rem;
-  padding: 2rem 1rem;
-  min-height: 100vh;
   background: var(--background);
+  height: 100%;
+  max-width: 100%;
+  aspect-ratio: 16/9.1;
+  box-sizing: content-box;
 }
 
 .pong-canvas-wrapper {
-  border: 4px solid var(--primary);
+  border: 8px solid var(--primary);
   border-radius: 0;
   box-shadow:
     0 0 0 8px var(--primary),
     0 0 40px var(--primary),
     0 12px 30px rgba(0, 0, 0, 0.5);
   background: var(--crt-screen);
-  padding: 1rem;
-  position: relative;
   max-width: 100%;
+  aspect-ratio: 16/9;
+  margin: auto;
+  position: relative;
 }
 
 .pong-canvas-wrapper::before {
@@ -42,16 +40,6 @@
   50% {
     opacity: 0.8;
   }
-}
-
-.score {
-  display: flex;
-  justify-content: center;
-  gap: 4rem;
-  font-size: 2rem;
-  font-weight: bold;
-  color: white;
-  margin-bottom: 0.5rem;
 }
 
 canvas {
@@ -87,88 +75,4 @@ canvas {
   40%  { transform: scale(1);    opacity: 1; }
   80%  { transform: scale(1);    opacity: 1; }
   100% { transform: scale(1);    opacity: 0; }
-}
-
-.pong-controls {
-  display: flex;
-  gap: 1rem;
-  flex-wrap: wrap;
-  justify-content: center;
-  width: 100%;
-}
-
-.pong-score-display {
-  display: flex;
-  justify-content: space-around;
-  width: 100%;
-  max-width: 600px;
-  padding: 1.5rem;
-  background: var(--card);
-  border: 3px solid var(--primary);
-  border-radius: 0;
-  box-shadow: 0 0 20px var(--primary);
-  font-family: var(--font-retro);
-}
-
-.score-item {
-  text-align: center;
-  flex: 1;
-}
-
-.score-player {
-  font-size: 0.9rem;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  color: var(--metal-silver);
-  margin-bottom: 0.5rem;
-}
-
-.score-value {
-  font-size: 2.5rem;
-  color: var(--primary);
-  text-shadow: 0 0 15px var(--primary);
-}
-
-.pong-status {
-  font-family: var(--font-mono);
-  font-size: 1.1rem;
-  text-align: center;
-  color: var(--metal-silver);
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  padding: 1rem;
-  background: rgba(244, 208, 63, 0.05);
-  border: 2px solid var(--primary);
-  border-radius: 0;
-}
-
-.pong-status.active {
-  color: var(--primary);
-  background: rgba(244, 208, 63, 0.15);
-  box-shadow: 0 0 20px var(--primary);
-}
-
-@media (max-width: 768px) {
-  .pong-canvas-container {
-    padding: 1rem 0.5rem;
-    gap: 1.5rem;
-  }
-
-  .pong-canvas-wrapper {
-    padding: 0.75rem;
-    border-width: 3px;
-  }
-
-  .pong-score-display {
-    padding: 1rem;
-    border-width: 2px;
-  }
-
-  .score-value {
-    font-size: 2rem;
-  }
-
-  canvas {
-    max-width: 100vw;
-  }
 }

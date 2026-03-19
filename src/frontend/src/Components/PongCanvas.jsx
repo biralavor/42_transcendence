@@ -99,10 +99,6 @@ export default function PongCanvas()
 
     return (
         <div className='pong-canvas-container'>
-            <div className='score'>
-                <span className='score-player1'>{gameState.score.player1}</span>
-                <span className='score-player2'>{gameState.score.player2}</span>
-            </div>
             <div className='pong-canvas-wrapper'>
                 {showGoal && (
                     <div className='goal-overlay'>

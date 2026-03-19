@@ -36,12 +36,6 @@ export default function Play() {
                 <div className="col-12 col-lg-7">
                   <div
                     className="pong-board"
-                    style={{
-                      height: '320px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
                   >
                     <PongCanvas />
                   </div>
