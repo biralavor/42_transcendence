@@ -30,11 +30,11 @@ const handleChange = (e) => {
 
 const handleSubmit =  async(e) => {
   e.preventDefault()
-  setError('')
+  setError('')  
   setSuccess('')
   setIsSubmitting(true)
 
-  if (!formData.rememberMe)
+  //if (!formData.rememberMe)
     // TODO: implement rememberMe behavior (token persistence strategy)
 
   try{
@@ -57,7 +57,9 @@ const handleSubmit =  async(e) => {
 
     setFormData((prev) => ({
       ...prev,
+      username:'',
       password: '',
+      rememberMe: false,
     }))
     localStorage.setItem('access_token', data.access_token)
     localStorage.setItem('refresh_token', data.refresh_token)
