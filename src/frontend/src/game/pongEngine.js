@@ -255,19 +255,16 @@ export function render(canvasContext, gameState, isPaused) {
  * @param {Function} isPaused - returns true when game is paused after goal
  * @param {Function} onGoal - called once when a goal is scored
  */
-export function gameLoop(canvasContext, gameState, setGameState, getInput, isPaused, onGoal) {
+export function gameLoop(canvasContext, gameState, getInput, isPaused, onGoal) {
+
+    /** @type {import('./pongSystem').GameInput} input */
+    const input = getInput();
+    System.playerMovement(gameState, input);
     if (!isPaused()) {
-        /** @type {import('./pongSystem').GameInput} input */
-        const input = getInput();
-        System.playerMovement(gameState, input);
         System.ballCollision(gameState, canvasContext);
         const scored = System.goalDetection(gameState, canvasContext);
         if (scored) onGoal();
     }
 
-    // Shallow spread creates a new object reference so React detects the change.
-    // Top-level mutations (score) trigger re-renders; nested mutations (ball, players)
-    // are rendered via canvas and don't need deep cloning.
-    setGameState({ ...gameState });
     render(canvasContext, gameState, isPaused);
 }
