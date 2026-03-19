@@ -3,8 +3,9 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from service.history import get_match_history
 from service.persistence import create_match, finish_match, get_match, get_user_matches, get_user_stats
-from service.schemas import MatchCreateRequest, MatchFinishRequest, MatchResponse, StatsResponse
+from service.schemas import MatchCreateRequest, MatchFinishRequest, MatchHistoryItem, MatchResponse, StatsResponse
 from shared.database import get_db
 
 router = APIRouter()
@@ -15,6 +16,11 @@ SessionDependency = Annotated[AsyncSession, Depends(get_db)]
 @router.get("/stats/{user_id}", response_model=StatsResponse)
 async def user_stats(user_id: int, session: SessionDependency):
     return await get_user_stats(session, user_id)
+
+
+@router.get("/matches/history/{user_id}", response_model=list[MatchHistoryItem])
+async def match_history(user_id: int, session: SessionDependency):
+    return await get_match_history(user_id, session)
 
 
 @router.get("/matches/{user_id}", response_model=list[MatchResponse])

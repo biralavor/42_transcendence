@@ -35,3 +35,11 @@ class MatchFinishRequest(BaseModel):
     winner_id: int
     score_p1: int
     score_p2: int
+
+
+class MatchHistoryItem(BaseModel):
+    id: int
+    opponent_id: int
+    result: str   # "Win" | "Loss"
+    score: str    # e.g. "11-3" (user score first, ASCII hyphen)
+    date: str     # finished_at ISO string, "" if null
