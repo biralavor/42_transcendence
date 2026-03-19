@@ -1,6 +1,7 @@
 from fastapi import status, HTTPException
-from service.schemas import Login, LoginResponse, RegisterRequest, RegisterResponse
+from service.schemas import Login, LoginResponse, RegisterRequest, RegisterResponse, UpdateProfileRequest
 from service.models.credentials import Credentials, Tokens
+from service.models.user import User
 from datetime import datetime, timedelta, timezone
 import bcrypt
 import hashlib
@@ -83,3 +84,26 @@ async def register_credentials(register_request: RegisterRequest, session: Async
             detail="User already exists"
         )
     return RegisterResponse(username=credentials.username)
+
+
+async def get_profile(user_id: int, session: AsyncSession) -> User | None:
+    result = await session.execute(select(User).where(User.id == user_id))
+    return result.scalars().first()
+
+
+async def update_profile(
+    user_id: int, data: UpdateProfileRequest, session: AsyncSession
+) -> User | None:
+    result = await session.execute(select(User).where(User.id == user_id))
+    user = result.scalars().first()
+    if user is None:
+        return None
+    if data.display_name is not None:
+        user.display_name = data.display_name
+    if data.bio is not None:
+        user.bio = data.bio
+    if data.dark_mode is not None:
+        user.dark_mode = data.dark_mode
+    await session.commit()
+    await session.refresh(user)
+    return user
