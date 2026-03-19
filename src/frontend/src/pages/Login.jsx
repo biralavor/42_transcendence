@@ -5,23 +5,64 @@ import { useState } from 'react'
 
 export default function Login() {
 
-const[formData, setFormData] = useState({
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  const[formData, setFormData] = useState({
   username: '', 
-  password: ''
+  password: '',
+  rememberMe: false
 })
 
 const handleChange = (e) => {
-  const{name, value} = e.target
+  const{name, value, type, checked} = e.target
+  let newValue = value
+
+  if(type === 'checkbox')
+    newValue = checked
 
   setFormData(prev => ({...prev, 
-    [name]: value}))
+    [name]: newValue}))
 }
 
-const handleSubmit = (e) => {
+const handleSubmit =  async(e) => {
   e.preventDefault()
+  setError('')
+  setSuccess('')
+  setIsSubmitting(true)
 
-  console.log('formData:', formData)
+  if (!formData.rememberMe)
+    console.log('rememberMe not flagged')
+
+  try{
+    const response = await fetch('/api/users/auth/login', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+       body: JSON.stringify({
+        username: formData.username,
+        password: formData.password
+       }),
+    })
+    const data = await response.json()
+    console.log('login response:', data)
+
+     if (!response.ok) {
+        setError(data.detail || 'Login failed.')
+        return
+      }
+
+      setSuccess('Login successful.')
+    } catch (err) {
+      console.error(err)
+      setError('Unable to connect to the server.')
+    } finally {
+      setIsSubmitting(false)
+    }
 }
+
 
   return (
     <div className="arcade-shell">
@@ -87,15 +128,23 @@ const handleSubmit = (e) => {
 
               <div className="auth-options">
                 <div className="form-check arcade-form-check">
-                  <input className="form-check-input" type="checkbox" id="flexCheckDefault" />
+                  <input className="form-check-input" 
+                  type="checkbox" 
+                  id="flexCheckDefault"
+                  name='rememberMe'
+                  checked={formData.rememberMe}
+                  onChange={handleChange}
+                  />
                   <label className="form-check-label" htmlFor="flexCheckDefault">Remember me</label>
                 </div>
                 {/* Forgot password functionality has been removed along with email
                     confirmations; if needed in the future, restore a link here. */}
               </div>
-
-              <button className="arcade-btn arcade-btn-primary w-100 auth-submit mb-3" type="submit">
+              {error && <p>{error}</p>}
+              {success &&   <p>{success}</p>}
+              <button className="arcade-btn arcade-btn-primary w-100 auth-submit mb-3" type="submit" disabled={isSubmitting}>
                 Sign in
+              {isSubmitting? 'Signing in' : 'Sign in'}
               </button>
 
               <p className="text-center arcade-form-copy auth-footer-copy mb-0">
