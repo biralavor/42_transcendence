@@ -35,7 +35,7 @@ const handleSubmit =  async(e) => {
   setIsSubmitting(true)
 
   if (!formData.rememberMe)
-    console.log('rememberMe not flagged')
+    // TODO: implement rememberMe behavior (token persistence strategy)
 
   try{
     const response = await fetch('/api/users/auth/login', {
