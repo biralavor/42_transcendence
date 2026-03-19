@@ -424,3 +424,147 @@ If `upgrade()` is empty (`pass`), Alembic didn't see your model. Check:
 2. **Always implement `downgrade()`** — even a simple `op.drop_table()` or `op.drop_column()`.
 3. **Commit migrations with the model changes** that triggered them — same commit.
 4. **Never run `alembic stamp`** unless you know exactly what you are doing.
+
+---
+
+## Querying Relational Data with SQLAlchemy ORM
+
+### 1-to-1 — Credentials → Tokens
+
+Each `Credentials` row has at most one active `Tokens` row (one user, one session).
+The FK lives on the child (`tokens.credential_id → credentials.id`).
+
+```python
+# Find the active token for a given username
+result = await db.execute(
+    select(Tokens)
+    .join(Credentials, Tokens.credential_id == Credentials.id)
+    .where(Credentials.username == username)
+)
+token = result.scalars().first()
+```
+
+Raw SQL equivalent:
+```sql
+SELECT tokens.*
+FROM tokens
+JOIN credentials ON tokens.credential_id = credentials.id
+WHERE credentials.username = 'alice';
+```
+
+> **In this project:** `authenticate()` in `user-service/service.py` uses this pattern
+> to look up the stored refresh token hash after login.
+
+---
+
+### 1-to-N — ChatRoom → Messages
+
+One `ChatRoom` has many `Message` rows. The FK lives on the child (`messages.room_id → chat_rooms.id`).
+
+```python
+# Fetch the 50 most recent messages in a room, oldest-first
+result = await db.execute(
+    select(Message)
+    .where(Message.room_id == room.id)
+    .order_by(Message.created_at.desc())
+    .limit(50)
+)
+messages = list(reversed(result.scalars().all()))
+```
+
+Raw SQL equivalent:
+```sql
+SELECT * FROM (
+    SELECT * FROM messages
+    WHERE room_id = 3
+    ORDER BY created_at DESC
+    LIMIT 50
+) sub
+ORDER BY created_at ASC;
+```
+
+> **In this project:** `get_room_history()` in `chat-service/persistence.py` uses
+> this exact query to replay history to a newly connected WebSocket client.
+
+---
+
+### N-to-N — Players ↔ Matches
+
+A match has two players; a player participates in many matches.
+This is a many-to-many relationship. In this project it is modelled without a
+SQLAlchemy `relationship()` (because `player_id` is a cross-service integer, not a
+local FK), so the join is written explicitly.
+
+**How it is stored today** (`game-service/models/match.py`):
+
+```python
+class Match(Base):
+    __tablename__ = "matches"
+    id         = Column(Integer, primary_key=True)
+    player1_id = Column(Integer, nullable=False)  # references user-service User.id
+    player2_id = Column(Integer, nullable=False)
+    winner_id  = Column(Integer, nullable=True)
+    score_p1   = Column(Integer, default=0)
+    score_p2   = Column(Integer, default=0)
+    status     = Column(String(20))
+```
+
+**Query — all matches a player was involved in:**
+
+```python
+result = await db.execute(
+    select(Match).where(
+        (Match.player1_id == user_id) | (Match.player2_id == user_id)
+    ).order_by(Match.started_at.desc())
+)
+matches = result.scalars().all()
+```
+
+Raw SQL equivalent:
+```sql
+SELECT * FROM matches
+WHERE player1_id = 7 OR player2_id = 7
+ORDER BY started_at DESC;
+```
+
+**If you needed a true join table** (e.g. tournament participants), the pattern is:
+
+```python
+# Association table — no model class needed, just a Table object
+tournament_players = Table(
+    "tournament_players",
+    Base.metadata,
+    Column("tournament_id", Integer, ForeignKey("tournaments.id"), primary_key=True),
+    Column("user_id",       Integer,                               primary_key=True),
+)
+
+# Query: all user_ids in tournament 5
+result = await db.execute(
+    select(tournament_players.c.user_id)
+    .where(tournament_players.c.tournament_id == 5)
+)
+user_ids = result.scalars().all()
+```
+
+---
+
+### Cross-service references — no ORM join possible
+
+`Match.player1_id` and `Message.user_id` point to rows in **user-service's** database,
+which is a separate PostgreSQL schema. SQLAlchemy cannot join across service boundaries.
+
+The pattern used in this project:
+
+```python
+# 1. Fetch the match from game-service DB
+result = await db.execute(select(Match).where(Match.id == match_id))
+match = result.scalars().first()
+
+# 2. Call user-service over HTTP to resolve player names
+# (httpx, or the internal service URL via docker-compose networking)
+player1 = await http_client.get(f"http://user-service/users/{match.player1_id}")
+```
+
+Raw SQL cannot solve this — the tables live in different services. This is the
+trade-off of a microservices architecture: you gain service isolation, you lose
+DB-level joins.
