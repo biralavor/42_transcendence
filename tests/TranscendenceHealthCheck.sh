@@ -450,6 +450,385 @@ else
     info "frontend container not running — skipping unit tests"
 fi
 
+# ── 18. Chat Message Suite ────────────────────────────────────────────────────
+section "Chat Message Suite"
+
+# Runs inside the chat-service container where websockets is installed.
+# Tests connect directly to the service (ws://127.0.0.1:<port>) to avoid TLS
+# and nginx overhead — the WS proxy path is already covered in section 16.
+_chat_ws_test() {
+    local port="$1"
+    local room="$2"
+    local test_name="$3"
+    local script="$4"
+    local err
+    err=$(docker exec chat-service python3 -c "$script" 2>&1)
+    local rc=$?
+    if [[ $rc -eq 0 ]]; then
+        pass "$test_name"
+    else
+        fail "$test_name — $err"
+    fi
+}
+
+if container_running chat-service; then
+    _PORT="${CHAT_SERVICE_PORT:-8003}"
+
+    # ── 17a. Single-client round-trip ─────────────────────────────────────────
+    # One client sends a JSON message and receives its own broadcast.
+    _chat_ws_test "$_PORT" "hc-roundtrip" \
+        "Chat: single-client message round-trip" \
+"
+import asyncio, websockets, json, sys
+
+async def test():
+    uri = 'ws://127.0.0.1:${_PORT}/ws/chat/hc-roundtrip'
+    async with websockets.connect(uri) as ws:
+        payload = {'content': 'hello', 'sender': 'healthcheck'}
+        await ws.send(json.dumps(payload))
+        raw = await asyncio.wait_for(ws.recv(), timeout=5)
+        data = json.loads(raw)
+        assert data.get('content') == 'hello', f'wrong content: {data}'
+        assert data.get('sender') == 'healthcheck', f'wrong sender: {data}'
+
+asyncio.run(test())
+"
+
+    # ── 17b. Two-client broadcast ──────────────────────────────────────────────
+    # Client A sends; client B (connected to the same room) receives the broadcast.
+    _chat_ws_test "$_PORT" "hc-broadcast" \
+        "Chat: two-client broadcast (A sends, B receives)" \
+"
+import asyncio, websockets, json, sys
+
+async def test():
+    uri = 'ws://127.0.0.1:${_PORT}/ws/chat/hc-broadcast'
+    async with websockets.connect(uri) as ws_a, \
+               websockets.connect(uri) as ws_b:
+        await ws_a.send(json.dumps({'content': 'broadcast-test', 'sender': 'Alice'}))
+        # ws_a receives its own echo; ws_b receives the broadcast
+        await asyncio.wait_for(ws_a.recv(), timeout=5)
+        raw_b = await asyncio.wait_for(ws_b.recv(), timeout=5)
+        data = json.loads(raw_b)
+        assert data.get('content') == 'broadcast-test', f'wrong content on B: {data}'
+        assert data.get('sender') == 'Alice', f'wrong sender on B: {data}'
+
+asyncio.run(test())
+"
+
+    # ── 17c. Disconnect handling ───────────────────────────────────────────────
+    # Client A connects, then disconnects. Client B (still connected) must not crash —
+    # it can still send and receive messages after A leaves.
+    _chat_ws_test "$_PORT" "hc-disconnect" \
+        "Chat: remaining client survives peer disconnect" \
+"
+import asyncio, websockets, json, sys
+
+async def test():
+    uri = 'ws://127.0.0.1:${_PORT}/ws/chat/hc-disconnect'
+    async with websockets.connect(uri) as ws_b:
+        # A joins and immediately leaves
+        ws_a = await websockets.connect(uri)
+        await ws_a.close()
+        await asyncio.sleep(0.1)   # let the server process the disconnect
+        # B should still be functional
+        await ws_b.send(json.dumps({'content': 'still-alive', 'sender': 'Bob'}))
+        raw = await asyncio.wait_for(ws_b.recv(), timeout=5)
+        data = json.loads(raw)
+        assert data.get('content') == 'still-alive', f'B failed after A disconnected: {data}'
+
+asyncio.run(test())
+"
+else
+    info "chat-service container not running — skipping chat message suite"
+fi
+
+# ── 19. Chat History Persistence Suite ────────────────────────────────────────
+section "Chat History Persistence Suite"
+
+# All tests run inside the chat-service container.
+# DB env vars (POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB, DB_HOST) are set
+# in the container by docker-compose; python scripts read them via os.environ.
+# asyncpg is installed (requirements-test.txt); websockets is available too.
+# Each test uses a UUID-suffixed room slug so runs never share state.
+
+_chat_db_test() {
+    local test_name="$1"
+    local script="$2"
+    local err
+    err=$(docker exec chat-service python3 -c "$script" 2>&1)
+    local rc=$?
+    if [[ $rc -eq 0 ]]; then
+        pass "$test_name"
+    else
+        fail "$test_name — $err"
+    fi
+}
+
+if container_running chat-service; then
+    _PORT="${CHAT_SERVICE_PORT:-8003}"
+
+    # ── 18a. Message is persisted to DB ───────────────────────────────────────
+    # Send one WS message; query DB to verify a messages row exists.
+    _chat_db_test \
+        "Chat history: sent message is persisted to DB" \
+"
+import asyncio, websockets, json, os, uuid
+import asyncpg
+
+SLUG = 'hc-persist-' + uuid.uuid4().hex[:8]
+
+async def test():
+    uri = 'ws://127.0.0.1:${_PORT}/ws/chat/' + SLUG
+    async with websockets.connect(uri) as ws:
+        await ws.send(json.dumps({'content': 'db-check', 'sender': 'hcbot'}))
+        await asyncio.wait_for(ws.recv(), timeout=5)  # consume broadcast
+
+    conn = await asyncpg.connect(
+        user=os.environ['DB_USER'],
+        password=os.environ['DB_PASSWORD'],
+        host=os.environ['DB_HOST'],
+        database=os.environ['DB_NAME'],
+    )
+    row = await conn.fetchrow(
+        '''SELECT m.content, m.sender_name, m.user_id
+           FROM messages m
+           JOIN chat_rooms r ON r.id = m.room_id
+           WHERE r.room_name = \$1 AND m.content = \$2''',
+        SLUG, 'db-check'
+    )
+    await conn.close()
+    assert row is not None, 'No row found in messages table'
+    assert row['content'] == 'db-check', f'wrong content: {row[\"content\"]}'
+    assert row['sender_name'] == 'hcbot', f'wrong sender_name: {row[\"sender_name\"]}'
+    assert row['user_id'] is None, f'user_id should be None for unauthenticated: {row[\"user_id\"]}'
+
+asyncio.run(test())
+"
+
+    # ── 18b. History delivered on connect ─────────────────────────────────────
+    # Pre-insert 2 rows directly via DB; connect a fresh WS client and assert
+    # both history frames arrive before any live message.
+    _chat_db_test \
+        "Chat history: pre-inserted messages delivered on connect" \
+"
+import asyncio, websockets, json, os, uuid
+import asyncpg
+
+SLUG = 'hc-hist-' + uuid.uuid4().hex[:8]
+
+async def test():
+    conn = await asyncpg.connect(
+        user=os.environ['DB_USER'],
+        password=os.environ['DB_PASSWORD'],
+        host=os.environ['DB_HOST'],
+        database=os.environ['DB_NAME'],
+    )
+    # Insert room and two seed messages directly
+    room_id = await conn.fetchval(
+        'INSERT INTO chat_rooms (room_name) VALUES (\$1) RETURNING id', SLUG
+    )
+    await conn.execute(
+        'INSERT INTO messages (room_id, content, sender_name) VALUES (\$1, \$2, \$3)',
+        room_id, 'first-msg', 'Alice'
+    )
+    await conn.execute(
+        'INSERT INTO messages (room_id, content, sender_name) VALUES (\$1, \$2, \$3)',
+        room_id, 'second-msg', 'Bob'
+    )
+    await conn.close()
+
+    uri = 'ws://127.0.0.1:${_PORT}/ws/chat/' + SLUG
+    async with websockets.connect(uri) as ws:
+        f1 = json.loads(await asyncio.wait_for(ws.recv(), timeout=5))
+        f2 = json.loads(await asyncio.wait_for(ws.recv(), timeout=5))
+    assert f1['content'] == 'first-msg', f'wrong first history frame: {f1}'
+    assert f1['sender'] == 'Alice', f'wrong sender in first frame: {f1}'
+    assert f2['content'] == 'second-msg', f'wrong second history frame: {f2}'
+    assert f2['sender'] == 'Bob', f'wrong sender in second frame: {f2}'
+
+asyncio.run(test())
+"
+
+    # ── 18c. History limit — only last 50 of 60 messages delivered ────────────
+    # Insert 60 rows; connect client; verify exactly 50 frames received,
+    # and the first delivered frame is msg #10 (oldest in the last 50).
+    _chat_db_test \
+        "Chat history: limit 50 — only last 50 of 60 messages delivered" \
+"
+import asyncio, websockets, json, os, uuid
+import asyncpg
+
+SLUG = 'hc-limit-' + uuid.uuid4().hex[:8]
+
+async def test():
+    conn = await asyncpg.connect(
+        user=os.environ['DB_USER'],
+        password=os.environ['DB_PASSWORD'],
+        host=os.environ['DB_HOST'],
+        database=os.environ['DB_NAME'],
+    )
+    room_id = await conn.fetchval(
+        'INSERT INTO chat_rooms (room_name) VALUES (\$1) RETURNING id', SLUG
+    )
+    for i in range(60):
+        await conn.execute(
+            'INSERT INTO messages (room_id, content, sender_name) VALUES (\$1, \$2, \$3)',
+            room_id, f'msg{i}', 'u'
+        )
+    await conn.close()
+
+    uri = 'ws://127.0.0.1:${_PORT}/ws/chat/' + SLUG
+    received = []
+    async with websockets.connect(uri) as ws:
+        # Drain all queued history frames with a short timeout
+        while True:
+            try:
+                raw = await asyncio.wait_for(ws.recv(), timeout=1)
+                received.append(json.loads(raw))
+            except asyncio.TimeoutError:
+                break
+
+    assert len(received) == 50, f'Expected 50 history frames, got {len(received)}'
+    assert received[0]['content'] == 'msg10', f'Expected oldest of last 50 (msg10), got {received[0][\"content\"]}'
+    assert received[-1]['content'] == 'msg59', f'Expected newest (msg59), got {received[-1][\"content\"]}'
+
+asyncio.run(test())
+"
+
+    # ── 18d. Room isolation — messages in room A don't appear in room B ───────
+    _chat_db_test \
+        "Chat history: room isolation — history does not leak across rooms" \
+"
+import asyncio, websockets, json, os, uuid
+import asyncpg
+
+SLUG_A = 'hc-iso-a-' + uuid.uuid4().hex[:8]
+SLUG_B = 'hc-iso-b-' + uuid.uuid4().hex[:8]
+
+async def test():
+    conn = await asyncpg.connect(
+        user=os.environ['DB_USER'],
+        password=os.environ['DB_PASSWORD'],
+        host=os.environ['DB_HOST'],
+        database=os.environ['DB_NAME'],
+    )
+    room_a = await conn.fetchval(
+        'INSERT INTO chat_rooms (room_name) VALUES (\$1) RETURNING id', SLUG_A
+    )
+    await conn.execute(
+        'INSERT INTO messages (room_id, content, sender_name) VALUES (\$1, \$2, \$3)',
+        room_a, 'secret-a', 'Alice'
+    )
+    await conn.close()
+
+    # Connect to room B — must receive no history (only room A has messages)
+    uri_b = 'ws://127.0.0.1:${_PORT}/ws/chat/' + SLUG_B
+    async with websockets.connect(uri_b) as ws_b:
+        try:
+            raw = await asyncio.wait_for(ws_b.recv(), timeout=1)
+            data = json.loads(raw)
+            assert False, f'Room B received unexpected history frame: {data}'
+        except asyncio.TimeoutError:
+            pass  # correct: no history delivered
+
+asyncio.run(test())
+"
+
+    # ── 18e. New room auto-created in DB on first connect ─────────────────────
+    _chat_db_test \
+        "Chat history: new room slug auto-creates chat_rooms row" \
+"
+import asyncio, websockets, json, os, uuid
+import asyncpg
+
+SLUG = 'hc-newroom-' + uuid.uuid4().hex[:8]
+
+async def test():
+    uri = 'ws://127.0.0.1:${_PORT}/ws/chat/' + SLUG
+    async with websockets.connect(uri) as ws:
+        pass  # just connect and disconnect
+
+    conn = await asyncpg.connect(
+        user=os.environ['DB_USER'],
+        password=os.environ['DB_PASSWORD'],
+        host=os.environ['DB_HOST'],
+        database=os.environ['DB_NAME'],
+    )
+    row = await conn.fetchrow(
+        'SELECT id FROM chat_rooms WHERE room_name = \$1', SLUG
+    )
+    await conn.close()
+    assert row is not None, f'chat_rooms row not created for slug {SLUG}'
+    assert row['id'] > 0, 'room id should be positive integer'
+
+asyncio.run(test())
+"
+
+    # ── 18f. History ordering — oldest frame delivered first ──────────────────
+    _chat_db_test \
+        "Chat history: messages delivered oldest-first" \
+"
+import asyncio, websockets, json, os, uuid
+import asyncpg
+
+SLUG = 'hc-order-' + uuid.uuid4().hex[:8]
+
+async def test():
+    conn = await asyncpg.connect(
+        user=os.environ['DB_USER'],
+        password=os.environ['DB_PASSWORD'],
+        host=os.environ['DB_HOST'],
+        database=os.environ['DB_NAME'],
+    )
+    room_id = await conn.fetchval(
+        'INSERT INTO chat_rooms (room_name) VALUES (\$1) RETURNING id', SLUG
+    )
+    # Insert in order: A, B, C (with small delay to ensure distinct created_at)
+    for content in ['alpha', 'beta', 'gamma']:
+        await conn.execute(
+            'INSERT INTO messages (room_id, content, sender_name) VALUES (\$1, \$2, \$3)',
+            room_id, content, 'u'
+        )
+    await conn.close()
+
+    uri = 'ws://127.0.0.1:${_PORT}/ws/chat/' + SLUG
+    received = []
+    async with websockets.connect(uri) as ws:
+        for _ in range(3):
+            raw = await asyncio.wait_for(ws.recv(), timeout=5)
+            received.append(json.loads(raw)['content'])
+
+    assert received == ['alpha', 'beta', 'gamma'], f'Wrong order: {received}'
+
+asyncio.run(test())
+"
+
+    # ── 18g. Empty room — no history frames on connect ────────────────────────
+    _chat_db_test \
+        "Chat history: fresh room sends no history frames on connect" \
+"
+import asyncio, websockets, json, os, uuid
+
+SLUG = 'hc-empty-' + uuid.uuid4().hex[:8]
+
+async def test():
+    uri = 'ws://127.0.0.1:${_PORT}/ws/chat/' + SLUG
+    async with websockets.connect(uri) as ws:
+        try:
+            raw = await asyncio.wait_for(ws.recv(), timeout=1)
+            data = json.loads(raw)
+            assert False, f'Received unexpected frame in fresh room: {data}'
+        except asyncio.TimeoutError:
+            pass  # correct: no history
+
+asyncio.run(test())
+"
+
+else
+    info "chat-service container not running — skipping chat history persistence suite"
+fi
+
 # ── Summary ───────────────────────────────────────────────────────────────────
 printf "\n${YELLOW}══════════════════════════════════════════${RESET}\n"
 printf "  ${YELLOW}MANDATORY${RESET}  ${GREEN}PASSED: %-3d${RESET}  ${RED}FAILED: %-3d${RESET}\n" "$PASS" "$FAIL"

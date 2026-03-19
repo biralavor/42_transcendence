@@ -17,9 +17,11 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
 from shared.config.settings import settings  # noqa: E402
 from shared.database import Base             # noqa: E402
 
-# Import the service models so Alembic can detect them in Base.metadata
-from service.models.chat_room import ChatRoom  # noqa: E402, F401
-from service.models.message import Message     # noqa: E402, F401
+# NOTE: "from service.models..." cannot be used here because service.py
+# shadows the service package when /app/service/ is the working directory.
+# Import models directly — they are importable from the cwd.
+from models.chat_room import ChatRoom  # noqa: E402, F401
+from models.message import Message     # noqa: E402, F401
 
 # Tables owned by this service — Alembic will ONLY manage these.
 _SERVICE_TABLES = {"chat_rooms", "messages"}

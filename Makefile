@@ -4,7 +4,9 @@ all: up
 .PHONY: up
 up:
 	docker build -f services/backend-base/Dockerfile -t backend-base .
-	docker compose up --build -d
+	DOMAIN=$${DOMAIN:-$$(hostname -I 2>/dev/null | awk '{print $$1}')} ; \
+	DOMAIN=$${DOMAIN:-localhost} ; \
+	DOMAIN=$$DOMAIN docker compose up --build -d
 
 .PHONY: down
 down:
@@ -33,7 +35,7 @@ ps:
 .PHONY: windows
 windows:
 	docker build -f services/backend-base/Dockerfile -t backend-base .
-	docker compose up --build -d
+	DOMAIN=$$(hostname -I 2>/dev/null | awk '{print $$1}') docker compose up --build -d
 
 .PHONY: wait
 wait:
@@ -134,6 +136,20 @@ re-game: down-game
 show-tables:
 	docker compose exec db sh -c 'psql -U $$POSTGRES_USER -d $$POSTGRES_DB -c "\dt"'
 
+.PHONY: show-table-contents
+show-table-contents:
+	@docker compose exec db sh -c \
+		'for tbl in $$(psql -U $$POSTGRES_USER -d $$POSTGRES_DB -At \
+		-c "SELECT table_name FROM information_schema.tables \
+		WHERE table_schema='"'"'public'"'"' \
+		AND table_name NOT LIKE '"'"'alembic%'"'"' \
+		ORDER BY table_name"); \
+		do \
+			echo ""; \
+			echo "=== $$tbl ==="; \
+			psql -U $$POSTGRES_USER -d $$POSTGRES_DB -c "SELECT * FROM $$tbl;"; \
+		done'
+
 .PHONY: show-tables-full
 show-tables-full:
 	docker compose exec db sh -c \
@@ -144,6 +160,27 @@ show-tables-full:
 		WHERE t.table_schema = '"'"'public'"'"' \
 		AND t.table_name NOT LIKE '"'"'alembic%'"'"' \
 		ORDER BY t.table_name, c.ordinal_position;"'
+
+# --- network access ---
+.PHONY: show-ip
+show-ip:
+	@IP=$$(hostname -I 2>/dev/null | awk '{print $$1}'); \
+	IP=$${IP:-localhost}; \
+	echo ""; \
+	echo "  Host LAN IP: $$IP"; \
+	echo ""; \
+	echo "  To access from another device on the same Wi-Fi:"; \
+	echo "    1. Open https://$$IP:8443 in the browser"; \
+	echo "    2. Accept the certificate warning (self-signed — tap Advanced → Accept the Risk)"; \
+	echo "    3. 'make up' auto-detects your LAN IP and issues the TLS cert for it."; \
+	echo "       If detection fails (macOS/Windows), DOMAIN defaults to 'localhost'."; \
+	echo "       Override anytime: set DOMAIN=<ip> in .env and run 'make re-nginx'."; \
+	echo ""
+
+.PHONY: re-nginx
+re-nginx:
+	docker compose stop nginx && docker compose rm -f nginx
+	docker compose up --build -d nginx
 
 # --- chat-service ---
 .PHONY: up-chat
