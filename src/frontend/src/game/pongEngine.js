@@ -119,11 +119,11 @@ export class Player extends Entity {
         if (type === Player.Type.ONE) {
             this.position = new Position(2 * this.size.width,
                                          heightRatio / 2 - (this.size.height / 2));
-            this.color = 'red';
+            this.color = 'white';
         } else {
             this.position = new Position(widthRatio - 3 * this.size.width,
                                          heightRatio / 2 - (this.size.height / 2));
-            this.color = 'blue';
+            this.color = 'white';
         }
     }
 }
@@ -247,16 +247,28 @@ export function render(canvasContext, gameState, isPaused) {
     const fontSize = canvasContext.widthScale * 16;
     renderingCanvas.reset();
     renderingCanvas.fillStyle = 'white';
-
+    renderingCanvas.strokeStyle = 'white';
 
     renderingCanvas.font = `bold ${fontSize}px Bungee sans-serif`
     renderingCanvas.fillText(`${score.player1}`,
-                             55 * canvasContext.widthScale,
+                             35 * canvasContext.widthScale,
                              15 * canvasContext.heightScale, fontSize * 10);
 
     renderingCanvas.fillText(`${score.player2}`,
-                             90 * canvasContext.widthScale,
+                             115 * canvasContext.widthScale,
                              15 * canvasContext.heightScale, fontSize * 10);
+
+
+    renderingCanvas.strokeRect(3, 3,
+                               widthRatio * canvasContext.widthScale - 6,
+                               heightRatio * canvasContext.heightScale - 3)
+
+    for (let i = 7.5; i < heightRatio ; i += player1.size.height + 15)
+        renderingCanvas.fillRect(((widthRatio / 2)  - (player1.size.width / 2))* canvasContext.widthScale,
+                             i  * canvasContext.heightScale,
+                             player1.size.width  * canvasContext.widthScale,
+                             player1.size.height * canvasContext.heightScale);
+
 
     renderingCanvas.fillStyle = player1.color;
     renderingCanvas.fillRect(player1.position.x  * canvasContext.widthScale,
@@ -269,6 +281,7 @@ export function render(canvasContext, gameState, isPaused) {
                              player2.position.y  * canvasContext.heightScale,
                              player2.size.width  * canvasContext.widthScale,
                              player2.size.height * canvasContext.heightScale);
+
 
     if (isPaused())
         return ;
@@ -292,7 +305,6 @@ export function render(canvasContext, gameState, isPaused) {
 export function gameLoop(canvasContext, gameState, getInput, isPaused, onGoal) {
 
     gameState.addFrameTime(Date.now());
-    console.log(gameState.deltaTime);
     /** @type {import('./pongSystem').GameInput} input */
     const input = getInput();
     System.playerMovement(gameState, input);
