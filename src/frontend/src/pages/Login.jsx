@@ -155,8 +155,8 @@ const handleSubmit =  async(e) => {
                 {/* Forgot password functionality has been removed along with email
                     confirmations; if needed in the future, restore a link here. */}
               </div>
-              {error && <p className="text-danger text-center mb-2">{error}</p>}
-              {success && <p className="text-success text-center mb-2">{success}</p>}
+              {error && <div className="alert alert-danger text-center mb-2" role="alert">{error}</div>}
+              {success && <div className="alert alert-success text-center mb-2" role="alert">{success}</div>}
 
               <button
                 className="arcade-btn arcade-btn-primary w-100 auth-submit mb-3"
