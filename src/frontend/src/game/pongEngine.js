@@ -171,6 +171,16 @@ export class GameState {
         return 1 / (this.#currentFrameTime - this.#lastFrameTime);
     }
 
+    get isPlayer1Defending() {
+        return this.ball.position.velX < 0
+            && this.ball.position.x > this.player1.position.x + this.player1.size.width;
+    }
+
+    get isPlayer2Defending() {
+        return this.ball.position.velX > 0
+        && this.ball.position.x + this.ball.size.width < this.player2.position.x;
+    }
+
     addFrameTime(currentTime) {
         this.#lastFrameTime = this.#currentFrameTime;
         this.#currentFrameTime = currentTime;

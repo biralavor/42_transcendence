@@ -89,15 +89,14 @@ function collision(gameState, canvasContext) {
     }
 
     // horizontal collision
-    // TODO improve collision detection logic to handle better non-frontal collisions
-    if (gameState.player1.isCollidingWith(newBall)) {
+    if (gameState.isPlayer1Defending && gameState.player1.isCollidingWith(newBall)) {
         const p1Surface = gameState.player1.position.x + gameState.player1.size.width;
         const ballSurface = ballIntendedPosition.x;
         const overflow = p1Surface - ballSurface;
         newBall.position.x = p1Surface + overflow;
         newBall.position.velX = -ballIntendedPosition.velX;
         newBall.position.velY += 0.4 * gameState.player1.position.velY;
-    } else if (gameState.player2.isCollidingWith(newBall)) {
+    } else if (gameState.isPlayer2Defending && gameState.player2.isCollidingWith(newBall)) {
         const p2Surface = gameState.player2.position.x;
         const ballSurface = ballIntendedPosition.x + newBall.size.width;
         const overflow = p2Surface - ballSurface;
