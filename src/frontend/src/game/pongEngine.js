@@ -95,7 +95,7 @@ export class Entity {
 
 /**
  * @typedef {(1|2)} PlayerType
- ; */
+ */
 /**
  * @typedef {('ONE'|'TWO')} PlayerKey
  */
