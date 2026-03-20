@@ -90,10 +90,18 @@ export class Entity {
     }
 }
 
+/**
+ * @typedef {(1|2)} PlayerType
+ */
+/**
+ * @typedef {('ONE'|'TWO')} PlayerKey
+ */
+
 export class Player extends Entity {
+
     /**
      * @readonly
-     * @enum {(1|2)}
+     * @type {Readonly<{ONE: 1; TWO: 2}>>}
      */
     static Type = Object.freeze({
         ONE: 1,
@@ -101,11 +109,12 @@ export class Player extends Entity {
     });
 
     /**
-     * @param {Player.Type} type
+     * @param {PlayerType} type
      */
     constructor(type) {
         super();
         this.type = type;
+
         this.size = new Size(5, 15);
         if (type === Player.Type.ONE) {
             this.position = new Position(2 * this.size.width,
@@ -116,7 +125,6 @@ export class Player extends Entity {
                                          heightRatio / 2 - (this.size.height / 2));
             this.color = 'blue';
         }
-
     }
 }
 

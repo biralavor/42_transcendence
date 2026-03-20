@@ -1,4 +1,4 @@
-import { Ball, CanvasGameContext } from "./pongEngine.js";
+import { Ball, CanvasGameContext, GameState, Player } from "./pongEngine.js";
 
 const MAX_PLAYER_VEL = 2;
 const PLAYER_VEL_RESISTANCE_FACTOR = 0.95;
@@ -109,13 +109,14 @@ function collision(gameState, canvasContext) {
  * Resets the ball to the center of the grid with initial velocity.
  * @param {GameState} gameState
  * @param {CanvasGameContext} canvasContext
+ * @param {import("./pongEngine.js").PlayerType} defending
  */
-function resetBall(gameState, canvasContext) {
+function resetBall(gameState, canvasContext, defending) {
     const gridWidth = canvasContext.widthRatio;
     const gridHeight = canvasContext.heightRatio;
     gameState.ball.position.x = gridWidth / 2 - gameState.ball.size.width / 2;
     gameState.ball.position.y = gridHeight / 2 - gameState.ball.size.height / 2;
-    gameState.ball.position.velX = 4;
+    gameState.ball.position.velX = defending == Player.Type.ONE ? 4 : -4;
     gameState.ball.position.velY = 0;
 }
 
@@ -134,11 +135,11 @@ function goalDetection(gameState, canvasContext) {
 
     if (ball.position.x + ball.size.width <= 0) {
         gameState.score.player2 += 1;
-        resetBall(gameState, canvasContext);
+        resetBall(gameState, canvasContext, Player.Type.ONE);
         return true;
     } else if (ball.position.x >= gridWidth) {
         gameState.score.player1 += 1;
-        resetBall(gameState, canvasContext);
+        resetBall(gameState, canvasContext, Player.Type.TWO);
         return true;
     }
     return false;
