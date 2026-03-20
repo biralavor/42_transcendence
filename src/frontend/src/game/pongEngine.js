@@ -147,6 +147,8 @@ export class Ball extends Entity {
 }
 
 export class GameState {
+    #lastFrameTime
+    #currentFrameTime
     constructor() {
         /** @type {Player} */
         this.player1 = new Player(Player.Type.ONE);
@@ -158,6 +160,20 @@ export class GameState {
         this.ball.position.velY = 0;
         /** @type {{ player1: number, player2: number }} */
         this.score = { player1: 0, player2: 0 };
+        this.#currentFrameTime = Date.now();
+    }
+
+    get deltaTime() {
+        return this.#currentFrameTime - this.#lastFrameTime;
+    }
+
+    get deltaFactor() {
+        return 1 / (this.#currentFrameTime - this.#lastFrameTime);
+    }
+
+    addFrameTime(currentTime) {
+        this.#lastFrameTime = this.#currentFrameTime;
+        this.#currentFrameTime = currentTime;
     }
 }
 
@@ -265,6 +281,8 @@ export function render(canvasContext, gameState, isPaused) {
  */
 export function gameLoop(canvasContext, gameState, getInput, isPaused, onGoal) {
 
+    gameState.addFrameTime(Date.now());
+    console.log(gameState.deltaTime);
     /** @type {import('./pongSystem').GameInput} input */
     const input = getInput();
     System.playerMovement(gameState, input);

@@ -2,7 +2,7 @@ import { Ball, CanvasGameContext, GameState, Player } from "./pongEngine.js";
 
 const MAX_PLAYER_VEL = 2;
 const PLAYER_VEL_RESISTANCE_FACTOR = 0.95;
-const PLAYER_VEL_INPUT_FACTOR = 0.33;
+const PLAYER_VEL_INPUT_FACTOR = 7;
 
 /**
  * @typedef {Object} PlayerInput
@@ -29,8 +29,12 @@ function desaceleratePlayers(gameState) {
  * @param {GameInput} input
  */
 function applyInput(gameState, input) {
-    gameState.player1.position.velY += (input.player1.velY * PLAYER_VEL_INPUT_FACTOR);
-    gameState.player2.position.velY += (input.player2.velY * PLAYER_VEL_INPUT_FACTOR);
+    gameState.player1.position.velY += (input.player1.velY
+                                        * PLAYER_VEL_INPUT_FACTOR
+                                        * gameState.deltaFactor);
+    gameState.player2.position.velY += (input.player2.velY
+                                        * PLAYER_VEL_INPUT_FACTOR
+                                        * gameState.deltaFactor);
 }
 
 
