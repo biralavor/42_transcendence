@@ -1,15 +1,91 @@
 import { Link } from 'react-router-dom'
 import './Login.css'
 import NavbarComponent from '../Components/Navbar'
+import { useState } from 'react'
 
 export default function Login() {
+
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  const[formData, setFormData] = useState({
+  username: '', 
+  password: '',
+  rememberMe: false
+})
+
+const handleChange = (e) => {
+  const{name, value, type, checked} = e.target
+  let newValue = value
+
+  if(type === 'checkbox')
+    newValue = checked
+
+  setError('')
+  setSuccess('')
+  setFormData(prev => ({...prev, 
+    [name]: newValue}))
+}
+
+const handleSubmit =  async(e) => {
+  e.preventDefault()
+  setError('')  
+  setSuccess('')
+  setIsSubmitting(true)
+
+  //if (!formData.rememberMe)
+    // TODO: implement rememberMe behavior (token persistence strategy)
+
+  try{
+    const response = await fetch('/api/users/auth/login', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+       body: JSON.stringify({
+        username: formData.username,
+        password: formData.password
+       }),
+    })
+    if (!response.ok) {
+      let detail = 'Login failed.'
+      try {
+        const errData = await response.json()
+        if (errData.detail) detail = errData.detail
+      } catch { /* non-JSON error body (e.g. 502 HTML) — keep default message */ }
+      setError(detail)
+      return
+    }
+
+    const data = await response.json()
+
+    setFormData((prev) => ({
+      ...prev,
+      username:'',
+      password: '',
+      rememberMe: false,
+    }))
+    localStorage.setItem('access_token', data.access_token)
+    localStorage.setItem('refresh_token', data.refresh_token)
+    localStorage.setItem('token_type', data.token_type)
+    setSuccess('Login successful.')
+    } catch (err) {
+      console.error(err)
+      setError('Unable to connect to the server.')
+    } finally {
+      setIsSubmitting(false)
+    }
+}
+
+
   return (
     <div className="arcade-shell">
       <NavbarComponent />
 
       <main className="arcade-auth-layout auth-page">
         <div className="form-container auth-container">
-          <form id="loginForm" className="form-box arcade-screen arcade-form-card auth-card">
+          <form id="loginForm" className="form-box arcade-screen arcade-form-card auth-card" onSubmit={handleSubmit}>
             <div className="arcade-panel auth-panel">
               <div className="auth-header text-center">
                 <span className="auth-eyebrow">Player access</span>
@@ -43,6 +119,8 @@ export default function Login() {
                   name="username"
                   placeholder="Username"
                   autoComplete="username"
+                  value={formData.username}
+                  onChange={handleChange}
                   required
                 />
                 <label htmlFor="floatingUsername">Username</label>
@@ -56,6 +134,8 @@ export default function Login() {
                   name="password"
                   placeholder="Password"
                   autoComplete="current-password"
+                  value={formData.password}
+                  onChange={handleChange}
                   required
                 />
                 <label htmlFor="floatingPassword">Password</label>
@@ -63,15 +143,27 @@ export default function Login() {
 
               <div className="auth-options">
                 <div className="form-check arcade-form-check">
-                  <input className="form-check-input" type="checkbox" id="flexCheckDefault" />
+                  <input className="form-check-input" 
+                  type="checkbox" 
+                  id="flexCheckDefault"
+                  name='rememberMe'
+                  checked={formData.rememberMe}
+                  onChange={handleChange}
+                  />
                   <label className="form-check-label" htmlFor="flexCheckDefault">Remember me</label>
                 </div>
                 {/* Forgot password functionality has been removed along with email
                     confirmations; if needed in the future, restore a link here. */}
               </div>
+              {error && <div className="alert alert-danger text-center mb-2" role="alert">{error}</div>}
+              {success && <div className="alert alert-success text-center mb-2" role="alert">{success}</div>}
 
-              <button className="arcade-btn arcade-btn-primary w-100 auth-submit mb-3" type="submit">
-                Sign in
+              <button
+                className="arcade-btn arcade-btn-primary w-100 auth-submit mb-3"
+                type="submit"
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? 'Signing in...' : 'Sign in'}
               </button>
 
               <p className="text-center arcade-form-copy auth-footer-copy mb-0">
