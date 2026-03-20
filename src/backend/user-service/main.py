@@ -32,6 +32,10 @@ async def create_credentials(register_request: RegisterRequest, session: Session
     return await register_credentials(register_request, session)
 
 
+# TODO(auth): both endpoints below must be protected once JWT auth lands.
+# GET  — add an auth dependency; any authenticated user may read any profile.
+# PUT  — derive user_id from the JWT subject and reject if it doesn't match
+#         the path param (prevents one user from overwriting another's profile).
 @app.get("/profile/{user_id}", response_model=ProfileResponse)
 async def get_user_profile(user_id: int, session: SessionDependency):
     profile = await get_profile(user_id, session)
