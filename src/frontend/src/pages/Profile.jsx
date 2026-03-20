@@ -1,5 +1,5 @@
 // src/frontend/src/pages/Profile.jsx
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import NavbarComponent from '../Components/Navbar'
 import { getAvatarFilter } from '../utils/avatarFilter'
 import './Profile.css'
@@ -12,14 +12,22 @@ export default function Profile() {
   const [loading, setLoading]   = useState(true)
   const [error, setError]       = useState('')
   const [saveStatus, setSaveStatus] = useState('')
+  const saveStatusTimer = useRef(null)
 
   useEffect(() => {
+    return () => clearTimeout(saveStatusTimer.current)
+  }, [])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    const { signal } = controller
+
     Promise.all([
-      fetch(`/api/users/profile/${USER_ID}`).then(r => {
+      fetch(`/api/users/profile/${USER_ID}`, { signal }).then(r => {
         if (!r.ok) throw new Error(`Profile fetch failed: ${r.status}`)
         return r.json()
       }),
-      fetch(`/api/game/matches/history/${USER_ID}`).then(r => {
+      fetch(`/api/game/matches/history/${USER_ID}`, { signal }).then(r => {
         if (!r.ok) throw new Error(`History fetch failed: ${r.status}`)
         return r.json()
       }),
@@ -36,8 +44,14 @@ export default function Profile() {
         })
         setHistory(historyData)
       })
-      .catch(err => setError(err.message))
-      .finally(() => setLoading(false))
+      .catch(err => {
+        if (err.name !== 'AbortError') setError(err.message)
+      })
+      .finally(() => {
+        if (!signal.aborted) setLoading(false)
+      })
+
+    return () => controller.abort()
   }, [])
 
   const handleChange = (e) => {
@@ -62,10 +76,12 @@ export default function Profile() {
       })
       if (!resp.ok) throw new Error('Save failed')
       setSaveStatus('Profile updated successfully!')
-      setTimeout(() => setSaveStatus(''), 3000)
+      clearTimeout(saveStatusTimer.current)
+      saveStatusTimer.current = setTimeout(() => setSaveStatus(''), 3000)
     } catch {
       setSaveStatus('Failed to save profile.')
-      setTimeout(() => setSaveStatus(''), 3000)
+      clearTimeout(saveStatusTimer.current)
+      saveStatusTimer.current = setTimeout(() => setSaveStatus(''), 3000)
     }
   }
 
