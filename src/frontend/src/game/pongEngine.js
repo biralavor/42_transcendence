@@ -104,7 +104,7 @@ export class Player extends Entity {
 
     /**
      * @readonly
-     * @type {Readonly<{ONE: 1; TWO: 2}>>}
+     * @type {Readonly<{ONE: 1; TWO: 2}>}
      */
     static Type = Object.freeze({
         ONE: 1,
