@@ -13,3 +13,7 @@
 ## react
 - https://medium.com/@pdx.lucasm/canvas-with-react-js-32e133c05258
 - https://www.rocketseat.com.br/blog/artigos/post/react-router-dom-guia-completo-roteamento-react
+
+### useState vs useRef
+- https://react.wiki/hooks/use-state-vs-use-ref/
+- https://conceitos.tech/tutoriais/react/hooks-ciclo-vida/qual-a-diferenca-entre-useref-e-usestate/
