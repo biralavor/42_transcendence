@@ -14,7 +14,9 @@ describe('getAvatarFilter', () => {
 
   it('hue is always in [0, 359]', () => {
     for (let id = 1; id <= 50; id++) {
-      const hue = parseInt(getAvatarFilter(id).match(/hue-rotate\((\d+)deg\)/)[1])
+      const match = getAvatarFilter(id).match(/hue-rotate\((\d+)deg\)/)
+      expect(match).not.toBeNull()
+      const hue = parseInt(match[1], 10)
       expect(hue).toBeGreaterThanOrEqual(0)
       expect(hue).toBeLessThan(360)
     }
@@ -22,7 +24,9 @@ describe('getAvatarFilter', () => {
 
   it('saturation is always in [100, 179]', () => {
     for (let id = 1; id <= 50; id++) {
-      const sat = parseInt(getAvatarFilter(id).match(/saturate\((\d+)%\)/)[1])
+      const match = getAvatarFilter(id).match(/saturate\((\d+)%\)/)
+      expect(match).not.toBeNull()
+      const sat = parseInt(match[1], 10)
       expect(sat).toBeGreaterThanOrEqual(100)
       expect(sat).toBeLessThan(180)
     }
