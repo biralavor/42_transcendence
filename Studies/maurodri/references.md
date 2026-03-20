@@ -17,3 +17,6 @@
 ### useState vs useRef
 - https://react.wiki/hooks/use-state-vs-use-ref/
 - https://conceitos.tech/tutoriais/react/hooks-ciclo-vida/qual-a-diferenca-entre-useref-e-usestate/
+
+### useRef initialization
+- https://react.dev/reference/react/useRef#avoiding-recreating-the-ref-contents

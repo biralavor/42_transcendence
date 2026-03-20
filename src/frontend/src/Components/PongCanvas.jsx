@@ -6,11 +6,20 @@ export default function PongCanvas()
 {
     console.log("rendered")
     const canvasRef = useRef(null);
-    const keyStateRef = useRef({ 'KeyJ': false, 'KeyK': false, 'KeyW': false, 'KeyS': false });
-    const gameStateRef = useRef(new GameState());
+    const keyStateRef = useRef(null);
+    const gameStateRef = useRef(null);
     const pauseRef = useRef(false);
     const goalTimerRef = useRef(null);
     const [showGoal, setShowGoal] = useState(false);
+    if (keyStateRef.current == null) {
+        keyStateRef.current = {
+            'KeyJ': false, 'KeyK': false,
+            'KeyW': false, 'KeyS': false
+        };
+    }
+    if (gameStateRef.current == null) {
+        gameStateRef.current = new GameState();
+    }
 
     function onGoal() {
         pauseRef.current = true;
