@@ -51,3 +51,33 @@ content-type: application/json
     "username": "bira",
     "password": "bira123"
 }
+
+### ── GAME SERVICE ──────────────────────────────────────────────────────────
+
+### Health check
+GET https://localhost:8443/api/game/health HTTP/1.1
+
+### Start a match
+POST https://localhost:8443/api/game/matches HTTP/1.1
+content-type: application/json
+
+{
+    "player1_id": 1,
+    "player2_id": 2
+}
+
+### Finish a match (replace 1 with the id returned above)
+POST https://localhost:8443/api/game/matches/1/finish HTTP/1.1
+content-type: application/json
+
+{
+    "winner_id": 1,
+    "score_p1": 3,
+    "score_p2": 0
+}
+
+### Get stats for a user
+GET https://localhost:8443/api/game/stats/1 HTTP/1.1
+
+### Get match history for a user
+GET https://localhost:8443/api/game/matches/1 HTTP/1.1
