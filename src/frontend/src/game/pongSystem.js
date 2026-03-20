@@ -4,6 +4,7 @@ const MAX_PLAYER_VEL = 2;
 const PLAYER_VEL_RESISTANCE_FACTOR = 0.95;
 const PLAYER_VEL_INPUT_FACTOR = 7;
 
+
 /**
  * @typedef {Object} PlayerInput
  * @property {number} velY - Vertical velocity
@@ -90,19 +91,26 @@ function collision(gameState, canvasContext) {
 
     // horizontal collision
     if (gameState.isPlayer1Defending && gameState.player1.isCollidingWith(newBall)) {
+        // angle change from player vertical speed
+        newBall.position.velY += 0.4 * gameState.player1.position.velY;
+        // angle change from edge collision
+        newBall.position.velY += gameState.player1.edgeCollisionFactor(newBall)
         const p1Surface = gameState.player1.position.x + gameState.player1.size.width;
         const ballSurface = ballIntendedPosition.x;
         const overflow = p1Surface - ballSurface;
         newBall.position.x = p1Surface + overflow;
         newBall.position.velX = -ballIntendedPosition.velX;
-        newBall.position.velY += 0.4 * gameState.player1.position.velY;
+
     } else if (gameState.isPlayer2Defending && gameState.player2.isCollidingWith(newBall)) {
+        newBall.position.velY += 0.4 * gameState.player2.position.velY;
+        newBall.position.velY += gameState.player2.edgeCollisionFactor(newBall)
+
         const p2Surface = gameState.player2.position.x;
         const ballSurface = ballIntendedPosition.x + newBall.size.width;
         const overflow = p2Surface - ballSurface;
         newBall.position.x = p2Surface + overflow - newBall.size.width;
         newBall.position.velX = -ballIntendedPosition.velX;
-        newBall.position.velY += 0.4 * gameState.player2.position.velY;
+
     }
 
     return newBall;

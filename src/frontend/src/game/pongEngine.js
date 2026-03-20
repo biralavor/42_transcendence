@@ -80,6 +80,9 @@ export class Entity {
         this.position.move();
     }
 
+    /**
+     * @param {{position: Position; size: Size}} other
+     */
     isCollidingWith(other) {
         return (
             this.position.x < other.position.x + other.size.width
@@ -92,7 +95,7 @@ export class Entity {
 
 /**
  * @typedef {(1|2)} PlayerType
- */
+ ; */
 /**
  * @typedef {('ONE'|'TWO')} PlayerKey
  */
@@ -107,7 +110,11 @@ export class Player extends Entity {
         ONE: 1,
         TWO: 2
     });
-
+    static #blockSize = 5;
+    static #edgeSize = new Size(Player.#blockSize, Player.#blockSize / 2);
+    static #extremeEdgeSize = new Size(Player.#blockSize, 0.5);
+    static #normalFactor = 0.4;
+    static #extremeFactor = 0.8;
     /**
      * @param {PlayerType} type
      */
@@ -115,7 +122,7 @@ export class Player extends Entity {
         super();
         this.type = type;
 
-        this.size = new Size(5, 15);
+        this.size = new Size(Player.#blockSize, 3 * Player.#blockSize);
         if (type === Player.Type.ONE) {
             this.position = new Position(2 * this.size.width,
                                          heightRatio / 2 - (this.size.height / 2));
@@ -125,6 +132,57 @@ export class Player extends Entity {
                                          heightRatio / 2 - (this.size.height / 2));
             this.color = 'white';
         }
+    }
+
+    /**
+     * @param {Ball} ball
+     */
+    edgeCollisionFactor(ball) {
+
+        const ballExtreme = Ball.copy(ball)
+        ballExtreme.size.height = ball.size.height / 1.5;
+
+
+        const extremeTop = {
+            position: this.position,
+            size: Player.#extremeEdgeSize
+        };
+        if (ballExtreme.isCollidingWith(extremeTop, true)) {
+            console.log('extreme top')
+            return -Player.#extremeFactor;
+        }
+        const top = {
+            position: this.position,
+            size: Player.#edgeSize
+        };
+        if (ball.isCollidingWith(top)) {
+            console.log('top')
+            return -Player.#normalFactor;
+        }
+
+        const extremeBottom = {
+            position: {
+                x: this.position.x,
+                y: this.position.y + (3 * Player.#blockSize) - Player.#extremeEdgeSize.height
+            },
+            size: Player.#extremeEdgeSize
+        };
+        if (ballExtreme.isCollidingWith(extremeBottom)) {
+            console.log('extreme bottom')
+            return Player.#extremeFactor;
+        }
+        const bottom = {
+            position: {
+                x: this.position.x,
+                y: this.position.y + (3 * Player.#blockSize) - Player.#edgeSize.height
+            },
+            size: Player.#edgeSize
+        }
+        if (ball.isCollidingWith(bottom)) {
+            console.log('bottom')
+            return Player.#normalFactor;
+        }
+        return 0;
     }
 }
 
@@ -263,12 +321,20 @@ export function render(canvasContext, gameState, isPaused) {
                                widthRatio * canvasContext.widthScale - 6,
                                heightRatio * canvasContext.heightScale - 3)
 
-    for (let i = 7.5; i < heightRatio ; i += player1.size.height + 15)
-        renderingCanvas.fillRect(((widthRatio / 2)  - (player1.size.width / 2))* canvasContext.widthScale,
-                             i  * canvasContext.heightScale,
-                             player1.size.width  * canvasContext.widthScale,
-                             player1.size.height * canvasContext.heightScale);
+    const midfieldStripSize = player1.size;
+    const midfieldStripXPos =
+          ((widthRatio / 2)  - (midfieldStripSize.width / 2))
+          * canvasContext.widthScale;
+    for (let i = midfieldStripSize.height / 2;
+         i < heightRatio ;
+         i += 2* midfieldStripSize.height) {
 
+        renderingCanvas.fillRect(
+            midfieldStripXPos,
+            i  * canvasContext.heightScale,
+            midfieldStripSize.width  * canvasContext.widthScale,
+            midfieldStripSize.height * canvasContext.heightScale);
+    }
 
     renderingCanvas.fillStyle = player1.color;
     renderingCanvas.fillRect(player1.position.x  * canvasContext.widthScale,
