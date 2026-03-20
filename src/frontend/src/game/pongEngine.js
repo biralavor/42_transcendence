@@ -147,7 +147,7 @@ export class Player extends Entity {
             position: this.position,
             size: Player.#extremeEdgeSize
         };
-        if (ballExtreme.isCollidingWith(extremeTop, true)) {
+        if (ballExtreme.isCollidingWith(extremeTop)) {
             console.log('extreme top')
             return -Player.#extremeFactor;
         }
@@ -369,7 +369,6 @@ export function render(canvasContext, gameState, isPaused) {
  * @param {Function} onGoal - called once when a goal is scored
  */
 export function gameLoop(canvasContext, gameState, getInput, isPaused, onGoal) {
-
     gameState.addFrameTime(Date.now());
     /** @type {import('./pongSystem').GameInput} input */
     const input = getInput();
