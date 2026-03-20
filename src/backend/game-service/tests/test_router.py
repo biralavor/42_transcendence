@@ -1,19 +1,21 @@
 import asyncio
 
 import pytest
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from sqlalchemy.pool import NullPool
+from sqlalchemy import text
 from starlette.testclient import TestClient
 
-from shared.database import Base, get_db
+from shared.config.settings import settings
+from shared.database import get_db
 from main import app
 
 # --------------------------------------------------------------------------- #
-# Shared in-memory SQLite DB for all HTTP tests in this module
+# Shared PostgreSQL engine for all HTTP tests in this module
 # --------------------------------------------------------------------------- #
 
-_engine = create_async_engine("sqlite+aiosqlite:///:memory:")
-_TestSession = sessionmaker(_engine, class_=AsyncSession, expire_on_commit=False)
+_engine = create_async_engine(settings.SQLALCHEMY_DATABASE_URI, poolclass=NullPool)
+_TestSession = async_sessionmaker(_engine, class_=AsyncSession, expire_on_commit=False)
 
 
 async def _override_get_db():
@@ -22,10 +24,10 @@ async def _override_get_db():
 
 
 def setup_module(_):
-    async def _create():
+    async def _truncate():
         async with _engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-    asyncio.run(_create())
+            await conn.execute(text("TRUNCATE TABLE matches RESTART IDENTITY CASCADE"))
+    asyncio.run(_truncate())
 
 
 def teardown_module(_):

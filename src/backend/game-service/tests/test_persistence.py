@@ -1,18 +1,19 @@
 import pytest
 import pytest_asyncio
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from sqlalchemy.pool import NullPool
 
-from shared.database import Base
+from shared.config.settings import settings
 from persistence import create_match, finish_match, get_match, get_user_stats, get_user_matches
 
 
 @pytest_asyncio.fixture
 async def db():
-    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    engine = create_async_engine(settings.SQLALCHEMY_DATABASE_URI, poolclass=NullPool)
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    Session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+        await conn.execute(text("TRUNCATE TABLE matches RESTART IDENTITY CASCADE"))
+    Session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     async with Session() as session:
         yield session
     await engine.dispose()
