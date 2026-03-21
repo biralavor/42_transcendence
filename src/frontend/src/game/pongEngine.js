@@ -363,7 +363,6 @@ export function render(canvasContext, gameState, isPaused) {
 /**
  * @param {CanvasGameContext} canvasContext
  * @param {GameState} gameState
- * @param {Function} setGameState - callback after state update
  * @param {Function} getInput - returns {player1: {velY, velX}, player2: {velY, velX}}
  * @param {Function} isPaused - returns true when game is paused after goal
  * @param {Function} onGoal - called once when a goal is scored
