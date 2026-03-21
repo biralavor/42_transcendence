@@ -307,7 +307,7 @@ export function render(canvasContext, gameState, isPaused) {
     renderingCanvas.fillStyle = 'white';
     renderingCanvas.strokeStyle = 'white';
 
-    renderingCanvas.font = `bold ${fontSize}px Bungee sans-serif`
+    renderingCanvas.font = `bold ${fontSize}px Bungee, sans-serif`
     renderingCanvas.fillText(`${score.player1}`,
                              35 * canvasContext.widthScale,
                              15 * canvasContext.heightScale, fontSize * 10);
