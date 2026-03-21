@@ -6,7 +6,8 @@ import './Profile.css'
 import FriendsSidebar from '../Components/FriendsSidebar'
 
 export default function Profile() {
-  const USER_ID = parseInt(localStorage.getItem('user_id') ?? '1', 10)
+  const _rawId = parseInt(localStorage.getItem('user_id'), 10)
+  const USER_ID = Number.isNaN(_rawId) ? 1 : _rawId
   const [profile, setProfile]   = useState(null)
   const [history, setHistory]   = useState([])
   const [loading, setLoading]   = useState(true)
