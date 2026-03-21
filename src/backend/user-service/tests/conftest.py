@@ -29,6 +29,7 @@ def _make_empty_session():
     """Return a mock AsyncSession whose execute() yields an empty result (scalars → None)."""
     scalars_mock = MagicMock()
     scalars_mock.first.return_value = None
+    scalars_mock.all.return_value = []
 
     result_mock = MagicMock()
     result_mock.scalars.return_value = scalars_mock

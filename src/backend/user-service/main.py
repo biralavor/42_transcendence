@@ -3,8 +3,16 @@ from typing import Annotated
 from fastapi import FastAPI, status, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from service.schemas import Login, LoginResponse, RegisterRequest, RegisterResponse, ProfileResponse, UpdateProfileRequest
+from service.schemas import (
+    Login, LoginResponse, RegisterRequest, RegisterResponse,
+    ProfileResponse, UpdateProfileRequest,
+    FriendResponse, FriendRequestResponse,
+)
 from service.service import authenticate, register_credentials, get_profile, update_profile
+from service.friends import (
+    get_friends, get_pending_requests, get_sent_requests, send_friend_request,
+    accept_friend_request, delete_friendship, search_users,
+)
 from shared.database import get_db
 
 SessionDependency = Annotated[AsyncSession, Depends(get_db)]
@@ -52,3 +60,47 @@ async def update_user_profile(
     if profile is None:
         raise HTTPException(status_code=404, detail="User not found")
     return profile
+
+
+# TODO(auth): friend endpoints must check JWT identity before modifying
+# relationship data. user_id in path should equal JWT subject.
+
+@app.get("/friends/{user_id}", response_model=list[FriendResponse])
+async def list_friends(user_id: int, session: SessionDependency):
+    return await get_friends(user_id, session)
+
+
+@app.get("/friends/{user_id}/requests", response_model=list[FriendRequestResponse])
+async def list_friend_requests(user_id: int, session: SessionDependency):
+    return await get_pending_requests(user_id, session)
+
+
+@app.get("/friends/{user_id}/sent", response_model=list[FriendRequestResponse])
+async def list_sent_requests(user_id: int, session: SessionDependency):
+    return await get_sent_requests(user_id, session)
+
+
+@app.post("/friends/{user_id}/request/{addressee_id}",
+          response_model=FriendRequestResponse, status_code=201)
+async def add_friend(user_id: int, addressee_id: int, session: SessionDependency):
+    return await send_friend_request(user_id, addressee_id, session)
+
+
+@app.put("/friends/{user_id}/accept/{requester_id}",
+         response_model=FriendRequestResponse)
+async def accept_friend(user_id: int, requester_id: int, session: SessionDependency):
+    return await accept_friend_request(user_id, requester_id, session)
+
+
+@app.delete("/friends/{user_id}/{other_id}", status_code=204)
+async def remove_friend(user_id: int, other_id: int, session: SessionDependency):
+    deleted = await delete_friendship(user_id, other_id, session)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Friendship not found")
+
+
+@app.get("/search", response_model=list[FriendResponse])
+async def search_users_endpoint(session: SessionDependency, q: str = ""):
+    if len(q) < 2:
+        return []
+    return await search_users(q, session)

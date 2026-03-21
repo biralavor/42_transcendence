@@ -1,8 +1,9 @@
-import { Ball, CanvasGameContext } from "./pongEngine.js";
+import { Ball, CanvasGameContext, GameState, Player } from "./pongEngine.js";
 
 const MAX_PLAYER_VEL = 2;
 const PLAYER_VEL_RESISTANCE_FACTOR = 0.95;
-const PLAYER_VEL_INPUT_FACTOR = 0.33;
+const PLAYER_VEL_INPUT_FACTOR = 7;
+
 
 /**
  * @typedef {Object} PlayerInput
@@ -29,10 +30,38 @@ function desaceleratePlayers(gameState) {
  * @param {GameInput} input
  */
 function applyInput(gameState, input) {
-    gameState.player1.position.velY += (input.player1.velY * PLAYER_VEL_INPUT_FACTOR);
-    gameState.player2.position.velY += (input.player2.velY * PLAYER_VEL_INPUT_FACTOR);
+    gameState.player1.position.velY += (input.player1.velY
+                                        * PLAYER_VEL_INPUT_FACTOR
+                                        * gameState.deltaFactor);
+    gameState.player2.position.velY += (input.player2.velY
+                                        * PLAYER_VEL_INPUT_FACTOR
+                                        * gameState.deltaFactor);
 }
 
+
+/**
+ * @param {GameState} gameState
+ * @param {CanvasGameContext} canvasContext
+ */
+function clampPlayerBounds(gameState, canvasContext) {
+    const gridHeight = canvasContext.heightRatio;
+
+    if (gameState.player1.position.y < 0) {
+        gameState.player1.position.y = 0;
+        gameState.player1.position.velY = 0;
+    } else if (gameState.player1.position.y + gameState.player1.size.height > gridHeight) {
+        gameState.player1.position.y = gridHeight - gameState.player1.size.height;
+        gameState.player1.position.velY = 0;
+    }
+
+    if (gameState.player2.position.y < 0) {
+        gameState.player2.position.y = 0;
+        gameState.player2.position.velY = 0;
+    } else if (gameState.player2.position.y + gameState.player2.size.height > gridHeight) {
+        gameState.player2.position.y = gridHeight - gameState.player2.size.height;
+        gameState.player2.position.velY = 0;
+    }
+}
 
 /**
  * @param {GameState} gameState
@@ -85,21 +114,27 @@ function collision(gameState, canvasContext) {
     }
 
     // horizontal collision
-    // TODO improve collision detection logic to handle better non-frontal collisions
-    if (gameState.player1.isCollidingWith(newBall)) {
+    if (gameState.isPlayer1Defending && gameState.player1.isCollidingWith(newBall)) {
+        // angle change from player vertical speed
+        newBall.position.velY += 0.4 * gameState.player1.position.velY;
+        // angle change from edge collision
+        newBall.position.velY += gameState.player1.edgeCollisionFactor(newBall)
         const p1Surface = gameState.player1.position.x + gameState.player1.size.width;
         const ballSurface = ballIntendedPosition.x;
         const overflow = p1Surface - ballSurface;
         newBall.position.x = p1Surface + overflow;
         newBall.position.velX = -ballIntendedPosition.velX;
-        newBall.position.velY += 0.4 * gameState.player1.position.velY;
-    } else if (gameState.player2.isCollidingWith(newBall)) {
+
+    } else if (gameState.isPlayer2Defending && gameState.player2.isCollidingWith(newBall)) {
+        newBall.position.velY += 0.4 * gameState.player2.position.velY;
+        newBall.position.velY += gameState.player2.edgeCollisionFactor(newBall)
+
         const p2Surface = gameState.player2.position.x;
         const ballSurface = ballIntendedPosition.x + newBall.size.width;
         const overflow = p2Surface - ballSurface;
         newBall.position.x = p2Surface + overflow - newBall.size.width;
         newBall.position.velX = -ballIntendedPosition.velX;
-        newBall.position.velY += 0.4 * gameState.player2.position.velY;
+
     }
 
     return newBall;
@@ -109,13 +144,14 @@ function collision(gameState, canvasContext) {
  * Resets the ball to the center of the grid with initial velocity.
  * @param {GameState} gameState
  * @param {CanvasGameContext} canvasContext
+ * @param {import("./pongEngine.js").PlayerType} defending
  */
-function resetBall(gameState, canvasContext) {
+function resetBall(gameState, canvasContext, defending) {
     const gridWidth = canvasContext.widthRatio;
     const gridHeight = canvasContext.heightRatio;
     gameState.ball.position.x = gridWidth / 2 - gameState.ball.size.width / 2;
     gameState.ball.position.y = gridHeight / 2 - gameState.ball.size.height / 2;
-    gameState.ball.position.velX = 4;
+    gameState.ball.position.velX = defending == Player.Type.ONE ? -4 : 4;
     gameState.ball.position.velY = 0;
 }
 
@@ -134,11 +170,11 @@ function goalDetection(gameState, canvasContext) {
 
     if (ball.position.x + ball.size.width <= 0) {
         gameState.score.player2 += 1;
-        resetBall(gameState, canvasContext);
+        resetBall(gameState, canvasContext, Player.Type.ONE);
         return true;
     } else if (ball.position.x >= gridWidth) {
         gameState.score.player1 += 1;
-        resetBall(gameState, canvasContext);
+        resetBall(gameState, canvasContext, Player.Type.TWO);
         return true;
     }
     return false;
@@ -150,13 +186,15 @@ export default class System {
     /**
      * @param {GameState} gameState
      * @param {GameInput} input
+     * @param {CanvasGameContext} canvasContext
      */
-    static playerMovement(gameState, input) {
+    static playerMovement(gameState, input, canvasContext) {
         desaceleratePlayers(gameState);
         applyInput(gameState, input);
         clampMaxVelocity(gameState);
         gameState.player1.move();
         gameState.player2.move();
+        clampPlayerBounds(gameState, canvasContext);
     }
 
     /**

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useLocation } from 'react-router-dom'
 import { createWsClient } from '../utils/wsClient'
 import NavbarComponent from '../Components/Navbar'
 import './Chat.css'
@@ -12,8 +12,10 @@ function senderHue(name) {
 
 export default function Chat() {
   const { roomId } = useParams()
-  const [name, setName] = useState('')
-  const [joined, setJoined] = useState(false)
+  const location = useLocation()
+  const autoName = location.state?.username ?? ''
+  const [name, setName] = useState(autoName)
+  const [joined, setJoined] = useState(!!autoName)
   const [connected, setConnected] = useState(false)
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')

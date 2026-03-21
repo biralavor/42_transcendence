@@ -6,11 +6,20 @@ export default function PongCanvas()
 {
     console.log("rendered")
     const canvasRef = useRef(null);
-    const keyStateRef = useRef({ 'KeyJ': false, 'KeyK': false, 'KeyW': false, 'KeyS': false })
-    const [gameState, setGameState] = useState(new GameState())
+    const keyStateRef = useRef(null);
+    const gameStateRef = useRef(null);
     const pauseRef = useRef(false);
     const goalTimerRef = useRef(null);
     const [showGoal, setShowGoal] = useState(false);
+    if (keyStateRef.current == null) {
+        keyStateRef.current = {
+            'KeyJ': false, 'KeyK': false,
+            'KeyW': false, 'KeyS': false
+        };
+    }
+    if (gameStateRef.current == null) {
+        gameStateRef.current = new GameState();
+    }
 
     function onGoal() {
         pauseRef.current = true;
@@ -82,7 +91,7 @@ export default function PongCanvas()
         }
         window.addEventListener('resize', onResize);
         const interval = setInterval(() => {
-            gameLoop(canvasContext, gameState, setGameState, getInput, isPaused, onGoal);
+            gameLoop(canvasContext, gameStateRef.current, getInput, isPaused, onGoal);
         }, timeFrameMillis);
 
         window.addEventListener('keydown', onKeydown)
@@ -99,10 +108,6 @@ export default function PongCanvas()
 
     return (
         <div className='pong-canvas-container'>
-            <div className='score'>
-                <span className='score-player1'>{gameState.score.player1}</span>
-                <span className='score-player2'>{gameState.score.player2}</span>
-            </div>
             <div className='pong-canvas-wrapper'>
                 {showGoal && (
                     <div className='goal-overlay'>
