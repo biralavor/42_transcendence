@@ -7,6 +7,7 @@ export default function FriendsSidebar({ userId, username }) {
   const [requests, setRequests]           = useState([])
   const [searchQuery, setSearchQuery]     = useState('')
   const [searchResults, setSearchResults] = useState([])
+  const [pendingSent, setPendingSent]     = useState([])
   const navigate    = useNavigate()
   const searchTimer = useRef(null)
 
@@ -15,9 +16,11 @@ export default function FriendsSidebar({ userId, username }) {
     Promise.all([
       fetch(`/api/users/friends/${userId}`, { signal: controller.signal }).then(r => r.json()),
       fetch(`/api/users/friends/${userId}/requests`, { signal: controller.signal }).then(r => r.json()),
-    ]).then(([f, r]) => {
+      fetch(`/api/users/friends/${userId}/sent`, { signal: controller.signal }).then(r => r.json()),
+    ]).then(([f, r, s]) => {
       setFriends(f)
       setRequests(r)
+      setPendingSent(s.map(req => ({ id: req.addressee_id, username: req.addressee_username })))
     }).catch(err => { if (err.name !== 'AbortError') console.error(err) })
     return () => {
       controller.abort()
@@ -41,7 +44,9 @@ export default function FriendsSidebar({ userId, username }) {
   const handleAddFriend = async (friendId) => {
     const res = await fetch(`/api/users/friends/${userId}/request/${friendId}`, { method: 'POST' })
     if (!res.ok) return
+    const user = searchResults.find(u => u.id === friendId)
     setSearchResults(prev => prev.filter(u => u.id !== friendId))
+    if (user) setPendingSent(prev => [...prev, user])
   }
 
   const handleAccept = async (requesterId) => {
@@ -71,6 +76,14 @@ export default function FriendsSidebar({ userId, username }) {
     navigate(`/chat/DM-${userId}-${friendId}`, { state: { username } })
   }
 
+  const excludedIds = new Set([
+    userId,
+    ...friends.map(f => f.id),
+    ...requests.map(r => r.requester_id),
+    ...pendingSent.map(p => p.id),
+  ])
+  const visibleResults = searchResults.filter(u => !excludedIds.has(u.id))
+
   return (
     <aside className="friends-sidebar arcade-screen">
       <h2 className="friends-sidebar-title">Players</h2>
@@ -88,11 +101,11 @@ export default function FriendsSidebar({ userId, username }) {
       {searchQuery.length >= 2 && (
         <div className="friends-section">
           <h3 className="friends-section-title">Results</h3>
-          {searchResults.length === 0 ? (
+          {visibleResults.length === 0 ? (
             <p className="friends-empty">No players found.</p>
           ) : (
             <ul className="friends-list">
-              {searchResults.map(user => (
+              {visibleResults.map(user => (
                 <li key={user.id} className="friends-list-item">
                   <span className="friends-username">{user.username}</span>
                   <button
@@ -105,6 +118,20 @@ export default function FriendsSidebar({ userId, username }) {
               ))}
             </ul>
           )}
+        </div>
+      )}
+
+      {pendingSent.length > 0 && (
+        <div className="friends-section">
+          <h3 className="friends-section-title">Pending</h3>
+          <ul className="friends-list">
+            {pendingSent.map(user => (
+              <li key={user.id} className="friends-list-item">
+                <span className="friends-username">{user.username}</span>
+                <span className="friends-pending-badge">Pending</span>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 

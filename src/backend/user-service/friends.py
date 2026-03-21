@@ -50,6 +50,30 @@ async def get_pending_requests(user_id: int, session: AsyncSession) -> list[dict
     return enriched
 
 
+async def get_sent_requests(user_id: int, session: AsyncSession) -> list[dict]:
+    """Returns pending requests where user_id is the requester, enriched with addressee username."""
+    result = await session.execute(
+        select(Friendship, User.username)
+        .join(User, User.id == Friendship.addressee_id)
+        .where(
+            Friendship.requester_id == user_id,
+            Friendship.status == "pending",
+        )
+    )
+    rows = result.all()
+    return [
+        {
+            "id":                friendship.id,
+            "requester_id":      friendship.requester_id,
+            "addressee_id":      friendship.addressee_id,
+            "status":            friendship.status,
+            "created_at":        friendship.created_at,
+            "addressee_username": addressee_username,
+        }
+        for friendship, addressee_username in rows
+    ]
+
+
 async def send_friend_request(
     requester_id: int, addressee_id: int, session: AsyncSession
 ) -> Friendship:

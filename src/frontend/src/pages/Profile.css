@@ -311,6 +311,17 @@
   font-size: 0.95rem;
 }
 
+.friends-pending-badge {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #f4d03f;
+  border: 1px solid #f4d03f;
+  padding: 0.15rem 0.45rem;
+  opacity: 0.75;
+}
+
 /* Responsive: stack on narrow viewports */
 @media (max-width: 768px) {
   .profile-layout {

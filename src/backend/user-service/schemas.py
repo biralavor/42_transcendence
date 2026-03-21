@@ -64,3 +64,4 @@ class FriendRequestResponse(BaseModel):
     status:             str
     created_at:         Optional[datetime] = None
     requester_username: Optional[str] = None
+    addressee_username: Optional[str] = None

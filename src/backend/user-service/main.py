@@ -10,7 +10,7 @@ from service.schemas import (
 )
 from service.service import authenticate, register_credentials, get_profile, update_profile
 from service.friends import (
-    get_friends, get_pending_requests, send_friend_request,
+    get_friends, get_pending_requests, get_sent_requests, send_friend_request,
     accept_friend_request, delete_friendship, search_users,
 )
 from shared.database import get_db
@@ -73,6 +73,11 @@ async def list_friends(user_id: int, session: SessionDependency):
 @app.get("/friends/{user_id}/requests", response_model=list[FriendRequestResponse])
 async def list_friend_requests(user_id: int, session: SessionDependency):
     return await get_pending_requests(user_id, session)
+
+
+@app.get("/friends/{user_id}/sent", response_model=list[FriendRequestResponse])
+async def list_sent_requests(user_id: int, session: SessionDependency):
+    return await get_sent_requests(user_id, session)
 
 
 @app.post("/friends/{user_id}/request/{addressee_id}",
