@@ -41,6 +41,30 @@ function applyInput(gameState, input) {
 
 /**
  * @param {GameState} gameState
+ * @param {CanvasGameContext} canvasContext
+ */
+function clampPlayerBounds(gameState, canvasContext) {
+    const gridHeight = canvasContext.heightRatio;
+
+    if (gameState.player1.position.y < 0) {
+        gameState.player1.position.y = 0;
+        gameState.player1.position.velY = 0;
+    } else if (gameState.player1.position.y + gameState.player1.size.height > gridHeight) {
+        gameState.player1.position.y = gridHeight - gameState.player1.size.height;
+        gameState.player1.position.velY = 0;
+    }
+
+    if (gameState.player2.position.y < 0) {
+        gameState.player2.position.y = 0;
+        gameState.player2.position.velY = 0;
+    } else if (gameState.player2.position.y + gameState.player2.size.height > gridHeight) {
+        gameState.player2.position.y = gridHeight - gameState.player2.size.height;
+        gameState.player2.position.velY = 0;
+    }
+}
+
+/**
+ * @param {GameState} gameState
  */
 function clampMaxVelocity(gameState) {
     gameState.player1.position.velY =
@@ -162,13 +186,15 @@ export default class System {
     /**
      * @param {GameState} gameState
      * @param {GameInput} input
+     * @param {CanvasGameContext} canvasContext
      */
-    static playerMovement(gameState, input) {
+    static playerMovement(gameState, input, canvasContext) {
         desaceleratePlayers(gameState);
         applyInput(gameState, input);
         clampMaxVelocity(gameState);
         gameState.player1.move();
         gameState.player2.move();
+        clampPlayerBounds(gameState, canvasContext);
     }
 
     /**

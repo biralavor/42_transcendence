@@ -371,7 +371,7 @@ export function gameLoop(canvasContext, gameState, getInput, isPaused, onGoal) {
     gameState.addFrameTime(Date.now());
     /** @type {import('./pongSystem').GameInput} input */
     const input = getInput();
-    System.playerMovement(gameState, input);
+    System.playerMovement(gameState, input, canvasContext);
     if (!isPaused()) {
         System.ballCollision(gameState, canvasContext);
         const scored = System.goalDetection(gameState, canvasContext);
