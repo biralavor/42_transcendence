@@ -10,7 +10,11 @@ const mockCanvasContext = {
     rendering2d: {
         reset: vi.fn(),
         fillStyle: '',
+        strokeStyle: '',
+        font: '',
         fillRect: vi.fn(),
+        fillText: vi.fn(),
+        strokeRect: vi.fn(),
     },
 }
 
@@ -18,13 +22,11 @@ describe('gameLoop', () => {
 
     /** @type {GameState} */
     let state
-    let setGameState
     let getInput
 
     beforeEach(() => {
         vi.clearAllMocks()
         state = new GameState()
-        setGameState = vi.fn()
         getInput = vi.fn().mockReturnValue({
             player1: { velY: 0, velX: 0 },
             player2: { velY: 0, velX: 0 },
@@ -39,7 +41,7 @@ describe('gameLoop', () => {
         const onGoal = vi.fn()
         const isPaused = () => false
 
-        gameLoop(mockCanvasContext, state, setGameState, getInput, isPaused, onGoal)
+        gameLoop(mockCanvasContext, state, getInput, isPaused, onGoal)
 
         expect(onGoal).toHaveBeenCalledTimes(1)
     })
@@ -49,7 +51,7 @@ describe('gameLoop', () => {
         const onGoal = vi.fn()
         const isPaused = () => false
 
-        gameLoop(mockCanvasContext, state, setGameState, getInput, isPaused, onGoal)
+        gameLoop(mockCanvasContext, state, getInput, isPaused, onGoal)
 
         expect(onGoal).not.toHaveBeenCalled()
     })
@@ -60,19 +62,18 @@ describe('gameLoop', () => {
         const isPaused = () => true
         const scoreBefore = state.score.player2
 
-        gameLoop(mockCanvasContext, state, setGameState, getInput, isPaused, onGoal)
+        gameLoop(mockCanvasContext, state, getInput, isPaused, onGoal)
 
         expect(onGoal).not.toHaveBeenCalled()
         expect(state.score.player2).toBe(scoreBefore)  // score unchanged
     })
 
-    it('still calls render and setGameState when paused', () => {
+    it('still calls render when paused', () => {
         const onGoal = vi.fn()
         const isPaused = () => true
 
-        gameLoop(mockCanvasContext, state, setGameState, getInput, isPaused, onGoal)
+        gameLoop(mockCanvasContext, state, getInput, isPaused, onGoal)
 
-        expect(setGameState).toHaveBeenCalledTimes(1)
         expect(mockCanvasContext.rendering2d.reset).toHaveBeenCalled()
     })
 })

@@ -80,6 +80,9 @@ export class Entity {
         this.position.move();
     }
 
+    /**
+     * @param {{position: Position; size: Size}} other
+     */
     isCollidingWith(other) {
         return (
             this.position.x < other.position.x + other.size.width
@@ -90,33 +93,96 @@ export class Entity {
     }
 }
 
+/**
+ * @typedef {(1|2)} PlayerType
+ */
+/**
+ * @typedef {('ONE'|'TWO')} PlayerKey
+ */
+
 export class Player extends Entity {
+
     /**
      * @readonly
-     * @enum {(1|2)}
+     * @type {Readonly<{ONE: 1; TWO: 2}>}
      */
     static Type = Object.freeze({
         ONE: 1,
         TWO: 2
     });
-
+    static #blockSize = 5;
+    static #edgeSize = new Size(Player.#blockSize, Player.#blockSize / 2);
+    static #extremeEdgeSize = new Size(Player.#blockSize, 0.5);
+    static #normalFactor = 0.4;
+    static #extremeFactor = 0.8;
     /**
-     * @param {Player.Type} type
+     * @param {PlayerType} type
      */
     constructor(type) {
         super();
         this.type = type;
-        this.size = new Size(5, 15);
+
+        this.size = new Size(Player.#blockSize, 3 * Player.#blockSize);
         if (type === Player.Type.ONE) {
             this.position = new Position(2 * this.size.width,
                                          heightRatio / 2 - (this.size.height / 2));
-            this.color = 'red';
+            this.color = 'white';
         } else {
             this.position = new Position(widthRatio - 3 * this.size.width,
                                          heightRatio / 2 - (this.size.height / 2));
-            this.color = 'blue';
+            this.color = 'white';
+        }
+    }
+
+    /**
+     * @param {Ball} ball
+     */
+    edgeCollisionFactor(ball) {
+
+        const ballExtreme = Ball.copy(ball)
+        ballExtreme.size.height = ball.size.height / 1.5;
+
+
+        const extremeTop = {
+            position: this.position,
+            size: Player.#extremeEdgeSize
+        };
+        if (ballExtreme.isCollidingWith(extremeTop)) {
+            console.log('extreme top')
+            return -Player.#extremeFactor;
+        }
+        const top = {
+            position: this.position,
+            size: Player.#edgeSize
+        };
+        if (ball.isCollidingWith(top)) {
+            console.log('top')
+            return -Player.#normalFactor;
         }
 
+        const extremeBottom = {
+            position: {
+                x: this.position.x,
+                y: this.position.y + (3 * Player.#blockSize) - Player.#extremeEdgeSize.height
+            },
+            size: Player.#extremeEdgeSize
+        };
+        if (ballExtreme.isCollidingWith(extremeBottom)) {
+            console.log('extreme bottom')
+            return Player.#extremeFactor;
+        }
+        const bottom = {
+            position: {
+                x: this.position.x,
+                y: this.position.y + (3 * Player.#blockSize) - Player.#edgeSize.height
+            },
+            size: Player.#edgeSize
+        }
+        if (ball.isCollidingWith(bottom)) {
+            console.log('bottom')
+            return Player.#normalFactor;
+        }
+        return 0;
     }
 }
 
@@ -139,6 +205,8 @@ export class Ball extends Entity {
 }
 
 export class GameState {
+    #lastFrameTime
+    #currentFrameTime
     constructor() {
         /** @type {Player} */
         this.player1 = new Player(Player.Type.ONE);
@@ -150,6 +218,30 @@ export class GameState {
         this.ball.position.velY = 0;
         /** @type {{ player1: number, player2: number }} */
         this.score = { player1: 0, player2: 0 };
+        this.#currentFrameTime = Date.now();
+    }
+
+    get deltaTime() {
+        return this.#currentFrameTime - this.#lastFrameTime;
+    }
+
+    get deltaFactor() {
+        return 1 / (this.#currentFrameTime - this.#lastFrameTime);
+    }
+
+    get isPlayer1Defending() {
+        return this.ball.position.velX < 0
+            && this.ball.position.x > this.player1.position.x + this.player1.size.width;
+    }
+
+    get isPlayer2Defending() {
+        return this.ball.position.velX > 0
+        && this.ball.position.x + this.ball.size.width < this.player2.position.x;
+    }
+
+    addFrameTime(currentTime) {
+        this.#lastFrameTime = this.#currentFrameTime;
+        this.#currentFrameTime = currentTime;
     }
 }
 
@@ -201,10 +293,48 @@ export class CanvasGameContext {
 /**
  * @param {CanvasGameContext} canvasContext
  * @param {GameState} gameState
+ * @param {Function} isPaused - returns true game is paused after goal
  */
-export function render(canvasContext, { player1, player2, ball }) {
+export function render(canvasContext, gameState, isPaused) {
     const renderingCanvas = canvasContext.rendering2d;
+    const player1 = gameState.player1;
+    const player2 = gameState.player2;
+    const ball = gameState.ball;
+    const score = gameState.score;
+
+    const fontSize = canvasContext.widthScale * 16;
     renderingCanvas.reset();
+    renderingCanvas.fillStyle = 'white';
+    renderingCanvas.strokeStyle = 'white';
+
+    renderingCanvas.font = `bold ${fontSize}px Bungee, sans-serif`
+    renderingCanvas.fillText(`${score.player1}`,
+                             35 * canvasContext.widthScale,
+                             15 * canvasContext.heightScale, fontSize * 10);
+
+    renderingCanvas.fillText(`${score.player2}`,
+                             115 * canvasContext.widthScale,
+                             15 * canvasContext.heightScale, fontSize * 10);
+
+
+    renderingCanvas.strokeRect(3, 3,
+                               widthRatio * canvasContext.widthScale - 6,
+                               heightRatio * canvasContext.heightScale - 3)
+
+    const midfieldStripSize = player1.size;
+    const midfieldStripXPos =
+          ((widthRatio / 2)  - (midfieldStripSize.width / 2))
+          * canvasContext.widthScale;
+    for (let i = midfieldStripSize.height / 2;
+         i < heightRatio ;
+         i += 2* midfieldStripSize.height) {
+
+        renderingCanvas.fillRect(
+            midfieldStripXPos,
+            i  * canvasContext.heightScale,
+            midfieldStripSize.width  * canvasContext.widthScale,
+            midfieldStripSize.height * canvasContext.heightScale);
+    }
 
     renderingCanvas.fillStyle = player1.color;
     renderingCanvas.fillRect(player1.position.x  * canvasContext.widthScale,
@@ -218,6 +348,10 @@ export function render(canvasContext, { player1, player2, ball }) {
                              player2.size.width  * canvasContext.widthScale,
                              player2.size.height * canvasContext.heightScale);
 
+
+    if (isPaused())
+        return ;
+
     renderingCanvas.fillStyle = ball.color;
     renderingCanvas.fillRect(ball.position.x  * canvasContext.widthScale,
                              ball.position.y  * canvasContext.heightScale,
@@ -229,24 +363,20 @@ export function render(canvasContext, { player1, player2, ball }) {
 /**
  * @param {CanvasGameContext} canvasContext
  * @param {GameState} gameState
- * @param {Function} setGameState - callback after state update
  * @param {Function} getInput - returns {player1: {velY, velX}, player2: {velY, velX}}
- * @param {Function} isPaused - returns true when physics should be skipped
+ * @param {Function} isPaused - returns true when game is paused after goal
  * @param {Function} onGoal - called once when a goal is scored
  */
-export function gameLoop(canvasContext, gameState, setGameState, getInput, isPaused, onGoal) {
+export function gameLoop(canvasContext, gameState, getInput, isPaused, onGoal) {
+    gameState.addFrameTime(Date.now());
+    /** @type {import('./pongSystem').GameInput} input */
+    const input = getInput();
+    System.playerMovement(gameState, input, canvasContext);
     if (!isPaused()) {
-        /** @type {import('./pongSystem').GameInput} input */
-        const input = getInput();
-        System.playerMovement(gameState, input);
         System.ballCollision(gameState, canvasContext);
         const scored = System.goalDetection(gameState, canvasContext);
         if (scored) onGoal();
     }
 
-    render(canvasContext, gameState);
-    // Shallow spread creates a new object reference so React detects the change.
-    // Top-level mutations (score) trigger re-renders; nested mutations (ball, players)
-    // are rendered via canvas and don't need deep cloning.
-    setGameState({ ...gameState });
+    render(canvasContext, gameState, isPaused);
 }

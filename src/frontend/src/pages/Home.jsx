@@ -72,7 +72,7 @@ export default function Home() {
                       <span className="arena-score">08 : 06</span>
                     </div>
 
-                    <div className="pong-board">
+                    <div className="pong-preview">
                       <div className="paddle paddle-left"></div>
                       <div className="pong-ball"></div>
                       <div className="paddle paddle-right"></div>
