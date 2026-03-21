@@ -1,3 +1,5 @@
+SHELL := /bin/bash
+
 .PHONY: all
 all: up
 
@@ -67,9 +69,14 @@ test:
 		 cd /app; pytest service/tests/test_service.py -v >/tmp/out 2>&1; r=$$?; \
 		 sed 's/test session starts/& — chat-service/' /tmp/out; exit $$r"
 
+.PHONY: seed
+seed:
+	@docker compose cp tests/seed_dev.py user-service:/app/seed_dev.py
+	@docker compose exec user-service python3 /app/seed_dev.py
+
 .PHONY: check
-check: wait test
-	bash tests/TranscendenceHealthCheck.sh | tee /dev/tty | sed 's/\x1b\[[0-9;]*m//g' > release.txt
+check: wait test seed
+	bash tests/TranscendenceHealthCheck.sh | tee >(sed 's/\x1b\[[0-9;]*m//g' > release.txt)
 
 # --- alembic migrations ---
 # Usage: make migrate-user MSG=add_avatar_url_to_users
