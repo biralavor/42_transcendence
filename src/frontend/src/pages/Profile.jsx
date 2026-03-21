@@ -3,10 +3,10 @@ import { useState, useEffect, useRef } from 'react'
 import NavbarComponent from '../Components/Navbar'
 import { getAvatarFilter } from '../utils/avatarFilter'
 import './Profile.css'
-
-const USER_ID = 1  // hardcoded until JWT auth lands
+import FriendsSidebar from '../Components/FriendsSidebar'
 
 export default function Profile() {
+  const USER_ID = parseInt(localStorage.getItem('user_id') ?? '1', 10)
   const [profile, setProfile]   = useState(null)
   const [history, setHistory]   = useState([])
   const [loading, setLoading]   = useState(true)
@@ -114,7 +114,12 @@ export default function Profile() {
     <div className="arcade-shell">
       <NavbarComponent />
       <main className="arcade-content profile-page">
-        <div className="arcade-screen profile-card">
+        <div className="profile-layout">
+          <div className="profile-sidebar-col">
+            <FriendsSidebar userId={USER_ID} username={profile?.username} />
+          </div>
+          <div className="profile-main-col">
+          <div className="arcade-screen profile-card">
           <div className="profile-header">
             <div className="profile-avatar-wrapper">
               <img
@@ -221,6 +226,8 @@ export default function Profile() {
                 ))}
               </div>
             )}
+          </div>
+          </div>
           </div>
         </div>
       </main>
