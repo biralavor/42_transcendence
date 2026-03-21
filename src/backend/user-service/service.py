@@ -54,10 +54,13 @@ async def authenticate(login: Login, session: AsyncSession) -> LoginResponse:
     )
     session.add(tokens)
     await session.commit()
+    user_row = await session.execute(select(User).where(User.username == credential.username))
+    user = user_row.scalars().first()
     return LoginResponse(
         access_token=access_token,
         token_type="bearer",
         refresh_token=raw_refresh_token,
+        user_id=user.id,
     )
 
 
