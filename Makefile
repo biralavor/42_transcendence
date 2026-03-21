@@ -52,8 +52,23 @@ wait:
 	done; \
 	echo ""; echo "Timeout: services not ready after 60s."; exit 1
 
+.PHONY: test
+test:
+	@echo "=== user-service tests ==="
+	docker compose exec user-service sh -c \
+		"pip install -q --root-user-action=ignore pytest==8.3.5 httpx==0.28.1 pytest-asyncio==0.24.0 && \
+		 cd /app && pytest service/tests/ -v"
+	@echo "=== game-service tests ==="
+	docker compose exec game-service sh -c \
+		"pip install -q --root-user-action=ignore pytest==8.3.5 httpx==0.28.1 pytest-asyncio==0.24.0 && \
+		 cd /app && pytest service/tests/ -v"
+	@echo "=== chat-service tests ==="
+	docker compose exec chat-service sh -c \
+		"pip install -q --root-user-action=ignore pytest==8.3.5 httpx==0.28.1 pytest-asyncio==0.23.8 asyncpg==0.30.0 && \
+		 cd /app && pytest service/tests/test_service.py -v"
+
 .PHONY: check
-check: wait
+check: wait test
 	bash tests/TranscendenceHealthCheck.sh | tee /dev/tty | sed 's/\x1b\[[0-9;]*m//g' > release.txt
 
 # --- alembic migrations ---

@@ -1,73 +1,114 @@
-import { useState } from 'react'
+// src/frontend/src/pages/Profile.jsx
+import { useState, useEffect, useRef } from 'react'
 import NavbarComponent from '../Components/Navbar'
+import { getAvatarFilter } from '../utils/avatarFilter'
 import './Profile.css'
 
-/**
- * Profile page component.  This page displays the current user's public
- * information along with editable fields for display name, bio and
- * preferences.  A simple match history table is also included to
- * illustrate how past games could be surfaced once the backend is
- * implemented.  All data on this page is mock data and is stored in
- * component state – no requests are sent to a server.  When a real
- * backend becomes available, replace the state management with API
- * calls to load and persist user data.
- */
+const USER_ID = 1  // hardcoded until JWT auth lands
+
 export default function Profile() {
-  // Mock profile data.  In a real application this would be loaded from
-  // an API after the user signs in.
-  const [profile, setProfile] = useState({
-    username: 'retro_gamer',
-    displayName: 'Retro Gamer',
-    bio: 'Paddling through pixels and climbing the leaderboard!',
-    preferences: {
-      // Dark mode preference; additional settings can be added here when needed.
-      darkMode: false,
-    },
-    metrics: {
-      wins: 12,
-      rank: 34,
-      matches: 20,
-    },
-    history: [
-      { id: 1, opponent: 'ArcadeAce', result: 'Win', score: '11–7', date: '2026-03-15' },
-      { id: 2, opponent: 'PaddlePro', result: 'Loss', score: '9–11', date: '2026-03-14' },
-      { id: 3, opponent: 'PixelMaster', result: 'Win', score: '11–4', date: '2026-03-12' },
-      { id: 4, opponent: 'GameGuru', result: 'Win', score: '11–9', date: '2026-03-10' },
-    ],
-  })
+  const [profile, setProfile]   = useState(null)
+  const [history, setHistory]   = useState([])
+  const [loading, setLoading]   = useState(true)
+  const [error, setError]       = useState('')
+  const [saveStatus, setSaveStatus] = useState('')
+  const saveStatusTimer = useRef(null)
 
-  const [status, setStatus] = useState('')
+  useEffect(() => {
+    return () => clearTimeout(saveStatusTimer.current)
+  }, [])
 
-  // Generic change handler for form inputs.  It can update nested
-  // preference values as well as top‑level profile fields.
+  useEffect(() => {
+    const controller = new AbortController()
+    const { signal } = controller
+
+    Promise.all([
+      fetch(`/api/users/profile/${USER_ID}`, { signal }).then(r => {
+        if (!r.ok) throw new Error(`Profile fetch failed: ${r.status}`)
+        return r.json()
+      }),
+      fetch(`/api/game/matches/history/${USER_ID}`, { signal }).then(r => {
+        if (!r.ok) throw new Error(`History fetch failed: ${r.status}`)
+        return r.json()
+      }),
+    ])
+      .then(([profileData, historyData]) => {
+        setProfile({
+          displayName: profileData.display_name ?? '',
+          darkMode:    profileData.dark_mode ?? false,
+          avatarUrl:   profileData.avatar_url ?? '/avatar_placeholder.jpg',
+          username:    profileData.username,
+          bio:         profileData.bio ?? '',
+          status:      profileData.status,
+          createdAt:   profileData.created_at,
+        })
+        setHistory(historyData)
+      })
+      .catch(err => {
+        if (err.name !== 'AbortError') setError(err.message)
+      })
+      .finally(() => {
+        if (!signal.aborted) setLoading(false)
+      })
+
+    return () => controller.abort()
+  }, [])
+
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target
+    setProfile(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value,
+    }))
+  }
 
-    if (name in profile.preferences) {
-      setProfile((prev) => ({
-        ...prev,
-        preferences: {
-          ...prev.preferences,
-          [name]: type === 'checkbox' ? checked : value,
-        },
-      }))
-    } else {
-      setProfile((prev) => ({
-        ...prev,
-        [name]: type === 'checkbox' ? checked : value,
-      }))
+  const handleSave = async (e) => {
+    e.preventDefault()
+    try {
+      const resp = await fetch(`/api/users/profile/${USER_ID}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          display_name: profile.displayName,
+          bio:          profile.bio,
+          dark_mode:    profile.darkMode,
+        }),
+      })
+      if (!resp.ok) throw new Error('Save failed')
+      setSaveStatus('Profile updated successfully!')
+      clearTimeout(saveStatusTimer.current)
+      saveStatusTimer.current = setTimeout(() => setSaveStatus(''), 3000)
+    } catch {
+      setSaveStatus('Failed to save profile.')
+      clearTimeout(saveStatusTimer.current)
+      saveStatusTimer.current = setTimeout(() => setSaveStatus(''), 3000)
     }
   }
 
-  // Simulate saving the profile.  In a real app this would make a
-  // request to persist the updated user data.  We simply set a status
-  // message to let the user know the operation completed.
-  const handleSave = (e) => {
-    e.preventDefault()
-    // In a real implementation you would POST/PATCH to an API here.
-    setStatus('Profile updated successfully!')
-    setTimeout(() => setStatus(''), 3000)
-  }
+  const wins    = history.filter(m => m.result === 'Win').length
+  const matches = history.length
+
+  if (loading) return (
+    <div className="arcade-shell">
+      <NavbarComponent />
+      <main className="arcade-content profile-page">
+        <div className="arcade-screen profile-card">
+          <p style={{ color: 'var(--metal-silver)' }}>Loading profile…</p>
+        </div>
+      </main>
+    </div>
+  )
+
+  if (error) return (
+    <div className="arcade-shell">
+      <NavbarComponent />
+      <main className="arcade-content profile-page">
+        <div className="arcade-screen profile-card">
+          <p style={{ color: '#ef9a9a' }}>{error}</p>
+        </div>
+      </main>
+    </div>
+  )
 
   return (
     <div className="arcade-shell">
@@ -76,23 +117,27 @@ export default function Profile() {
         <div className="arcade-screen profile-card">
           <div className="profile-header">
             <div className="profile-avatar-wrapper">
-              {/* Placeholder avatar; replace with user avatar once available */}
-              <img src="/avatar_placeholder.jpg" alt="User avatar" className="profile-avatar" />
+              <img
+                src={profile.avatarUrl}
+                alt="User avatar"
+                className="profile-avatar"
+                style={{ filter: getAvatarFilter(USER_ID) }}
+              />
             </div>
             <div className="profile-info">
-              <h1 className="profile-display-name">{profile.displayName}</h1>
+              <h1 className="profile-display-name">{profile.displayName || profile.username}</h1>
               <p className="profile-username">@{profile.username}</p>
               <div className="profile-stats">
                 <div className="profile-stat-card">
-                  <span className="profile-stat-value">{profile.metrics.wins}</span>
+                  <span className="profile-stat-value">{wins}</span>
                   <span className="profile-stat-label">Wins</span>
                 </div>
                 <div className="profile-stat-card">
-                  <span className="profile-stat-value">{profile.metrics.rank}</span>
+                  <span className="profile-stat-value">—</span>
                   <span className="profile-stat-label">Rank</span>
                 </div>
                 <div className="profile-stat-card">
-                  <span className="profile-stat-value">{profile.metrics.matches}</span>
+                  <span className="profile-stat-value">{matches}</span>
                   <span className="profile-stat-label">Matches</span>
                 </div>
               </div>
@@ -100,9 +145,9 @@ export default function Profile() {
           </div>
 
           <form className="profile-form" onSubmit={handleSave}>
-            {status && (
-              <div className="alert alert-success profile-alert" role="alert">
-                {status}
+            {saveStatus && (
+              <div className={`alert ${saveStatus.includes('successfully') ? 'alert-success' : 'alert-danger'} profile-alert`} role="alert">
+                {saveStatus}
               </div>
             )}
             <div className="form-floating mb-3 arcade-form-control profile-form-control">
@@ -137,7 +182,7 @@ export default function Profile() {
                   type="checkbox"
                   id="darkMode"
                   name="darkMode"
-                  checked={profile.preferences.darkMode}
+                  checked={profile.darkMode}
                   onChange={handleChange}
                 />
                 <label className="form-check-label" htmlFor="darkMode">
@@ -152,22 +197,30 @@ export default function Profile() {
 
           <div className="profile-history">
             <h2 className="profile-section-title">Match history</h2>
-            <div className="history-table">
-              <div className="history-row history-header">
-                <div className="history-col">Opponent</div>
-                <div className="history-col">Date</div>
-                <div className="history-col">Result</div>
-                <div className="history-col">Score</div>
-              </div>
-              {profile.history.map((match) => (
-                <div className="history-row" key={match.id}>
-                  <div className="history-col history-opponent">{match.opponent}</div>
-                  <div className="history-col history-date">{match.date}</div>
-                  <div className="history-col history-result">{match.result}</div>
-                  <div className="history-col history-score">{match.score}</div>
+            {history.length === 0 ? (
+              <p style={{ color: 'var(--metal-silver)', fontFamily: 'VT323, monospace' }}>
+                No matches yet.
+              </p>
+            ) : (
+              <div className="history-table">
+                <div className="history-row history-header">
+                  <div className="history-col">Opponent</div>
+                  <div className="history-col">Date</div>
+                  <div className="history-col">Result</div>
+                  <div className="history-col">Score</div>
                 </div>
-              ))}
-            </div>
+                {history.map((match) => (
+                  <div className="history-row" key={match.id}>
+                    <div className="history-col history-opponent">Player #{match.opponent_id}</div>
+                    <div className="history-col history-date">
+                      {match.date ? new Date(match.date).toLocaleDateString() : '—'}
+                    </div>
+                    <div className="history-col history-result">{match.result}</div>
+                    <div className="history-col history-score">{match.score}</div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </main>

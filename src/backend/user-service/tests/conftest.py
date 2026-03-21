@@ -1,12 +1,6 @@
 """
-Host-side test path setup for game-service.
-
-In Docker, the Dockerfile copies game-service/ → /app/service/ and uvicorn
-runs as `service.main:app` from WORKDIR /app, so `service.` imports resolve
-naturally.  On the host the directory is named game-service/ (a dash makes it
-unimportable as a package), so we register a `service` entry in sys.modules
-that points to the same directory — mirroring the Docker layout without a
-real rename.
+Path shim so host-side pytest can import `service.*` the same way Docker does.
+Mirrors the pattern used by chat-service/tests/conftest.py and game-service/tests/conftest.py.
 
 Also provides a `get_db` dependency override that returns a mock AsyncSession
 so tests can run without a real PostgreSQL connection.
@@ -18,16 +12,12 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-_service_dir = Path(__file__).resolve().parents[1]  # .../game-service
-_backend_dir = _service_dir.parent                   # .../src/backend
+_service_dir = Path(__file__).resolve().parents[1]   # .../user-service
+_backend_dir = _service_dir.parent                    # .../src/backend
 
-# _service_dir → `from main import app` resolves
-# _backend_dir → `from shared.ws.manager import` resolves
 sys.path.insert(0, str(_backend_dir))
 sys.path.insert(0, str(_service_dir))
 
-# Register 'service' package pointing to game-service/
-# so `from service.ws.router import router` works on the host.
 if "service" not in sys.modules:
     _mod = types.ModuleType("service")
     _mod.__path__ = [str(_service_dir)]
@@ -36,9 +26,9 @@ if "service" not in sys.modules:
 
 
 def _make_empty_session():
-    """Return a mock AsyncSession whose execute() yields an empty scalars result."""
+    """Return a mock AsyncSession whose execute() yields an empty result (scalars → None)."""
     scalars_mock = MagicMock()
-    scalars_mock.all.return_value = []
+    scalars_mock.first.return_value = None
 
     result_mock = MagicMock()
     result_mock.scalars.return_value = scalars_mock

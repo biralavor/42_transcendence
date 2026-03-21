@@ -1,7 +1,7 @@
 import threading
 import queue
 from starlette.testclient import TestClient
-from main import app
+from service.main import app
 
 
 def test_ws_game_connect_and_echo():
