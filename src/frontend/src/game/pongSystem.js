@@ -127,7 +127,7 @@ function resetBall(gameState, canvasContext, defending) {
     const gridHeight = canvasContext.heightRatio;
     gameState.ball.position.x = gridWidth / 2 - gameState.ball.size.width / 2;
     gameState.ball.position.y = gridHeight / 2 - gameState.ball.size.height / 2;
-    gameState.ball.position.velX = defending == Player.Type.ONE ? 4 : -4;
+    gameState.ball.position.velX = defending == Player.Type.ONE ? -4 : 4;
     gameState.ball.position.velY = 0;
 }
 
