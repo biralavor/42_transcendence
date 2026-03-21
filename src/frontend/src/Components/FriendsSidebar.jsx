@@ -73,7 +73,8 @@ export default function FriendsSidebar({ userId, username }) {
   }
 
   const handleChat = (friendId) => {
-    navigate(`/chat/DM-${userId}-${friendId}`, { state: { username } })
+    const [a, b] = [userId, friendId].sort((x, y) => x - y)
+    navigate(`/chat/DM-${a}-${b}`, { state: { username } })
   }
 
   const excludedIds = new Set([
