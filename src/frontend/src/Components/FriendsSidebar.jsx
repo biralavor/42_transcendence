@@ -114,7 +114,7 @@ export default function FriendsSidebar({ userId, username }) {
           <ul className="friends-list">
             {requests.map(req => (
               <li key={req.id} className="friends-list-item friends-request-item">
-                <span className="friends-username">Player #{req.requester_id}</span>
+                <span className="friends-username">{req.requester_username ?? `Player #${req.requester_id}`}</span>
                 <div className="friends-request-actions">
                   <button
                     className="arcade-btn arcade-btn-primary friends-btn"

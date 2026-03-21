@@ -58,8 +58,9 @@ class FriendRequestResponse(BaseModel):
     """A pending friendship row returned from the requests endpoint."""
     model_config = ConfigDict(from_attributes=True)
 
-    id:           int
-    requester_id: int
-    addressee_id: int
-    status:       str
-    created_at:   Optional[datetime] = None
+    id:                 int
+    requester_id:       int
+    addressee_id:       int
+    status:             str
+    created_at:         Optional[datetime] = None
+    requester_username: Optional[str] = None

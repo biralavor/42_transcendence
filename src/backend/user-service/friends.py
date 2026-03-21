@@ -26,15 +26,28 @@ async def get_friends(user_id: int, session: AsyncSession) -> list[User]:
     return result.scalars().all()
 
 
-async def get_pending_requests(user_id: int, session: AsyncSession) -> list[Friendship]:
-    """Returns pending Friendship rows where user_id is the addressee."""
+async def get_pending_requests(user_id: int, session: AsyncSession) -> list[dict]:
+    """Returns pending requests where user_id is the addressee, enriched with requester username."""
     result = await session.execute(
-        select(Friendship).where(
+        select(Friendship, User.username)
+        .join(User, User.id == Friendship.requester_id)
+        .where(
             Friendship.addressee_id == user_id,
             Friendship.status == "pending",
         )
     )
-    return result.scalars().all()
+    rows = result.all()
+    enriched = []
+    for friendship, requester_username in rows:
+        enriched.append({
+            "id":                 friendship.id,
+            "requester_id":       friendship.requester_id,
+            "addressee_id":       friendship.addressee_id,
+            "status":             friendship.status,
+            "created_at":         friendship.created_at,
+            "requester_username": requester_username,
+        })
+    return enriched
 
 
 async def send_friend_request(
