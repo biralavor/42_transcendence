@@ -26,17 +26,9 @@ Chat rooms seeded (fixed slugs used by TranscendenceHealthCheck.sh):
     hc-order  → 3 messages: alpha, beta, gamma
 """
 
-import os
-import sys
-import bcrypt
-
-# ── make sure shared + service are importable ───────────────────────
-_here = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(_here, "src", "backend"))          # host path
-sys.path.insert(0, "/app")                                          # container path
-sys.path.insert(0, "/app/service")                                  # container path
-
 import asyncio
+import os
+import bcrypt
 from datetime import datetime
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
