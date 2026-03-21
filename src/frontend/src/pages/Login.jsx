@@ -2,11 +2,13 @@ import { Link } from 'react-router-dom'
 import './Login.css'
 import NavbarComponent from '../Components/Navbar'
 import { useState } from 'react'
+import { useAuth } from '../context/authContext'
 
 export default function Login() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const { login } = useAuth()
 
   const [formData, setFormData] = useState({
     username: '',
@@ -71,21 +73,7 @@ export default function Login() {
         return
       }
 
-      const storage = formData.rememberMe
-        ? window.localStorage
-        : window.sessionStorage
-
-      const otherStorage = formData.rememberMe
-        ? window.sessionStorage
-        : window.localStorage
-
-      storage.setItem('access_token', data.access_token)
-      storage.setItem('refresh_token', data.refresh_token)
-      storage.setItem('token_type', data.token_type)
-
-      otherStorage.removeItem('access_token')
-      otherStorage.removeItem('refresh_token')
-      otherStorage.removeItem('token_type')
+      login(data, formData.rememberMe)
 
       setFormData((prev) => ({
         ...prev,
