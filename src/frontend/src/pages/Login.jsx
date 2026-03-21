@@ -4,80 +4,103 @@ import NavbarComponent from '../Components/Navbar'
 import { useState } from 'react'
 
 export default function Login() {
-
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const[formData, setFormData] = useState({
-  username: '', 
-  password: '',
-  rememberMe: false
-})
+  const [formData, setFormData] = useState({
+    username: '',
+    password: '',
+    rememberMe: false,
+  })
 
-const handleChange = (e) => {
-  const{name, value, type, checked} = e.target
-  let newValue = value
+  const handleChange = (e) => {
+    const { name, value, type, checked } = e.target
+    let newValue = value
 
-  if(type === 'checkbox')
-    newValue = checked
+    if (type === 'checkbox')
+      newValue = checked
 
-  setError('')
-  setSuccess('')
-  setFormData(prev => ({...prev, 
-    [name]: newValue}))
-}
-
-const handleSubmit =  async(e) => {
-  e.preventDefault()
-  setError('')  
-  setSuccess('')
-  setIsSubmitting(true)
-
-  //if (!formData.rememberMe)
-    // TODO: implement rememberMe behavior (token persistence strategy)
-
-  try{
-    const response = await fetch('/api/users/auth/login', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-       body: JSON.stringify({
-        username: formData.username,
-        password: formData.password
-       }),
-    })
-    if (!response.ok) {
-      let detail = 'Login failed.'
-      try {
-        const errData = await response.json()
-        if (errData.detail) detail = errData.detail
-      } catch { /* non-JSON error body (e.g. 502 HTML) — keep default message */ }
-      setError(detail)
-      return
-    }
-
-    const data = await response.json()
-
+    setError('')
+    setSuccess('')
     setFormData((prev) => ({
       ...prev,
-      username:'',
-      password: '',
-      rememberMe: false,
+      [name]: newValue,
     }))
-    localStorage.setItem('access_token', data.access_token)
-    localStorage.setItem('refresh_token', data.refresh_token)
-    localStorage.setItem('token_type', data.token_type)
-    setSuccess('Login successful.')
+  }
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setError('')
+    setSuccess('')
+    setIsSubmitting(true)
+
+    try {
+      const response = await fetch('/api/users/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          username: formData.username,
+          password: formData.password,
+        }),
+      })
+
+      let data = null
+
+      try {
+        data = await response.json()
+      } catch {
+        // resposta vazia ou não-JSON (ex: HTML de erro do nginx)
+      }
+
+      if (!response.ok) {
+        const message =
+          (data && data.detail) ||
+          (response.status
+            ? `Login failed. (HTTP ${response.status})`
+            : 'Login failed.')
+
+        setError(message)
+        return
+      }
+
+      if (!data) {
+        setError('Login failed: invalid server response.')
+        return
+      }
+
+      const storage = formData.rememberMe
+        ? window.localStorage
+        : window.sessionStorage
+
+      const otherStorage = formData.rememberMe
+        ? window.sessionStorage
+        : window.localStorage
+
+      storage.setItem('access_token', data.access_token)
+      storage.setItem('refresh_token', data.refresh_token)
+      storage.setItem('token_type', data.token_type)
+
+      otherStorage.removeItem('access_token')
+      otherStorage.removeItem('refresh_token')
+      otherStorage.removeItem('token_type')
+
+      setFormData((prev) => ({
+        ...prev,
+        username: '',
+        password: '',
+      }))
+
+      setSuccess('Login successful.')
     } catch (err) {
       console.error(err)
       setError('Unable to connect to the server.')
     } finally {
       setIsSubmitting(false)
     }
-}
-
+  }
 
   return (
     <div className="arcade-shell">
@@ -85,14 +108,25 @@ const handleSubmit =  async(e) => {
 
       <main className="arcade-auth-layout auth-page">
         <div className="form-container auth-container">
-          <form id="loginForm" className="form-box arcade-screen arcade-form-card auth-card" onSubmit={handleSubmit}>
+          <form
+            id="loginForm"
+            className="form-box arcade-screen arcade-form-card auth-card"
+            onSubmit={handleSubmit}
+          >
             <div className="arcade-panel auth-panel">
               <div className="auth-header text-center">
                 <span className="auth-eyebrow">Player access</span>
-                <img src="/logo_tight_square.png" className="logo auth-logo" alt="ft_transcendence logo" />
-                <h1 className="arcade-title auth-title text-center">Welcome back</h1>
+                <img
+                  src="/logo_tight_square.png"
+                  className="logo auth-logo"
+                  alt="ft_transcendence logo"
+                />
+                <h1 className="arcade-title auth-title text-center">
+                  Welcome back
+                </h1>
                 <p className="arcade-form-copy auth-subtitle text-center mb-0">
-                  Sign in to continue your run, track your stats, and jump back into the arena.
+                  Sign in to continue your run, track your stats, and jump back
+                  into the arena.
                 </p>
               </div>
 
@@ -143,20 +177,34 @@ const handleSubmit =  async(e) => {
 
               <div className="auth-options">
                 <div className="form-check arcade-form-check">
-                  <input className="form-check-input" 
-                  type="checkbox" 
-                  id="flexCheckDefault"
-                  name='rememberMe'
-                  checked={formData.rememberMe}
-                  onChange={handleChange}
+                  <input
+                    className="form-check-input"
+                    type="checkbox"
+                    id="flexCheckDefault"
+                    name="rememberMe"
+                    checked={formData.rememberMe}
+                    onChange={handleChange}
                   />
-                  <label className="form-check-label" htmlFor="flexCheckDefault">Remember me</label>
+                  <label
+                    className="form-check-label"
+                    htmlFor="flexCheckDefault"
+                  >
+                    Remember me
+                  </label>
                 </div>
-                {/* Forgot password functionality has been removed along with email
-                    confirmations; if needed in the future, restore a link here. */}
               </div>
-              {error && <div className="alert alert-danger text-center mb-2" role="alert">{error}</div>}
-              {success && <div className="alert alert-success text-center mb-2" role="alert">{success}</div>}
+
+              {error && (
+                <div className="alert alert-danger text-center mb-2" role="alert">
+                  {error}
+                </div>
+              )}
+
+              {success && (
+                <div className="alert alert-success text-center mb-2" role="alert">
+                  {success}
+                </div>
+              )}
 
               <button
                 className="arcade-btn arcade-btn-primary w-100 auth-submit mb-3"
