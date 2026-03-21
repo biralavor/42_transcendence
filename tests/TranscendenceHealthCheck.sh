@@ -705,10 +705,10 @@ fi
 
 # ── 20. User Service API Suite ────────────────────────────────────────────────
 section "User Service API Suite"
-if container_running user-service && command -v curl &>/dev/null; then
+if container_running user-service; then
     _UPORT="${USER_SERVICE_PORT:-8001}"
 
-    # Login returns user_id in response body
+    # Login — parse alice's user_id from the response
     login_body=$(docker exec user-service wget -q -O - \
         --header="Content-Type: application/json" \
         --post-data='{"username":"alice","password":"test123"}' \
@@ -725,13 +725,16 @@ if container_running user-service && command -v curl &>/dev/null; then
         fail "User login response missing access_token"
     fi
 
-    # Profile fetch by user_id
+    alice_id=$(echo "$login_body" | python3 -c \
+        "import sys,json; print(json.load(sys.stdin).get('user_id',''))" 2>/dev/null || echo "")
+
+    # Profile fetch using alice's actual user_id
     profile_body=$(docker exec user-service wget -q -O - \
-        "http://127.0.0.1:${_UPORT}/profile/1" 2>/dev/null || echo "")
+        "http://127.0.0.1:${_UPORT}/profile/${alice_id}" 2>/dev/null || echo "")
     if echo "$profile_body" | grep -q '"username"'; then
         pass "User profile endpoint returns username"
     else
-        fail "User profile endpoint failed for id=1 (got: '${profile_body:0:120}')"
+        fail "User profile endpoint failed for id=${alice_id} (got: '${profile_body:0:120}')"
     fi
 
     # Search users
@@ -743,48 +746,54 @@ if container_running user-service && command -v curl &>/dev/null; then
         fail "User search endpoint failed for q=alice (got: '${search_body:0:120}')"
     fi
 
-    # Friends list endpoint
+    # Friends list — also extract a friend_id for later
     friends_body=$(docker exec user-service wget -q -O - \
-        "http://127.0.0.1:${_UPORT}/friends/1" 2>/dev/null || echo "")
+        "http://127.0.0.1:${_UPORT}/friends/${alice_id}" 2>/dev/null || echo "")
     if echo "$friends_body" | grep -qE '^\['; then
-        pass "Friends list endpoint returns a JSON array for user 1"
+        pass "Friends list endpoint returns a JSON array for alice"
     else
-        fail "Friends list endpoint failed for user 1 (got: '${friends_body:0:120}')"
+        fail "Friends list endpoint failed for alice (got: '${friends_body:0:120}')"
     fi
+
+    friend_id=$(echo "$friends_body" | python3 -c \
+        "import sys,json; d=json.load(sys.stdin); print(d[0]['id'] if d else '')" 2>/dev/null || echo "")
 
     # Pending requests endpoint
     requests_body=$(docker exec user-service wget -q -O - \
-        "http://127.0.0.1:${_UPORT}/friends/1/requests" 2>/dev/null || echo "")
+        "http://127.0.0.1:${_UPORT}/friends/${alice_id}/requests" 2>/dev/null || echo "")
     if echo "$requests_body" | grep -qE '^\['; then
-        pass "Friend requests endpoint returns a JSON array for user 1"
+        pass "Friend requests endpoint returns a JSON array for alice"
     else
-        fail "Friend requests endpoint failed for user 1 (got: '${requests_body:0:120}')"
+        fail "Friend requests endpoint failed for alice (got: '${requests_body:0:120}')"
     fi
 
     # Sent requests endpoint
     sent_body=$(docker exec user-service wget -q -O - \
-        "http://127.0.0.1:${_UPORT}/friends/1/sent" 2>/dev/null || echo "")
+        "http://127.0.0.1:${_UPORT}/friends/${alice_id}/sent" 2>/dev/null || echo "")
     if echo "$sent_body" | grep -qE '^\['; then
-        pass "Sent friend requests endpoint returns a JSON array for user 1"
+        pass "Sent friend requests endpoint returns a JSON array for alice"
     else
-        fail "Sent friend requests endpoint failed for user 1 (got: '${sent_body:0:120}')"
+        fail "Sent friend requests endpoint failed for alice (got: '${sent_body:0:120}')"
     fi
 
-    # Duplicate friend request returns 409
-    dup_code=$(docker exec user-service sh -c \
-        "wget -q -O /dev/null --server-response \
-         --header='Content-Type: application/json' \
-         --post-data='' \
-         'http://127.0.0.1:${_UPORT}/friends/1/request/2' 2>&1 | grep 'HTTP/' | tail -1 | awk '{print \$2}'" \
-        2>/dev/null || echo "")
-    if [[ "$dup_code" == "409" ]]; then
-        pass "Duplicate friend request correctly returns 409"
+    # Duplicate friend request returns 409 (uses parsed friend_id)
+    if [[ -n "$friend_id" ]]; then
+        dup_code=$(docker exec user-service sh -c \
+            "wget -q -O /dev/null --server-response \
+             --header='Content-Type: application/json' \
+             --post-data='' \
+             'http://127.0.0.1:${_UPORT}/friends/${alice_id}/request/${friend_id}' 2>&1 | grep 'HTTP/' | tail -1 | awk '{print \$2}'" \
+            2>/dev/null || echo "")
+        if [[ "$dup_code" == "409" ]]; then
+            pass "Duplicate friend request correctly returns 409"
+        else
+            info "Duplicate friend request returned '${dup_code:-unknown}' (409 expected; may vary if already accepted)"
+        fi
     else
-        # alice→bob friendship is accepted; a new request returns 409 too
-        info "Duplicate friend request returned '${dup_code:-unknown}' (409 expected; may vary if already accepted)"
+        info "No friend found for alice — skipping duplicate request check"
     fi
 else
-    info "user-service not running or curl missing — skipping user service API suite"
+    info "user-service not running — skipping user service API suite"
 fi
 
 # ── 21. Game Service Match History Suite ─────────────────────────────────────
@@ -824,11 +833,11 @@ fi
 # ── 22. Frontend Unit Tests ───────────────────────────────────────────────────
 section "Frontend Unit Tests"
 if container_running frontend; then
-    vitest_out=$(docker exec frontend npx vitest run --reporter=verbose 2>&1)
+    vitest_out=$(docker exec frontend npx vitest run --reporter=verbose 2>&1) && vitest_rc=0 || vitest_rc=$?
     printf "%s\n" "$vitest_out" | tail -5
 
-    files_line=$(printf "%s\n" "$vitest_out" | grep -E '^\s+Test Files\s+')
-    tests_line=$(printf "%s\n" "$vitest_out" | grep -E '^\s+Tests\s+')
+    files_line=$(printf "%s\n" "$vitest_out" | grep -E '^\s+Test Files\s+') || true
+    tests_line=$(printf "%s\n" "$vitest_out" | grep -E '^\s+Tests\s+') || true
 
     vf_pass=$(printf "%s\n" "$files_line" | grep -oP '\d+(?= passed)' | head -1) || true; vf_pass=${vf_pass:-0}
     vf_fail=$(printf "%s\n" "$files_line" | grep -oP '\d+(?= failed)' | head -1) || true; vf_fail=${vf_fail:-0}
@@ -837,6 +846,9 @@ if container_running frontend; then
 
     ((SUITE_PASS[$CURRENT_SUITE] += vf_pass + vt_pass)) || true
     ((SUITE_FAIL[$CURRENT_SUITE] += vf_fail + vt_fail)) || true
+    if [[ $vitest_rc -ne 0 && $vt_fail -eq 0 ]]; then
+        fail "Frontend unit tests (vitest) failed — run 'docker exec frontend npx vitest run' for details"
+    fi
     ((PASS += vf_pass + vt_pass)) || true
     ((FAIL += vf_fail + vt_fail)) || true
 else

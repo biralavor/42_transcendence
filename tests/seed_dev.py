@@ -33,10 +33,13 @@ from datetime import datetime
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 
-# ── DB URL (same env var used by all services) ───────────────────────
-DATABASE_URL = os.environ.get(
-    "DATABASE_URL",
-    "postgresql+asyncpg://transcendence_user:change_me@db:5432/transcendence_db",
+# ── DB URL — built from the same DB_* vars used by all services ─────
+DATABASE_URL = "postgresql+asyncpg://{}:{}@{}:{}/{}".format(
+    os.environ.get("DB_USER",     "postgres"),
+    os.environ.get("DB_PASSWORD", "postgres"),
+    os.environ.get("DB_HOST",     "db"),
+    os.environ.get("DB_PORT",     "5432"),
+    os.environ.get("DB_NAME",     "transcendence_db"),
 )
 
 
