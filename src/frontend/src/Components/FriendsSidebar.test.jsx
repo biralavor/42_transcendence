@@ -18,17 +18,19 @@ describe('FriendsSidebar', () => {
   })
 
   it('renders search input', () => {
-    vi.spyOn(global, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify([]), { status: 200 })
-    )
+    vi.spyOn(global, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
     renderSidebar()
     expect(screen.getByPlaceholderText(/search players/i)).toBeInTheDocument()
   })
 
   it('shows friends section heading', async () => {
-    vi.spyOn(global, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify([]), { status: 200 })
-    )
+    vi.spyOn(global, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
     renderSidebar()
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: /friends/i })).toBeInTheDocument()
@@ -36,9 +38,10 @@ describe('FriendsSidebar', () => {
   })
 
   it('shows no friends message when list is empty', async () => {
-    vi.spyOn(global, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify([]), { status: 200 })
-    )
+    vi.spyOn(global, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
     renderSidebar()
     await waitFor(() => {
       expect(screen.getByText(/no friends yet/i)).toBeInTheDocument()
@@ -52,9 +55,8 @@ describe('FriendsSidebar', () => {
           { id: 2, username: 'bob', display_name: 'Bob', status: 'online', avatar_url: null }
         ]), { status: 200 })
       )
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify([]), { status: 200 })
-      )
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
     renderSidebar()
     await waitFor(() => {
       expect(screen.getByText('bob')).toBeInTheDocument()
@@ -64,6 +66,7 @@ describe('FriendsSidebar', () => {
 
   it('shows search results when query is entered', async () => {
     vi.spyOn(global, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
       .mockResolvedValueOnce(

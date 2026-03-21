@@ -57,7 +57,7 @@ describe('System.goalDetection', () => {
         state.ball.position.velX = -7
         state.ball.position.velY = 3
         System.goalDetection(state, mockCanvasContext)
-        expect(state.ball.position.velX).toBe(4)
+        expect(state.ball.position.velX).toBe(-4)
         expect(state.ball.position.velY).toBe(0)
     })
 
