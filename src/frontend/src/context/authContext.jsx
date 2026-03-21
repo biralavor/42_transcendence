@@ -53,6 +53,8 @@ export function AuthProvider({ children }) {
     logout,
   }), [auth, isAuthenticated])
 
+  console.log('Auth state:', auth)
+  console.log('isAuthenticated:', isAuthenticated)
   return (
     <AuthContext.Provider value={value}>
       {children}
