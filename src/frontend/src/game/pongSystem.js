@@ -164,11 +164,11 @@ function goalDetection(gameState, canvasContext) {
 
   if (ball.position.x + ball.size.width <= 0) {
     gameState.score.player2 += 1;
-    resetBall(gameState, canvasContext, Player.Type.ONE);
+    resetBall(gameState, canvasContext, Player.Type.TWO);
     return true;
   } else if (ball.position.x >= gridWidth) {
     gameState.score.player1 += 1;
-    resetBall(gameState, canvasContext, Player.Type.TWO);
+    resetBall(gameState, canvasContext, Player.Type.ONE);
     return true;
   }
   return false;
