@@ -21,8 +21,8 @@ const PLAYER_VEL_INPUT_FACTOR = 7;
  * @param {GameState} gameState
  */
 function desaceleratePlayers(gameState) {
-    gameState.player1.position.velY *= PLAYER_VEL_RESISTANCE_FACTOR;
-    gameState.player2.position.velY *= PLAYER_VEL_RESISTANCE_FACTOR;
+  gameState.player1.position.velY *= PLAYER_VEL_RESISTANCE_FACTOR;
+  gameState.player2.position.velY *= PLAYER_VEL_RESISTANCE_FACTOR;
 }
 
 /**
@@ -30,12 +30,12 @@ function desaceleratePlayers(gameState) {
  * @param {GameInput} input
  */
 function applyInput(gameState, input) {
-    gameState.player1.position.velY += (input.player1.velY
-                                        * PLAYER_VEL_INPUT_FACTOR
-                                        * gameState.deltaFactor);
-    gameState.player2.position.velY += (input.player2.velY
-                                        * PLAYER_VEL_INPUT_FACTOR
-                                        * gameState.deltaFactor);
+  gameState.player1.position.velY += (input.player1.velY
+                                      * PLAYER_VEL_INPUT_FACTOR
+                                      * gameState.deltaFactor);
+  gameState.player2.position.velY += (input.player2.velY
+                                      * PLAYER_VEL_INPUT_FACTOR
+                                      * gameState.deltaFactor);
 }
 
 
@@ -44,46 +44,46 @@ function applyInput(gameState, input) {
  * @param {CanvasGameContext} canvasContext
  */
 function clampPlayerBounds(gameState, canvasContext) {
-    const gridHeight = canvasContext.heightRatio;
+  const gridHeight = canvasContext.heightRatio;
 
-    if (gameState.player1.position.y < 0) {
-        gameState.player1.position.y = 0;
-        gameState.player1.position.velY = 0;
-    } else if (gameState.player1.position.y + gameState.player1.size.height > gridHeight) {
-        gameState.player1.position.y = gridHeight - gameState.player1.size.height;
-        gameState.player1.position.velY = 0;
-    }
+  if (gameState.player1.position.y < 0) {
+    gameState.player1.position.y = 0;
+    gameState.player1.position.velY = 0;
+  } else if (gameState.player1.position.y + gameState.player1.size.height > gridHeight) {
+    gameState.player1.position.y = gridHeight - gameState.player1.size.height;
+    gameState.player1.position.velY = 0;
+  }
 
-    if (gameState.player2.position.y < 0) {
-        gameState.player2.position.y = 0;
-        gameState.player2.position.velY = 0;
-    } else if (gameState.player2.position.y + gameState.player2.size.height > gridHeight) {
-        gameState.player2.position.y = gridHeight - gameState.player2.size.height;
-        gameState.player2.position.velY = 0;
-    }
+  if (gameState.player2.position.y < 0) {
+    gameState.player2.position.y = 0;
+    gameState.player2.position.velY = 0;
+  } else if (gameState.player2.position.y + gameState.player2.size.height > gridHeight) {
+    gameState.player2.position.y = gridHeight - gameState.player2.size.height;
+    gameState.player2.position.velY = 0;
+  }
 }
 
 /**
  * @param {GameState} gameState
  */
 function clampMaxVelocity(gameState) {
-    gameState.player1.position.velY =
-        gameState.player1.position.velY > MAX_PLAYER_VEL
-        ? MAX_PLAYER_VEL
-        : gameState.player1.position.velY;
-    gameState.player1.position.velY =
-        gameState.player1.position.velY < -MAX_PLAYER_VEL
-        ? -MAX_PLAYER_VEL
-        : gameState.player1.position.velY;
+  gameState.player1.position.velY =
+    gameState.player1.position.velY > MAX_PLAYER_VEL
+    ? MAX_PLAYER_VEL
+    : gameState.player1.position.velY;
+  gameState.player1.position.velY =
+    gameState.player1.position.velY < -MAX_PLAYER_VEL
+    ? -MAX_PLAYER_VEL
+    : gameState.player1.position.velY;
 
-    gameState.player2.position.velY =
-        gameState.player2.position.velY > MAX_PLAYER_VEL
-        ? MAX_PLAYER_VEL
-        : gameState.player2.position.velY;
-    gameState.player2.position.velY =
-        gameState.player2.position.velY < -MAX_PLAYER_VEL
-        ? -MAX_PLAYER_VEL
-        : gameState.player2.position.velY;
+  gameState.player2.position.velY =
+    gameState.player2.position.velY > MAX_PLAYER_VEL
+    ? MAX_PLAYER_VEL
+    : gameState.player2.position.velY;
+  gameState.player2.position.velY =
+    gameState.player2.position.velY < -MAX_PLAYER_VEL
+    ? -MAX_PLAYER_VEL
+    : gameState.player2.position.velY;
 }
 
 /**
@@ -92,52 +92,52 @@ function clampMaxVelocity(gameState) {
  * @returns {Ball} - a new ball derived from gameState with collisions applied
  */
 function collision(gameState, canvasContext) {
-    const gridWidth = canvasContext.widthRatio;
-    const gridHeight = canvasContext.heightRatio;
-    const ballIntendedPosition = { ...gameState.ball.position };
-    [ballIntendedPosition.y,
-     ballIntendedPosition.x] = gameState.ball.position.moveIntent();
+  const gridWidth = canvasContext.widthRatio;
+  const gridHeight = canvasContext.heightRatio;
+  const ballIntendedPosition = { ...gameState.ball.position };
+  [ballIntendedPosition.y,
+   ballIntendedPosition.x] = gameState.ball.position.moveIntent();
 
-    const newBall = Ball.copy(gameState.ball);
-    newBall.position.x = ballIntendedPosition.x;
-    newBall.position.y = ballIntendedPosition.y;
+  const newBall = Ball.copy(gameState.ball);
+  newBall.position.x = ballIntendedPosition.x;
+  newBall.position.y = ballIntendedPosition.y;
 
-    // vertical collision
-    if (ballIntendedPosition.y <= 0) {
-        const overflow = 0 - ballIntendedPosition.y;
-        newBall.position.y = overflow;
-        newBall.position.velY = ballIntendedPosition.velY * (-1.0);
-    } else if (ballIntendedPosition.y >= gridHeight - newBall.size.height) {
-        const overflow = ballIntendedPosition.y - (gridHeight - newBall.size.height);
-        newBall.position.y = (gridHeight - newBall.size.height) - overflow;
-        newBall.position.velY = -gameState.ball.position.velY;
-    }
+  // vertical collision
+  if (ballIntendedPosition.y <= 0) {
+    const overflow = 0 - ballIntendedPosition.y;
+    newBall.position.y = overflow;
+    newBall.position.velY = ballIntendedPosition.velY * (-1.0);
+  } else if (ballIntendedPosition.y >= gridHeight - newBall.size.height) {
+    const overflow = ballIntendedPosition.y - (gridHeight - newBall.size.height);
+    newBall.position.y = (gridHeight - newBall.size.height) - overflow;
+    newBall.position.velY = -gameState.ball.position.velY;
+  }
 
-    // horizontal collision
-    if (gameState.isPlayer1Defending && gameState.player1.isCollidingWith(newBall)) {
-        // angle change from player vertical speed
-        newBall.position.velY += 0.4 * gameState.player1.position.velY;
-        // angle change from edge collision
-        newBall.position.velY += gameState.player1.edgeCollisionFactor(newBall)
-        const p1Surface = gameState.player1.position.x + gameState.player1.size.width;
-        const ballSurface = ballIntendedPosition.x;
-        const overflow = p1Surface - ballSurface;
-        newBall.position.x = p1Surface + overflow;
-        newBall.position.velX = -ballIntendedPosition.velX;
+  // horizontal collision
+  if (gameState.isPlayer1Defending && gameState.player1.isCollidingWith(newBall)) {
+    // angle change from player vertical speed
+    newBall.position.velY += 0.4 * gameState.player1.position.velY;
+    // angle change from edge collision
+    newBall.position.velY += gameState.player1.edgeCollisionFactor(newBall)
+    const p1Surface = gameState.player1.position.x + gameState.player1.size.width;
+    const ballSurface = ballIntendedPosition.x;
+    const overflow = p1Surface - ballSurface;
+    newBall.position.x = p1Surface + overflow;
+    newBall.position.velX = -ballIntendedPosition.velX;
 
-    } else if (gameState.isPlayer2Defending && gameState.player2.isCollidingWith(newBall)) {
-        newBall.position.velY += 0.4 * gameState.player2.position.velY;
-        newBall.position.velY += gameState.player2.edgeCollisionFactor(newBall)
+  } else if (gameState.isPlayer2Defending && gameState.player2.isCollidingWith(newBall)) {
+    newBall.position.velY += 0.4 * gameState.player2.position.velY;
+    newBall.position.velY += gameState.player2.edgeCollisionFactor(newBall)
 
-        const p2Surface = gameState.player2.position.x;
-        const ballSurface = ballIntendedPosition.x + newBall.size.width;
-        const overflow = p2Surface - ballSurface;
-        newBall.position.x = p2Surface + overflow - newBall.size.width;
-        newBall.position.velX = -ballIntendedPosition.velX;
+    const p2Surface = gameState.player2.position.x;
+    const ballSurface = ballIntendedPosition.x + newBall.size.width;
+    const overflow = p2Surface - ballSurface;
+    newBall.position.x = p2Surface + overflow - newBall.size.width;
+    newBall.position.velX = -ballIntendedPosition.velX;
 
-    }
+  }
 
-    return newBall;
+  return newBall;
 }
 
 /**
@@ -147,12 +147,12 @@ function collision(gameState, canvasContext) {
  * @param {import("./pongEngine.js").PlayerType} defending
  */
 function resetBall(gameState, canvasContext, defending) {
-    const gridWidth = canvasContext.widthRatio;
-    const gridHeight = canvasContext.heightRatio;
-    gameState.ball.position.x = gridWidth / 2 - gameState.ball.size.width / 2;
-    gameState.ball.position.y = gridHeight / 2 - gameState.ball.size.height / 2;
-    gameState.ball.position.velX = defending == Player.Type.ONE ? -4 : 4;
-    gameState.ball.position.velY = 0;
+  const gridWidth = canvasContext.widthRatio;
+  const gridHeight = canvasContext.heightRatio;
+  gameState.ball.position.x = gridWidth / 2 - gameState.ball.size.width / 2;
+  gameState.ball.position.y = gridHeight / 2 - gameState.ball.size.height / 2;
+  gameState.ball.position.velX = defending == Player.Type.ONE ? -4 : 4;
+  gameState.ball.position.velY = 0;
 }
 
 /**
@@ -165,53 +165,53 @@ function resetBall(gameState, canvasContext, defending) {
  * @returns {boolean} true if a goal was scored this tick, false otherwise
  */
 function goalDetection(gameState, canvasContext) {
-    const gridWidth = canvasContext.widthRatio;
-    const ball = gameState.ball;
+  const gridWidth = canvasContext.widthRatio;
+  const ball = gameState.ball;
 
-    if (ball.position.x + ball.size.width <= 0) {
-        gameState.score.player2 += 1;
-        resetBall(gameState, canvasContext, Player.Type.ONE);
-        return true;
-    } else if (ball.position.x >= gridWidth) {
-        gameState.score.player1 += 1;
-        resetBall(gameState, canvasContext, Player.Type.TWO);
-        return true;
-    }
-    return false;
+  if (ball.position.x + ball.size.width <= 0) {
+    gameState.score.player2 += 1;
+    resetBall(gameState, canvasContext, Player.Type.ONE);
+    return true;
+  } else if (ball.position.x >= gridWidth) {
+    gameState.score.player1 += 1;
+    resetBall(gameState, canvasContext, Player.Type.TWO);
+    return true;
+  }
+  return false;
 }
 
 
 export default class System {
 
-    /**
-     * @param {GameState} gameState
-     * @param {GameInput} input
-     * @param {CanvasGameContext} canvasContext
-     */
-    static playerMovement(gameState, input, canvasContext) {
-        desaceleratePlayers(gameState);
-        applyInput(gameState, input);
-        clampMaxVelocity(gameState);
-        gameState.player1.move();
-        gameState.player2.move();
-        clampPlayerBounds(gameState, canvasContext);
-    }
+  /**
+   * @param {GameState} gameState
+   * @param {GameInput} input
+   * @param {CanvasGameContext} canvasContext
+   */
+  static playerMovement(gameState, input, canvasContext) {
+    desaceleratePlayers(gameState);
+    applyInput(gameState, input);
+    clampMaxVelocity(gameState);
+    gameState.player1.move();
+    gameState.player2.move();
+    clampPlayerBounds(gameState, canvasContext);
+  }
 
-    /**
-     * @param {GameState} gameState
-     * @param {CanvasGameContext} canvasContext
-     */
-    static ballCollision(gameState, canvasContext) {
-        const ballAfterCollision = collision(gameState, canvasContext);
-        gameState.ball = ballAfterCollision;
-    }
+  /**
+   * @param {GameState} gameState
+   * @param {CanvasGameContext} canvasContext
+   */
+  static ballCollision(gameState, canvasContext) {
+    const ballAfterCollision = collision(gameState, canvasContext);
+    gameState.ball = ballAfterCollision;
+  }
 
-    /**
-     * @param {GameState} gameState
-     * @param {CanvasGameContext} canvasContext
-     * @returns {boolean} true if a goal was scored this tick, false otherwise
-     */
-    static goalDetection(gameState, canvasContext) {
-        return goalDetection(gameState, canvasContext);
-    }
+  /**
+   * @param {GameState} gameState
+   * @param {CanvasGameContext} canvasContext
+   * @returns {boolean} true if a goal was scored this tick, false otherwise
+   */
+  static goalDetection(gameState, canvasContext) {
+    return goalDetection(gameState, canvasContext);
+  }
 }
