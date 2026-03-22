@@ -21,8 +21,9 @@ const PLAYER_VEL_INPUT_FACTOR = 7;
  * @param {GameState} gameState
  */
 function desaceleratePlayers(gameState) {
-  gameState.player1.position.velY *= PLAYER_VEL_RESISTANCE_FACTOR;
-  gameState.player2.position.velY *= PLAYER_VEL_RESISTANCE_FACTOR;
+  for (let player of gameState.players) {
+    player.position.velY *= PLAYER_VEL_RESISTANCE_FACTOR;
+  }
 }
 
 /**
@@ -30,12 +31,18 @@ function desaceleratePlayers(gameState) {
  * @param {GameInput} input
  */
 function applyInput(gameState, input) {
-  gameState.player1.position.velY += (input.player1.velY
-                                      * PLAYER_VEL_INPUT_FACTOR
-                                      * gameState.deltaFactor);
-  gameState.player2.position.velY += (input.player2.velY
-                                      * PLAYER_VEL_INPUT_FACTOR
-                                      * gameState.deltaFactor);
+  const players = gameState.players;
+  const inputs = [input.player1, input.player2];
+
+  for (let playerType = 1; playerType <= 2; ++playerType){
+    const i = playerType - 1;
+    const player = players[i];
+    const playerInput = inputs[i];
+
+    player.position.velY += (playerInput.velY
+                             * PLAYER_VEL_INPUT_FACTOR
+                             * gameState.deltaFactor);
+  }
 }
 
 
@@ -46,20 +53,14 @@ function applyInput(gameState, input) {
 function clampPlayerBounds(gameState, canvasContext) {
   const gridHeight = canvasContext.heightRatio;
 
-  if (gameState.player1.position.y < 0) {
-    gameState.player1.position.y = 0;
-    gameState.player1.position.velY = 0;
-  } else if (gameState.player1.position.y + gameState.player1.size.height > gridHeight) {
-    gameState.player1.position.y = gridHeight - gameState.player1.size.height;
-    gameState.player1.position.velY = 0;
-  }
-
-  if (gameState.player2.position.y < 0) {
-    gameState.player2.position.y = 0;
-    gameState.player2.position.velY = 0;
-  } else if (gameState.player2.position.y + gameState.player2.size.height > gridHeight) {
-    gameState.player2.position.y = gridHeight - gameState.player2.size.height;
-    gameState.player2.position.velY = 0;
+  for (let player of gameState.players) {
+    if (player.position.y < (-player.size.height)) {
+      player.position.y = (-player.size.height);
+      player.position.velY = 0;
+    } else if (player.position.y > gridHeight) {
+      player.position.y = gridHeight;
+      player.position.velY = 0;
+    }
   }
 }
 
@@ -67,23 +68,16 @@ function clampPlayerBounds(gameState, canvasContext) {
  * @param {GameState} gameState
  */
 function clampMaxVelocity(gameState) {
-  gameState.player1.position.velY =
-    gameState.player1.position.velY > MAX_PLAYER_VEL
-    ? MAX_PLAYER_VEL
-    : gameState.player1.position.velY;
-  gameState.player1.position.velY =
-    gameState.player1.position.velY < -MAX_PLAYER_VEL
-    ? -MAX_PLAYER_VEL
-    : gameState.player1.position.velY;
-
-  gameState.player2.position.velY =
-    gameState.player2.position.velY > MAX_PLAYER_VEL
-    ? MAX_PLAYER_VEL
-    : gameState.player2.position.velY;
-  gameState.player2.position.velY =
-    gameState.player2.position.velY < -MAX_PLAYER_VEL
-    ? -MAX_PLAYER_VEL
-    : gameState.player2.position.velY;
+  for (let player of gameState.players) {
+    player.position.velY =
+      player.position.velY > MAX_PLAYER_VEL
+      ? MAX_PLAYER_VEL
+      : player.position.velY;
+    player.position.velY =
+      player.position.velY < -MAX_PLAYER_VEL
+      ? -MAX_PLAYER_VEL
+      : player.position.velY;
+  }
 }
 
 /**

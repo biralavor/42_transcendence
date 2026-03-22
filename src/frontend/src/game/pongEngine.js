@@ -239,6 +239,10 @@ export class GameState {
       && this.ball.position.x + this.ball.size.width < this.player2.position.x;
   }
 
+  get players() {
+    return [this.player1, this.player2];
+  }
+
   addFrameTime(currentTime) {
     this.#lastFrameTime = this.#currentFrameTime;
     this.#currentFrameTime = currentTime;
