@@ -1,4 +1,5 @@
 import { Link, useLocation } from 'react-router-dom'
+import { useAuth } from '../context/authContext'
 
 const navLinks = [
   { to: '/', label: 'Home' },
@@ -6,15 +7,16 @@ const navLinks = [
   { to: '/chat/general', label: 'Chat' },
   { to: '/leaderboard', label: 'Ranking' },
   { to: '/about', label: 'About' },
-  // Provide easy access to the user's profile.  In a real application you
-  // would likely hide this link until the user is authenticated and show it
-  // alongside the avatar or username, but for the purposes of mock data it
-  // is always visible.
   { to: '/profile', label: 'Profile' },
 ]
 
 const NavbarComponent = () => {
   const location = useLocation()
+  const { logout, isAuthenticated } = useAuth()
+
+  const handleLogout = () => {
+    logout()
+  }
 
   return (
     <header className="arcade-nav">
@@ -22,9 +24,7 @@ const NavbarComponent = () => {
         <nav className="arcade-screen">
           <div className="arcade-navbar">
             <Link to="/" className="navbar-brand-link">
-              {/* Wordmark emphasises the retro nature of the project */}
               <span className="navbar-wordmark">PONG</span>
-              {/* Updated tagline to clearly communicate the visual identity */}
               <span className="navbar-tagline">Retro Arcade&nbsp;70s</span>
             </Link>
 
@@ -42,14 +42,22 @@ const NavbarComponent = () => {
                   </Link>
                 )
               })}
+
+              {isAuthenticated && (
+                <button
+                  type="button"
+                  className="arcade-nav-link"
+                  onClick={handleLogout}
+                >
+                  Logout
+                </button>
+              )}
             </div>
 
             <div className="arcade-nav-actions">
-              {/* Secondary action encourages new players to join */}
               <Link className="arcade-btn arcade-btn-secondary" to="/register">
                 Join
               </Link>
-              {/* Primary action drives returning users to sign in */}
               <Link className="arcade-btn arcade-btn-primary" to="/login">
                 Sign&nbsp;in
               </Link>
