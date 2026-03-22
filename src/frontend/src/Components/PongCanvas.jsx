@@ -86,6 +86,9 @@ export default function PongCanvas()
     const renderingContext = canvas.getContext('2d');
     updateCanvasDimensions()
     const canvasContext = new CanvasGameContext(canvas, renderingContext)
+    gameStateRef.current.player1.color = canvasContext.crtWhite;
+    gameStateRef.current.player2.color = canvasContext.crtWhite;
+    gameStateRef.current.ball.color = canvasContext.crtWhite;
     function onResize(event) {
       updateCanvasDimensions()
     }

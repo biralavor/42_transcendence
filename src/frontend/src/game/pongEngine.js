@@ -292,6 +292,14 @@ export class CanvasGameContext {
   get heightRatio() {
     return heightRatio;
   }
+
+  get primaryColor() {
+    return getComputedStyle(this.#canvas).getPropertyValue('--primary');
+  }
+
+  get crtWhite() {
+    return getComputedStyle(this.#canvas).getPropertyValue('--crt-white');
+  }
 }
 
 /**
@@ -308,9 +316,16 @@ export function render(canvasContext, gameState, isPaused) {
 
   const fontSize = canvasContext.widthScale * 16;
   renderingCanvas.reset();
-  renderingCanvas.fillStyle = 'white';
-  renderingCanvas.strokeStyle = 'white';
 
+  renderingCanvas.strokeStyle = canvasContext.primaryColor;
+  renderingCanvas.lineWidth = 6;
+  renderingCanvas.strokeRect(0, 0,
+                             widthRatio * canvasContext.widthScale,
+                             heightRatio * canvasContext.heightScale);
+
+  renderingCanvas.fillStyle = canvasContext.crtWhite;
+  renderingCanvas.strokeStyle = canvasContext.crtWhite;
+  renderingCanvas.lineWidth = 2;
   renderingCanvas.font = `bold ${fontSize}px Bungee, sans-serif`
   renderingCanvas.fillText(`${score.player1}`,
                            35 * canvasContext.widthScale,
@@ -320,10 +335,13 @@ export function render(canvasContext, gameState, isPaused) {
                            115 * canvasContext.widthScale,
                            15 * canvasContext.heightScale, fontSize * 10);
 
-
-  renderingCanvas.strokeRect(3, 3,
-                             widthRatio * canvasContext.widthScale - 6,
-                             heightRatio * canvasContext.heightScale - 3)
+  const borderRadius = 8;
+  renderingCanvas.beginPath();
+  renderingCanvas.roundRect(1, 1,
+                             widthRatio * canvasContext.widthScale - 2,
+                            heightRatio * canvasContext.heightScale - 2,
+                            borderRadius);
+  renderingCanvas.stroke();
 
   const midfieldStripSize = player1.size;
   const midfieldStripXPos =
