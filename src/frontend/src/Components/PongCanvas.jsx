@@ -4,7 +4,6 @@ import { GameState, gameLoop, CanvasGameContext } from '../game/pongEngine.js'
 
 export default function PongCanvas()
 {
-  console.log("rendered")
   const canvasRef = useRef(null);
   const keyStateRef = useRef(null);
   const gameStateRef = useRef(null);
@@ -33,7 +32,6 @@ export default function PongCanvas()
   const isPaused = () => pauseRef.current;
 
   function onKeyup(event) {
-    console.log(`keyup ${event}`)
     if (event.code === 'KeyJ'
         || event.code === 'KeyK'
         || event.code === 'KeyW'
@@ -44,7 +42,6 @@ export default function PongCanvas()
   }
 
   function onKeydown(event) {
-    console.log(`keydown ${event}`)
     if (event.code === 'KeyJ'
         || event.code === 'KeyK'
         || event.code === 'KeyW'
