@@ -76,7 +76,7 @@ async def get_user_matches(db: AsyncSession, user_id: int) -> list[Match]:
 
 
 async def get_leaderboard(db: AsyncSession, limit: int = 20) -> list[dict]:
-    finished = (Match.status == "finished", Match.finished_at.is_not(None))
+    finished_cond = (Match.status == "finished", Match.finished_at.is_not(None))
 
     # Build per-player-slot views of each finished match, then UNION ALL
     p1 = select(
@@ -84,14 +84,14 @@ async def get_leaderboard(db: AsyncSession, limit: int = 20) -> list[dict]:
         Match.score_p1.label("goals_scored"),
         Match.score_p2.label("goals_conceded"),
         case((Match.winner_id == Match.player1_id, 1), else_=0).label("is_win"),
-    ).where(*finished)
+    ).where(*finished_cond)
 
     p2 = select(
         Match.player2_id.label("user_id"),
         Match.score_p2.label("goals_scored"),
         Match.score_p1.label("goals_conceded"),
         case((Match.winner_id == Match.player2_id, 1), else_=0).label("is_win"),
-    ).where(*finished)
+    ).where(*finished_cond)
 
     combined = union_all(p1, p2).subquery()
 
@@ -126,6 +126,6 @@ async def get_leaderboard(db: AsyncSession, limit: int = 20) -> list[dict]:
 
     result = await db.execute(stmt)
     return [
-        {**dict(row), "rank": rank}
+        {**row, "rank": rank}
         for rank, row in enumerate(result.mappings().all(), start=1)
     ]
