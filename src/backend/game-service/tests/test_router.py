@@ -129,3 +129,33 @@ def test_get_matches_returns_both_sides(client):
     resp = client.get("/matches/30")
     assert resp.status_code == 200
     assert len(resp.json()) == 2
+
+
+# --------------------------------------------------------------------------- #
+# GET /leaderboard
+# --------------------------------------------------------------------------- #
+
+def test_get_leaderboard_returns_ranked_rows(client):
+    m1 = client.post("/matches", json={"player1_id": 1, "player2_id": 2}).json()["id"]
+    client.post(f"/matches/{m1}/finish", json={"winner_id": 1, "score_p1": 7, "score_p2": 2})
+
+    m2 = client.post("/matches", json={"player1_id": 2, "player2_id": 3}).json()["id"]
+    client.post(f"/matches/{m2}/finish", json={"winner_id": 2, "score_p1": 4, "score_p2": 1})
+
+    resp = client.get("/leaderboard")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 3
+    assert data[0]["rank"] == 1
+    assert data[0]["user_id"] == 1
+    assert data[0]["points"] == 3
+
+
+def test_get_leaderboard_honors_limit_query_param(client):
+    for user_id in [10, 20, 30]:
+        match_id = client.post("/matches", json={"player1_id": user_id, "player2_id": 999}).json()["id"]
+        client.post(f"/matches/{match_id}/finish", json={"winner_id": user_id, "score_p1": 3, "score_p2": 0})
+
+    resp = client.get("/leaderboard?limit=2")
+    assert resp.status_code == 200
+    assert len(resp.json()) == 2

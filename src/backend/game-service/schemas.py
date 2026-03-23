@@ -26,6 +26,18 @@ class StatsResponse(BaseModel):
     goals_conceded: int
 
 
+class LeaderboardEntryResponse(BaseModel):
+    rank: int
+    user_id: int
+    wins: int
+    losses: int
+    total_games: int
+    goals_scored: int
+    goals_conceded: int
+    goal_difference: int
+    points: int
+
+
 class MatchCreateRequest(BaseModel):
     player1_id: int
     player2_id: int

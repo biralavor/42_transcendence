@@ -4,8 +4,15 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from service.history import get_match_history
-from service.persistence import create_match, finish_match, get_match, get_user_matches, get_user_stats
-from service.schemas import MatchCreateRequest, MatchFinishRequest, MatchHistoryItem, MatchResponse, StatsResponse
+from service.persistence import create_match, finish_match, get_leaderboard, get_match, get_user_matches, get_user_stats
+from service.schemas import (
+    LeaderboardEntryResponse,
+    MatchCreateRequest,
+    MatchFinishRequest,
+    MatchHistoryItem,
+    MatchResponse,
+    StatsResponse,
+)
 from shared.database import get_db
 
 router = APIRouter()
@@ -16,6 +23,12 @@ SessionDependency = Annotated[AsyncSession, Depends(get_db)]
 @router.get("/stats/{user_id}", response_model=StatsResponse)
 async def user_stats(user_id: int, session: SessionDependency):
     return await get_user_stats(session, user_id)
+
+
+@router.get("/leaderboard", response_model=list[LeaderboardEntryResponse])
+async def leaderboard(session: SessionDependency, limit: int = 20):
+    normalized_limit = max(1, min(limit, 100))
+    return await get_leaderboard(session, normalized_limit)
 
 
 @router.get("/matches/history/{user_id}", response_model=list[MatchHistoryItem])
