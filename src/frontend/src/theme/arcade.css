@@ -1,0 +1,492 @@
+.arcade-shell {
+  min-height: 100vh;
+  background:
+    linear-gradient(180deg, #5d4037 0%, #4e342e 45%, #3e2723 100%);
+}
+
+.arcade-nav {
+  position: sticky;
+  top: 0;
+  width: 100%;
+  z-index: 20;
+  padding: 0;
+  background: #f4d03f;
+  border-bottom: 6px solid #3e2723;
+  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.3);
+}
+
+.arcade-content {
+  width: 100%;
+  margin: 0 auto;
+}
+
+.arcade-screen {
+  background:
+    linear-gradient(145deg, #2a2a2a, #1a1410);
+  border: 6px solid #3e2723;
+  border-radius: 1.5rem;
+  box-shadow:
+    0 18px 36px rgba(0, 0, 0, 0.4),
+    inset 0 0 60px rgba(0, 0, 0, 0.9);
+}
+
+.arcade-nav .arcade-screen {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  border-radius: 0;
+}
+
+.arcade-navbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding: 1.25rem 3rem;
+  flex-wrap: wrap;
+}
+
+.arcade-panel {
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.02), transparent 50%, rgba(255, 255, 255, 0.02)),
+    rgba(12, 9, 7, 0.9);
+  border-radius: 1.4rem;
+}
+
+.arcade-nav-links {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.arcade-nav-link {
+  color: #5d4037;
+  text-decoration: none;
+  font-family: 'Righteous', cursive;
+  font-size: 0.9rem;
+  padding: 0.75rem 1.1rem;
+  border-radius: 999px;
+  transition: 0.2s ease;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  position: relative;
+}
+
+.arcade-nav-link:hover {
+  color: #3e2723;
+  background: rgba(62, 39, 35, 0.06);
+}
+
+.arcade-nav-link.active {
+  color: #3e2723;
+  background: transparent;
+  box-shadow: none;
+}
+
+.arcade-nav-link::after {
+  content: '';
+  position: absolute;
+  left: 0.5rem;
+  right: 0.5rem;
+  bottom: -0.35rem;
+  height: 3px;
+  border-radius: 999px;
+  background: transparent;
+  transition: background 0.18s ease, transform 0.18s ease;
+}
+
+.arcade-nav-link:hover::after {
+  background: rgba(62, 39, 35, 0.35);
+}
+
+.arcade-nav-link.active::after {
+  background: #3e2723;
+  transform: translateY(1px);
+}
+
+.arcade-nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  flex-wrap: wrap;
+}
+
+.arcade-kicker {
+  font-family: 'Bungee', cursive;
+  font-size: 0.85rem;
+  color: #f4d03f;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.arcade-muted {
+  color: rgba(240, 240, 232, 0.78);
+  font-family: 'VT323', monospace;
+  font-size: 1.35rem;
+}
+
+.navbar-logo {
+  width: 54px;
+  height: 54px;
+  object-fit: contain;
+  border-radius: 0.75rem;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 0.2rem;
+}
+
+.navbar-brand-link {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  text-decoration: none;
+}
+
+.navbar-wordmark {
+  font-family: 'Bungee', cursive;
+  font-size: 1.9rem;
+  color: #3e2723;
+  letter-spacing: 0.35rem;
+  text-shadow: 3px 3px 0 rgba(0, 0, 0, 0.18);
+}
+
+.navbar-tagline {
+  font-family: 'VT323', monospace;
+  font-size: 1rem;
+  color: #5d4037;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.arcade-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0;
+  padding: 0.9rem 1.8rem;
+  text-decoration: none;
+  font-family: 'Righteous', cursive;
+  font-size: 0.95rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+  border: 4px solid #3e2723;
+  box-shadow: 6px 6px 0 #3e2723;
+}
+
+.arcade-btn:hover {
+  transform: translate(3px, 3px);
+  box-shadow: 3px 3px 0 #3e2723;
+}
+
+.arcade-btn-primary {
+  background: #f4d03f;
+  color: #1a1410;
+  box-shadow: 6px 6px 0 #3e2723;
+}
+
+.arcade-btn-secondary {
+  background: #6d4c41;
+  color: #f0f0e8;
+  box-shadow: 6px 6px 0 #3e2723;
+}
+
+@media (max-width: 992px) {
+  .arcade-navbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .arcade-nav-links,
+  .arcade-nav-actions {
+    justify-content: center;
+  }
+}
+
+/* Arcade Button Styles - Primary */
+.btn-arcade {
+  font-family: var(--font-retro);
+  font-size: 0.9rem;
+  padding: 1rem 1.5rem;
+  border: 3px solid var(--primary);
+  border-radius: 0;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.3);
+  text-decoration: none;
+  display: inline-block;
+}
+
+.btn-arcade:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 0 rgba(0, 0, 0, 0.3);
+}
+
+.btn-arcade:active {
+  transform: translateY(-2px);
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.3);
+}
+
+.btn-arcade.btn-primary {
+  background-color: var(--primary);
+  color: var(--primary-foreground);
+}
+
+.btn-arcade.btn-primary:hover {
+  background-color: var(--accent);
+  border-color: var(--accent);
+}
+
+.btn-arcade.btn-secondary {
+  background-color: transparent;
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+.btn-arcade.btn-secondary:hover {
+  background-color: var(--primary);
+  color: var(--primary-foreground);
+}
+
+/* Form Styles */
+.form-arcade {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 2rem;
+  background: var(--card);
+  border: 3px solid var(--primary);
+  border-radius: 0;
+  box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.3);
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.form-label {
+  font-family: var(--font-retro);
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--primary);
+}
+
+.form-input {
+  padding: 0.75rem 1rem;
+  background-color: var(--input-background);
+  border: 2px solid var(--primary);
+  border-radius: 0;
+  color: var(--foreground);
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  transition: all 0.3s ease;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 15px var(--primary);
+}
+
+.form-input::placeholder {
+  color: var(--metal-silver);
+}
+
+/* Auth Layout & Floating Forms */
+.arcade-auth-layout {
+  min-height: calc(100vh - 80px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2.5rem 1rem;
+  background: var(--background);
+}
+
+.arcade-form-card {
+  max-width: 500px;
+  margin: 0 auto;
+}
+
+.arcade-form-control .form-control {
+  background-color: var(--input-background);
+  border-radius: 0;
+  border: 2px solid var(--primary);
+  color: var(--foreground);
+  font-family: var(--font-mono);
+}
+
+.arcade-form-control .form-control:focus {
+  box-shadow: 0 0 20px var(--primary);
+  border-color: var(--accent);
+}
+
+.arcade-form-check .form-check-input {
+  border-radius: 0;
+  border: 2px solid var(--primary);
+  background-color: transparent;
+}
+
+.arcade-form-check .form-check-input:checked {
+  background-color: var(--primary);
+  border-color: var(--primary);
+}
+
+.arcade-form-copy {
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  color: var(--foreground);
+}
+
+.arcade-footer-note {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--metal-silver);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* Card Styles */
+.card-arcade {
+  background: var(--card);
+  border: 3px solid var(--primary);
+  border-radius: 0;
+  padding: 2rem;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
+  position: relative;
+}
+
+.card-arcade::before {
+  content: '';
+  position: absolute;
+  top: -6px;
+  left: -6px;
+  right: -6px;
+  bottom: -6px;
+  background: var(--primary);
+  z-index: -1;
+}
+
+.card-arcade.glow {
+  box-shadow: 
+    0 8px 16px rgba(0, 0, 0, 0.4),
+    0 0 30px var(--primary);
+}
+
+/* Title Styles */
+.title-arcade {
+  font-family: var(--font-retro);
+  font-size: 3rem;
+  text-transform: uppercase;
+  letter-spacing: 4px;
+  text-shadow: 
+    0 0 20px var(--primary),
+    0 0 40px var(--primary),
+    3px 3px 0 rgba(0, 0, 0, 0.5);
+  margin: 0 0 1rem 0;
+  color: var(--primary);
+}
+
+.subtitle-arcade {
+  font-family: var(--font-mono);
+  font-size: 1.25rem;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--metal-silver);
+  margin-bottom: 2rem;
+}
+
+/* Feature Card */
+.feature-card {
+  background: var(--card);
+  border: 2px solid var(--primary);
+  border-radius: 0;
+  padding: 1.5rem;
+  text-align: center;
+  transition: all 0.3s ease;
+}
+
+.feature-card:hover {
+  border-color: var(--accent);
+  box-shadow: 0 0 20px var(--primary);
+  transform: translateY(-4px);
+}
+
+.feature-card h3 {
+  color: var(--primary);
+  margin-bottom: 0.5rem;
+}
+
+.feature-card p {
+  color: var(--metal-silver);
+  font-size: 0.9rem;
+}
+
+/* Grid Layout */
+.button-group {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin: 2rem 0;
+}
+
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 2rem;
+  margin-top: 3rem;
+}
+
+/* Badge */
+.badge-arcade {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  padding: 0.5rem 1rem;
+  border-radius: 0;
+  font-family: var(--font-retro);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  display: inline-block;
+}
+
+/* Text Utilities */
+.text-glow {
+  text-shadow: 0 0 10px var(--primary);
+}
+
+.text-warning {
+  color: var(--arcade-yellow-dark);
+}
+
+.text-muted {
+  color: var(--metal-silver);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .title-arcade {
+    font-size: 2rem;
+  }
+
+  .subtitle-arcade {
+    font-size: 1rem;
+  }
+
+  .button-group {
+    flex-direction: column;
+  }
+
+  .features-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .form-arcade {
+    padding: 1.5rem;
+  }
+}

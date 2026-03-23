@@ -6,9 +6,9 @@
 Each backend service follows the same directory and container layout:
 
 ```
-Host                              Container (WORKDIR /app)
-src/backend/user-service/  ──►   /app/service/
-src/backend/shared/        ──►   /app/shared/
+Host                               Container (WORKDIR /app)
+src/backend/<name>-service/  ──►  /app/service/
+src/backend/shared/          ──►  /app/shared/
 ```
 
 Uvicorn runs as: `uvicorn service.main:app`
@@ -27,6 +27,66 @@ from shared.database import get_db
 # ❌ Wrong — ModuleNotFoundError at startup
 from models import Credentials
 from service import register_user
+```
+
+## Testing Services on the Host
+
+On the host, service directories are named `<name>-service/` (with a dash),
+which Python cannot import as a package.  In Docker they are copied to
+`/app/service/` where the `service.` prefix resolves normally.
+
+To let host-side pytest tests use the same `service.` imports, each service's
+`tests/conftest.py` registers a `service` entry in `sys.modules` that points
+to the local directory — mirroring the Docker rename without touching the
+filesystem:
+
+```python
+# tests/conftest.py (generated once per service)
+import sys, types
+from pathlib import Path
+
+_service_dir = Path(__file__).resolve().parents[1]  # e.g. .../chat-service
+_backend_dir = _service_dir.parent                   # .../src/backend
+
+sys.path.insert(0, str(_backend_dir))  # shared.* imports
+sys.path.insert(0, str(_service_dir))  # `from main import app`
+
+if "service" not in sys.modules:
+    _mod = types.ModuleType("service")
+    _mod.__path__ = [str(_service_dir)]
+    _mod.__package__ = "service"
+    sys.modules["service"] = _mod
+```
+
+Test files themselves do **not** manipulate `sys.path` — conftest owns it.
+
+> **When adding a new service**, copy this conftest pattern into its
+> `tests/conftest.py`.  See `chat-service/tests/conftest.py` as the reference.
+
+### Running service tests locally
+
+Each service has a `requirements-test.txt` with test-only deps (`pytest`,
+`httpx`) that are **not** installed in the production container image.
+Install them before running tests:
+
+```bash
+# One-time install (from repo root)
+pip install \
+    -r src/backend/shared/requirements-test.txt \
+    -r src/backend/chat-service/requirements-test.txt
+
+pytest src/backend/chat-service/tests/
+
+# Same pattern for game-service
+pip install \
+    -r src/backend/shared/requirements-test.txt \
+    -r src/backend/game-service/requirements-test.txt
+
+pytest src/backend/game-service/tests/
+
+# shared/ws unit tests only need the shared test deps
+pip install -r src/backend/shared/requirements-test.txt
+pytest src/backend/shared/ws/tests/
 ```
 
 ## backend-base Image
@@ -84,7 +144,19 @@ is reflected inside the container immediately — no rebuild needed.
 
 5. Add `<NAME>_SERVICE_PORT` to `.env.example` and `.env`
 
-6. Add make targets: `up-<name>`, `down-<name>`, `re-<name>` to `Makefile`
+6. Add make targets to `Makefile`: `up-<name>`, `down-<name>`, `re-<name>`, `migrate-<name>`
+
+7. Set up Alembic inside the service directory:
+   ```bash
+   # inside the container or with alembic installed locally
+   cd src/backend/<name>-service
+   alembic init alembic
+   ```
+   - Point `alembic.ini` `sqlalchemy.url` to use the `DATABASE_URL` env var
+   - Update `alembic/env.py` to import your `Base` metadata (see `chat-service/alembic/env.py` as reference)
+   - Add `alembic upgrade head` to the service entrypoint so migrations run at container startup
+
+8. Add `tests/conftest.py` using the `sys.modules` shim (see "Testing Services on the Host" above)
 
 ## Adding Dependencies
 

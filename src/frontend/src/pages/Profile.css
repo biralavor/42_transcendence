@@ -1,0 +1,334 @@
+/*
+ * Styles for the Profile page.  These rules build on top of the
+ * existing theme variables defined in `theme/theme.css` to create a
+ * cohesive look that matches the rest of the application.  The
+ * layout constrains the width of the profile card on large screens
+ * while allowing it to remain fluid on smaller devices.
+ */
+
+.profile-page {
+  padding: 3rem 1rem;
+}
+
+.profile-card {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 2rem 2.25rem;
+  border-radius: 1.5rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 2px solid rgba(251, 192, 45, 0.35);
+  box-shadow: 0 0 24px rgba(251, 192, 45, 0.18);
+}
+
+.profile-header {
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  margin-bottom: 2rem;
+}
+
+.profile-avatar-wrapper {
+  flex-shrink: 0;
+}
+
+.profile-avatar {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  border: 3px solid rgba(251, 192, 45, 0.5);
+  padding: 0.35rem;
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow: 0 0 24px rgba(251, 192, 45, 0.18);
+  object-fit: cover;
+}
+
+.profile-info {
+  flex-grow: 1;
+}
+
+.profile-display-name {
+  margin: 0;
+  color: var(--primary);
+  font-family: 'Righteous', cursive;
+  font-size: clamp(2rem, 3vw, 2.6rem);
+  letter-spacing: 0.05em;
+}
+
+.profile-username {
+  margin: 0.1rem 0 0.5rem;
+  color: rgba(245, 245, 242, 0.8);
+  font-family: 'VT323', monospace;
+  font-size: 1.15rem;
+  letter-spacing: 0.06em;
+}
+
+.profile-stats {
+  display: flex;
+  gap: 1rem;
+}
+
+.profile-stat-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 96px;
+  border: 1px solid rgba(251, 192, 45, 0.28);
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.04);
+  text-align: center;
+  padding: 0.9rem 0.75rem;
+}
+
+.profile-stat-value {
+  color: var(--primary);
+  font-family: 'Righteous', cursive;
+  font-size: 1.6rem;
+  letter-spacing: 0.04em;
+}
+
+.profile-stat-label {
+  color: var(--metal-silver);
+  font-family: 'VT323', monospace;
+  font-size: 0.95rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* Form controls on the profile page reuse the existing arcade styling */
+.profile-form-control .form-control {
+  min-height: 64px;
+  padding-top: 1.6rem;
+  border-radius: 1rem;
+  border-width: 2px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.profile-form-control label {
+  color: rgba(245, 245, 242, 0.72);
+  font-family: 'VT323', monospace;
+  letter-spacing: 0.06em;
+}
+
+.profile-preferences {
+  margin-bottom: 1.5rem;
+}
+
+.profile-section-title {
+  margin: 2rem 0 1rem;
+  color: var(--primary);
+  font-family: 'Righteous', cursive;
+  font-size: 1.6rem;
+  letter-spacing: 0.05em;
+}
+
+.profile-preference-item {
+  margin-bottom: 0.75rem;
+}
+
+.profile-save-btn {
+  min-height: 58px;
+  border-radius: 0.9rem;
+  justify-content: center;
+  width: 100%;
+  margin-top: 1rem;
+}
+
+/* Match history styling */
+.profile-history {
+  margin-top: 2.5rem;
+}
+
+.history-table {
+  width: 100%;
+  border: 1px solid rgba(251, 192, 45, 0.3);
+  border-radius: 1rem;
+  overflow: hidden;
+}
+
+.history-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr;
+  gap: 0;
+}
+
+.history-header {
+  background: rgba(251, 192, 45, 0.08);
+  border-bottom: 1px solid rgba(251, 192, 45, 0.3);
+  color: var(--primary);
+  font-family: 'VT323', monospace;
+  font-size: 1rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.history-row:not(.history-header) {
+  border-bottom: 1px solid rgba(251, 192, 45, 0.2);
+}
+
+.history-row:last-child {
+  border-bottom: none;
+}
+
+.history-col {
+  padding: 0.75rem 1rem;
+  color: rgba(245, 245, 242, 0.85);
+  font-family: 'VT323', monospace;
+  font-size: 1rem;
+  letter-spacing: 0.05em;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.history-opponent {
+  font-weight: bold;
+  color: var(--primary);
+}
+
+.history-result {
+  text-transform: capitalize;
+}
+
+/* ── Friends sidebar two-column layout ───────────────────────────── */
+.profile-layout {
+  display: flex;
+  gap: 1.5rem;
+  align-items: flex-start;
+}
+
+.profile-sidebar-col {
+  flex: 0 0 260px;
+  min-width: 0;
+}
+
+.profile-main-col {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ── FriendsSidebar internal styles ──────────────────────────────── */
+.friends-sidebar {
+  padding: 1rem;
+}
+
+.friends-sidebar-title {
+  font-family: 'VT323', monospace;
+  color: var(--neon-yellow, #f5e642);
+  font-size: 1.4rem;
+  margin-bottom: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.friends-search-input {
+  margin-bottom: 1rem;
+  font-family: 'VT323', monospace;
+}
+
+.friends-section {
+  margin-bottom: 1.25rem;
+}
+
+.friends-section-title {
+  font-family: 'VT323', monospace;
+  color: var(--metal-silver, #a8b2bd);
+  font-size: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 0.5rem;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+  padding-bottom: 0.25rem;
+}
+
+.friends-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.friends-list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.friends-request-item {
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.friends-user-info {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.friends-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.friends-status-online  { background: #4caf50; }
+.friends-status-offline { background: #757575; }
+
+.friends-username {
+  font-family: 'VT323', monospace;
+  font-size: 1rem;
+  color: var(--metal-silver, #a8b2bd);
+  word-break: break-word;
+}
+
+.friends-actions,
+.friends-request-actions {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.friends-btn {
+  padding: 0.15rem 0.5rem;
+  font-size: 0.8rem;
+}
+
+.friends-btn-decline {
+  background: transparent;
+  border: 1px solid #ef9a9a;
+  color: #ef9a9a;
+}
+
+.friends-btn-decline:hover {
+  background: rgba(239,154,154,0.15);
+}
+
+.friends-empty {
+  font-family: 'VT323', monospace;
+  color: var(--metal-silver, #a8b2bd);
+  font-size: 0.95rem;
+}
+
+.friends-pending-badge {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #f4d03f;
+  border: 1px solid #f4d03f;
+  padding: 0.15rem 0.45rem;
+  opacity: 0.75;
+}
+
+/* Responsive: stack on narrow viewports */
+@media (max-width: 768px) {
+  .profile-layout {
+    flex-direction: column;
+  }
+  .profile-sidebar-col {
+    flex: unset;
+    width: 100%;
+  }
+}

@@ -1,2 +1,3 @@
 # Base deps come from backend-base image.
-# Add only game-service-specific packages here.
+# Add only game-service-specific RUNTIME packages here.
+# Test-only deps (pytest, httpx) live in requirements-test.txt.

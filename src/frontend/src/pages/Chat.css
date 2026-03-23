@@ -1,0 +1,27 @@
+.chat-join {
+  max-width: 400px;
+}
+
+.chat-view {
+  max-width: 700px;
+}
+
+.chat-messages {
+  height: 400px;
+  overflow-y: auto;
+}
+
+.chat-share-url {
+  font-size: 0.85em;
+}
+
+.chat-msg {
+  color: #000;
+  border-radius: 6px;
+  padding: 4px 8px;
+  background: hsl(var(--sender-hue), 50%, 93%);
+}
+
+.chat-msg strong {
+  color: hsl(var(--sender-hue), 60%, 35%);
+}

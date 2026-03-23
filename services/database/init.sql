@@ -1,7 +1,10 @@
--- Placeholder schema — real migrations managed by SQLAlchemy/Alembic later
-
-CREATE TABLE IF NOT EXISTS users (
-    id          SERIAL PRIMARY KEY,
-    username    VARCHAR(50) UNIQUE NOT NULL,
-    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+-- Schema is managed entirely by Alembic migrations.
+-- Each service runs `alembic upgrade head` on startup via its entrypoint.sh.
+--
+-- To inspect the current schema:
+--   docker compose exec user-service sh -c "cd /app/service && alembic current"
+--
+-- To apply all pending migrations:
+--   docker compose exec user-service sh -c "cd /app/service && alembic upgrade head"
+--
+-- See docs/ALEMBIC.md for the full changelog workflow.

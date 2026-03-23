@@ -1,46 +1,72 @@
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
+import { useAuth } from '../context/authContext'
 
-const NavbarComponent =  () => {
-    return(
- <nav className="navbar navbar-expand-lg bg-body-tertiary">
-      <div className="container-fluid">
-        <img
-          src="/logo_tight_square.png"
-          alt="ft_transcendence logo"
-          className="navbar-logo"
-        />
-        <button
-          className="navbar-toggler"
-          type="button"
-          data-bs-toggle="collapse"
-          data-bs-target="#navbarSupportedContent"
-          aria-controls="navbarSupportedContent"
-          aria-expanded="false"
-          aria-label="Toggle navigation"
-        >
-          <span className="navbar-toggler-icon"></span>
-        </button>
-        <div className="collapse navbar-collapse" id="navbarSupportedContent">
-          <ul className="navbar-nav me-auto mb-2 mb-lg-0">
-            <li className="nav-item">
-              <Link className="nav-link active" aria-current="page" to="/">Home</Link>
-            </li>
-            <li className="nav-item">
-              <Link className="nav-link" to="/play">Play</Link>
-            </li>
-            <li className="nav-item">
-              <Link className="nav-link" to="/leaderboard">Leaderboard</Link>
-            </li>
-            <li className="nav-item">
-              <Link className="nav-link" to="/about">About</Link>
-            </li>
-          </ul>
-          <Link className="btn btn-outline-success" to="/register">Register</Link>
-          <Link className="btn btn-outline-success ms-2" to="/login">login</Link>
-        </div>
+const navLinks = [
+  { to: '/', label: 'Home' },
+  { to: '/play', label: 'Arena' },
+  { to: '/chat/general', label: 'Chat' },
+  { to: '/leaderboard', label: 'Ranking' },
+  { to: '/about', label: 'About' },
+  { to: '/profile', label: 'Profile' },
+]
+
+const NavbarComponent = () => {
+  const location = useLocation()
+  const { logout, isAuthenticated } = useAuth()
+
+  const handleLogout = () => {
+    logout()
+  }
+
+  return (
+    <header className="arcade-nav">
+      <div className="arcade-content">
+        <nav className="arcade-screen">
+          <div className="arcade-navbar">
+            <Link to="/" className="navbar-brand-link">
+              <span className="navbar-wordmark">PONG</span>
+              <span className="navbar-tagline">Retro Arcade&nbsp;70s</span>
+            </Link>
+
+            <div className="arcade-nav-links">
+              {navLinks.map((link) => {
+                const isActive = location.pathname === link.to
+
+                return (
+                  <Link
+                    key={link.to}
+                    to={link.to}
+                    className={`arcade-nav-link ${isActive ? 'active' : ''}`}
+                  >
+                    {link.label}
+                  </Link>
+                )
+              })}
+
+              {isAuthenticated && (
+                <button
+                  type="button"
+                  className="arcade-nav-link"
+                  onClick={handleLogout}
+                >
+                  Logout
+                </button>
+              )}
+            </div>
+
+            <div className="arcade-nav-actions">
+              <Link className="arcade-btn arcade-btn-secondary" to="/register">
+                Join
+              </Link>
+              <Link className="arcade-btn arcade-btn-primary" to="/login">
+                Sign&nbsp;in
+              </Link>
+            </div>
+          </div>
+        </nav>
       </div>
-    </nav>
-    );
-};
+    </header>
+  )
+}
 
-export default NavbarComponent;
+export default NavbarComponent
