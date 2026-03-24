@@ -1,6 +1,6 @@
 from datetime import datetime, timezone  # timezone used to get UTC then strip tzinfo
 
-from sqlalchemy import or_, select
+from sqlalchemy import or_, select, case, func, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from service.models.match import Match
@@ -73,3 +73,90 @@ async def get_user_matches(db: AsyncSession, user_id: int) -> list[Match]:
         .order_by(Match.started_at.desc())
     )
     return list(result.scalars().all())
+
+
+async def get_leaderboard(db: AsyncSession, limit: int = 20) -> list[dict]:
+    """
+    Aggregate finished matches directly in the database to produce a ranked leaderboard.
+
+    We build two subqueries (one for each player slot) that project the per‑match
+    statistics we care about (goals scored, goals conceded, whether the user won).
+    These are unioned into a single table, then aggregated by user.  Ordering and
+    limiting are pushed into the database for efficiency.  Finally, we attach a
+    one‑based rank to each result row.
+
+    Args:
+        db: Async database session.
+        limit: Maximum number of leaderboard entries to return.
+
+    Returns:
+        A list of dicts, each containing user_id, wins, losses, total_games,
+        goals_scored, goals_conceded, goal_difference, points and rank.
+    """
+    # Conditions to filter finished matches.  We name this tuple clearly so it's
+    # obvious it's a set of SQLAlchemy expressions and not a result.
+    finished_cond = (Match.status == "finished", Match.finished_at.is_not(None))
+
+    # Build per‑player views of each finished match.  For player1 we take
+    # score_p1 as goals_scored and score_p2 as goals_conceded.  We also compute
+    # a flag (1 or 0) indicating whether this user won the match.
+    p1 = select(
+        Match.player1_id.label("user_id"),
+        Match.score_p1.label("goals_scored"),
+        Match.score_p2.label("goals_conceded"),
+        case((Match.winner_id == Match.player1_id, 1), else_=0).label("is_win"),
+    ).where(*finished_cond)
+
+    # Mirror of the above for player2.
+    p2 = select(
+        Match.player2_id.label("user_id"),
+        Match.score_p2.label("goals_scored"),
+        Match.score_p1.label("goals_conceded"),
+        case((Match.winner_id == Match.player2_id, 1), else_=0).label("is_win"),
+    ).where(*finished_cond)
+
+    # Combine both sets of per‑player records into one table.  union_all preserves
+    # duplicates, which we want because each match contributes two rows (one per
+    # player).
+    combined = union_all(p1, p2).subquery()
+
+    # Aggregate per user: count wins and losses, total games, sum goals scored
+    # and conceded.  Compute goal_difference and points at the SQL level.
+    agg = (
+        select(
+            combined.c.user_id,
+            func.sum(combined.c.is_win).label("wins"),
+            func.sum(1 - combined.c.is_win).label("losses"),
+            func.count(combined.c.user_id).label("total_games"),
+            func.sum(combined.c.goals_scored).label("goals_scored"),
+            func.sum(combined.c.goals_conceded).label("goals_conceded"),
+            (
+                func.sum(combined.c.goals_scored) - func.sum(combined.c.goals_conceded)
+            ).label("goal_difference"),
+            (func.sum(combined.c.is_win) * 3).label("points"),
+        )
+        .group_by(combined.c.user_id)
+        .subquery()
+    )
+
+    # Apply ordering and limit.  The ordering matches the requirements: points
+    # descending, then goal_difference, then goals_scored, and finally user_id
+    # ascending as a deterministic tie‑breaker.
+    stmt = (
+        select(agg)
+        .order_by(
+            agg.c.points.desc(),
+            agg.c.goal_difference.desc(),
+            agg.c.goals_scored.desc(),
+            agg.c.user_id.asc(),
+        )
+        .limit(limit)
+    )
+
+    result = await db.execute(stmt)
+    # result.mappings() yields RowMapping objects which already behave like
+    # dictionaries.  Build the response list and attach a 1‑based rank.
+    return [
+        {**row, "rank": rank}
+        for rank, row in enumerate(result.mappings().all(), start=1)
+    ]

@@ -1,11 +1,18 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from service.history import get_match_history
-from service.persistence import create_match, finish_match, get_match, get_user_matches, get_user_stats
-from service.schemas import MatchCreateRequest, MatchFinishRequest, MatchHistoryItem, MatchResponse, StatsResponse
+from service.persistence import create_match, finish_match, get_leaderboard, get_match, get_user_matches, get_user_stats
+from service.schemas import (
+    LeaderboardEntryResponse,
+    MatchCreateRequest,
+    MatchFinishRequest,
+    MatchHistoryItem,
+    MatchResponse,
+    StatsResponse,
+)
 from shared.database import get_db
 
 router = APIRouter()
@@ -16,6 +23,17 @@ SessionDependency = Annotated[AsyncSession, Depends(get_db)]
 @router.get("/stats/{user_id}", response_model=StatsResponse)
 async def user_stats(user_id: int, session: SessionDependency):
     return await get_user_stats(session, user_id)
+
+
+@router.get("/leaderboard", response_model=list[LeaderboardEntryResponse])
+async def leaderboard(
+    session: SessionDependency,
+    # Use FastAPI's Query parameters to enforce bounds and document them.  This
+    # replaces manual normalization and will return a 422 response if the
+    # provided limit is out of range.  Defaults to 20, minimum 1, maximum 100.
+    limit: int = Query(20, ge=1, le=100),
+) -> list[LeaderboardEntryResponse]:
+    return await get_leaderboard(session, limit)
 
 
 @router.get("/matches/history/{user_id}", response_model=list[MatchHistoryItem])

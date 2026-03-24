@@ -1,56 +1,130 @@
+import { useEffect, useMemo, useState } from 'react'
 import NavbarComponent from '../Components/Navbar'
 
-// Top players are mocked here until real API integration is ready
-const topPlayers = [
-  {
-    rank: 1,
-    player: 'vector_viper',
-    avatar: '/avatar_placeholder.jpg',
-    wins: 128,
-    streak: '12W',
-    score: 9820,
-  },
-  {
-    rank: 2,
-    player: 'pongmaster42',
-    avatar: '/avatar_placeholder.jpg',
-    wins: 121,
-    streak: '7W',
-    score: 9450,
-  },
-  {
-    rank: 3,
-    player: 'crt-champion',
-    avatar: '/avatar_placeholder.jpg',
-    wins: 113,
-    streak: '5W',
-    score: 9010,
-  },
-  {
-    rank: 4,
-    player: 'bgomes-l',
-    avatar: '/avatar_placeholder.jpg',
-    wins: 108,
-    streak: '3W',
-    score: 8785,
-  },
-  {
-    rank: 5,
-    player: 'pixelspin',
-    avatar: '/avatar_placeholder.jpg',
-    wins: 98,
-    streak: '2W',
-    score: 8420,
-  },
-]
-
 export default function Leaderboard() {
-  // Trophy icons for the top three positions
-  const trophyIcons = {
-    1: '🥇',
-    2: '🥈',
-    3: '🥉',
-  }
+  const [entries, setEntries] = useState([])
+  const [usernamesById, setUsernamesById] = useState({})
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    const controller = new AbortController()
+    // Flag to track whether the component has been unmounted.  We set this to
+    // true in the cleanup function so asynchronous handlers can avoid
+    // updating state after unmount.
+    let cancelled = false
+
+    async function loadLeaderboard() {
+      // Always reset loading/error when starting a new fetch.  Only update
+      // state if the effect hasn't been cancelled.
+      if (!cancelled) {
+        setLoading(true)
+        setError('')
+      }
+
+      try {
+        const leaderboardResp = await fetch('/api/game/leaderboard?limit=20', {
+          signal: controller.signal,
+        })
+        if (!leaderboardResp.ok) {
+          throw new Error('Could not load leaderboard data.')
+        }
+
+        const leaderboardData = await leaderboardResp.json()
+        // Skip updates if the request was aborted or the effect was cancelled.
+        if (controller.signal.aborted || cancelled) return
+        setEntries(leaderboardData)
+
+        const userIds = leaderboardData.map((row) => row.user_id)
+        const uniqueUserIds = [...new Set(userIds)]
+
+        // Fetch all required user profiles in a single batch request to avoid
+        // issuing one HTTP request per user (N+1 pattern).
+        let usernamesByIdResult = {}
+        if (uniqueUserIds.length > 0) {
+          try {
+            const batchResp = await fetch('/api/users/profiles/batch', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ user_ids: uniqueUserIds }),
+              signal: controller.signal,
+            })
+
+            // Start with sensible defaults for all users in case the batch
+            // response is partial or missing entries.
+            usernamesByIdResult = uniqueUserIds.reduce((acc, userId) => {
+              acc[userId] = `Player ${userId}`
+              return acc
+            }, {})
+
+            if (batchResp.ok) {
+              const profiles = await batchResp.json()
+              // Support either { user_id, username } or { id, username } shapes.
+              for (const profile of profiles || []) {
+                const id = profile.user_id ?? profile.id
+                if (id != null && Object.prototype.hasOwnProperty.call(usernamesByIdResult, id)) {
+                  if (profile.username) {
+                    usernamesByIdResult[id] = profile.username
+                  }
+                }
+              }
+            }
+          } catch {
+            // On any error, fall back to the default "Player {id}" labels
+            // already populated in usernamesByIdResult.
+            if (Object.keys(usernamesByIdResult).length === 0) {
+              usernamesByIdResult = uniqueUserIds.reduce((acc, userId) => {
+                acc[userId] = `Player ${userId}`
+                return acc
+              }, {})
+            }
+          }
+        }
+
+        if (controller.signal.aborted || cancelled) return
+        setUsernamesById(usernamesByIdResult)
+      } catch (requestError) {
+        // Ignore abort errors; otherwise report a generic failure.  Avoid
+        // updating state if the component has unmounted or the request was aborted.
+        if (requestError.name !== 'AbortError' && !cancelled) {
+          setError('Failed to load leaderboard from backend services.')
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false)
+        }
+      }
+    }
+
+    loadLeaderboard()
+
+    return () => {
+      cancelled = true
+      controller.abort()
+    }
+  }, [])
+
+  const summary = useMemo(() => {
+    if (entries.length === 0) {
+      return {
+        highestPoints: 0,
+        longestWins: 0,
+        risingPlayer: 'No data',
+      }
+    }
+
+    const highestPoints = entries[0]?.points ?? 0
+    const longestWins = Math.max(...entries.map((entry) => entry.wins))
+    const rising = entries.find((entry) => entry.rank > 1) ?? entries[0]
+
+    return {
+      highestPoints,
+      longestWins,
+      risingPlayer: usernamesById[rising.user_id] || `Player ${rising.user_id}`,
+    }
+  }, [entries, usernamesById])
 
   return (
     <div className="arcade-shell">
@@ -78,48 +152,69 @@ export default function Leaderboard() {
             <div className="row g-4 mb-4">
               <div className="col-12 col-md-4">
                 <article className="arcade-card h-100 text-center">
-                  <p className="arcade-kicker mb-2">Highest score</p>
-                  <div className="arcade-title mb-0" style={{ fontSize: '2.4rem' }}>9820</div>
+                  <p className="arcade-kicker mb-2">Highest points</p>
+                  <div className="arcade-title mb-0" style={{ fontSize: '2.4rem' }}>{summary.highestPoints}</div>
                 </article>
               </div>
               <div className="col-12 col-md-4">
                 <article className="arcade-card h-100 text-center">
-                  <p className="arcade-kicker mb-2">Longest streak</p>
-                  <div className="arcade-title mb-0" style={{ fontSize: '2.4rem' }}>12W</div>
+                  <p className="arcade-kicker mb-2">Most wins</p>
+                  <div className="arcade-title mb-0" style={{ fontSize: '2.4rem' }}>{summary.longestWins}W</div>
                 </article>
               </div>
               <div className="col-12 col-md-4">
                 <article className="arcade-card h-100 text-center">
                   <p className="arcade-kicker mb-2">Rising player</p>
-                  <div className="arcade-title mb-0" style={{ fontSize: '2rem' }}>bgomes-l</div>
+                  <div className="arcade-title mb-0" style={{ fontSize: '2rem' }}>{summary.risingPlayer}</div>
                 </article>
               </div>
             </div>
 
-            {/* Rankings list */}
-            <div className="leaderboard-list">
-              {topPlayers.map((player) => {
-                const rowClass = player.rank <= 3 ? `leaderboard-top-${player.rank}` : ''
-                const displayRank = player.rank <= 3 ? trophyIcons[player.rank] : `#${player.rank}`
-                return (
-                  <div key={player.rank} className={`leaderboard-entry ${rowClass}`}>
-                    <div className="leaderboard-rank">{displayRank}</div>
-                    <img
-                      src={player.avatar}
-                      alt={`${player.player} avatar`}
-                      className="leaderboard-avatar"
-                    />
-                    <div className="leaderboard-info">
-                      <div className="leaderboard-player">{player.player}</div>
-                      <div className="leaderboard-stats">
-                        <span>{player.wins} wins</span>
-                        <span className="arcade-chip">{player.streak}</span>
-                        <span>{player.score} pts</span>
-                      </div>
-                    </div>
-                  </div>
-                )
-              })}
+            {/* Old-style rankings table */}
+            <div className="leaderboard-table-shell">
+              {loading && <p className="arcade-copy mb-0">Loading leaderboard...</p>}
+              {!loading && error && <p className="arcade-copy mb-0 text-danger">{error}</p>}
+              {!loading && !error && entries.length === 0 && (
+                <p className="arcade-copy mb-0">No matches finished yet.</p>
+              )}
+
+              {!loading && !error && entries.length > 0 && (
+                <div className="table-responsive">
+                  <table className="leaderboard-table">
+                    <thead>
+                      <tr>
+                        <th>Rank</th>
+                        <th>Player</th>
+                        <th>W</th>
+                        <th>L</th>
+                        <th>GP</th>
+                        <th>GF</th>
+                        <th>GA</th>
+                        <th>GD</th>
+                        <th>Pts</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {entries.map((entry) => {
+                        const rowClass = entry.rank <= 3 ? `leaderboard-top-${entry.rank}` : ''
+                        return (
+                          <tr key={entry.user_id} className={rowClass}>
+                            <td>#{entry.rank}</td>
+                            <td>{usernamesById[entry.user_id] || `Player ${entry.user_id}`}</td>
+                            <td>{entry.wins}</td>
+                            <td>{entry.losses}</td>
+                            <td>{entry.total_games}</td>
+                            <td>{entry.goals_scored}</td>
+                            <td>{entry.goals_conceded}</td>
+                            <td>{entry.goal_difference}</td>
+                            <td>{entry.points}</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         </section>
