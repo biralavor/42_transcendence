@@ -38,25 +38,53 @@ export default function Leaderboard() {
         const userIds = leaderboardData.map((row) => row.user_id)
         const uniqueUserIds = [...new Set(userIds)]
 
-        const profileResults = await Promise.all(
-          uniqueUserIds.map(async (userId) => {
-            try {
-              const profileResp = await fetch(`/api/users/profile/${userId}`, {
-                signal: controller.signal,
-              })
-              if (!profileResp.ok) {
-                return [userId, `Player ${userId}`]
+        // Fetch all required user profiles in a single batch request to avoid
+        // issuing one HTTP request per user (N+1 pattern).
+        let usernamesByIdResult = {}
+        if (uniqueUserIds.length > 0) {
+          try {
+            const batchResp = await fetch('/api/users/profiles/batch', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ user_ids: uniqueUserIds }),
+              signal: controller.signal,
+            })
+
+            // Start with sensible defaults for all users in case the batch
+            // response is partial or missing entries.
+            usernamesByIdResult = uniqueUserIds.reduce((acc, userId) => {
+              acc[userId] = `Player ${userId}`
+              return acc
+            }, {})
+
+            if (batchResp.ok) {
+              const profiles = await batchResp.json()
+              // Support either { user_id, username } or { id, username } shapes.
+              for (const profile of profiles || []) {
+                const id = profile.user_id ?? profile.id
+                if (id != null && Object.prototype.hasOwnProperty.call(usernamesByIdResult, id)) {
+                  if (profile.username) {
+                    usernamesByIdResult[id] = profile.username
+                  }
+                }
               }
-              const profile = await profileResp.json()
-              return [userId, profile.username || `Player ${userId}`]
-            } catch {
-              return [userId, `Player ${userId}`]
             }
-          })
-        )
+          } catch {
+            // On any error, fall back to the default "Player {id}" labels
+            // already populated in usernamesByIdResult.
+            if (Object.keys(usernamesByIdResult).length === 0) {
+              usernamesByIdResult = uniqueUserIds.reduce((acc, userId) => {
+                acc[userId] = `Player ${userId}`
+                return acc
+              }, {})
+            }
+          }
+        }
 
         if (controller.signal.aborted || cancelled) return
-        setUsernamesById(Object.fromEntries(profileResults))
+        setUsernamesById(usernamesByIdResult)
       } catch (requestError) {
         // Ignore abort errors; otherwise report a generic failure.  Avoid
         // updating state if the component has unmounted or the request was aborted.
