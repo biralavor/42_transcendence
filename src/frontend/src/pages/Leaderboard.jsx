@@ -9,10 +9,18 @@ export default function Leaderboard() {
 
   useEffect(() => {
     const controller = new AbortController()
+    // Flag to track whether the component has been unmounted.  We set this to
+    // true in the cleanup function so asynchronous handlers can avoid
+    // updating state after unmount.
+    let cancelled = false
 
     async function loadLeaderboard() {
-      setLoading(true)
-      setError('')
+      // Always reset loading/error when starting a new fetch.  Only update
+      // state if the effect hasn't been cancelled.
+      if (!cancelled) {
+        setLoading(true)
+        setError('')
+      }
 
       try {
         const leaderboardResp = await fetch('/api/game/leaderboard?limit=20', {
@@ -23,6 +31,8 @@ export default function Leaderboard() {
         }
 
         const leaderboardData = await leaderboardResp.json()
+        // Skip updates if the request was aborted or the effect was cancelled.
+        if (controller.signal.aborted || cancelled) return
         setEntries(leaderboardData)
 
         const userIds = leaderboardData.map((row) => row.user_id)
@@ -45,19 +55,25 @@ export default function Leaderboard() {
           })
         )
 
+        if (controller.signal.aborted || cancelled) return
         setUsernamesById(Object.fromEntries(profileResults))
       } catch (requestError) {
-        if (requestError.name !== 'AbortError') {
+        // Ignore abort errors; otherwise report a generic failure.  Avoid
+        // updating state if the component has unmounted or the request was aborted.
+        if (requestError.name !== 'AbortError' && !cancelled) {
           setError('Failed to load leaderboard from backend services.')
         }
       } finally {
-        setLoading(false)
+        if (!cancelled) {
+          setLoading(false)
+        }
       }
     }
 
     loadLeaderboard()
 
     return () => {
+      cancelled = true
       controller.abort()
     }
   }, [])

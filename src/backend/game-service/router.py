@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from service.history import get_match_history
@@ -26,9 +26,14 @@ async def user_stats(user_id: int, session: SessionDependency):
 
 
 @router.get("/leaderboard", response_model=list[LeaderboardEntryResponse])
-async def leaderboard(session: SessionDependency, limit: int = 20):
-    normalized_limit = max(1, min(limit, 100))
-    return await get_leaderboard(session, normalized_limit)
+async def leaderboard(
+    session: SessionDependency,
+    # Use FastAPI's Query parameters to enforce bounds and document them.  This
+    # replaces manual normalization and will return a 422 response if the
+    # provided limit is out of range.  Defaults to 20, minimum 1, maximum 100.
+    limit: int = Query(20, ge=1, le=100),
+) -> list[LeaderboardEntryResponse]:
+    return await get_leaderboard(session, limit)
 
 
 @router.get("/matches/history/{user_id}", response_model=list[MatchHistoryItem])
