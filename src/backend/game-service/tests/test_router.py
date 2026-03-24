@@ -23,15 +23,24 @@ async def _override_get_db():
         yield session
 
 
+async def _truncate_matches():
+    async with _engine.begin() as conn:
+        await conn.execute(text("TRUNCATE TABLE matches RESTART IDENTITY CASCADE"))
+
+
 def setup_module(_):
-    async def _truncate():
-        async with _engine.begin() as conn:
-            await conn.execute(text("TRUNCATE TABLE matches RESTART IDENTITY CASCADE"))
-    asyncio.run(_truncate())
+    asyncio.run(_truncate_matches())
 
 
 def teardown_module(_):
     asyncio.run(_engine.dispose())
+
+
+@pytest.fixture
+def clean_matches():
+    """Truncate the matches table before each leaderboard test for a stable baseline."""
+    asyncio.run(_truncate_matches())
+    yield
 
 
 @pytest.fixture
@@ -135,7 +144,7 @@ def test_get_matches_returns_both_sides(client):
 # GET /leaderboard
 # --------------------------------------------------------------------------- #
 
-def test_get_leaderboard_returns_ranked_rows(client):
+def test_get_leaderboard_returns_ranked_rows(client, clean_matches):
     m1 = client.post("/matches", json={"player1_id": 1, "player2_id": 2}).json()["id"]
     client.post(f"/matches/{m1}/finish", json={"winner_id": 1, "score_p1": 7, "score_p2": 2})
 
@@ -151,7 +160,7 @@ def test_get_leaderboard_returns_ranked_rows(client):
     assert data[0]["points"] == 3
 
 
-def test_get_leaderboard_honors_limit_query_param(client):
+def test_get_leaderboard_honors_limit_query_param(client, clean_matches):
     for user_id in [10, 20, 30]:
         match_id = client.post("/matches", json={"player1_id": user_id, "player2_id": 999}).json()["id"]
         client.post(f"/matches/{match_id}/finish", json={"winner_id": user_id, "score_p1": 3, "score_p2": 0})
