@@ -27,6 +27,11 @@ content-type: application/json
     "username": "maurodri",
     "password": "maurodri123"
 }
+
+### Me (replace <token> with the access_token from login response)
+GET https://localhost:8443/api/users/auth/me HTTP/1.1
+Authorization: Bearer <token>
+
 ### Register
 POST https://localhost:8443/api/users/auth/register HTTP/1.1
 content-type: application/json

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, TIMESTAMP, Boolean
+from sqlalchemy import Column, ForeignKey, Integer, String, TIMESTAMP, Boolean
 from sqlalchemy.sql import func
 
 from shared.database import Base
@@ -7,9 +7,9 @@ from shared.database import Base
 class User(Base):
     __tablename__ = "users"
 
-    id           = Column(Integer, primary_key=True, index=True)
-    username     = Column(String(50), unique=True, nullable=False)
-    email        = Column(String(100), unique=True)
+    id            = Column(Integer, primary_key=True, index=True)
+    username      = Column(String(50), unique=True, nullable=False)
+    credential_id = Column(Integer, ForeignKey("credentials.id"), unique=True, nullable=True)
     password_hash = Column(String)
     status       = Column(String(20), default="offline")
     avatar_url   = Column(String, nullable=True)

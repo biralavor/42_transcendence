@@ -3,12 +3,14 @@ from typing import Annotated
 from fastapi import FastAPI, status, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+
 from service.schemas import (
     Login, LoginResponse, RegisterRequest, RegisterResponse,
-    ProfileResponse, UpdateProfileRequest,
+    ProfileResponse, UpdateProfileRequest, MeResponse,
     FriendResponse, FriendRequestResponse,
 )
-from service.service import authenticate, register_credentials, get_profile, update_profile
+from service.service import authenticate, register_credentials, get_profile, update_profile, get_me
 from service.friends import (
     get_friends, get_pending_requests, get_sent_requests, send_friend_request,
     accept_friend_request, delete_friendship, search_users,
@@ -16,6 +18,7 @@ from service.friends import (
 from shared.database import get_db
 
 SessionDependency = Annotated[AsyncSession, Depends(get_db)]
+bearer_scheme = HTTPBearer()
 
 app = FastAPI(title="User Service")
 
@@ -33,6 +36,14 @@ def root():
 @app.post("/auth/login", status_code=status.HTTP_200_OK, response_model=LoginResponse)
 async def login(login: Login, session: SessionDependency):
     return await authenticate(login, session)
+
+
+@app.get("/auth/me", response_model=MeResponse)
+async def me(
+    session: SessionDependency,
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+):
+    return await get_me(credentials.credentials, session)
 
 
 @app.post("/auth/register", status_code=status.HTTP_201_CREATED, response_model=RegisterResponse)

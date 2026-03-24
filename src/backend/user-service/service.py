@@ -1,5 +1,5 @@
 from fastapi import status, HTTPException
-from service.schemas import Login, LoginResponse, RegisterRequest, RegisterResponse, UpdateProfileRequest
+from service.schemas import Login, LoginResponse, RegisterRequest, RegisterResponse, UpdateProfileRequest, MeResponse
 from service.models.credentials import Credentials, Tokens
 from service.models.user import User
 from datetime import datetime, timedelta, timezone
@@ -46,16 +46,26 @@ async def authenticate(login: Login, session: AsyncSession) -> LoginResponse:
     )
     raw_refresh_token = secrets.token_hex(32)
     refresh_token_hash = hashlib.sha256(raw_refresh_token.encode()).hexdigest()
-    tokens = Tokens(
-        credential_id=credential.id,
-        token_type="bearer",
-        refresh_token_hash=refresh_token_hash,
-        expires_at=datetime.now(timezone.utc) + timedelta(days=30),
-    )
-    session.add(tokens)
-    await session.commit()
-    user_row = await session.execute(select(User).where(User.username == credential.username))
+    token_row = await session.execute(select(Tokens).where(Tokens.credential_id == credential.id))
+    tokens = token_row.scalars().first()
+    if tokens is None:
+        tokens = Tokens(credential_id=credential.id, token_type="bearer")
+        session.add(tokens)
+    tokens.refresh_token_hash = refresh_token_hash
+    tokens.expires_at = datetime.now(timezone.utc) + timedelta(days=30)
+
+    user_row = await session.execute(select(User).where(User.credential_id == credential.id))
     user = user_row.scalars().first()
+    if user is None:
+        user = User(
+            username=credential.username,
+            credential_id=credential.id,
+            password_hash=credential.password,
+        )
+        session.add(user)
+
+    await session.commit()
+    await session.refresh(user)
     return LoginResponse(
         access_token=access_token,
         token_type="bearer",
@@ -80,18 +90,40 @@ async def register_credentials(register_request: RegisterRequest, session: Async
         session.add(credentials)
         await session.commit()
         await session.refresh(credentials)
-    except IntegrityError:
+    except IntegrityError as exc:
         await session.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="User already exists"
-        )
+        ) from exc
     return RegisterResponse(username=credentials.username)
 
 
 async def get_profile(user_id: int, session: AsyncSession) -> User | None:
     result = await session.execute(select(User).where(User.id == user_id))
     return result.scalars().first()
+
+
+async def get_me(token: str, session: AsyncSession) -> MeResponse:
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise ValueError("missing sub")
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token",
+        ) from exc
+    result = await session.execute(select(Credentials).where(Credentials.username == username))
+    credential = result.scalars().first()
+    if credential is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+    user_row = await session.execute(select(User).where(User.credential_id == credential.id))
+    user = user_row.scalars().first()
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    return user
 
 
 async def update_profile(
