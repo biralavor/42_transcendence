@@ -48,7 +48,6 @@
 | Advanced Search | Web |
 | File Upload & Management | Web |
 | Browser Compatibility | Accessibility |
-| Additional Browser Support | Accessibility |
 | Game Statistics & Match History | User Management |
 | User Activity Analytics & Insights Dashboard | User Management |
 | Tournament System | Gaming & UX |
