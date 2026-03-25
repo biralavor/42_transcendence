@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     DB_PORT: int = 5432
     DB_NAME: str = "transcendence_db"
     DB_ECHO: bool = False
+    JWT_SECRET_KEY: str = "changeme"
 
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> str:
