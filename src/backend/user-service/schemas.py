@@ -37,6 +37,20 @@ class ProfileResponse(BaseModel):
     dark_mode:    bool = False
 
 
+class MeResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id:            int
+    username:      str
+    credential_id: Optional[int] = None
+    display_name:  Optional[str] = None
+    status:        str
+    avatar_url:    Optional[str] = None
+    created_at:    Optional[datetime] = None
+    bio:           Optional[str] = None
+    dark_mode:     bool = False
+
+
 class UpdateProfileRequest(BaseModel):
     display_name: Optional[str] = None
     bio:          Optional[str] = None
