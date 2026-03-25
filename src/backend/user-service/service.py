@@ -6,12 +6,12 @@ from datetime import datetime, timedelta, timezone
 import bcrypt
 import hashlib
 import secrets
-from jose import jwt
+from jose import jwt, ExpiredSignatureError, JWTError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
+from shared.config.settings import settings
 
-SECRET_KEY = "secret"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
@@ -20,7 +20,7 @@ def create_access_token(data: dict, expires_delta: timedelta):
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + expires_delta
     to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm=ALGORITHM)
 
 
 def hash_password(password: str) -> bytes:
@@ -60,7 +60,6 @@ async def authenticate(login: Login, session: AsyncSession) -> LoginResponse:
         user = User(
             username=credential.username,
             credential_id=credential.id,
-            password_hash=credential.password,
         )
         session.add(user)
 
@@ -106,11 +105,16 @@ async def get_profile(user_id: int, session: AsyncSession) -> User | None:
 
 async def get_me(token: str, session: AsyncSession) -> MeResponse:
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[ALGORITHM])
         username: str = payload.get("sub")
         if username is None:
-            raise ValueError("missing sub")
-    except Exception as exc:
+            raise JWTError("missing sub")
+    except ExpiredSignatureError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token expired",
+        ) from exc
+    except JWTError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token",
