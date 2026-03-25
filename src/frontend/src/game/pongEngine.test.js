@@ -11,10 +11,14 @@ const mockCanvasContext = {
         reset: vi.fn(),
         fillStyle: '',
         strokeStyle: '',
+        lineWidth: 0,
         font: '',
         fillRect: vi.fn(),
         fillText: vi.fn(),
         strokeRect: vi.fn(),
+        beginPath: vi.fn(),
+        roundRect: vi.fn(),
+        stroke: vi.fn(),
     },
 }
 
