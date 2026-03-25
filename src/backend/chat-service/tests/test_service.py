@@ -12,6 +12,13 @@ from persistence import get_or_create_room, save_message, get_room_history
 async def db():
     engine = create_async_engine(settings.SQLALCHEMY_DATABASE_URI, poolclass=NullPool)
     async with engine.begin() as conn:
+        # Terminate any idle-in-transaction connections that would block TRUNCATE
+        await conn.execute(text(
+            "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+            "WHERE state = 'idle in transaction' "
+            "AND datname = current_database() "
+            "AND pid <> pg_backend_pid()"
+        ))
         await conn.execute(text("TRUNCATE TABLE messages, chat_rooms RESTART IDENTITY CASCADE"))
     async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     async with async_session() as session:
