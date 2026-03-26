@@ -54,22 +54,11 @@ async def authenticate(login: Login, session: AsyncSession) -> LoginResponse:
     tokens.refresh_token_hash = refresh_token_hash
     tokens.expires_at = datetime.now(timezone.utc) + timedelta(days=30)
 
-    user_row = await session.execute(select(User).where(User.credential_id == credential.id))
-    user = user_row.scalars().first()
-    if user is None:
-        user = User(
-            username=credential.username,
-            credential_id=credential.id,
-        )
-        session.add(user)
-
     await session.commit()
-    await session.refresh(user)
     return LoginResponse(
         access_token=access_token,
         token_type="bearer",
         refresh_token=raw_refresh_token,
-        user_id=user.id,
     )
 
 
@@ -126,7 +115,10 @@ async def get_me(token: str, session: AsyncSession) -> MeResponse:
     user_row = await session.execute(select(User).where(User.credential_id == credential.id))
     user = user_row.scalars().first()
     if user is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        user = User(username=credential.username, credential_id=credential.id)
+        session.add(user)
+        await session.commit()
+        await session.refresh(user)
     return user
 
 

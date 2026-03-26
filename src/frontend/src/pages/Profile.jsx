@@ -4,10 +4,11 @@ import NavbarComponent from '../Components/Navbar'
 import { getAvatarFilter } from '../utils/avatarFilter'
 import './Profile.css'
 import FriendsSidebar from '../Components/FriendsSidebar'
+import { useAuth } from '../context/authContext'
 
 export default function Profile() {
-  const _rawId = parseInt(localStorage.getItem('user_id'), 10)
-  const USER_ID = Number.isNaN(_rawId) ? 1 : _rawId
+  const { auth } = useAuth()
+  const [userId, setUserId]     = useState(null)
   const [profile, setProfile]   = useState(null)
   const [history, setHistory]   = useState([])
   const [loading, setLoading]   = useState(true)
@@ -20,19 +21,37 @@ export default function Profile() {
   }, [])
 
   useEffect(() => {
+    if (!auth.access_token) {
+      setError('Not authenticated')
+      setLoading(false)
+      return
+    }
+
     const controller = new AbortController()
     const { signal } = controller
 
-    Promise.all([
-      fetch(`/api/users/profile/${USER_ID}`, { signal }).then(r => {
-        if (!r.ok) throw new Error(`Profile fetch failed: ${r.status}`)
+    fetch('/api/users/auth/me', {
+      signal,
+      headers: { Authorization: `Bearer ${auth.access_token}` },
+    })
+      .then(r => {
+        if (!r.ok) throw new Error(`Auth failed: ${r.status}`)
         return r.json()
-      }),
-      fetch(`/api/game/matches/history/${USER_ID}`, { signal }).then(r => {
-        if (!r.ok) throw new Error(`History fetch failed: ${r.status}`)
-        return r.json()
-      }),
-    ])
+      })
+      .then(me => {
+        const id = me.id
+        setUserId(id)
+        return Promise.all([
+          fetch(`/api/users/profile/${id}`, { signal }).then(r => {
+            if (!r.ok) throw new Error(`Profile fetch failed: ${r.status}`)
+            return r.json()
+          }),
+          fetch(`/api/game/matches/history/${id}`, { signal }).then(r => {
+            if (!r.ok) throw new Error(`History fetch failed: ${r.status}`)
+            return r.json()
+          }),
+        ])
+      })
       .then(([profileData, historyData]) => {
         setProfile({
           displayName: profileData.display_name ?? '',
@@ -53,7 +72,7 @@ export default function Profile() {
       })
 
     return () => controller.abort()
-  }, [])
+  }, [auth.access_token])
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target
@@ -66,7 +85,7 @@ export default function Profile() {
   const handleSave = async (e) => {
     e.preventDefault()
     try {
-      const resp = await fetch(`/api/users/profile/${USER_ID}`, {
+      const resp = await fetch(`/api/users/profile/${userId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -117,7 +136,7 @@ export default function Profile() {
       <main className="arcade-content profile-page">
         <div className="profile-layout">
           <div className="profile-sidebar-col">
-            <FriendsSidebar userId={USER_ID} username={profile?.username} />
+            <FriendsSidebar userId={userId} username={profile?.username} />
           </div>
           <div className="profile-main-col">
           <div className="arcade-screen profile-card">
@@ -127,7 +146,7 @@ export default function Profile() {
                 src={profile.avatarUrl}
                 alt="User avatar"
                 className="profile-avatar"
-                style={{ filter: getAvatarFilter(USER_ID) }}
+                style={{ filter: getAvatarFilter(userId) }}
               />
             </div>
             <div className="profile-info">

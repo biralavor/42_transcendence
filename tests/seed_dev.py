@@ -61,10 +61,29 @@ async def seed():
     Session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
     async with Session() as session:
-        # ── insert users ─────────────────────────────────────────────
+        # ── insert credentials first (users.credential_id is NOT NULL) ─
+        cred_ids = {}
+        for u in USERS:
+            existing = await session.execute(
+                text("SELECT id FROM credentials WHERE username = :u"), {"u": u["username"]}
+            )
+            row = existing.fetchone()
+            if row:
+                cred_ids[u["username"]] = row[0]
+                print(f"  [skip] credentials '{u['username']}' already exist")
+                continue
+
+            pw_hash = _hash(PASSWORD)
+            result = await session.execute(
+                text("INSERT INTO credentials (username, password) VALUES (:u, :p) RETURNING id"),
+                {"u": u["username"], "p": pw_hash},
+            )
+            cred_ids[u["username"]] = result.fetchone()[0]
+            print(f"  [ok]   credentials '{u['username']}' created (password='{PASSWORD}')")
+
+        # ── insert users linked to their credential ───────────────────
         user_ids = {}
         for u in USERS:
-            # upsert: skip if username already exists
             existing = await session.execute(
                 text("SELECT id FROM users WHERE username = :u"), {"u": u["username"]}
             )
@@ -76,31 +95,15 @@ async def seed():
 
             result = await session.execute(
                 text("""
-                    INSERT INTO users (username, display_name, status, bio, avatar_url)
-                    VALUES (:username, :display_name, :status, :bio, :avatar_url)
+                    INSERT INTO users (username, display_name, status, bio, avatar_url, credential_id)
+                    VALUES (:username, :display_name, :status, :bio, :avatar_url, :credential_id)
                     RETURNING id
                 """),
-                u,
+                {**u, "credential_id": cred_ids[u["username"]]},
             )
             uid = result.fetchone()[0]
             user_ids[u["username"]] = uid
             print(f"  [ok]   user '{u['username']}' created (id={uid})")
-
-        # ── insert credentials ────────────────────────────────────────
-        for u in USERS:
-            existing = await session.execute(
-                text("SELECT id FROM credentials WHERE username = :u"), {"u": u["username"]}
-            )
-            if existing.fetchone():
-                print(f"  [skip] credentials '{u['username']}' already exist")
-                continue
-
-            pw_hash = _hash(PASSWORD)
-            await session.execute(
-                text("INSERT INTO credentials (username, password) VALUES (:u, :p)"),
-                {"u": u["username"], "p": pw_hash},
-            )
-            print(f"  [ok]   credentials '{u['username']}' created (password='{PASSWORD}')")
 
         # ── insert friendships ────────────────────────────────────────
         alice_id   = user_ids.get("alice")

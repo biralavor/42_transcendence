@@ -23,19 +23,16 @@ async def _override_get_db():
         yield session
 
 
-def setup_module(_):
-    async def _truncate():
-        async with _engine.begin() as conn:
-            await conn.execute(text("TRUNCATE TABLE matches RESTART IDENTITY CASCADE"))
-    asyncio.run(_truncate())
-
-
 def teardown_module(_):
     asyncio.run(_engine.dispose())
 
 
 @pytest.fixture
 def client():
+    async def _truncate():
+        async with _engine.begin() as conn:
+            await conn.execute(text("TRUNCATE TABLE matches RESTART IDENTITY CASCADE"))
+    asyncio.run(_truncate())
     app.dependency_overrides[get_db] = _override_get_db
     yield TestClient(app)
     app.dependency_overrides.clear()

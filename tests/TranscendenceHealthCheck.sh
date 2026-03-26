@@ -708,16 +708,11 @@ section "User Service API Suite"
 if container_running user-service; then
     _UPORT="${USER_SERVICE_PORT:-8001}"
 
-    # Login — parse alice's user_id from the response
+    # Login — get tokens; user_id is resolved via /auth/me
     login_body=$(docker exec user-service wget -q -O - \
         --header="Content-Type: application/json" \
         --post-data='{"username":"alice","password":"test123"}' \
         "http://127.0.0.1:${_UPORT}/auth/login" 2>/dev/null || echo "")
-    if echo "$login_body" | grep -q '"user_id"'; then
-        pass "User login response includes user_id"
-    else
-        fail "User login response missing user_id (got: '${login_body:0:120}')"
-    fi
 
     if echo "$login_body" | grep -q '"access_token"'; then
         pass "User login response includes access_token"
@@ -725,8 +720,15 @@ if container_running user-service; then
         fail "User login response missing access_token"
     fi
 
-    alice_id=$(echo "$login_body" | python3 -c \
-        "import sys,json; print(json.load(sys.stdin).get('user_id',''))" 2>/dev/null || echo "")
+    alice_token=$(echo "$login_body" | python3 -c \
+        "import sys,json; print(json.load(sys.stdin).get('access_token',''))" 2>/dev/null || echo "")
+
+    # Resolve alice's user_id via /auth/me
+    me_body=$(docker exec user-service wget -q -O - \
+        --header="Authorization: Bearer ${alice_token}" \
+        "http://127.0.0.1:${_UPORT}/auth/me" 2>/dev/null || echo "")
+    alice_id=$(echo "$me_body" | python3 -c \
+        "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || echo "")
 
     # Profile fetch using alice's actual user_id
     profile_body=$(docker exec user-service wget -q -O - \
@@ -801,20 +803,21 @@ section "Game Service Match History Suite"
 if container_running game-service; then
     _GPORT="${GAME_SERVICE_PORT:-8002}"
 
+    _alice_id="${alice_id:-1}"
     history_body=$(docker exec game-service wget -q -O - \
-        "http://127.0.0.1:${_GPORT}/matches/history/1" 2>/dev/null || echo "")
+        "http://127.0.0.1:${_GPORT}/matches/history/${_alice_id}" 2>/dev/null || echo "")
     if echo "$history_body" | grep -qE '^\['; then
-        pass "Match history endpoint returns a JSON array for user 1"
+        pass "Match history endpoint returns a JSON array for alice"
     else
-        fail "Match history endpoint failed for user 1 (got: '${history_body:0:120}')"
+        fail "Match history endpoint failed for alice (got: '${history_body:0:120}')"
     fi
 
-    # Seeded data: alice (id=1) has at least 3 finished matches
+    # Seeded data: alice has at least 3 finished matches
     match_count=$(echo "$history_body" | python3 -c "import sys,json; print(len(json.load(sys.stdin)))" 2>/dev/null || echo "-1")
     if [[ "$match_count" -ge 3 ]]; then
-        pass "Match history for user 1 contains at least 3 seeded matches (got $match_count)"
+        pass "Match history for alice contains at least 3 seeded matches (got $match_count)"
     else
-        fail "Match history for user 1 has fewer matches than expected (got $match_count, want ≥3)"
+        fail "Match history for alice has fewer matches than expected (got $match_count, want ≥3)"
     fi
 
     # Each match must include result and score fields
