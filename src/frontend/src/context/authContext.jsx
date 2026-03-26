@@ -9,6 +9,7 @@ export function AuthProvider({ children }) {
     refresh_token: null,
     token_type: null,
   })
+  const [isAuthReady, setIsAuthReady] = useState(false)
 
   useEffect(() => {
     const storedAuth = getStoredAuth()
@@ -20,6 +21,8 @@ export function AuthProvider({ children }) {
         token_type: storedAuth.token_type,
       })
     }
+
+    setIsAuthReady(true)
   }, [])
 
   const login = (authData, rememberMe = false) => {
@@ -49,12 +52,14 @@ export function AuthProvider({ children }) {
   const value = useMemo(() => ({
     auth,
     isAuthenticated,
+    isAuthReady,
     login,
     logout,
-  }), [auth, isAuthenticated])
+  }), [auth, isAuthenticated, isAuthReady])
 
   console.log('Auth state:', auth)
   console.log('isAuthenticated:', isAuthenticated)
+
   return (
     <AuthContext.Provider value={value}>
       {children}
