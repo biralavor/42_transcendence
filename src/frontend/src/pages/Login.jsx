@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import './Login.css'
 import NavbarComponent from '../Components/Navbar'
 import { useState } from 'react'
@@ -9,6 +9,7 @@ export default function Login() {
   const [success, setSuccess] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const { login } = useAuth()
+  const navigate = useNavigate()
 
   const [formData, setFormData] = useState({
     username: '',
@@ -74,14 +75,7 @@ export default function Login() {
       }
 
       login(data, formData.rememberMe)
-
-      setFormData((prev) => ({
-        ...prev,
-        username: '',
-        password: '',
-      }))
-
-      setSuccess('Login successful.')
+      navigate('/profile')
     } catch (err) {
       console.error(err)
       setError('Unable to connect to the server.')
