@@ -46,13 +46,19 @@ def mock_db_session():
 
 @pytest.fixture(autouse=True)
 def override_get_db(mock_db_session):
-    """Override FastAPI's get_db dependency for every test in this package."""
-    from service.main import app
+    """Override FastAPI's get_db and get_current_user dependencies for every test."""
+    from unittest.mock import MagicMock
+    from service.main import app, get_current_user
     from shared.database import get_db
 
     async def _fake_get_db():
         yield mock_db_session
 
+    default_user = MagicMock()
+    default_user.id = 9999  # matches the user_id used in most test paths
+
     app.dependency_overrides[get_db] = _fake_get_db
+    app.dependency_overrides[get_current_user] = lambda: default_user
     yield
     app.dependency_overrides.pop(get_db, None)
+    app.dependency_overrides.pop(get_current_user, None)

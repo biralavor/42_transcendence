@@ -117,6 +117,25 @@ async def accept_friend_request(
     return friendship
 
 
+async def decline_friend_request(
+    addressee_id: int, requester_id: int, session: AsyncSession
+) -> bool:
+    """Deletes a pending request where addressee_id is the recipient. Returns False if not found."""
+    result = await session.execute(
+        select(Friendship).where(
+            Friendship.requester_id == requester_id,
+            Friendship.addressee_id == addressee_id,
+            Friendship.status == "pending",
+        )
+    )
+    friendship = result.scalars().first()
+    if friendship is None:
+        return False
+    await session.delete(friendship)
+    await session.commit()
+    return True
+
+
 async def delete_friendship(
     user_id: int, other_id: int, session: AsyncSession
 ) -> bool:

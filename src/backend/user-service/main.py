@@ -10,10 +10,11 @@ from service.schemas import (
     ProfileResponse, UpdateProfileRequest, MeResponse,
     FriendResponse, FriendRequestResponse,
 )
+from service.models.user import User
 from service.service import authenticate, register_credentials, get_profile, update_profile, get_me
 from service.friends import (
     get_friends, get_pending_requests, get_sent_requests, send_friend_request,
-    accept_friend_request, delete_friendship, search_users,
+    accept_friend_request, decline_friend_request, delete_friendship, search_users,
 )
 from shared.database import get_db
 
@@ -21,6 +22,14 @@ SessionDependency = Annotated[AsyncSession, Depends(get_db)]
 bearer_scheme = HTTPBearer()
 
 app = FastAPI(title="User Service")
+
+
+async def get_current_user(
+    session: SessionDependency,
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+) -> User:
+    """Decode the Bearer JWT and return the authenticated User."""
+    return await get_me(credentials.credentials, session)
 
 
 @app.get("/health")
@@ -99,8 +108,25 @@ async def add_friend(user_id: int, addressee_id: int, session: SessionDependency
 
 @app.put("/friends/{user_id}/accept/{requester_id}",
          response_model=FriendRequestResponse)
-async def accept_friend(user_id: int, requester_id: int, session: SessionDependency):
+async def accept_friend(
+    user_id: int, requester_id: int, session: SessionDependency,
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.id != user_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
     return await accept_friend_request(user_id, requester_id, session)
+
+
+@app.delete("/friends/{user_id}/decline/{requester_id}", status_code=204)
+async def decline_friend(
+    user_id: int, requester_id: int, session: SessionDependency,
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.id != user_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    deleted = await decline_friend_request(user_id, requester_id, session)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Friend request not found")
 
 
 @app.delete("/friends/{user_id}/{other_id}", status_code=204)
