@@ -22,6 +22,7 @@ export default function App() {
         <Route path="/leaderboard" element={<Leaderboard />} />
         <Route path="/register" element={<Register />} />
         <Route path="/pong-develop" element={<PongCanvas />} />
+
         <Route
           path="/profile"
           element={(
@@ -30,8 +31,17 @@ export default function App() {
             </PrivateRoute>
           )}
         />
+
+        <Route
+          path="/chat/:roomId"
+          element={(
+            <PrivateRoute>
+              <Chat />
+            </PrivateRoute>
+          )}
+        />
+
         <Route path="/forgot-password" element={<ForgotPassword />} />
-        <Route path="/chat/:roomId" element={<Chat />} />
       </Routes>
     </BrowserRouter>
   )
