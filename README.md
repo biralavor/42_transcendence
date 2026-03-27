@@ -80,28 +80,14 @@ bash tests/TranscendenceHealthCheck.sh   # run health checks
 make fclean                  # full teardown
 ```
 
-See [docs/DEV_DOC.md](docs/DEV_DOC.md) · [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/MICROSERVICES.md](docs/MICROSERVICES.md) · [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) for developer guides.
-
-## Documentation
-
-| Resource | Description |
-|----------|-------------|
-| [Wiki — Home](https://github.com/biralavor/42_transcendence/wiki/Home) | Project overview and quick start |
-| [Wiki — Milestones](https://github.com/biralavor/42_transcendence/wiki/Milestones) | Sprint plan and delivery timeline |
-| [Wiki — Troubleshooting](https://github.com/biralavor/42_transcendence/wiki/Troubleshooting) | Common setup and runtime issues |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System diagram and service routing |
-| [docs/MICROSERVICES.md](docs/MICROSERVICES.md) | Backend service layout |
-| [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) | Git workflow and branching strategy |
-| [docs/ALEMBIC.md](docs/ALEMBIC.md) | Alembic migration guide — changelog, rollback, workflow |
+See [docs/DEV_DOC.md](docs/DEV_DOC.md) · [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/MICROSERVICES.md](docs/MICROSERVICES.md) · [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md)
 
 ---
 
-## Team
+## Contributing
 
-| Name | Role | GitHub |
-|------|------|--------|
-| Lis | Product Owner · Developer | [@solismesmo](https://github.com/solismesmo) |
-| Mauricio Rodrigues | Technical Lead · Architect · Developer | [@RedJocker](https://github.com/RedJocker) |
-| Bira Lavor | Project Manager · Scrum Master · DevOps · Developer | [@biralavor](https://github.com/biralavor) |
-| Bruno Gomes Lameirinha | Developer | [@Bruno-Gomes-Lameirinha](https://github.com/Bruno-Gomes-Lameirinha) |
-| Bruno Thorstensen | Developer | [@brunothors](https://github.com/brunothors) |
+Contributions are welcome! Please follow these steps:
+1. Review the [Architecture Documentation](docs/ARCHITECTURE.md) to understand the microservice boundaries.
+2. Create a feature branch (`git checkout -b feature/AmazingFeature`).
+3. Ensure your code passes the `bash tests/TranscendenceHealthCheck.sh` suite.
+4. Open a Pull Request detailing your changes and which module they impact.
