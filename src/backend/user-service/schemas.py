@@ -12,7 +12,6 @@ class LoginResponse(BaseModel):
     access_token: str
     token_type: str
     refresh_token: str
-    user_id: int
 
 
 class RegisterRequest(BaseModel):

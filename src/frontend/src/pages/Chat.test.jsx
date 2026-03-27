@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, act } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { AuthProvider } from '../context/authContext'
 import Chat from './Chat'
 
 // ── Mock createWsClient ────────────────────────────────────────────────────
@@ -21,11 +22,13 @@ vi.mock('../utils/wsClient', () => ({
 
 function renderChat(roomId = 'room1') {
   return render(
-    <MemoryRouter initialEntries={[`/chat/${roomId}`]}>
-      <Routes>
-        <Route path="/chat/:roomId" element={<Chat />} />
-      </Routes>
-    </MemoryRouter>
+    <AuthProvider>
+      <MemoryRouter initialEntries={[`/chat/${roomId}`]}>
+        <Routes>
+          <Route path="/chat/:roomId" element={<Chat />} />
+        </Routes>
+      </MemoryRouter>
+    </AuthProvider>
   )
 }
 

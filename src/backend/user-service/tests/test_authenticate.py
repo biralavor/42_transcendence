@@ -1,5 +1,5 @@
 # src/backend/user-service/tests/test_authenticate.py
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import bcrypt
 import pytest
@@ -18,15 +18,6 @@ def _make_credential(username: str = "alice", password: str = "secret123"):
     cred.username = username
     cred.password = _hashed(password)
     return cred
-
-
-def _make_user(credential_id: int = 1, user_id: int = 42):
-    user = MagicMock()
-    user.id = user_id
-    user.credential_id = credential_id
-    user.username = "alice"
-    user.password_hash = None
-    return user
 
 
 def _make_token_row(credential_id: int = 1):
@@ -51,17 +42,11 @@ def _session_returning(*call_results):
 
 
 @pytest.mark.asyncio
-async def test_first_login_creates_user_linked_to_credential():
-    """First login: no existing User row → one is created with credential_id set."""
+async def test_login_returns_tokens_without_user_id():
+    """authenticate() only deals with credentials + tokens — no user_id in response."""
     cred = _make_credential()
-    # execute calls: 1=credentials, 2=tokens (None → new), 3=user (None → new)
-    session = _session_returning(cred, None, None)
-
-    new_user = _make_user()
-    session.refresh = AsyncMock(side_effect=lambda obj: setattr(obj, "id", new_user.id) or None)
-
-    added_objects = []
-    session.add = MagicMock(side_effect=added_objects.append)
+    # execute calls: 1=credentials, 2=tokens (None → new)
+    session = _session_returning(cred, None)
 
     from shared.database import get_db
 
@@ -80,15 +65,7 @@ async def test_first_login_creates_user_linked_to_credential():
     data = resp.json()
     assert "access_token" in data
     assert "refresh_token" in data
-
-    # A User object must have been added to the session
-    from service.models.user import User
-    created_users = [o for o in added_objects if isinstance(o, User)]
-    assert len(created_users) == 1
-    assert created_users[0].credential_id == cred.id
-    assert created_users[0].username == cred.username
-    # password_hash must NOT be copied from credentials
-    assert created_users[0].password_hash is None
+    assert "user_id" not in data
 
 
 @pytest.mark.asyncio
@@ -96,10 +73,8 @@ async def test_subsequent_login_updates_token_not_duplicates():
     """Second login: existing Tokens row is updated in-place, no new row added."""
     cred = _make_credential()
     existing_token = _make_token_row(credential_id=cred.id)
-    existing_user = _make_user(credential_id=cred.id)
-    # execute calls: 1=credentials, 2=tokens (found), 3=user (found)
-    session = _session_returning(cred, existing_token, existing_user)
-    session.refresh = AsyncMock()
+    # execute calls: 1=credentials, 2=tokens (found)
+    session = _session_returning(cred, existing_token)
 
     added_objects = []
     session.add = MagicMock(side_effect=added_objects.append)

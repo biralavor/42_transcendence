@@ -1,13 +1,29 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Routes, Route } from 'react-router-dom'
+import { AuthProvider } from '../context/authContext'
 import Login from './Login'
 
 function renderLogin() {
   return render(
-    <MemoryRouter>
-      <Login />
-    </MemoryRouter>
+    <AuthProvider>
+      <MemoryRouter>
+        <Login />
+      </MemoryRouter>
+    </AuthProvider>
+  )
+}
+
+function renderLoginWithRoutes() {
+  return render(
+    <AuthProvider>
+      <MemoryRouter initialEntries={['/login']}>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="/profile" element={<div>profile page</div>} />
+        </Routes>
+      </MemoryRouter>
+    </AuthProvider>
   )
 }
 
@@ -15,6 +31,7 @@ describe('Login page', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
     localStorage.clear()
+    sessionStorage.clear()
   })
 
   it('renders username and password fields', () => {
@@ -62,7 +79,7 @@ describe('Login page', () => {
     expect(JSON.parse(options.body)).toEqual({ username: 'testuser', password: 'secret' })
   })
 
-  it('stores tokens in localStorage on success', async () => {
+  it('stores tokens in sessionStorage on success (rememberMe unchecked)', async () => {
     vi.spyOn(global, 'fetch').mockResolvedValueOnce(
       new Response(
         JSON.stringify({ access_token: 'acc', refresh_token: 'ref', token_type: 'bearer' }),
@@ -75,9 +92,8 @@ describe('Login page', () => {
     fireEvent.change(screen.getByLabelText(/password/i), { target: { value: 'p' } })
     fireEvent.submit(screen.getByRole('button', { name: /sign in/i }).closest('form'))
 
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/login successful/i))
-    expect(localStorage.getItem('access_token')).toBe('acc')
-    expect(localStorage.getItem('refresh_token')).toBe('ref')
+    await waitFor(() => expect(sessionStorage.getItem('access_token')).toBe('acc'))
+    expect(sessionStorage.getItem('refresh_token')).toBe('ref')
   })
 
   it('shows error alert on 401', async () => {
@@ -124,5 +140,40 @@ describe('Login page', () => {
     await waitFor(() =>
       expect(screen.getByRole('alert')).toHaveTextContent(/unable to connect/i)
     )
+  })
+
+  it('redirects to /profile on successful login', async () => {
+    vi.spyOn(global, 'fetch').mockResolvedValueOnce(
+      new Response(JSON.stringify({ access_token: 'a', refresh_token: 'r', token_type: 'bearer' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    )
+
+    renderLoginWithRoutes()
+    fireEvent.change(screen.getByLabelText(/username/i), { target: { value: 'u' } })
+    fireEvent.change(screen.getByLabelText(/password/i), { target: { value: 'p' } })
+    fireEvent.submit(screen.getByRole('button', { name: /sign in/i }).closest('form'))
+
+    await waitFor(() => expect(screen.getByText('profile page')).toBeInTheDocument())
+  })
+
+  it('stores tokens in localStorage when rememberMe is checked', async () => {
+    vi.spyOn(global, 'fetch').mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ access_token: 'acc', refresh_token: 'ref', token_type: 'bearer' }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      )
+    )
+
+    renderLogin()
+    fireEvent.change(screen.getByLabelText(/username/i), { target: { value: 'u' } })
+    fireEvent.change(screen.getByLabelText(/password/i), { target: { value: 'p' } })
+    fireEvent.click(screen.getByRole('checkbox', { name: /remember me/i }))
+    fireEvent.submit(screen.getByRole('button', { name: /sign in/i }).closest('form'))
+
+    await waitFor(() => expect(localStorage.getItem('access_token')).toBe('acc'))
+    expect(localStorage.getItem('refresh_token')).toBe('ref')
+    expect(sessionStorage.getItem('access_token')).toBeNull()
   })
 })

@@ -9,8 +9,7 @@ class User(Base):
 
     id            = Column(Integer, primary_key=True, index=True)
     username      = Column(String(50), unique=True, nullable=False)
-    credential_id = Column(Integer, ForeignKey("credentials.id"), unique=True, nullable=True)
-    password_hash = Column(String)
+    credential_id = Column(Integer, ForeignKey("credentials.id"), unique=True, nullable=False)
     status       = Column(String(20), default="offline")
     avatar_url   = Column(String, nullable=True)
     display_name = Column(String(50), nullable=True)
