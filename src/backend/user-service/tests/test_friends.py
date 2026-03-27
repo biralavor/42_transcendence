@@ -1,4 +1,6 @@
 # src/backend/user-service/tests/test_friends.py
+from unittest.mock import MagicMock
+
 from httpx import AsyncClient, ASGITransport
 from service.main import app
 
@@ -23,10 +25,32 @@ async def test_remove_friend_not_found():
     assert resp.status_code == 404
 
 
-async def test_accept_request_not_found():
+async def test_respond_to_request_not_found():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.put("/friends/9999/accept/8888")
+        resp = await client.put("/friends/9999/requests/8888", json={"action": "accept"})
     assert resp.status_code == 404
+
+
+async def test_respond_to_request_forbidden():
+    """User cannot respond to a request addressed to someone else."""
+    from service.main import get_current_user
+
+    fake_user = MagicMock()
+    fake_user.id = 1  # JWT user is id=1, but path says user_id=2
+
+    app.dependency_overrides[get_current_user] = lambda: fake_user
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.put("/friends/2/requests/8888", json={"action": "accept"})
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+    assert resp.status_code == 403
+
+
+async def test_respond_to_request_invalid_action():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.put("/friends/9999/requests/8888", json={"action": "foo"})
+    assert resp.status_code == 422
 
 
 async def test_search_users_empty():
