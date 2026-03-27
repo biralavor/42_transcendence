@@ -1,6 +1,5 @@
 import { Link } from 'react-router-dom'
 import NavbarComponent from './Navbar'
-import './AuthRequired.css'
 
 export default function AuthRequired() {
   return (
