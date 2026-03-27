@@ -10,7 +10,7 @@ export default function AuthRequired() {
       <main className="auth-required-page">
         <section className="auth-required-card">
           <h1>Private Area</h1>
-          <p>You must be logged in to access the Profile page.</p>
+          <p>You must be logged in to access this page.</p>
 
           <div className="auth-required-actions">
             <Link to="/login" className="auth-required-button">
