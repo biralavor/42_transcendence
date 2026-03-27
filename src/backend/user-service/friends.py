@@ -97,13 +97,17 @@ async def send_friend_request(
     return friendship
 
 
-async def accept_friend_request(
-    addressee_id: int, requester_id: int, session: AsyncSession
-) -> Friendship:
-    """Marks a pending request as accepted. Raises 404 if not found."""
+async def respond_to_friend_request(
+    addressee_id: int, request_id: int, action: str, session: AsyncSession
+) -> Friendship | None:
+    """Accept or decline a pending friend request by its ID.
+
+    Returns the updated Friendship for 'accept', None for 'decline'.
+    Raises 404 if the request does not exist or does not belong to addressee_id.
+    """
     result = await session.execute(
         select(Friendship).where(
-            Friendship.requester_id == requester_id,
+            Friendship.id == request_id,
             Friendship.addressee_id == addressee_id,
             Friendship.status == "pending",
         )
@@ -111,29 +115,15 @@ async def accept_friend_request(
     friendship = result.scalars().first()
     if friendship is None:
         raise HTTPException(status_code=404, detail="Friend request not found")
-    friendship.status = "accepted"
-    await session.commit()
-    await session.refresh(friendship)
-    return friendship
-
-
-async def decline_friend_request(
-    addressee_id: int, requester_id: int, session: AsyncSession
-) -> bool:
-    """Deletes a pending request where addressee_id is the recipient. Returns False if not found."""
-    result = await session.execute(
-        select(Friendship).where(
-            Friendship.requester_id == requester_id,
-            Friendship.addressee_id == addressee_id,
-            Friendship.status == "pending",
-        )
-    )
-    friendship = result.scalars().first()
-    if friendship is None:
-        return False
-    await session.delete(friendship)
-    await session.commit()
-    return True
+    if action == "accept":
+        friendship.status = "accepted"
+        await session.commit()
+        await session.refresh(friendship)
+        return friendship
+    else:  # decline
+        await session.delete(friendship)
+        await session.commit()
+        return None
 
 
 async def delete_friendship(

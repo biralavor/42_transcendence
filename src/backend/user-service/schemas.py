@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 from pydantic import BaseModel, ConfigDict
 
 
@@ -79,3 +79,7 @@ class FriendRequestResponse(BaseModel):
     created_at:         Optional[datetime] = None
     requester_username: Optional[str] = None
     addressee_username: Optional[str] = None
+
+
+class FriendRequestAction(BaseModel):
+    action: Literal["accept", "decline"]
