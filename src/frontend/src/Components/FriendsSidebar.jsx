@@ -1,8 +1,10 @@
 // src/frontend/src/Components/FriendsSidebar.jsx
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../context/authContext'
 
 export default function FriendsSidebar({ userId, username }) {
+  const { auth } = useAuth()
   const [friends, setFriends]             = useState([])
   const [requests, setRequests]           = useState([])
   const [searchQuery, setSearchQuery]     = useState('')
@@ -52,7 +54,10 @@ export default function FriendsSidebar({ userId, username }) {
   const handleRespond = async (req, action) => {
     const res = await fetch(`/api/users/friends/${userId}/requests/${req.id}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${auth.access_token}`,
+      },
       body: JSON.stringify({ action }),
     })
     if (!res.ok) return

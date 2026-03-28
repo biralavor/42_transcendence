@@ -9,6 +9,10 @@ vi.mock('react-router-dom', async () => {
   return { ...actual, useNavigate: vi.fn() }
 })
 
+vi.mock('../context/authContext', () => ({
+  useAuth: () => ({ auth: { access_token: 'fake-token' } }),
+}))
+
 function renderSidebar(userId = 1) {
   return render(
     <MemoryRouter>
@@ -100,6 +104,25 @@ describe('FriendsSidebar', () => {
     renderSidebar(5)  // userId=5, friendId=3 → /chat/DM-3-5 (canonicalized)
     fireEvent.click(await screen.findByRole('button', { name: /chat/i }))
     expect(navigate).toHaveBeenCalledWith('/chat/DM-3-5', expect.any(Object))
+  })
+
+  it('accept PUT includes Authorization header', async () => {
+    vi.spyOn(global, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([
+        { id: 7, requester_id: 2, requester_username: 'bob', status: 'pending' },
+      ]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response('{}', { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: 2, username: 'bob', status: 'offline' }), { status: 200 }))
+    renderSidebar(1)
+    fireEvent.click(await screen.findByRole('button', { name: /✓/ }))
+    await waitFor(() => {
+      const respondCall = global.fetch.mock.calls.find(([url, opts]) =>
+        url.includes('/requests/7') && opts?.method === 'PUT'
+      )
+      expect(respondCall[1].headers?.Authorization).toBe('Bearer fake-token')
+    })
   })
 
   it('accept button calls PUT /requests/{id} with action accept', async () => {
