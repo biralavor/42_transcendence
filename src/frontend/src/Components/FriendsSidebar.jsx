@@ -49,21 +49,21 @@ export default function FriendsSidebar({ userId, username }) {
     if (user) setPendingSent(prev => [...prev, user])
   }
 
-  const handleAccept = async (requesterId) => {
-    const res = await fetch(`/api/users/friends/${userId}/accept/${requesterId}`, { method: 'PUT' })
+  const handleRespond = async (req, action) => {
+    const res = await fetch(`/api/users/friends/${userId}/requests/${req.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action }),
+    })
     if (!res.ok) return
-    setRequests(prev => prev.filter(r => r.requester_id !== requesterId))
-    const profileRes = await fetch(`/api/users/profile/${requesterId}`)
-    if (profileRes.ok) {
-      const user = await profileRes.json()
-      setFriends(prev => [...prev, user])
+    setRequests(prev => prev.filter(r => r.id !== req.id))
+    if (action === 'accept') {
+      const profileRes = await fetch(`/api/users/profile/${req.requester_id}`)
+      if (profileRes.ok) {
+        const newFriend = await profileRes.json()
+        setFriends(prev => [...prev, newFriend])
+      }
     }
-  }
-
-  const handleDecline = async (requesterId) => {
-    const res = await fetch(`/api/users/friends/${userId}/${requesterId}`, { method: 'DELETE' })
-    if (!res.ok) return
-    setRequests(prev => prev.filter(r => r.requester_id !== requesterId))
   }
 
   const handleRemoveFriend = async (friendId) => {
@@ -146,13 +146,13 @@ export default function FriendsSidebar({ userId, username }) {
                 <div className="friends-request-actions">
                   <button
                     className="arcade-btn arcade-btn-primary friends-btn"
-                    onClick={() => handleAccept(req.requester_id)}
+                    onClick={() => handleRespond(req, 'accept')}
                   >
                     ✓
                   </button>
                   <button
                     className="arcade-btn friends-btn friends-btn-decline"
-                    onClick={() => handleDecline(req.requester_id)}
+                    onClick={() => handleRespond(req, 'decline')}
                   >
                     ✗
                   </button>

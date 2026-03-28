@@ -102,6 +102,47 @@ describe('FriendsSidebar', () => {
     expect(navigate).toHaveBeenCalledWith('/chat/DM-3-5', expect.any(Object))
   })
 
+  it('accept button calls PUT /requests/{id} with action accept', async () => {
+    vi.spyOn(global, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([
+        { id: 7, requester_id: 2, requester_username: 'bob', status: 'pending' },
+      ]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response('{}', { status: 200 })) // respond call
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: 2, username: 'bob', status: 'offline' }), { status: 200 })) // profile re-fetch
+    renderSidebar(1)
+    fireEvent.click(await screen.findByRole('button', { name: /✓/ }))
+    await waitFor(() => {
+      const calls = global.fetch.mock.calls
+      const respondCall = calls.find(([url, opts]) =>
+        url.includes('/requests/7') && opts?.method === 'PUT'
+      )
+      expect(respondCall).toBeDefined()
+      expect(JSON.parse(respondCall[1].body)).toEqual({ action: 'accept' })
+    })
+  })
+
+  it('decline button calls PUT /requests/{id} with action decline', async () => {
+    vi.spyOn(global, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([
+        { id: 7, requester_id: 2, requester_username: 'bob', status: 'pending' },
+      ]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response('{}', { status: 200 })) // respond call (204 not valid in Response constructor)
+    renderSidebar(1)
+    fireEvent.click(await screen.findByRole('button', { name: /✗/ }))
+    await waitFor(() => {
+      const calls = global.fetch.mock.calls
+      const respondCall = calls.find(([url, opts]) =>
+        url.includes('/requests/7') && opts?.method === 'PUT'
+      )
+      expect(respondCall).toBeDefined()
+      expect(JSON.parse(respondCall[1].body)).toEqual({ action: 'decline' })
+    })
+  })
+
   it('shows search results when query is entered', async () => {
     vi.spyOn(global, 'fetch')
       .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
