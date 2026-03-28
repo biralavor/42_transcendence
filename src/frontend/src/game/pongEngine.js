@@ -218,7 +218,7 @@ export class GameState {
     this.ball.position.velY = 0;
     /** @type {{ player1: number, player2: number }} */
     this.score = { player1: 0, player2: 0 };
-    this.#currentFrameTime = Date.now();
+    this.#currentFrameTime = performance.now();
   }
 
   get deltaTime() {
@@ -390,7 +390,7 @@ export function render(canvasContext, gameState, isPaused) {
  * @param {Function} onGoal - called once when a goal is scored
  */
 export function gameLoop(canvasContext, gameState, getInput, isPaused, onGoal) {
-  gameState.addFrameTime(Date.now());
+  gameState.addFrameTime(performance.now());
   /** @type {import('./pongSystem').GameInput} input */
   const input = getInput();
   System.playerMovement(gameState, input, canvasContext);
