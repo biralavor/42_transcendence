@@ -38,6 +38,41 @@ async def get_or_create_room(db: AsyncSession, room_slug: str) -> ChatRoom:
     return room
 
 
+async def get_or_create_dm_room(db: AsyncSession, user_a_id: int, user_b_id: int) -> ChatRoom:
+    """Return (or create) the private DM room for two users.
+
+    Room name is always DM-{min_id}-{max_id} regardless of argument order.
+    """
+    lo, hi = sorted((user_a_id, user_b_id))
+    slug = f"DM-{lo}-{hi}"
+    result = await db.execute(select(ChatRoom).where(ChatRoom.room_name == slug))
+    room = result.scalars().first()
+    if room is None:
+        room = ChatRoom(room_name=slug, room_type="dm")
+        db.add(room)
+        try:
+            await db.commit()
+            await db.refresh(room)
+        except IntegrityError:
+            await db.rollback()
+            # Another concurrent session already inserted the row; fetch it.
+            # Retry up to 3 times with a short backoff in case the committing
+            # transaction hasn't become visible yet.
+            for attempt in range(3):
+                result2 = await db.execute(
+                    select(ChatRoom).where(ChatRoom.room_name == slug)
+                )
+                room = result2.scalars().first()
+                if room is not None:
+                    break
+                await asyncio.sleep(0.05 * (attempt + 1))
+            else:
+                raise RuntimeError(
+                    f"DM room '{slug}' not found after concurrent insert"
+                )
+    return room
+
+
 async def save_message(
     db: AsyncSession, room_pk: int, sender_name: str, content: str
 ) -> Message:
