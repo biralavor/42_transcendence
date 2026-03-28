@@ -115,12 +115,14 @@ async def respond_to_friend_request(
     friendship = result.scalars().first()
     if friendship is None:
         raise HTTPException(status_code=404, detail="Friend request not found")
+    if action not in ("accept", "decline"):
+        raise HTTPException(status_code=400, detail=f"Invalid action: {action!r}")
     if action == "accept":
         friendship.status = "accepted"
         await session.commit()
         await session.refresh(friendship)
         return friendship
-    else:  # decline
+    else:
         await session.delete(friendship)
         await session.commit()
         return None
