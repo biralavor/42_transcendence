@@ -43,35 +43,34 @@ async def presence_endpoint(websocket: WebSocket, session: SessionDep, token: st
 
     user_id = me.id
 
-    # Connect and broadcast online to friends
     await presence_manager.connect(user_id, websocket)
-
-    friends = await get_friends(user_id, session)
-    for friend in friends:
-        if presence_manager.is_online(friend.id):
-            await presence_manager.broadcast_to(
-                friend.id,
-                {"type": "presence", "user_id": user_id, "status": "online"},
-            )
-
-    await set_user_status(user_id, "online", session)
-
-    # Keep connection alive
     try:
+        friends = await get_friends(user_id, session)
+        for friend in friends:
+            if presence_manager.is_online(friend.id):
+                await presence_manager.broadcast_to(
+                    friend.id,
+                    {"type": "presence", "user_id": user_id, "status": "online"},
+                )
+
+        await set_user_status(user_id, "online", session)
+
         while True:
             await websocket.receive_text()
     except WebSocketDisconnect:
         pass
-
-    # Disconnect and broadcast offline to friends
-    presence_manager.disconnect(user_id, websocket)
-
-    friends = await get_friends(user_id, session)
-    for friend in friends:
-        if presence_manager.is_online(friend.id):
-            await presence_manager.broadcast_to(
-                friend.id,
-                {"type": "presence", "user_id": user_id, "status": "offline"},
-            )
-
-    await set_user_status(user_id, "offline", session)
+    except Exception:
+        logger.exception("WS /presence unexpected error for user %d", user_id)
+    finally:
+        presence_manager.disconnect(user_id, websocket)
+        try:
+            friends = await get_friends(user_id, session)
+            for friend in friends:
+                if presence_manager.is_online(friend.id):
+                    await presence_manager.broadcast_to(
+                        friend.id,
+                        {"type": "presence", "user_id": user_id, "status": "offline"},
+                    )
+            await set_user_status(user_id, "offline", session)
+        except Exception:
+            logger.exception("WS /presence cleanup error for user %d", user_id)
