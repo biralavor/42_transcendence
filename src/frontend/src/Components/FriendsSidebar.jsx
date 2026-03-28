@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/authContext'
+import { usePresence } from '../context/presenceContext'
 
 export default function FriendsSidebar({ userId, username }) {
   const { auth } = useAuth()
@@ -12,6 +13,7 @@ export default function FriendsSidebar({ userId, username }) {
   const [pendingSent, setPendingSent]     = useState([])
   const navigate    = useNavigate()
   const searchTimer = useRef(null)
+  const presenceMap = usePresence()
 
   useEffect(() => {
     const controller = new AbortController()
@@ -180,9 +182,9 @@ export default function FriendsSidebar({ userId, username }) {
                   <img
                     src={friend.avatar_url || '/avatar_placeholder.jpg'}
                     alt={friend.username}
-                    className="friends-avatar"
+                    className={`friends-avatar friends-avatar-${presenceMap[friend.id] ?? friend.status}`}
                   />
-                  <span className={`friends-status-dot friends-status-${friend.status}`} />
+                  <span className={`friends-status-dot friends-status-${presenceMap[friend.id] ?? friend.status}`} />
                   <span className="friends-username">{friend.username}</span>
                 </div>
                 <div className="friends-actions">

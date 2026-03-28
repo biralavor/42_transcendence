@@ -13,6 +13,11 @@ vi.mock('../context/authContext', () => ({
   useAuth: () => ({ auth: { access_token: 'fake-token' } }),
 }))
 
+vi.mock('../context/presenceContext', () => ({
+  usePresence: vi.fn(() => ({})),
+}))
+import { usePresence } from '../context/presenceContext'
+
 function renderSidebar(userId = 1) {
   return render(
     <MemoryRouter>
@@ -211,6 +216,50 @@ describe('FriendsSidebar', () => {
     await waitFor(() => {
       expect(screen.getByText('charlie')).toBeInTheDocument()
       expect(screen.getByRole('button', { name: /add friend/i })).toBeInTheDocument()
+    })
+  })
+
+  it('shows online dot when presenceMap says online', async () => {
+    usePresence.mockReturnValue({ 2: 'online' })
+    vi.spyOn(global, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify([
+        { id: 2, username: 'bob', status: 'offline', avatar_url: null },
+      ]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+    renderSidebar()
+    await waitFor(() => {
+      expect(document.querySelector('.friends-status-online')).toBeInTheDocument()
+    })
+  })
+
+  it('presenceMap online overrides REST offline status', async () => {
+    usePresence.mockReturnValue({ 2: 'online' })
+    vi.spyOn(global, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify([
+        { id: 2, username: 'bob', status: 'offline', avatar_url: null },
+      ]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+    renderSidebar()
+    await waitFor(() => {
+      expect(document.querySelector('.friends-status-online')).toBeInTheDocument()
+      expect(document.querySelector('.friends-status-offline')).not.toBeInTheDocument()
+    })
+  })
+
+  it('avatar has online border class when presenceMap says online', async () => {
+    usePresence.mockReturnValue({ 2: 'online' })
+    vi.spyOn(global, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify([
+        { id: 2, username: 'bob', status: 'offline', avatar_url: null },
+      ]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+    renderSidebar()
+    await waitFor(() => {
+      const img = screen.getByRole('img', { name: /bob/i })
+      expect(img.className).toContain('friends-avatar-online')
     })
   })
 })
