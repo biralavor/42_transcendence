@@ -205,6 +205,8 @@ export class Ball extends Entity {
 }
 
 export class GameState {
+  static targetFrameRate = 30;                      //frame per second
+  static timeFrameMillis = 1000 / GameState.targetFrameRate; //millis per frame
   #lastFrameTime
   #currentFrameTime
   #currentFrameCount
@@ -245,10 +247,14 @@ export class GameState {
     return [this.player1, this.player2];
   }
 
-  addFrameTime(currentTime) {
+  addFrame() {
     this.#lastFrameTime = this.#currentFrameTime;
-    this.#currentFrameTime = currentTime;
+    this.#currentFrameTime += GameState.timeFrameMillis;
     ++(this.#currentFrameCount);
+  }
+
+  shouldAddFrame(time) {
+    return time > this.#currentFrameTime + GameState.timeFrameMillis;
   }
 }
 
@@ -393,15 +399,19 @@ export function render(canvasContext, gameState, isPaused) {
  * @param {Function} onGoal - called once when a goal is scored
  */
 export function gameLoop(canvasContext, gameState, getInput, isPaused, onGoal) {
-  gameState.addFrameTime(performance.now());
-  /** @type {import('./pongSystem').GameInput} input */
-  const input = getInput();
-  System.playerMovement(gameState, input, canvasContext);
-  if (!isPaused()) {
-    System.ballCollision(gameState, canvasContext);
-    const scored = System.goalDetection(gameState, canvasContext);
-    if (scored) onGoal();
-  }
+  const time = performance.now();
 
-  render(canvasContext, gameState, isPaused);
+  while (gameState.shouldAddFrame(time)) {
+    gameState.addFrame();
+    /** @type {import('./pongSystem').GameInput} input */
+    const input = getInput();
+    System.playerMovement(gameState, input, canvasContext);
+    if (!isPaused()) {
+      System.ballCollision(gameState, canvasContext);
+      const scored = System.goalDetection(gameState, canvasContext);
+      if (scored) onGoal();
+    }
+
+    render(canvasContext, gameState, isPaused);
+  }
 }
