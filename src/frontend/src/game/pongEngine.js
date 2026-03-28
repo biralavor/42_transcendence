@@ -207,6 +207,7 @@ export class Ball extends Entity {
 export class GameState {
   #lastFrameTime
   #currentFrameTime
+  #currentFrameCount
   constructor() {
     /** @type {Player} */
     this.player1 = new Player(Player.Type.ONE);
@@ -219,6 +220,7 @@ export class GameState {
     /** @type {{ player1: number, player2: number }} */
     this.score = { player1: 0, player2: 0 };
     this.#currentFrameTime = performance.now();
+    this.#currentFrameCount = 0n;
   }
 
   get deltaTime() {
@@ -246,6 +248,7 @@ export class GameState {
   addFrameTime(currentTime) {
     this.#lastFrameTime = this.#currentFrameTime;
     this.#currentFrameTime = currentTime;
+    ++(this.#currentFrameCount);
   }
 }
 
