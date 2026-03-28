@@ -43,17 +43,19 @@ async def presence_endpoint(websocket: WebSocket, session: SessionDep, token: st
 
     user_id = me.id
 
+    already_online = presence_manager.is_online(user_id)
     await presence_manager.connect(user_id, websocket)
     try:
-        friends = await get_friends(user_id, session)
-        for friend in friends:
-            if presence_manager.is_online(friend.id):
-                await presence_manager.broadcast_to(
-                    friend.id,
-                    {"type": "presence", "user_id": user_id, "status": "online"},
-                )
+        if not already_online:
+            friends = await get_friends(user_id, session)
+            for friend in friends:
+                if presence_manager.is_online(friend.id):
+                    await presence_manager.broadcast_to(
+                        friend.id,
+                        {"type": "presence", "user_id": user_id, "status": "online"},
+                    )
 
-        await set_user_status(user_id, "online", session)
+            await set_user_status(user_id, "online", session)
 
         while True:
             await websocket.receive_text()
