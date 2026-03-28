@@ -58,6 +58,34 @@ describe('FriendsSidebar', () => {
     })
   })
 
+  it('shows avatar image for each friend', async () => {
+    vi.spyOn(global, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify([
+        { id: 2, username: 'bob', status: 'online', avatar_url: '/img/bob.jpg' },
+      ]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+    renderSidebar()
+    await waitFor(() => {
+      const img = screen.getByRole('img', { name: /bob/i })
+      expect(img).toBeInTheDocument()
+      expect(img).toHaveAttribute('src', '/img/bob.jpg')
+    })
+  })
+
+  it('falls back to placeholder when avatar_url is null', async () => {
+    vi.spyOn(global, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify([
+        { id: 2, username: 'bob', status: 'online', avatar_url: null },
+      ]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+    renderSidebar()
+    await waitFor(() => {
+      expect(screen.getByRole('img', { name: /bob/i })).toHaveAttribute('src', '/avatar_placeholder.jpg')
+    })
+  })
+
   it('shows friend with chat button when list has entries', async () => {
     vi.spyOn(global, 'fetch')
       .mockResolvedValueOnce(

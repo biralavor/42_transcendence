@@ -177,6 +177,11 @@ export default function FriendsSidebar({ userId, username }) {
             {friends.map(friend => (
               <li key={friend.id} className="friends-list-item">
                 <div className="friends-user-info">
+                  <img
+                    src={friend.avatar_url || '/avatar_placeholder.jpg'}
+                    alt={friend.username}
+                    className="friends-avatar"
+                  />
                   <span className={`friends-status-dot friends-status-${friend.status}`} />
                   <span className="friends-username">{friend.username}</span>
                 </div>
