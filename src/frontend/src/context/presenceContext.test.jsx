@@ -8,6 +8,7 @@ vi.mock('./authContext', () => ({
 import { useAuth } from './authContext'
 
 let mockWsInstance
+let originalWebSocket
 
 class MockWebSocket {
   constructor(url) {
@@ -21,10 +22,12 @@ class MockWebSocket {
 
 beforeEach(() => {
   mockWsInstance = null
+  originalWebSocket = global.WebSocket
   global.WebSocket = MockWebSocket
 })
 
 afterEach(() => {
+  global.WebSocket = originalWebSocket
   vi.restoreAllMocks()
 })
 
