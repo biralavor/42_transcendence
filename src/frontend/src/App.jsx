@@ -10,6 +10,7 @@ import ForgotPassword from './pages/ForgotPassword'
 import Chat from './pages/Chat'
 import PongCanvas from './Components/PongCanvas'
 import PrivateRoute from './Components/PrivateRoute'
+import GameWaitingRoom from './pages/GameWaitingRoom'
 
 export default function App() {
   return (
@@ -39,6 +40,15 @@ export default function App() {
           element={(
             <PrivateRoute>
               <Chat />
+            </PrivateRoute>
+          )}
+        />
+
+        <Route
+          path="/game/waiting/:roomId"
+          element={(
+            <PrivateRoute>
+              <GameWaitingRoom />
             </PrivateRoute>
           )}
         />
