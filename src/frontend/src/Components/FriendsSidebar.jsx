@@ -94,7 +94,7 @@ export default function FriendsSidebar({ userId, username }) {
 
   return (
     <aside className="friends-sidebar arcade-screen">
-      <h2 className="friends-sidebar-title">Players</h2>
+      <h2 className="friends-sidebar-title">Friends sidebar</h2>
 
       <div className="friends-search">
         <input
