@@ -267,6 +267,16 @@
   gap: 0.4rem;
 }
 
+.friends-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 2px solid rgba(251, 192, 45, 0.5);
+  padding: 0.15rem;
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow: 0 0 12px rgba(251, 192, 45, 0.18);
+}
+
 .friends-status-dot {
   width: 8px;
   height: 8px;
