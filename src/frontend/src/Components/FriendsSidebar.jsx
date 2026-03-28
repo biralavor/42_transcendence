@@ -81,7 +81,7 @@ export default function FriendsSidebar({ userId, username }) {
 
   const handleChat = (friendId) => {
     const [a, b] = [userId, friendId].sort((x, y) => x - y)
-    navigate(`/chat/DM-${a}-${b}`, { state: { username } })
+    navigate(`/chat/DM-${a}-${b}`, { state: { username, userId } })
   }
 
   const excludedIds = new Set([
@@ -179,6 +179,7 @@ export default function FriendsSidebar({ userId, username }) {
             {friends.map(friend => (
               <li key={friend.id} className="friends-list-item">
                 <div className="friends-user-info">
+                  {/* presenceMap values are always "online"|"offline" from backend; ?? falls back to REST status when map is empty */}
                   <img
                     src={friend.avatar_url || '/avatar_placeholder.jpg'}
                     alt={friend.username}

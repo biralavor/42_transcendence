@@ -1,7 +1,10 @@
+// src/frontend/src/pages/Chat.jsx
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useLocation } from 'react-router-dom'
 import { createWsClient } from '../utils/wsClient'
 import NavbarComponent from '../Components/Navbar'
+import FriendsSidebar from '../Components/FriendsSidebar'
+import { useAuth } from '../context/authContext'
 import './Chat.css'
 
 function senderHue(name) {
@@ -13,14 +16,28 @@ function senderHue(name) {
 export default function Chat() {
   const { roomId } = useParams()
   const location = useLocation()
+  const { auth } = useAuth()
   const autoName = location.state?.username ?? ''
+  const passedUserId = location.state?.userId ?? null
   const [name, setName] = useState(autoName)
   const [joined, setJoined] = useState(!!autoName)
   const [connected, setConnected] = useState(false)
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
+  const [userId, setUserId] = useState(passedUserId)
   const wsRef = useRef(null)
   const bottomRef = useRef(null)
+
+  // Fetch userId if not passed via navigation state (e.g. direct URL access)
+  useEffect(() => {
+    if (userId || !auth.access_token) return
+    fetch('/api/users/auth/me', {
+      headers: { Authorization: `Bearer ${auth.access_token}` },
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then(me => { if (me) setUserId(me.id) })
+      .catch((err) => { console.warn('Failed to fetch user identity for chat sidebar:', err) })
+  }, [auth.access_token, userId])
 
   function join(e) {
     e.preventDefault()
@@ -30,7 +47,6 @@ export default function Chat() {
 
   useEffect(() => {
     if (!joined) return
-
     const scheme = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const url = `${scheme}//${window.location.host}/api/chat/ws/chat/${roomId}`
     const ws = createWsClient(url, {
@@ -60,23 +76,13 @@ export default function Chat() {
       <>
         <NavbarComponent />
         <div className="container py-5 chat-join">
-          <h2 className="mb-4">
-            Join Room: <code>{roomId}</code>
-          </h2>
+          <h2 className="mb-4">Join Room: <code>{roomId}</code></h2>
           <form onSubmit={join}>
             <div className="mb-3">
-              <input
-                className="form-control"
-                placeholder="Your name"
-                aria-label="Your name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                autoFocus
-              />
+              <input className="form-control" placeholder="Your name" aria-label="Your name"
+                value={name} onChange={(e) => setName(e.target.value)} autoFocus />
             </div>
-            <button className="btn btn-primary w-100" type="submit">
-              Join
-            </button>
+            <button className="btn btn-primary w-100" type="submit">Join</button>
           </form>
         </div>
       </>
@@ -87,50 +93,40 @@ export default function Chat() {
   return (
     <>
       <NavbarComponent />
-      <div className="container py-4 chat-view">
-        <div className="d-flex align-items-center gap-2 mb-3">
-          <h2 className="mb-0">
-            Room: <code>{roomId}</code>
-          </h2>
-          <span className={`badge ${connected ? 'bg-success' : 'bg-danger'}`}>
-            {connected ? 'Connected' : 'Connecting…'}
-          </span>
+      <div className="chat-layout">
+        {userId && (
+          <FriendsSidebar userId={userId} username={name} />
+        )}
+        <div className="container py-4 chat-view">
+          <div className="d-flex align-items-center gap-2 mb-3">
+            <h2 className="mb-0">Room: <code>{roomId}</code></h2>
+            <span className={`badge ${connected ? 'bg-success' : 'bg-danger'}`}>
+              {connected ? 'Connected' : 'Connecting…'}
+            </span>
+          </div>
+          <div className="border rounded p-3 mb-3 bg-light chat-messages">
+            {messages.length === 0 && (
+              <p className="text-muted text-center mt-5">No messages yet. Say hello!</p>
+            )}
+            {messages.map((msg, i) => (
+              <div key={i} className="mb-2 chat-msg" style={{ '--sender-hue': senderHue(msg.sender ?? 'anon') }}>
+                <strong>{msg.sender ?? 'anon'}:</strong>{' '}
+                <span>{msg.content}</span>
+              </div>
+            ))}
+            <div ref={bottomRef} />
+          </div>
+          <div className="input-group">
+            <input className="form-control" placeholder="Type a message…" aria-label="Type a message"
+              value={input} onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && send()} disabled={!connected} autoFocus />
+            <button className="btn btn-primary" onClick={send} disabled={!connected}>Send</button>
+          </div>
+          <p className="text-muted mt-2 chat-share-url">
+            Share this URL to invite others:{' '}
+            <code>{window.location.href.replace(window.location.hostname, import.meta.env.VITE_DOMAIN || window.location.hostname)}</code>
+          </p>
         </div>
-
-        <div
-          className="border rounded p-3 mb-3 bg-light chat-messages"
-        >
-          {messages.length === 0 && (
-            <p className="text-muted text-center mt-5">No messages yet. Say hello!</p>
-          )}
-          {messages.map((msg, i) => (
-            <div key={i} className="mb-2 chat-msg" style={{ '--sender-hue': senderHue(msg.sender ?? 'anon') }}>
-              <strong>{msg.sender ?? 'anon'}:</strong>{' '}
-              <span>{msg.content}</span>
-            </div>
-          ))}
-          <div ref={bottomRef} />
-        </div>
-
-        <div className="input-group">
-          <input
-            className="form-control"
-            placeholder="Type a message…"
-            aria-label="Type a message"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && send()}
-            disabled={!connected}
-            autoFocus
-          />
-          <button className="btn btn-primary" onClick={send} disabled={!connected}>
-            Send
-          </button>
-        </div>
-
-        <p className="text-muted mt-2 chat-share-url">
-          Share this URL to invite others: <code>{window.location.href.replace(window.location.hostname, import.meta.env.VITE_DOMAIN || window.location.hostname)}</code>
-        </p>
       </div>
     </>
   )

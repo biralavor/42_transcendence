@@ -262,4 +262,18 @@ describe('FriendsSidebar', () => {
       expect(img.className).toContain('friends-avatar-online')
     })
   })
+
+  it('falls back to REST status when presenceMap is empty (e.g. after WS disconnect)', async () => {
+    usePresence.mockReturnValue({})  // simulates post-disconnect cleared map
+    vi.spyOn(global, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify([
+        { id: 2, username: 'bob', status: 'online', avatar_url: null },
+      ]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+    renderSidebar()
+    await waitFor(() => {
+      expect(document.querySelector('.friends-status-online')).toBeInTheDocument()
+    })
+  })
 })
