@@ -2,7 +2,9 @@ import asyncio
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import HTTPException
 
+from service.models.block import Block
 from service.models.chat_room import ChatRoom
 from service.models.message import Message
 
@@ -58,3 +60,45 @@ async def get_room_history(
     )
     rows = result.scalars().all()
     return list(reversed(rows))
+
+
+async def block_user(db: AsyncSession, blocker_id: int, blocked_id: int) -> None:
+    """Block blocked_id from blocker's perspective. Idempotent."""
+    result = await db.execute(
+        select(Block).where(Block.blocker_id == blocker_id, Block.blocked_id == blocked_id)
+    )
+    if result.scalars().first() is not None:
+        return
+    db.add(Block(blocker_id=blocker_id, blocked_id=blocked_id))
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()  # concurrent insert — already blocked
+
+
+async def unblock_user(db: AsyncSession, blocker_id: int, blocked_id: int) -> None:
+    """Remove a block. Raises 404 if no block exists."""
+    result = await db.execute(
+        select(Block).where(Block.blocker_id == blocker_id, Block.blocked_id == blocked_id)
+    )
+    row = result.scalars().first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Block not found")
+    db.delete(row)
+    await db.commit()
+
+
+async def get_blocked_ids(db: AsyncSession, user_id: int) -> set[int]:
+    """Return the set of user IDs blocked by user_id."""
+    result = await db.execute(
+        select(Block.blocked_id).where(Block.blocker_id == user_id)
+    )
+    return set(result.scalars().all())
+
+
+async def is_blocked(db: AsyncSession, blocker_id: int, blocked_id: int) -> bool:
+    """Return True if blocker_id has blocked blocked_id."""
+    result = await db.execute(
+        select(Block).where(Block.blocker_id == blocker_id, Block.blocked_id == blocked_id)
+    )
+    return result.scalars().first() is not None

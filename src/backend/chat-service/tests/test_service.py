@@ -6,6 +6,7 @@ from sqlalchemy.pool import NullPool
 
 from shared.config.settings import settings
 from persistence import get_or_create_room, save_message, get_room_history
+from persistence import block_user, unblock_user, get_blocked_ids, is_blocked
 
 
 @pytest_asyncio.fixture
@@ -19,7 +20,7 @@ async def db():
             "AND datname = current_database() "
             "AND pid <> pg_backend_pid()"
         ))
-        await conn.execute(text("TRUNCATE TABLE messages, chat_rooms RESTART IDENTITY CASCADE"))
+        await conn.execute(text("TRUNCATE TABLE messages, chat_rooms, blocks RESTART IDENTITY CASCADE"))
     async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     async with async_session() as session:
         yield session
@@ -73,3 +74,51 @@ async def test_get_room_history_respects_limit(db):
 async def test_get_room_history_returns_empty_for_unknown_room(db):
     history = await get_room_history(db, 99999)
     assert history == []
+
+
+@pytest.mark.asyncio
+async def test_block_user_creates_row(db):
+    await block_user(db, blocker_id=1, blocked_id=2)
+    assert await is_blocked(db, blocker_id=1, blocked_id=2)
+
+
+@pytest.mark.asyncio
+async def test_block_is_one_directional(db):
+    await block_user(db, blocker_id=1, blocked_id=2)
+    assert not await is_blocked(db, blocker_id=2, blocked_id=1)
+
+
+@pytest.mark.asyncio
+async def test_block_user_is_idempotent(db):
+    await block_user(db, blocker_id=1, blocked_id=2)
+    await block_user(db, blocker_id=1, blocked_id=2)  # must not raise
+    assert await is_blocked(db, blocker_id=1, blocked_id=2)
+
+
+@pytest.mark.asyncio
+async def test_unblock_user_removes_row(db):
+    await block_user(db, blocker_id=1, blocked_id=2)
+    await unblock_user(db, blocker_id=1, blocked_id=2)
+    assert not await is_blocked(db, blocker_id=1, blocked_id=2)
+
+
+@pytest.mark.asyncio
+async def test_unblock_nonexistent_raises_404(db):
+    from fastapi import HTTPException
+    with pytest.raises(HTTPException) as exc_info:
+        await unblock_user(db, blocker_id=1, blocked_id=99)
+    assert exc_info.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_get_blocked_ids_returns_set(db):
+    await block_user(db, blocker_id=1, blocked_id=2)
+    await block_user(db, blocker_id=1, blocked_id=3)
+    result = await get_blocked_ids(db, user_id=1)
+    assert result == {2, 3}
+
+
+@pytest.mark.asyncio
+async def test_get_blocked_ids_empty_when_none(db):
+    result = await get_blocked_ids(db, user_id=99)
+    assert result == set()
