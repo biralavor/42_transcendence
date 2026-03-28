@@ -63,14 +63,15 @@ async def presence_endpoint(websocket: WebSocket, session: SessionDep, token: st
         logger.exception("WS /presence unexpected error for user %d", user_id)
     finally:
         presence_manager.disconnect(user_id, websocket)
-        try:
-            friends = await get_friends(user_id, session)
-            for friend in friends:
-                if presence_manager.is_online(friend.id):
-                    await presence_manager.broadcast_to(
-                        friend.id,
-                        {"type": "presence", "user_id": user_id, "status": "offline"},
-                    )
-            await set_user_status(user_id, "offline", session)
-        except Exception:
-            logger.exception("WS /presence cleanup error for user %d", user_id)
+        if not presence_manager.is_online(user_id):
+            try:
+                friends = await get_friends(user_id, session)
+                for friend in friends:
+                    if presence_manager.is_online(friend.id):
+                        await presence_manager.broadcast_to(
+                            friend.id,
+                            {"type": "presence", "user_id": user_id, "status": "offline"},
+                        )
+                await set_user_status(user_id, "offline", session)
+            except Exception:
+                logger.exception("WS /presence cleanup error for user %d", user_id)
