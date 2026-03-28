@@ -80,3 +80,12 @@ async def test_broadcast_to_silently_drops_dead_socket(manager):
 async def test_broadcast_to_unknown_user_is_noop(manager):
     # Must not raise
     await manager.broadcast_to(999, {"type": "presence", "user_id": 1, "status": "online"})
+
+
+@pytest.mark.asyncio
+async def test_broadcast_to_last_dead_socket_user_goes_offline(manager):
+    ws_dead = make_ws()
+    ws_dead.send_json.side_effect = RuntimeError("closed")
+    await manager.connect(1, ws_dead)
+    await manager.broadcast_to(1, {"type": "presence", "user_id": 2, "status": "online"})
+    assert manager.is_online(1) is False
