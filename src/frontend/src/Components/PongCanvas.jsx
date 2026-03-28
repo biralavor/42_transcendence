@@ -2,14 +2,17 @@ import { useRef, useEffect, useState } from 'react'
 import './PongCanvas.css'
 import { GameState, gameLoop, CanvasGameContext } from '../game/pongEngine.js'
 
+
 export default function PongCanvas()
 {
   const canvasRef = useRef(null);
   const keyStateRef = useRef(null);
   const gameStateRef = useRef(null);
   const pauseRef = useRef(false);
+  const loopRef = useRef(null);
   const goalTimerRef = useRef(null);
   const [showGoal, setShowGoal] = useState(false);
+
   if (keyStateRef.current == null) {
     keyStateRef.current = {
       'KeyJ': false, 'KeyK': false,
@@ -76,8 +79,6 @@ export default function PongCanvas()
 
   useEffect(() => {
 
-    const targetFrameRate = 30; //frame per second
-    const timeFrameMillis = 1000 / targetFrameRate; //millis per frame
     /** @type {HTMLCanvasElement} */
     const canvas = canvasRef.current;
     const renderingContext = canvas.getContext('2d');
@@ -89,16 +90,19 @@ export default function PongCanvas()
     function onResize(event) {
       updateCanvasDimensions()
     }
-    window.addEventListener('resize', onResize);
-    const interval = setInterval(() => {
+    function loop() {
       gameLoop(canvasContext, gameStateRef.current, getInput, isPaused, onGoal);
-    }, timeFrameMillis);
+      loopRef.current = requestAnimationFrame(loop);
+    }
 
+    window.addEventListener('resize', onResize);
     window.addEventListener('keydown', onKeydown)
     window.addEventListener('keyup', onKeyup);
 
+    loopRef.current = requestAnimationFrame(loop);
+
     return () => {
-      clearInterval(interval);
+      cancelAnimationFrame(loopRef.current);
       clearTimeout(goalTimerRef.current);
       window.removeEventListener('resize', onResize);
       window.removeEventListener('keydown', onKeydown);
