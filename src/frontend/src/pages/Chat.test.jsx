@@ -20,6 +20,14 @@ vi.mock('../utils/wsClient', () => ({
   }),
 }))
 
+vi.mock('../context/presenceContext', () => ({
+  usePresence: vi.fn(() => ({})),
+}))
+
+vi.mock('../Components/FriendsSidebar', () => ({
+  default: ({ userId }) => <div data-testid="friends-sidebar" data-userid={String(userId)} />,
+}))
+
 function renderChat(roomId = 'room1') {
   return render(
     <AuthProvider>
@@ -88,5 +96,25 @@ describe('Chat page', () => {
     act(() => { mockWs.simulateMessage({ content: 'Hi there', sender: 'Bob' }) })
     expect(screen.getByText('Hi there')).toBeInTheDocument()
     expect(screen.getByText(/Bob/)).toBeInTheDocument()
+  })
+
+  function renderChatJoined(roomId = 'DM-3-7', userId = 3) {
+    return render(
+      <AuthProvider>
+        <MemoryRouter initialEntries={[{ pathname: `/chat/${roomId}`, state: { username: 'Alice', userId } }]}>
+          <Routes>
+            <Route path="/chat/:roomId" element={<Chat />} />
+          </Routes>
+        </MemoryRouter>
+      </AuthProvider>
+    )
+  }
+
+  it('renders FriendsSidebar alongside the chat panel', () => {
+    renderChatJoined('DM-3-7', 3)
+    const sidebar = screen.getByTestId('friends-sidebar')
+    expect(sidebar).toBeInTheDocument()
+    expect(sidebar).toHaveAttribute('data-userid', '3')
+    expect(screen.getByPlaceholderText(/type a message/i)).toBeInTheDocument()
   })
 })

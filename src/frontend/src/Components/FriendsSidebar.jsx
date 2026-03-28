@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/authContext'
+import { usePresence } from '../context/presenceContext'
 
 export default function FriendsSidebar({ userId, username }) {
   const { auth } = useAuth()
@@ -12,6 +13,7 @@ export default function FriendsSidebar({ userId, username }) {
   const [pendingSent, setPendingSent]     = useState([])
   const navigate    = useNavigate()
   const searchTimer = useRef(null)
+  const presenceMap = usePresence()
 
   useEffect(() => {
     const controller = new AbortController()
@@ -79,7 +81,7 @@ export default function FriendsSidebar({ userId, username }) {
 
   const handleChat = (friendId) => {
     const [a, b] = [userId, friendId].sort((x, y) => x - y)
-    navigate(`/chat/DM-${a}-${b}`, { state: { username } })
+    navigate(`/chat/DM-${a}-${b}`, { state: { username, userId } })
   }
 
   const excludedIds = new Set([
@@ -92,7 +94,7 @@ export default function FriendsSidebar({ userId, username }) {
 
   return (
     <aside className="friends-sidebar arcade-screen">
-      <h2 className="friends-sidebar-title">Players</h2>
+      <h2 className="friends-sidebar-title">Friends sidebar</h2>
 
       <div className="friends-search">
         <input
@@ -177,12 +179,13 @@ export default function FriendsSidebar({ userId, username }) {
             {friends.map(friend => (
               <li key={friend.id} className="friends-list-item">
                 <div className="friends-user-info">
+                  {/* presenceMap values are always "online"|"offline" from backend; ?? falls back to REST status when map is empty */}
                   <img
                     src={friend.avatar_url || '/avatar_placeholder.jpg'}
                     alt={friend.username}
-                    className="friends-avatar"
+                    className={`friends-avatar friends-avatar-${presenceMap[friend.id] ?? friend.status}`}
                   />
-                  <span className={`friends-status-dot friends-status-${friend.status}`} />
+                  <span className={`friends-status-dot friends-status-${presenceMap[friend.id] ?? friend.status}`} />
                   <span className="friends-username">{friend.username}</span>
                 </div>
                 <div className="friends-actions">

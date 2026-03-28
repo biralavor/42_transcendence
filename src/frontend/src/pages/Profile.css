@@ -287,6 +287,9 @@
 .friends-status-online  { background: #4caf50; }
 .friends-status-offline { background: #757575; }
 
+.friends-avatar-online  { border-color: #4caf50; box-shadow: 0 0 8px rgba(76, 175, 80, 0.4); }
+.friends-avatar-offline { border-color: rgba(251, 192, 45, 0.5); }
+
 .friends-username {
   font-family: 'VT323', monospace;
   font-size: 1rem;
