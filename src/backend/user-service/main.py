@@ -17,6 +17,7 @@ from service.friends import (
     respond_to_friend_request, delete_friendship, search_users,
 )
 from shared.database import get_db
+from service.ws.presence_router import router as presence_router
 
 SessionDependency = Annotated[AsyncSession, Depends(get_db)]
 bearer_scheme = HTTPBearer()
@@ -136,3 +137,6 @@ async def search_users_endpoint(session: SessionDependency, q: str = ""):
     if len(q) < 2:
         return []
     return await search_users(q, session)
+
+
+app.include_router(presence_router)
