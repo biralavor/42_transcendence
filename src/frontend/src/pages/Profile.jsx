@@ -136,7 +136,15 @@ export default function Profile() {
       <main className="arcade-content profile-page">
         <div className="profile-layout">
           <div className="profile-sidebar-col">
-            <FriendsSidebar userId={userId} username={profile?.username} />
+            <FriendsSidebar
+              userId={userId}
+              username={profile?.username}
+              currentUser={{
+                id: userId,
+                username: profile?.username,
+                avatarUrl: profile?.avatarUrl,
+              }}
+            />
           </div>
           <div className="profile-main-col">
           <div className="arcade-screen profile-card">
