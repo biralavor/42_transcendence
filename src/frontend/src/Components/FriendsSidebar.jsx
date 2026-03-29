@@ -1,8 +1,12 @@
 // src/frontend/src/Components/FriendsSidebar.jsx
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../context/authContext'
+import { usePresence } from '../context/presenceContext'
+import './FriendsSidebar.css'
 
 export default function FriendsSidebar({ userId, username }) {
+  const { auth } = useAuth()
   const [friends, setFriends]             = useState([])
   const [requests, setRequests]           = useState([])
   const [searchQuery, setSearchQuery]     = useState('')
@@ -10,6 +14,7 @@ export default function FriendsSidebar({ userId, username }) {
   const [pendingSent, setPendingSent]     = useState([])
   const navigate    = useNavigate()
   const searchTimer = useRef(null)
+  const presenceMap = usePresence()
 
   useEffect(() => {
     const controller = new AbortController()
@@ -49,21 +54,24 @@ export default function FriendsSidebar({ userId, username }) {
     if (user) setPendingSent(prev => [...prev, user])
   }
 
-  const handleAccept = async (requesterId) => {
-    const res = await fetch(`/api/users/friends/${userId}/accept/${requesterId}`, { method: 'PUT' })
+  const handleRespond = async (req, action) => {
+    const res = await fetch(`/api/users/friends/${userId}/requests/${req.id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${auth.access_token}`,
+      },
+      body: JSON.stringify({ action }),
+    })
     if (!res.ok) return
-    setRequests(prev => prev.filter(r => r.requester_id !== requesterId))
-    const profileRes = await fetch(`/api/users/profile/${requesterId}`)
-    if (profileRes.ok) {
-      const user = await profileRes.json()
-      setFriends(prev => [...prev, user])
+    setRequests(prev => prev.filter(r => r.id !== req.id))
+    if (action === 'accept') {
+      const profileRes = await fetch(`/api/users/profile/${req.requester_id}`)
+      if (profileRes.ok) {
+        const newFriend = await profileRes.json()
+        setFriends(prev => [...prev, newFriend])
+      }
     }
-  }
-
-  const handleDecline = async (requesterId) => {
-    const res = await fetch(`/api/users/friends/${userId}/${requesterId}`, { method: 'DELETE' })
-    if (!res.ok) return
-    setRequests(prev => prev.filter(r => r.requester_id !== requesterId))
   }
 
   const handleRemoveFriend = async (friendId) => {
@@ -74,7 +82,7 @@ export default function FriendsSidebar({ userId, username }) {
 
   const handleChat = (friendId) => {
     const [a, b] = [userId, friendId].sort((x, y) => x - y)
-    navigate(`/chat/DM-${a}-${b}`, { state: { username } })
+    navigate(`/chat/DM-${a}-${b}`, { state: { username, userId } })
   }
 
   const excludedIds = new Set([
@@ -87,7 +95,7 @@ export default function FriendsSidebar({ userId, username }) {
 
   return (
     <aside className="friends-sidebar arcade-screen">
-      <h2 className="friends-sidebar-title">Players</h2>
+      <h2 className="friends-sidebar-title">Friends sidebar</h2>
 
       <div className="friends-search">
         <input
@@ -146,13 +154,13 @@ export default function FriendsSidebar({ userId, username }) {
                 <div className="friends-request-actions">
                   <button
                     className="arcade-btn arcade-btn-primary friends-btn"
-                    onClick={() => handleAccept(req.requester_id)}
+                    onClick={() => handleRespond(req, 'accept')}
                   >
                     ✓
                   </button>
                   <button
                     className="arcade-btn friends-btn friends-btn-decline"
-                    onClick={() => handleDecline(req.requester_id)}
+                    onClick={() => handleRespond(req, 'decline')}
                   >
                     ✗
                   </button>
@@ -172,7 +180,13 @@ export default function FriendsSidebar({ userId, username }) {
             {friends.map(friend => (
               <li key={friend.id} className="friends-list-item">
                 <div className="friends-user-info">
-                  <span className={`friends-status-dot friends-status-${friend.status}`} />
+                  {/* presenceMap values are always "online"|"offline" from backend; ?? falls back to REST status when map is empty */}
+                  <img
+                    src={friend.avatar_url || '/avatar_placeholder.jpg'}
+                    alt={friend.username}
+                    className={`friends-avatar friends-avatar-${presenceMap[friend.id] ?? friend.status}`}
+                  />
+                  <span className={`friends-status-dot friends-status-${presenceMap[friend.id] ?? friend.status}`} />
                   <span className="friends-username">{friend.username}</span>
                 </div>
                 <div className="friends-actions">

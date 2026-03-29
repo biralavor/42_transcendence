@@ -1,0 +1,127 @@
+/* FriendsSidebar component styles — imported by FriendsSidebar.jsx */
+
+.friends-sidebar {
+  padding: 1rem;
+}
+
+.friends-sidebar-title {
+  font-family: 'VT323', monospace;
+  color: var(--neon-yellow, #f5e642);
+  font-size: 1.4rem;
+  margin-bottom: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.friends-search-input {
+  margin-bottom: 1rem;
+  font-family: 'VT323', monospace;
+}
+
+.friends-section {
+  margin-bottom: 1.25rem;
+}
+
+.friends-section-title {
+  font-family: 'VT323', monospace;
+  color: var(--metal-silver, #a8b2bd);
+  font-size: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 0.5rem;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+  padding-bottom: 0.25rem;
+}
+
+.friends-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.friends-list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.friends-request-item {
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.friends-user-info {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.friends-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 2px solid rgba(251, 192, 45, 0.5);
+  padding: 0.15rem;
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow: 0 0 12px rgba(251, 192, 45, 0.18);
+}
+
+.friends-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.friends-status-online  { background: #4caf50; }
+.friends-status-offline { background: #757575; }
+
+.friends-avatar-online  { border-color: #4caf50; box-shadow: 0 0 8px rgba(76, 175, 80, 0.4); }
+.friends-avatar-offline { border-color: rgba(251, 192, 45, 0.5); }
+
+.friends-username {
+  font-family: 'VT323', monospace;
+  font-size: 1rem;
+  color: var(--metal-silver, #a8b2bd);
+  word-break: break-word;
+}
+
+.friends-actions,
+.friends-request-actions {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.friends-btn {
+  padding: 0.15rem 0.5rem;
+  font-size: 0.8rem;
+}
+
+.friends-btn-decline {
+  background: transparent;
+  border: 1px solid #ef9a9a;
+  color: #ef9a9a;
+}
+
+.friends-btn-decline:hover {
+  background: rgba(239,154,154,0.15);
+}
+
+.friends-empty {
+  font-family: 'VT323', monospace;
+  color: var(--metal-silver, #a8b2bd);
+  font-size: 0.95rem;
+}
+
+.friends-pending-badge {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #f4d03f;
+  border: 1px solid #f4d03f;
+  padding: 0.15rem 0.45rem;
+  opacity: 0.75;
+}
