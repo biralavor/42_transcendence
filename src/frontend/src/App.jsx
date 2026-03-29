@@ -21,7 +21,9 @@ export default function App() {
         <Route path="/play" element={<Play />} />
         <Route path="/leaderboard" element={<Leaderboard />} />
         <Route path="/register" element={<Register />} />
-        <Route path="/pong-develop" element={<PongCanvas />} />
+        <Route path="/pong-develop" element={<PongCanvas
+                                               player1Kind='local'
+                                               player2Kind='remote-ai' />} />
 
         <Route
           path="/profile"

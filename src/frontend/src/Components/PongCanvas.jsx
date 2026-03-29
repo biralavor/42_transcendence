@@ -2,16 +2,37 @@ import { useRef, useEffect, useState } from 'react'
 import './PongCanvas.css'
 import { GameState, gameLoop, CanvasGameContext } from '../game/pongEngine.js'
 
+function getLocalInput(keyState, keyUp, keyDown) {
+    let velY = keyState[keyDown] ? 1 : 0;
+    velY -= keyState[keyUp] ? 1 : 0;
 
-export default function PongCanvas()
+    return { velY, velX: 0};
+}
+
+function getRemoteInput(gameState) {
+  // TODO get remote game input
+  let velY = gameState.ball.position.y >
+      (gameState.player2.position.y + (gameState.player2.size.height / 2))
+      ? 1 : 0
+  velY -= gameState.ball.position.y <
+    (gameState.player2.position.y + (gameState.player2.size.height / 2))
+    ? 1 : 0;
+  return { velY, velX: 0};
+}
+
+export default function PongCanvas(props)
 {
+  const player1Kind = props?.player1Kind;
+  const player2Kind = props?.player2Kind;
+  console.log(player1Kind, player2Kind)
   const canvasRef = useRef(null);
   const keyStateRef = useRef(null);
   const gameStateRef = useRef(null);
-  const pauseRef = useRef(false);
+  const kickoffRef = useRef(false);
   const loopRef = useRef(null);
   const goalTimerRef = useRef(null);
   const [showGoal, setShowGoal] = useState(false);
+
 
   if (keyStateRef.current == null) {
     keyStateRef.current = {
@@ -19,20 +40,21 @@ export default function PongCanvas()
       'KeyW': false, 'KeyS': false
     };
   }
+
   if (gameStateRef.current == null) {
-    gameStateRef.current = new GameState();
+    gameStateRef.current = new GameState(player1Kind, player2Kind);
   }
 
   function onGoal() {
-    pauseRef.current = true;
+    kickoffRef.current = true;
     setShowGoal(true);
     goalTimerRef.current = setTimeout(() => {
-      pauseRef.current = false;
+      kickoffRef.current = false;
       setShowGoal(false);
     }, 2000);
   }
 
-  const isPaused = () => pauseRef.current;
+  const isPaused = () => kickoffRef.current;
 
   function onKeyup(event) {
     if (event.code === 'KeyJ'
@@ -55,14 +77,15 @@ export default function PongCanvas()
   }
 
   function getInput() {
-    let p1VelY = keyStateRef.current['KeyS'] ? 1 : 0;
-    p1VelY -= keyStateRef.current['KeyW'] ? 1 : 0;
-    let p2VelY = keyStateRef.current['KeyJ'] ? 1 : 0;
-    p2VelY -= keyStateRef.current['KeyK'] ? 1 : 0;
-    return {
-      player1: {velY: p1VelY, velX: 0},
-      player2: {velY: p2VelY, velX: 0},
-    }
+    const player1 = player1Kind == 'local'
+          ? getLocalInput(keyStateRef.current, 'KeyW', 'KeyS')
+          : null;
+    const player2 = player2Kind == 'local'
+          ? getLocalInput(keyStateRef.current, 'KeyK', 'KeyJ')
+          : player2Kind.startsWith('remote-')
+          ? getRemoteInput(gameStateRef.current)
+          : null;
+    return { player1, player2, }
   }
 
   function updateCanvasDimensions() {

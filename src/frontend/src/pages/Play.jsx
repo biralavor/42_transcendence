@@ -37,7 +37,7 @@ export default function Play() {
                   <div
                     className="pong-board"
                   >
-                    <PongCanvas />
+                    <PongCanvas player1Kind='local' player2Kind='local' />
                   </div>
                 </div>
 
