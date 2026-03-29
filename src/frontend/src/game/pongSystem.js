@@ -1,4 +1,6 @@
-import { Ball, CanvasGameContext, GameState, Player } from "./pongEngine.js";
+import { Ball, GameState, Player } from "./pongEngine.js";
+import { Callbacks } from "./pongExternal.js";
+import { CanvasGameContext } from "./pongRenderer.js";
 
 const MAX_PLAYER_VEL = 2;
 const PLAYER_VEL_RESISTANCE_FACTOR = 0.95;
@@ -6,67 +8,39 @@ const PLAYER_VEL_INPUT_FACTOR = (1 / 7);
 
 
 /**
- * @typedef {Object} PlayerInput
- * @property {number} velY - Vertical velocity
- * @property {number} velX - Horizontal velocity
+ * @param {Player} player
  */
-
-/**
- * @typedef {Object} GameInput
- * @property {PlayerInput} player1
- * @property {PlayerInput} player2
- */
-
-/**
- * @param {GameState} gameState
- */
-function desaceleratePlayers(gameState) {
-  for (let player of gameState.players) {
-    player.position.velY *= PLAYER_VEL_RESISTANCE_FACTOR;
-  }
+function desaceleratePlayer(player) {
+  player.position.velY *= PLAYER_VEL_RESISTANCE_FACTOR;
 }
 
 /**
- * @param {GameState} gameState
- * @param {GameInput} input
+ * @param {Player} player
+ * @param {import("./pongExternal.js").PlayerInput} playerInput
  */
-function applyInput(gameState, input) {
-  const players = gameState.players;
-  const inputs = [input.player1, input.player2];
-
-  for (let playerType = 1; playerType <= 2; ++playerType){
-    const i = playerType - 1;
-    const player = players[i];
-    const playerInput = inputs[i];
-
-    player.position.velY += (playerInput.velY * PLAYER_VEL_INPUT_FACTOR);
-  }
+function applyInput(player, playerInput) {
+  player.position.velY += (playerInput.velY * PLAYER_VEL_INPUT_FACTOR);
 }
 
 
 /**
- * @param {GameState} gameState
- * @param {CanvasGameContext} canvasContext
+ * @param {Player} player
+ * @param {number} gridHeight
  */
-function clampPlayerBounds(gameState, canvasContext) {
-  const gridHeight = canvasContext.heightRatio;
-
-  for (let player of gameState.players) {
-    if (player.position.y < (-player.size.height)) {
-      player.position.y = (-player.size.height);
-      player.position.velY = 0;
-    } else if (player.position.y > gridHeight) {
-      player.position.y = gridHeight;
-      player.position.velY = 0;
-    }
+function clampPlayerBounds(player, gridHeight) {
+  if (player.position.y < (-player.size.height)) {
+    player.position.y = (-player.size.height);
+    player.position.velY = 0;
+  } else if (player.position.y > gridHeight) {
+    player.position.y = gridHeight;
+    player.position.velY = 0;
   }
 }
 
 /**
- * @param {GameState} gameState
+ * @param {Player} player
  */
-function clampMaxVelocity(gameState) {
-  for (let player of gameState.players) {
+function clampMaxVelocity(player) {
     player.position.velY =
       player.position.velY > MAX_PLAYER_VEL
       ? MAX_PLAYER_VEL
@@ -75,7 +49,6 @@ function clampMaxVelocity(gameState) {
       player.position.velY < -MAX_PLAYER_VEL
       ? -MAX_PLAYER_VEL
       : player.position.velY;
-  }
 }
 
 /**
@@ -106,7 +79,7 @@ function collision(gameState, canvasContext) {
   }
 
   // horizontal collision
-  if (gameState.isPlayer1Defending && gameState.player1.isCollidingWith(newBall)) {
+  if (gameState.canPlayer1Defend && gameState.player1.isCollidingWith(newBall)) {
     // angle change from player vertical speed
     newBall.position.velY += 0.4 * gameState.player1.position.velY;
     // angle change from edge collision
@@ -117,7 +90,7 @@ function collision(gameState, canvasContext) {
     newBall.position.x = p1Surface + overflow;
     newBall.position.velX = -ballIntendedPosition.velX;
 
-  } else if (gameState.isPlayer2Defending && gameState.player2.isCollidingWith(newBall)) {
+  } else if (gameState.canPlayer2Defend && gameState.player2.isCollidingWith(newBall)) {
     newBall.position.velY += 0.4 * gameState.player2.position.velY;
     newBall.position.velY += gameState.player2.edgeCollisionFactor(newBall)
 
@@ -177,16 +150,33 @@ export default class System {
 
   /**
    * @param {GameState} gameState
-   * @param {GameInput} input
    * @param {CanvasGameContext} canvasContext
+   * @param {Callbacks} callbacks
    */
-  static playerMovement(gameState, input, canvasContext) {
-    desaceleratePlayers(gameState);
-    applyInput(gameState, input);
-    clampMaxVelocity(gameState);
-    gameState.player1.move();
-    gameState.player2.move();
-    clampPlayerBounds(gameState, canvasContext);
+  static playersMovement(gameState, canvasContext, callbacks) {
+    const input = callbacks.getInput();
+    for (let player of gameState.localPlayers) {
+      const playerInput = player.type == Player.Type.ONE
+            ? input.player1
+            : input.player2;
+      System.playerMovement(player, playerInput, canvasContext.heightRatio)
+    }
+    for (let player of gameState.remotePlayers) {
+      player.position = callbacks.getRemotePlayerPosition(gameState, player);
+    }
+  }
+
+  /**
+   * @param {Player} player
+   * @param {import("./pongExternal.js").PlayerInput} playerInput
+   * @param {number} gridHeight
+   */
+  static playerMovement(player, playerInput, gridHeight) {
+    desaceleratePlayer(player);
+    applyInput(player, playerInput);
+    clampMaxVelocity(player);
+    player.move();
+    clampPlayerBounds(player, gridHeight);
   }
 
   /**

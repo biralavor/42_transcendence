@@ -4,17 +4,9 @@
  *   - src/Components/PongCanvas.jsx  (React SPA)
  */
 
+import { Callbacks } from './pongExternal.js';
+import { CanvasGameContext, heightRatio, render, widthRatio } from './pongRenderer.js';
 import System from './pongSystem.js';
-
-/**
- * For string based color follow reference
- * https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Values/color_value
- * @typedef {(string|CanvasGradient|CanvasPattern)} Color
- */
-
-const widthRatio = 160;
-const heightRatio = 90;
-const aspectRatio = (widthRatio/heightRatio);
 
 export class Position {
   /**
@@ -143,6 +135,14 @@ export class Player extends Entity {
     }
   }
 
+  get isLocal() {
+    return this.kind == 'local';
+  }
+
+  get isRemote() {
+    return this.kind.startsWith('remote-');
+  }
+
   /**
    * @param {Ball} ball
    */
@@ -216,7 +216,6 @@ export class Ball extends Entity {
 export class GameState {
   static targetFrameRate = 30;                      //frame per second
   static timeFrameMillis = 1000 / GameState.targetFrameRate; //millis per frame
-  #lastFrameTime
   #currentFrameTime
   #currentFrameCount
 
@@ -233,24 +232,33 @@ export class GameState {
     this.score = { player1: 0, player2: 0 };
     this.#currentFrameTime = performance.now();
     this.#currentFrameCount = 0n;
+    /** @type {[Player]} */
+    this.players = [this.player1, this.player2];
+    /** @type {[Player]} */
+    this.localPlayers = this.players.filter(player => player.isLocal)
+    /** @type {[Player]} */
+    this.remotePlayers = this.players.filter(player => player.isRemote)
   }
 
   get isPlayer1Defending() {
     return this.ball.position.velX < 0
+  }
+
+  get canPlayer1Defend() {
+    return this.isPlayer1Defending
       && this.ball.position.x > this.player1.position.x + this.player1.size.width;
   }
 
   get isPlayer2Defending() {
     return this.ball.position.velX > 0
+  }
+
+  get canPlayer2Defend() {
+    return this.isPlayer2Defending
       && this.ball.position.x + this.ball.size.width < this.player2.position.x;
   }
 
-  get players() {
-    return [this.player1, this.player2];
-  }
-
   addFrame() {
-    this.#lastFrameTime = this.#currentFrameTime;
     this.#currentFrameTime += GameState.timeFrameMillis;
     ++(this.#currentFrameCount);
   }
@@ -265,184 +273,49 @@ export class GameState {
   }
 
   get isLocalDefending() {
-    return (this.ball.position.velX < 0 && this.player1.kind == 'local')
-      || (this.ball.position.velX > 0 && this.player2.kind == 'local')
+    return (this.isPlayer1Defending && this.player1.isLocal)
+      || (this.isPlayer2Defending && this.player2.isLocal)
   }
 
-  get shouldBroadcastGameEvent() {
-    return (this.ball.position.velX < 0 && this.player2.kind.startsWith('remote-'))
-      || (this.ball.position.velX > 0 && this.player1.kind.startsWith('remote-')); 
-  }
-}
-
-export class CanvasGameContext {
-
-  /** @type {HTMLCanvasElement} */
-  #canvas;
-  /**
-   * @param {HTMLCanvasElement} canvas
-   * @param {CanvasRenderingContext2D} renderingContext2d
-   */
-  constructor(canvas, renderingContext2d) {
-    /** @type {CanvasRenderingContext2D} */
-    this.rendering2d = renderingContext2d
-    this.#canvas = canvas
-  }
-
-  /** @property {number} */
-  get width() {
-    return this.#canvas.width;
-  }
-
-  /** @property {number} */
-  get height() {
-    return this.#canvas.height;
-  }
-
-  /** @property {number} */
-  get widthScale() {
-    return this.#canvas.width / widthRatio;
-  }
-
-  /** @property {number} */
-  get heightScale() {
-    return this.#canvas.height / heightRatio;
-  }
-
-  /** @property {number} */
-  get widthRatio() {
-    return widthRatio;
-  }
-
-  /** @property {number} */
-  get heightRatio() {
-    return heightRatio;
-  }
-
-  get primaryColor() {
-    return getComputedStyle(this.#canvas).getPropertyValue('--primary');
-  }
-
-  get crtWhite() {
-    return getComputedStyle(this.#canvas).getPropertyValue('--crt-white');
+  get shouldBroadcastGameEvents() {
+    // TODO revise this logic
+    return (this.isPlayer1Defending && this.player2.isRemote)
+      || (this.isPlayer1Defending && this.player1.isRemote);
   }
 }
 
 /**
  * @param {CanvasGameContext} canvasContext
  * @param {GameState} gameState
- * @param {Function} isKickOff - returns true game is paused after goal
+ * @param {Callbacks} callbacks
  */
-export function render(canvasContext, gameState, isKickOff) {
-  const renderingCanvas = canvasContext.rendering2d;
-  const player1 = gameState.player1;
-  const player2 = gameState.player2;
-  const ball = gameState.ball;
-  const score = gameState.score;
-
-  const fontSize = canvasContext.widthScale * 16;
-  renderingCanvas.reset();
-
-  renderingCanvas.strokeStyle = canvasContext.primaryColor;
-  renderingCanvas.lineWidth = 6;
-  renderingCanvas.strokeRect(0, 0,
-                             widthRatio * canvasContext.widthScale,
-                             heightRatio * canvasContext.heightScale);
-
-  renderingCanvas.fillStyle = canvasContext.crtWhite;
-  renderingCanvas.strokeStyle = canvasContext.crtWhite;
-  renderingCanvas.lineWidth = 2;
-  renderingCanvas.font = `bold ${fontSize}px Bungee, sans-serif`
-  renderingCanvas.fillText(`${score.player1}`,
-                           35 * canvasContext.widthScale,
-                           15 * canvasContext.heightScale, fontSize * 10);
-
-  renderingCanvas.fillText(`${score.player2}`,
-                           115 * canvasContext.widthScale,
-                           15 * canvasContext.heightScale, fontSize * 10);
-
-  const borderRadius = 8;
-  renderingCanvas.beginPath();
-  renderingCanvas.roundRect(1, 1,
-                             widthRatio * canvasContext.widthScale - 2,
-                            heightRatio * canvasContext.heightScale - 2,
-                            borderRadius);
-  renderingCanvas.stroke();
-
-  const midfieldStripSize = player1.size;
-  const midfieldStripXPos =
-        ((widthRatio / 2)  - (midfieldStripSize.width / 2))
-        * canvasContext.widthScale;
-  for (let i = midfieldStripSize.height / 2;
-       i < heightRatio ;
-       i += 2* midfieldStripSize.height) {
-
-    renderingCanvas.fillRect(
-      midfieldStripXPos,
-      i  * canvasContext.heightScale,
-      midfieldStripSize.width  * canvasContext.widthScale,
-      midfieldStripSize.height * canvasContext.heightScale);
-  }
-
-  renderingCanvas.fillStyle = player1.color;
-  renderingCanvas.fillRect(player1.position.x  * canvasContext.widthScale,
-                           player1.position.y  * canvasContext.heightScale,
-                           player1.size.width  * canvasContext.widthScale,
-                           player1.size.height * canvasContext.heightScale);
-
-  renderingCanvas.fillStyle = player2.color;
-  renderingCanvas.fillRect(player2.position.x  * canvasContext.widthScale,
-                           player2.position.y  * canvasContext.heightScale,
-                           player2.size.width  * canvasContext.widthScale,
-                           player2.size.height * canvasContext.heightScale);
-
-
-  if (isKickOff())
-    return ;
-
-  renderingCanvas.fillStyle = ball.color;
-  renderingCanvas.fillRect(ball.position.x  * canvasContext.widthScale,
-                           ball.position.y  * canvasContext.heightScale,
-                           ball.size.width  * canvasContext.widthScale,
-                           ball.size.height * canvasContext.heightScale);
-}
-
-
-/**
- * @param {CanvasGameContext} canvasContext
- * @param {GameState} gameState
- * @param {Function} getInput - returns {player1: {velY, velX}, player2: {velY, velX}}
- * @param {Function} isKickoff - returns true when game is paused after goal
- * @param {Function} onGoal - called once when a goal is scored
- */
-export function gameLoop(canvasContext, gameState, getInput, isKickoff, onGoal) {
+export function gameLoop(canvasContext, gameState, callbacks) {
   const time = performance.now();
 
   while (gameState.shouldAddFrame(time)) {
     gameState.addFrame();
-    /** @type {import('./pongSystem').GameInput} input */
-    const input = getInput();
-    System.playerMovement(gameState, input, canvasContext);
-    if (!isKickoff()) {
+    System.playersMovement(gameState, canvasContext, callbacks);
+    if (!callbacks.isKickoff()) {
       if (gameState.isLocalDefending) {
         console.log('local defending')
         System.ballCollision(gameState, canvasContext);
         const scored = System.goalDetection(gameState, canvasContext);
-        if (scored) onGoal();
+        if (scored) callbacks.onGoal();
       } else {
-
         console.log('remote defending')
         // TODO replace by ball remote input
         System.ballCollision(gameState, canvasContext);
         const scored = System.goalDetection(gameState, canvasContext);
-        if (scored) onGoal();
+        if (scored) callbacks.onGoal();
       }
     }
 
-    render(canvasContext, gameState, isKickoff);
-    if (gameState.shouldBroadcastGameEvent) {
+    render(canvasContext, gameState, callbacks.isKickoff);
+    if (gameState.shouldBroadcastGameEvents) {
       // TODO
       console.log('broadcast game relevant state to server')
+      // local player most recent position
+      // ball bounces into local player / goal
     }
   }
 }

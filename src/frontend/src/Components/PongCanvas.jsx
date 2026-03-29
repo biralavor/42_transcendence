@@ -1,6 +1,9 @@
 import { useRef, useEffect, useState } from 'react'
 import './PongCanvas.css'
-import { GameState, gameLoop, CanvasGameContext } from '../game/pongEngine.js'
+import { GameState, gameLoop, Player, Position } from '../game/pongEngine.js'
+import System from '../game/pongSystem.js';
+import { Callbacks } from '../game/pongExternal.js';
+import { CanvasGameContext } from '../game/pongRenderer.js';
 
 function getLocalInput(keyState, keyUp, keyDown) {
     let velY = keyState[keyDown] ? 1 : 0;
@@ -9,22 +12,27 @@ function getLocalInput(keyState, keyUp, keyDown) {
     return { velY, velX: 0};
 }
 
-function getRemoteInput(gameState) {
-  // TODO get remote game input
+function getRemotePlayerPosition(gameState, remotePlayer) {
+  // TODO return a player position from remote
+  const remotePlayerCopy = new Player(remotePlayer.type, remotePlayer.kind);
+  remotePlayerCopy.position = Position.copy(remotePlayer.position);
+
   let velY = gameState.ball.position.y >
-      (gameState.player2.position.y + (gameState.player2.size.height / 2))
+      (remotePlayer.position.y + (remotePlayer.size.height / 2))
       ? 1 : 0
   velY -= gameState.ball.position.y <
-    (gameState.player2.position.y + (gameState.player2.size.height / 2))
+    (remotePlayer.position.y + (remotePlayer.size.height / 2))
     ? 1 : 0;
-  return { velY, velX: 0};
+  const playerInput = { velY, velX: 0};
+  const heightRatio = 90;
+  System.playerMovement(remotePlayerCopy, playerInput, heightRatio);
+  return remotePlayerCopy.position;
 }
 
 export default function PongCanvas(props)
 {
   const player1Kind = props?.player1Kind;
   const player2Kind = props?.player2Kind;
-  console.log(player1Kind, player2Kind)
   const canvasRef = useRef(null);
   const keyStateRef = useRef(null);
   const gameStateRef = useRef(null);
@@ -54,8 +62,7 @@ export default function PongCanvas(props)
     }, 2000);
   }
 
-  const isPaused = () => kickoffRef.current;
-
+  const isKickoff = () => kickoffRef.current;
   function onKeyup(event) {
     if (event.code === 'KeyJ'
         || event.code === 'KeyK'
@@ -82,8 +89,6 @@ export default function PongCanvas(props)
           : null;
     const player2 = player2Kind == 'local'
           ? getLocalInput(keyStateRef.current, 'KeyK', 'KeyJ')
-          : player2Kind.startsWith('remote-')
-          ? getRemoteInput(gameStateRef.current)
           : null;
     return { player1, player2, }
   }
@@ -105,7 +110,7 @@ export default function PongCanvas(props)
     /** @type {HTMLCanvasElement} */
     const canvas = canvasRef.current;
     const renderingContext = canvas.getContext('2d');
-    updateCanvasDimensions()
+    updateCanvasDimensions();
     const canvasContext = new CanvasGameContext(canvas, renderingContext)
     gameStateRef.current.player1.color = canvasContext.crtWhite;
     gameStateRef.current.player2.color = canvasContext.crtWhite;
@@ -113,8 +118,11 @@ export default function PongCanvas(props)
     function onResize(event) {
       updateCanvasDimensions()
     }
+    const callbacks =
+          new Callbacks(getInput, isKickoff, onGoal, getRemotePlayerPosition);
+
     function loop() {
-      gameLoop(canvasContext, gameStateRef.current, getInput, isPaused, onGoal);
+      gameLoop(canvasContext, gameStateRef.current, callbacks);
       loopRef.current = requestAnimationFrame(loop);
     }
 
