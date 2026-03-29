@@ -99,6 +99,9 @@ export class Entity {
 /**
  * @typedef {('ONE'|'TWO')} PlayerKey
  */
+/**
+ * @typedef {('local'|'remote-ai'|'remote-human')} PlayerKind
+ */
 
 export class Player extends Entity {
 
@@ -110,6 +113,7 @@ export class Player extends Entity {
     ONE: 1,
     TWO: 2
   });
+
   static #blockSize = 5;
   static #edgeSize = new Size(Player.#blockSize, Player.#blockSize / 2);
   static #extremeEdgeSize = new Size(Player.#blockSize, 0.5);
@@ -117,13 +121,18 @@ export class Player extends Entity {
   static #extremeFactor = 0.8;
   /**
    * @param {PlayerType} type
+   * @param {PlayerKind} kind
    */
-  constructor(type) {
+  constructor(type, kind) {
     super();
+    /** @type {PlayerType} */
     this.type = type;
-
+    /** @type {PlayerKind} */
+    this.kind = kind;
+    /** @type {Size} */
     this.size = new Size(Player.#blockSize, 3 * Player.#blockSize);
     if (type === Player.Type.ONE) {
+      /** @type {Position} */
       this.position = new Position(2 * this.size.width,
                                    heightRatio / 2 - (this.size.height / 2));
       this.color = 'white';
@@ -210,11 +219,12 @@ export class GameState {
   #lastFrameTime
   #currentFrameTime
   #currentFrameCount
-  constructor() {
+
+  constructor(player1Kind, player2Kind) {
     /** @type {Player} */
-    this.player1 = new Player(Player.Type.ONE);
+    this.player1 = new Player(Player.Type.ONE, player1Kind);
     /** @type {Player} */
-    this.player2 = new Player(Player.Type.TWO);
+    this.player2 = new Player(Player.Type.TWO, player2Kind);
     /** @type {Ball} */
     this.ball = new Ball();
     this.ball.position.velX = 4;
@@ -223,14 +233,6 @@ export class GameState {
     this.score = { player1: 0, player2: 0 };
     this.#currentFrameTime = performance.now();
     this.#currentFrameCount = 0n;
-  }
-
-  get deltaTime() {
-    return this.#currentFrameTime - this.#lastFrameTime;
-  }
-
-  get deltaFactor() {
-    return 1 / (this.#currentFrameTime - this.#lastFrameTime);
   }
 
   get isPlayer1Defending() {
@@ -255,6 +257,21 @@ export class GameState {
 
   shouldAddFrame(time) {
     return time > this.#currentFrameTime + GameState.timeFrameMillis;
+  }
+
+  get isLocalOnly() {
+    return this.player1.kind == 'local'
+    && this.player2.kind == 'local'
+  }
+
+  get isLocalDefending() {
+    return (this.ball.position.velX < 0 && this.player1.kind == 'local')
+      || (this.ball.position.velX > 0 && this.player2.kind == 'local')
+  }
+
+  get shouldBroadcastGameEvent() {
+    return (this.ball.position.velX < 0 && this.player2.kind.startsWith('remote-'))
+      || (this.ball.position.velX > 0 && this.player1.kind.startsWith('remote-')); 
   }
 }
 
@@ -314,9 +331,9 @@ export class CanvasGameContext {
 /**
  * @param {CanvasGameContext} canvasContext
  * @param {GameState} gameState
- * @param {Function} isPaused - returns true game is paused after goal
+ * @param {Function} isKickOff - returns true game is paused after goal
  */
-export function render(canvasContext, gameState, isPaused) {
+export function render(canvasContext, gameState, isKickOff) {
   const renderingCanvas = canvasContext.rendering2d;
   const player1 = gameState.player1;
   const player2 = gameState.player2;
@@ -380,7 +397,7 @@ export function render(canvasContext, gameState, isPaused) {
                            player2.size.height * canvasContext.heightScale);
 
 
-  if (isPaused())
+  if (isKickOff())
     return ;
 
   renderingCanvas.fillStyle = ball.color;
@@ -395,10 +412,10 @@ export function render(canvasContext, gameState, isPaused) {
  * @param {CanvasGameContext} canvasContext
  * @param {GameState} gameState
  * @param {Function} getInput - returns {player1: {velY, velX}, player2: {velY, velX}}
- * @param {Function} isPaused - returns true when game is paused after goal
+ * @param {Function} isKickoff - returns true when game is paused after goal
  * @param {Function} onGoal - called once when a goal is scored
  */
-export function gameLoop(canvasContext, gameState, getInput, isPaused, onGoal) {
+export function gameLoop(canvasContext, gameState, getInput, isKickoff, onGoal) {
   const time = performance.now();
 
   while (gameState.shouldAddFrame(time)) {
@@ -406,12 +423,26 @@ export function gameLoop(canvasContext, gameState, getInput, isPaused, onGoal) {
     /** @type {import('./pongSystem').GameInput} input */
     const input = getInput();
     System.playerMovement(gameState, input, canvasContext);
-    if (!isPaused()) {
-      System.ballCollision(gameState, canvasContext);
-      const scored = System.goalDetection(gameState, canvasContext);
-      if (scored) onGoal();
+    if (!isKickoff()) {
+      if (gameState.isLocalDefending) {
+        console.log('local defending')
+        System.ballCollision(gameState, canvasContext);
+        const scored = System.goalDetection(gameState, canvasContext);
+        if (scored) onGoal();
+      } else {
+
+        console.log('remote defending')
+        // TODO replace by ball remote input
+        System.ballCollision(gameState, canvasContext);
+        const scored = System.goalDetection(gameState, canvasContext);
+        if (scored) onGoal();
+      }
     }
 
-    render(canvasContext, gameState, isPaused);
+    render(canvasContext, gameState, isKickoff);
+    if (gameState.shouldBroadcastGameEvent) {
+      // TODO
+      console.log('broadcast game relevant state to server')
+    }
   }
 }
