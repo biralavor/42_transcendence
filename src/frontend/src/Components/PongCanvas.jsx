@@ -1,9 +1,10 @@
 import { useRef, useEffect, useState } from 'react'
 import './PongCanvas.css'
-import { GameState, gameLoop, Player, Position } from '../game/pongEngine.js'
+import { GameState, gameLoop} from '../game/pongEngine.js'
 import System from '../game/pongSystem.js';
 import { Callbacks } from '../game/pongExternal.js';
 import { CanvasGameContext } from '../game/pongRenderer.js';
+import { Player, Position } from '../game/pongEntities.js';
 
 function getLocalInput(keyState, keyUp, keyDown) {
     let velY = keyState[keyDown] ? 1 : 0;
@@ -27,6 +28,20 @@ function getRemotePlayerPosition(gameState, remotePlayer) {
   const heightRatio = 90;
   System.playerMovement(remotePlayerCopy, playerInput, heightRatio);
   return remotePlayerCopy.position;
+}
+
+function getRemoteBallPosition(ballFrame, gameState, canvasContext) {
+  console.log(`ball frame ${ballFrame} vs ${gameState.frameCount}`)
+  if (ballFrame % 5n < 3n && Math.random() < 0.5) {
+    return null;
+  }
+
+  const newBall = System.ballCollision(gameState, canvasContext);
+
+  if (ballFrame < gameState.frameCount && Math.random() < 0.5) {
+    newBall.position.frame = gameState.frameCount;
+  }
+  return newBall.position;
 }
 
 export default function PongCanvas(props)
@@ -119,7 +134,15 @@ export default function PongCanvas(props)
       updateCanvasDimensions()
     }
     const callbacks =
-          new Callbacks(getInput, isKickoff, onGoal, getRemotePlayerPosition);
+          new Callbacks(
+            getInput,
+            isKickoff,
+            onGoal,
+            getRemotePlayerPosition,
+            (ballFrame) => {
+              return getRemoteBallPosition(ballFrame, gameStateRef.current, canvasContext)
+            }
+          );
 
     function loop() {
       gameLoop(canvasContext, gameStateRef.current, callbacks);

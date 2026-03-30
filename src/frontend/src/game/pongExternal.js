@@ -4,7 +4,7 @@
  * @property {number} velX - Horizontal velocity
  */
 
-import { Player, Position } from "./pongEngine";
+import { Player, Ball, Position } from "./pongEntities.js";
 
 /**
  * @typedef {Object} GameInput
@@ -19,12 +19,14 @@ export class Callbacks {
    * @param {() => boolean} isKickoff - returns true when game is paused after goal
    * @param {() => void} onGoal - called when a goal is scored
    * @param {(Player) => Position} getRemotePlayerPosition
+   * @param {(BigInt) => Position} getRemoteBallPosition
    */
   constructor(
     getInput,
     isKickoff,
     onGoal,
-    getRemotePlayerPosition
+    getRemotePlayerPosition,
+    getRemoteBallPosition
   ) {
     /** @type {() => GameInput} - returns {player1: {velY, velX}, player2: {velY, velX}} */
     this.getInput = getInput;
@@ -34,5 +36,7 @@ export class Callbacks {
     this.onGoal = onGoal;
     /** @type {(Player) => Position}  */
     this.getRemotePlayerPosition = getRemotePlayerPosition;
+    /** @type {(BigInt) => Position}  */
+    this.getRemoteBallPosition = getRemoteBallPosition;
   }
 }
