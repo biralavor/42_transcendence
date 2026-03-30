@@ -37,6 +37,15 @@
   min-width: 0;
 }
 
+.chat-typing {
+  font-size: 0.8rem;
+  color: #6c757d;
+  font-style: italic;
+  min-height: 1.25rem;
+  padding: 0.1rem 0.25rem;
+  margin-bottom: 0.25rem;
+}
+
 .chat-layout .friends-sidebar {
   flex-shrink: 0;
   width: 260px;

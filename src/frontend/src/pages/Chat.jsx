@@ -25,8 +25,11 @@ export default function Chat() {
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [userId, setUserId] = useState(passedUserId)
+  const [typingUsers, setTypingUsers] = useState([])
   const wsRef = useRef(null)
   const bottomRef = useRef(null)
+  const typingTimers = useRef(new Map())
+  const emitThrottle = useRef(null)
 
   // Fetch userId if not passed via navigation state (e.g. direct URL access)
   useEffect(() => {
@@ -56,10 +59,31 @@ export default function Chat() {
     const ws = createWsClient(url, {
       onOpen: () => setConnected(true),
       onClose: () => setConnected(false),
-      onMessage: (data) => setMessages((prev) => [...prev, data]),
+      onMessage: (data) => {
+        if (data?.type === 'typing') {
+          const sender = data.sender
+          if (!sender || sender === name) return
+          setTypingUsers(prev => prev.includes(sender) ? prev : [...prev, sender])
+          clearTimeout(typingTimers.current.get(sender))
+          typingTimers.current.set(
+            sender,
+            setTimeout(() => {
+              setTypingUsers(prev => prev.filter(u => u !== sender))
+              typingTimers.current.delete(sender)
+            }, 2000)
+          )
+        } else {
+          setMessages(prev => [...prev, data])
+        }
+      },
     })
     wsRef.current = ws
-    return () => ws.close()
+    return () => {
+      ws.close()
+      clearTimeout(emitThrottle.current)
+      typingTimers.current.forEach(id => clearTimeout(id))
+      typingTimers.current.clear()
+    }
   }, [joined, roomId])
 
   useEffect(() => {
@@ -67,6 +91,14 @@ export default function Chat() {
       bottomRef.current.scrollIntoView({ behavior: 'smooth' })
     }
   }, [messages])
+
+  function handleInputChange(e) {
+    setInput(e.target.value)
+    if (!connected || !wsRef.current || !e.target.value.trim()) return
+    if (emitThrottle.current) return
+    wsRef.current.send({ type: 'typing', sender: name })
+    emitThrottle.current = setTimeout(() => { emitThrottle.current = null }, 300)
+  }
 
   function send() {
     if (!input.trim() || !connected || !wsRef.current) return
@@ -120,9 +152,14 @@ export default function Chat() {
             ))}
             <div ref={bottomRef} />
           </div>
+          <div className="chat-typing">
+            {typingUsers.length === 1 && `${typingUsers[0]} is typing…`}
+            {typingUsers.length === 2 && `${typingUsers[0]} and ${typingUsers[1]} are typing…`}
+            {typingUsers.length > 2 && 'Several people are typing…'}
+          </div>
           <div className="input-group">
             <input className="form-control" placeholder="Type a message…" aria-label="Type a message"
-              value={input} onChange={(e) => setInput(e.target.value)}
+              value={input} onChange={handleInputChange}
               onKeyDown={(e) => e.key === 'Enter' && send()} disabled={!connected} autoFocus />
             <button className="btn btn-primary" onClick={send} disabled={!connected}>Send</button>
           </div>

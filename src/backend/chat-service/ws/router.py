@@ -91,6 +91,14 @@ async def chat_websocket(websocket: WebSocket, room_slug: str, token: str = "") 
             while True:
                 data = await websocket.receive_json()
 
+                # Typing event — broadcast only, never persisted
+                if isinstance(data, dict) and data.get("type") == "typing":
+                    sender = data.get("sender")
+                    if isinstance(sender, str) and 0 < len(sender) <= SENDER_MAX_LEN:
+                        if not await _sender_is_blocked(dm_participants, sender_uid, db):
+                            await manager.broadcast(room_slug, {"type": "typing", "sender": sender})
+                    continue
+
                 error = _validate(data)
                 if error:
                     await websocket.send_json({"error": error})
