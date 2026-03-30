@@ -3,6 +3,7 @@ import re
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from jose import jwt
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncSession
 from shared.ws.manager import ConnectionManager
 from shared.database import AsyncSessionLocal
 from shared.config.settings import settings
@@ -50,6 +51,7 @@ def _validate(data: object) -> str | None:
 async def _sender_is_blocked(
     dm_participants: tuple[int, int] | None,
     sender_uid: int | None,
+    db: AsyncSession,
 ) -> bool:
     """Return True if the recipient has blocked the sender in a DM room.
 
@@ -63,8 +65,7 @@ async def _sender_is_blocked(
     if sender_uid not in (lo, hi):
         return True  # not a participant — treat as blocked / drop silently
     recipient_uid = hi if sender_uid == lo else lo
-    async with AsyncSessionLocal() as check_db:
-        return await is_blocked(check_db, blocker_id=recipient_uid, blocked_id=sender_uid)
+    return await is_blocked(db, blocker_id=recipient_uid, blocked_id=sender_uid)
 
 
 @router.websocket("/ws/chat/{room_slug}")
@@ -95,7 +96,7 @@ async def chat_websocket(websocket: WebSocket, room_slug: str, token: str = "") 
                     await websocket.send_json({"error": error})
                     continue
 
-                if await _sender_is_blocked(dm_participants, sender_uid):
+                if await _sender_is_blocked(dm_participants, sender_uid, db):
                     continue
 
                 try:
