@@ -12,7 +12,8 @@
 }
 
 .chat-share-url {
-  font-size: 0.85em;
+  font-size: 0.80rem;
+  font-family: 'Courier New', Courier, monospace;
 }
 
 .chat-msg {
@@ -35,6 +36,16 @@
 .chat-layout .chat-view {
   flex: 1;
   min-width: 0;
+}
+
+.chat-typing {
+  font-size: 0.80rem;
+  font-family: 'Courier New', Courier, monospace;
+  color: #cfc867;
+  font-style: italic;
+  min-height: 1.25rem;
+  padding: 0.1rem 0.25rem;
+  margin-bottom: 0.25rem;
 }
 
 .chat-layout .friends-sidebar {

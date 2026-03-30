@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from shared.config.settings import settings
 from shared.database import get_db
 from service.ws.router import router as ws_router
-from persistence import (
+from service.persistence import (
     get_or_create_dm_room,
     block_user, unblock_user, get_blocked_ids,
 )

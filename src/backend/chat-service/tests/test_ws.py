@@ -171,6 +171,47 @@ def _ws_db_patches(is_blocked_fn=None, sender_uid=None):
 
 
 # ---------------------------------------------------------------------------
+# Typing-event tests
+# ---------------------------------------------------------------------------
+
+def test_typing_event_broadcast():
+    """A typing event is broadcast to other clients; type and sender are preserved."""
+    import contextlib
+    with contextlib.ExitStack() as stack:
+        for p in _ws_db_patches():
+            stack.enter_context(p)
+        client = TestClient(app)
+        with client.websocket_connect("/ws/chat/room-typing") as ws1, \
+             client.websocket_connect("/ws/chat/room-typing") as ws2:
+            ws1.send_json({"type": "typing", "sender": "alice"})
+            data = ws2.receive_json()
+            assert data == {"type": "typing", "sender": "alice", "sender_uid": None}
+
+
+def test_typing_event_not_persisted():
+    """Typing events are broadcast but save_message is never called for them."""
+    import contextlib
+    save_calls = []
+
+    async def tracking_save(db, room_id, sender, content):
+        save_calls.append(content)
+
+    with contextlib.ExitStack() as stack:
+        for p in _ws_db_patches():
+            stack.enter_context(p)
+        # Override the no-op save_message with a tracking version (applied last → wins)
+        stack.enter_context(patch("service.ws.router.save_message", side_effect=tracking_save))
+        client = TestClient(app)
+        with client.websocket_connect("/ws/chat/room-typing-persist") as ws:
+            ws.send_json({"type": "typing", "sender": "alice"})
+            ws.send_json({"content": "hello", "sender": "alice"})
+            # Consume both broadcasts (typing + chat) so both are fully processed
+            ws.receive_json()
+
+    assert save_calls == ["hello"]
+
+
+# ---------------------------------------------------------------------------
 # Block-filter tests
 # ---------------------------------------------------------------------------
 
