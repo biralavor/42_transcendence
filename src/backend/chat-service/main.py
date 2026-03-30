@@ -31,6 +31,8 @@ def _decode_uid(credentials: HTTPAuthorizationCredentials = Depends(_bearer)) ->
         return int(uid)
     except JWTError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token uid is not a valid integer")
 
 
 CallerUid = Annotated[int, Depends(_decode_uid)]
