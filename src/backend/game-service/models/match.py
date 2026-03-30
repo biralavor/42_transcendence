@@ -13,6 +13,6 @@ class Match(Base):
     winner_id = Column(Integer, nullable=True)
     score_p1 = Column(Integer, default=0)
     score_p2 = Column(Integer, default=0)
-    started_at = Column(TIMESTAMP)
-    finished_at = Column(TIMESTAMP, nullable=True)
+    started_at = Column(TIMESTAMP(timezone=True))
+    finished_at = Column(TIMESTAMP(timezone=True), nullable=True)
     status = Column(String(20))
