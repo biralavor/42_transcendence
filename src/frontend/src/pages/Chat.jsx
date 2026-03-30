@@ -62,7 +62,11 @@ export default function Chat() {
       onMessage: (data) => {
         if (data?.type === 'typing') {
           const sender = data.sender
-          if (!sender || sender === name) return
+          if (!sender) return
+          const isSelf = (userId && data.sender_uid != null)
+            ? data.sender_uid === userId
+            : sender === name
+          if (isSelf) return
           setTypingUsers(prev => prev.includes(sender) ? prev : [...prev, sender])
           clearTimeout(typingTimers.current.get(sender))
           typingTimers.current.set(
@@ -98,7 +102,7 @@ export default function Chat() {
     if (!connected || !wsRef.current || !e.target.value.trim()) return
     clearTimeout(emitThrottle.current)
     emitThrottle.current = setTimeout(() => {
-      wsRef.current?.send({ type: 'typing', sender: name })
+      wsRef.current?.send({ type: 'typing', sender: name, sender_uid: userId })
     }, 300)
   }
 
