@@ -133,8 +133,12 @@ def _make_fake_room(room_id=1):
     return FakeRoom()
 
 
-def _ws_db_patches(is_blocked_fn=None):
-    """Return a list of patch context managers that mock all DB calls in ws/router.py."""
+def _ws_db_patches(is_blocked_fn=None, sender_uid=None):
+    """Return a list of patch context managers that mock all DB calls in ws/router.py.
+
+    sender_uid: when set, patches _uid_from_token to return this value so DM
+                rooms accept the connection without a real JWT.
+    """
     import contextlib
     from unittest.mock import MagicMock
 
@@ -161,12 +165,30 @@ def _ws_db_patches(is_blocked_fn=None):
     ]
     if is_blocked_fn is not None:
         patches.append(patch("service.ws.router.is_blocked", side_effect=is_blocked_fn))
+    if sender_uid is not None:
+        patches.append(patch("service.ws.router._uid_from_token", return_value=sender_uid))
     return patches
 
 
 # ---------------------------------------------------------------------------
 # Block-filter tests
 # ---------------------------------------------------------------------------
+
+def test_dm_without_token_rejected():
+    """Connecting to a DM room without a token is rejected with close code 4001."""
+    import contextlib
+    import pytest
+    from starlette.websockets import WebSocketDisconnect
+
+    with contextlib.ExitStack() as stack:
+        for p in _ws_db_patches():
+            stack.enter_context(p)
+        client = TestClient(app)
+        with pytest.raises(WebSocketDisconnect) as exc_info:
+            with client.websocket_connect("/ws/chat/DM-1-2"):
+                pass
+        assert exc_info.value.code == 4001
+
 
 def test_blocked_sender_message_not_delivered():
     """If is_blocked returns True for (recipient, sender), message is dropped."""
@@ -177,12 +199,12 @@ def test_blocked_sender_message_not_delivered():
         return blocker_id == 10 and blocked_id == 20
 
     with contextlib.ExitStack() as stack:
-        for p in _ws_db_patches(is_blocked_fn=mock_is_blocked):
+        for p in _ws_db_patches(is_blocked_fn=mock_is_blocked, sender_uid=20):
             stack.enter_context(p)
         client = TestClient(app)
         with client.websocket_connect(f"/ws/chat/{room}") as ws_blocker, \
              client.websocket_connect(f"/ws/chat/{room}") as ws_sender:
-            ws_sender.send_json({"sender": "bob", "content": "blocked msg", "user_id": 20})
+            ws_sender.send_json({"sender": "bob", "content": "blocked msg"})
 
             result = queue.Queue()
             def try_recv():
@@ -205,13 +227,13 @@ def test_unblocked_sender_message_delivered():
         return False
 
     with contextlib.ExitStack() as stack:
-        for p in _ws_db_patches(is_blocked_fn=mock_is_blocked):
+        for p in _ws_db_patches(is_blocked_fn=mock_is_blocked, sender_uid=30):
             stack.enter_context(p)
         client = TestClient(app)
         room = "DM-30-40"
         with client.websocket_connect(f"/ws/chat/{room}") as ws1, \
              client.websocket_connect(f"/ws/chat/{room}") as ws2:
-            ws1.send_json({"sender": "alice", "content": "hello", "user_id": 30})
+            ws1.send_json({"sender": "alice", "content": "hello"})
             d = ws2.receive_json()
             assert d["content"] == "hello"
 

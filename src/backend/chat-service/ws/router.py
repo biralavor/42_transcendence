@@ -1,16 +1,29 @@
 # Note: sys.path is set by main.py (Docker) or test file (host) — not repeated here.
 import re
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from jose import jwt
 from sqlalchemy.exc import SQLAlchemyError
 from shared.ws.manager import ConnectionManager
 from shared.database import AsyncSessionLocal
+from shared.config.settings import settings
 from service.persistence import get_or_create_room, save_message, get_room_history, is_blocked
 
 router = APIRouter()
 manager = ConnectionManager()
 
+_ALGORITHM = "HS256"
 SENDER_MAX_LEN = 50
 _DM_RE = re.compile(r"^DM-(\d+)-(\d+)$")
+
+
+def _uid_from_token(token: str) -> int | None:
+    """Decode JWT and return the uid claim, or None if invalid/missing."""
+    try:
+        payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[_ALGORITHM])
+        uid = payload.get("uid")
+        return int(uid) if uid is not None else None
+    except Exception:
+        return None
 
 
 def _parse_dm_participants(room_slug: str) -> tuple[int, int] | None:
@@ -40,9 +53,9 @@ async def _sender_is_blocked(
 ) -> bool:
     """Return True if the recipient has blocked the sender in a DM room.
 
-    Only applies when the room is a DM (dm_participants is not None) and the
-    sender included their user_id in the message payload. Returns False for
-    public/group rooms and for messages without a user_id field.
+    Only applies when the room is a DM (dm_participants is not None) and
+    sender_uid is the connection-bound identity decoded from the JWT at connect
+    time. Returns False for public/group rooms.
     """
     if dm_participants is None or not isinstance(sender_uid, int):
         return False
@@ -55,8 +68,17 @@ async def _sender_is_blocked(
 
 
 @router.websocket("/ws/chat/{room_slug}")
-async def chat_websocket(websocket: WebSocket, room_slug: str) -> None:
+async def chat_websocket(websocket: WebSocket, room_slug: str, token: str = "") -> None:
     dm_participants = _parse_dm_participants(room_slug)
+
+    # DM rooms require a verified identity — decode once at connect, bind for the session
+    sender_uid: int | None = None
+    if dm_participants is not None:
+        sender_uid = _uid_from_token(token)
+        if sender_uid is None:
+            await websocket.close(code=4001)
+            return
+
     await manager.connect(room_slug, websocket)
     try:
         async with AsyncSessionLocal() as db:
@@ -73,7 +95,7 @@ async def chat_websocket(websocket: WebSocket, room_slug: str) -> None:
                     await websocket.send_json({"error": error})
                     continue
 
-                if await _sender_is_blocked(dm_participants, data.get("user_id")):
+                if await _sender_is_blocked(dm_participants, sender_uid):
                     continue
 
                 try:
