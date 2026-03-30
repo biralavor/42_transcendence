@@ -185,7 +185,7 @@ def test_typing_event_broadcast():
              client.websocket_connect("/ws/chat/room-typing") as ws2:
             ws1.send_json({"type": "typing", "sender": "alice"})
             data = ws2.receive_json()
-            assert data == {"type": "typing", "sender": "alice"}
+            assert data == {"type": "typing", "sender": "alice", "sender_uid": None}
 
 
 def test_typing_event_not_persisted():
@@ -204,9 +204,9 @@ def test_typing_event_not_persisted():
         client = TestClient(app)
         with client.websocket_connect("/ws/chat/room-typing-persist") as ws:
             ws.send_json({"type": "typing", "sender": "alice"})
-            # Send a real message after — when its broadcast arrives we know both were processed
             ws.send_json({"content": "hello", "sender": "alice"})
-            ws.receive_json()  # consume the chat broadcast
+            # Consume both broadcasts (typing + chat) so both are fully processed
+            ws.receive_json()
 
     assert save_calls == ["hello"]
 
