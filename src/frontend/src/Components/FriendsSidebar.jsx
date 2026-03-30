@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/authContext'
 import { usePresence } from '../context/presenceContext'
+import './FriendsSidebar.css'
 
 export default function FriendsSidebar({ userId, username }) {
   const { auth } = useAuth()

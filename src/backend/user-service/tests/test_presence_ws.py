@@ -63,15 +63,16 @@ def test_invalid_token_closes_4001():
 
 # ── user-not-found path ────────────────────────────────────────────────────────
 
-def test_valid_token_unknown_user_closes_4003(mock_db_session):
-    """JWT decodes OK but get_me raises (user not in DB) → close 4003."""
+def test_get_me_error_closes_4001():
+    """Any get_me failure (bad credentials, user not found, etc.) → close 4001."""
     token = _make_token("ghost")
 
     with patch("service.ws.presence_router.get_me", new=AsyncMock(side_effect=Exception("not found"))):
         with TestClient(app) as client:
-            with pytest.raises(Exception):
+            with pytest.raises(WebSocketDisconnect) as exc_info:
                 with client.websocket_connect(f"/ws/presence?token={token}"):
                     pass
+        assert exc_info.value.code == 4001
 
 
 # ── happy path: no friends online ────────────────────────────────────────────

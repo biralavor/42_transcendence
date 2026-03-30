@@ -31,12 +31,15 @@ export default function Chat() {
   // Fetch userId if not passed via navigation state (e.g. direct URL access)
   useEffect(() => {
     if (userId || !auth.access_token) return
+    const controller = new AbortController()
     fetch('/api/users/auth/me', {
       headers: { Authorization: `Bearer ${auth.access_token}` },
+      signal: controller.signal,
     })
       .then(r => r.ok ? r.json() : null)
       .then(me => { if (me) setUserId(me.id) })
-      .catch((err) => { console.warn('Failed to fetch user identity for chat sidebar:', err) })
+      .catch((err) => { if (err.name !== 'AbortError') console.warn('Failed to fetch user identity for chat sidebar:', err) })
+    return () => controller.abort()
   }, [auth.access_token, userId])
 
   function join(e) {
