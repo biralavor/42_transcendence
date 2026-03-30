@@ -1,5 +1,5 @@
 from fastapi import status, HTTPException
-from service.schemas import Login, LoginResponse, RegisterRequest, RegisterResponse, UpdateProfileRequest, MeResponse
+from service.schemas import Login, LoginResponse, RefreshRequest, RegisterRequest, RegisterResponse, UpdateProfileRequest, MeResponse
 from service.models.credentials import Credentials, Tokens
 from service.models.user import User
 from datetime import datetime, timedelta, timezone
@@ -13,7 +13,8 @@ from sqlalchemy.exc import IntegrityError
 from shared.config.settings import settings
 
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+ACCESS_TOKEN_EXPIRE = 30
+REFRESH_TOKEN_EXPIRE = 30
 
 
 def create_access_token(data: dict, expires_delta: timedelta):
@@ -40,7 +41,7 @@ async def authenticate(login: Login, session: AsyncSession) -> LoginResponse:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials"
         )
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE)
     access_token = create_access_token(
         data={"sub": credential.username}, expires_delta=access_token_expires
     )
@@ -52,8 +53,36 @@ async def authenticate(login: Login, session: AsyncSession) -> LoginResponse:
         tokens = Tokens(credential_id=credential.id, token_type="bearer")
         session.add(tokens)
     tokens.refresh_token_hash = refresh_token_hash
-    tokens.expires_at = datetime.now(timezone.utc) + timedelta(days=30)
+    tokens.expires_at = datetime.now(timezone.utc) + timedelta(minutes=REFRESH_TOKEN_EXPIRE)
 
+    await session.commit()
+    return LoginResponse(
+        access_token=access_token,
+        token_type="bearer",
+        refresh_token=raw_refresh_token,
+    )
+
+
+async def refresh_access_token(body: RefreshRequest, session: AsyncSession) -> LoginResponse:
+    token_hash = hashlib.sha256(body.refresh_token.encode()).hexdigest()
+    token_row = await session.execute(select(Tokens).where(Tokens.refresh_token_hash == token_hash))
+    tokens = token_row.scalars().first()
+    if tokens is None or tokens.expires_at <= datetime.now(timezone.utc):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired refresh token",
+        )
+    result = await session.execute(select(Credentials).where(Credentials.id == tokens.credential_id))
+    credential = result.scalars().first()
+    if credential is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
+    access_token = create_access_token(
+        data={"sub": credential.username},
+        expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE),
+    )
+    raw_refresh_token = secrets.token_hex(32)
+    tokens.refresh_token_hash = hashlib.sha256(raw_refresh_token.encode()).hexdigest()
+    tokens.expires_at = datetime.now(timezone.utc) + timedelta(minutes=REFRESH_TOKEN_EXPIRE)
     await session.commit()
     return LoginResponse(
         access_token=access_token,

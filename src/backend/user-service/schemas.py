@@ -80,5 +80,9 @@ class FriendRequestResponse(BaseModel):
     addressee_username: Optional[str] = None
 
 
+class RefreshRequest(BaseModel):
+    refresh_token: str
+
+
 class FriendRequestAction(BaseModel):
     action: Literal["accept", "decline"]

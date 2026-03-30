@@ -6,12 +6,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from service.schemas import (
-    Login, LoginResponse, RegisterRequest, RegisterResponse,
+    Login, LoginResponse, RefreshRequest, RegisterRequest, RegisterResponse,
     ProfileResponse, UpdateProfileRequest, MeResponse,
     FriendResponse, FriendRequestResponse, FriendRequestAction,
 )
 from service.models.user import User
-from service.service import authenticate, register_credentials, get_profile, update_profile, get_me
+from service.service import authenticate, refresh_access_token, register_credentials, get_profile, update_profile, get_me
 from service.friends import (
     get_friends, get_pending_requests, get_sent_requests, send_friend_request,
     respond_to_friend_request, delete_friendship, search_users,
@@ -54,6 +54,11 @@ async def me(
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
 ):
     return await get_me(credentials.credentials, session)
+
+
+@app.post("/auth/refresh", status_code=status.HTTP_200_OK, response_model=LoginResponse)
+async def refresh(body: RefreshRequest, session: SessionDependency):
+    return await refresh_access_token(body, session)
 
 
 @app.post("/auth/register", status_code=status.HTTP_201_CREATED, response_model=RegisterResponse)
