@@ -96,9 +96,10 @@ export default function Chat() {
   function handleInputChange(e) {
     setInput(e.target.value)
     if (!connected || !wsRef.current || !e.target.value.trim()) return
-    if (emitThrottle.current) return
-    wsRef.current.send({ type: 'typing', sender: name })
-    emitThrottle.current = setTimeout(() => { emitThrottle.current = null }, 300)
+    clearTimeout(emitThrottle.current)
+    emitThrottle.current = setTimeout(() => {
+      wsRef.current?.send({ type: 'typing', sender: name })
+    }, 300)
   }
 
   function send() {
