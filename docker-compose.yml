@@ -35,6 +35,7 @@ services:
       DB_PASSWORD:       ${DB_PASSWORD}
       DB_NAME:           ${DB_NAME}
       USER_SERVICE_PORT: ${USER_SERVICE_PORT}
+      JWT_SECRET_KEY:    ${JWT_SECRET_KEY}
     volumes:
       - ./src/backend/user-service:/app/service
       - ./src/backend/shared:/app/shared
@@ -58,6 +59,7 @@ services:
       DB_PASSWORD:       ${DB_PASSWORD}
       DB_NAME:           ${DB_NAME}
       GAME_SERVICE_PORT: ${GAME_SERVICE_PORT}
+      JWT_SECRET_KEY:    ${JWT_SECRET_KEY}
     volumes:
       - ./src/backend/game-service:/app/service
       - ./src/backend/shared:/app/shared
@@ -81,6 +83,7 @@ services:
       DB_PASSWORD:       ${DB_PASSWORD}
       DB_NAME:           ${DB_NAME}
       CHAT_SERVICE_PORT: ${CHAT_SERVICE_PORT}
+      JWT_SECRET_KEY:    ${JWT_SECRET_KEY}
     volumes:
       - ./src/backend/chat-service:/app/service
       - ./src/backend/shared:/app/shared

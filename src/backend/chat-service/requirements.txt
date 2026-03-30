@@ -1,3 +1,4 @@
 # Base deps come from backend-base image.
 # Add only chat-service-specific RUNTIME packages here.
 # Test-only deps (pytest, httpx) live in requirements-test.txt.
+python-jose[cryptography]==3.5.0
