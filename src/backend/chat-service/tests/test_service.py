@@ -3,9 +3,16 @@ import pytest_asyncio
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.pool import NullPool
+from jose import jwt
+from unittest.mock import AsyncMock, MagicMock, patch
+from httpx import ASGITransport, AsyncClient
 
 from shared.config.settings import settings
+from shared.database import get_db
+from main import app
 from persistence import get_or_create_room, save_message, get_room_history
+from persistence import block_user, unblock_user, get_blocked_ids, is_blocked
+from persistence import get_or_create_dm_room
 
 
 @pytest_asyncio.fixture
@@ -19,7 +26,7 @@ async def db():
             "AND datname = current_database() "
             "AND pid <> pg_backend_pid()"
         ))
-        await conn.execute(text("TRUNCATE TABLE messages, chat_rooms RESTART IDENTITY CASCADE"))
+        await conn.execute(text("TRUNCATE TABLE messages, chat_rooms, blocks RESTART IDENTITY CASCADE"))
     async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     async with async_session() as session:
         yield session
@@ -73,3 +80,196 @@ async def test_get_room_history_respects_limit(db):
 async def test_get_room_history_returns_empty_for_unknown_room(db):
     history = await get_room_history(db, 99999)
     assert history == []
+
+
+@pytest.mark.asyncio
+async def test_block_user_creates_row(db):
+    await block_user(db, blocker_id=1, blocked_id=2)
+    assert await is_blocked(db, blocker_id=1, blocked_id=2)
+
+
+@pytest.mark.asyncio
+async def test_block_is_one_directional(db):
+    await block_user(db, blocker_id=1, blocked_id=2)
+    assert not await is_blocked(db, blocker_id=2, blocked_id=1)
+
+
+@pytest.mark.asyncio
+async def test_block_user_is_idempotent(db):
+    await block_user(db, blocker_id=1, blocked_id=2)
+    await block_user(db, blocker_id=1, blocked_id=2)  # must not raise
+    assert await is_blocked(db, blocker_id=1, blocked_id=2)
+
+
+@pytest.mark.asyncio
+async def test_unblock_user_removes_row(db):
+    await block_user(db, blocker_id=1, blocked_id=2)
+    await unblock_user(db, blocker_id=1, blocked_id=2)
+    assert not await is_blocked(db, blocker_id=1, blocked_id=2)
+
+
+@pytest.mark.asyncio
+async def test_unblock_nonexistent_raises_404(db):
+    from fastapi import HTTPException
+    with pytest.raises(HTTPException) as exc_info:
+        await unblock_user(db, blocker_id=1, blocked_id=99)
+    assert exc_info.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_get_blocked_ids_returns_set(db):
+    await block_user(db, blocker_id=1, blocked_id=2)
+    await block_user(db, blocker_id=1, blocked_id=3)
+    result = await get_blocked_ids(db, user_id=1)
+    assert result == {2, 3}
+
+
+@pytest.mark.asyncio
+async def test_get_blocked_ids_empty_when_none(db):
+    result = await get_blocked_ids(db, user_id=99)
+    assert result == set()
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_dm_room_uses_sorted_ids(db):
+    """Room name is always DM-{min}-{max} regardless of argument order."""
+    room1 = await get_or_create_dm_room(db, user_a_id=5, user_b_id=2)
+    room2 = await get_or_create_dm_room(db, user_a_id=2, user_b_id=5)
+    assert room1.id == room2.id
+    assert room1.room_name == "DM-2-5"
+    assert room1.room_type == "dm"
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_dm_room_is_idempotent(db):
+    r1 = await get_or_create_dm_room(db, user_a_id=1, user_b_id=3)
+    r2 = await get_or_create_dm_room(db, user_a_id=1, user_b_id=3)
+    assert r1.id == r2.id
+
+
+# ---------------------------------------------------------------------------
+# Endpoint tests (mocked DB — no Docker required)
+# ---------------------------------------------------------------------------
+
+def _make_session():
+    scalars = MagicMock()
+    scalars.first.return_value = None
+    scalars.all.return_value = []
+    r = MagicMock()
+    r.scalars.return_value = scalars
+    session = AsyncMock()
+    session.execute.return_value = r
+    return session
+
+
+def _valid_token(uid: int = 1) -> str:
+    from datetime import timedelta, datetime, timezone
+    payload = {"sub": "alice", "uid": uid, "exp": datetime.now(timezone.utc) + timedelta(minutes=5)}
+    return jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm="HS256")
+
+
+@pytest.mark.asyncio
+async def test_post_dm_returns_room_name():
+    session = _make_session()
+    async def fake_db():
+        yield session
+
+    app.dependency_overrides[get_db] = fake_db
+    try:
+        with patch("main.get_or_create_dm_room", new=AsyncMock(
+            return_value=MagicMock(room_name="DM-1-2")
+        )):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                resp = await client.post(
+                    "/dm/2",
+                    headers={"Authorization": f"Bearer {_valid_token(uid=1)}"},
+                )
+        assert resp.status_code == 200
+        assert resp.json()["room_name"] == "DM-1-2"
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_post_dm_self_returns_400():
+    session = _make_session()
+    async def fake_db():
+        yield session
+
+    app.dependency_overrides[get_db] = fake_db
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post(
+                "/dm/1",
+                headers={"Authorization": f"Bearer {_valid_token(uid=1)}"},
+            )
+        assert resp.status_code == 400
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_post_block_returns_204():
+    session = _make_session()
+    async def fake_db():
+        yield session
+
+    app.dependency_overrides[get_db] = fake_db
+    try:
+        with patch("main.block_user", new=AsyncMock()):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                resp = await client.post(
+                    "/block/2",
+                    headers={"Authorization": f"Bearer {_valid_token(uid=1)}"},
+                )
+        assert resp.status_code == 204
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_delete_block_returns_204():
+    session = _make_session()
+    async def fake_db():
+        yield session
+
+    app.dependency_overrides[get_db] = fake_db
+    try:
+        with patch("main.unblock_user", new=AsyncMock()):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                resp = await client.delete(
+                    "/block/2",
+                    headers={"Authorization": f"Bearer {_valid_token(uid=1)}"},
+                )
+        assert resp.status_code == 204
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_get_blocked_returns_list():
+    session = _make_session()
+    async def fake_db():
+        yield session
+
+    app.dependency_overrides[get_db] = fake_db
+    try:
+        with patch("main.get_blocked_ids", new=AsyncMock(return_value={3, 5})):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                resp = await client.get(
+                    "/blocked",
+                    headers={"Authorization": f"Bearer {_valid_token(uid=1)}"},
+                )
+        assert resp.status_code == 200
+        assert set(resp.json()) == {3, 5}
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_endpoints_require_auth():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        assert (await client.post("/dm/2")).status_code == 403
+        assert (await client.post("/block/2")).status_code == 403
+        assert (await client.delete("/block/2")).status_code == 403
+        assert (await client.get("/blocked")).status_code == 403

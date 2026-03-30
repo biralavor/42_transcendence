@@ -41,8 +41,14 @@ async def authenticate(login: Login, session: AsyncSession) -> LoginResponse:
             detail="Invalid credentials"
         )
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    user_row = await session.execute(select(User).where(User.credential_id == credential.id))
+    user = user_row.scalars().first()
+    if user is None:
+        user = User(username=credential.username, credential_id=credential.id)
+        session.add(user)
+        await session.flush()  # populate user.id; final commit happens below with the token row
     access_token = create_access_token(
-        data={"sub": credential.username}, expires_delta=access_token_expires
+        data={"sub": credential.username, "uid": user.id}, expires_delta=access_token_expires
     )
     raw_refresh_token = secrets.token_hex(32)
     refresh_token_hash = hashlib.sha256(raw_refresh_token.encode()).hexdigest()
