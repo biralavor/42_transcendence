@@ -1,4 +1,5 @@
-import { Ball, GameState, Player } from "./pongEngine.js";
+import { GameState } from "./pongEngine.js";
+import { Ball, Player } from "./pongEntities.js";
 import { Callbacks } from "./pongExternal.js";
 import { CanvasGameContext } from "./pongRenderer.js";
 
@@ -99,9 +100,8 @@ function collision(gameState, canvasContext) {
     const overflow = p2Surface - ballSurface;
     newBall.position.x = p2Surface + overflow - newBall.size.width;
     newBall.position.velX = -ballIntendedPosition.velX;
-
   }
-
+  ++newBall.position.frame
   return newBall;
 }
 
@@ -182,10 +182,11 @@ export default class System {
   /**
    * @param {GameState} gameState
    * @param {CanvasGameContext} canvasContext
+   * @returns {Ball} ballAffterCollisions
    */
   static ballCollision(gameState, canvasContext) {
     const ballAfterCollision = collision(gameState, canvasContext);
-    gameState.ball = ballAfterCollision;
+    return ballAfterCollision
   }
 
   /**
