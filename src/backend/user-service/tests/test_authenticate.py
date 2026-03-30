@@ -110,6 +110,38 @@ async def test_subsequent_login_updates_token_not_duplicates():
 
 
 @pytest.mark.asyncio
+async def test_login_creates_user_row_when_missing():
+    """If no User row exists at login time, one is created and a token is still issued."""
+    from service.models.user import User
+
+    cred = _make_credential()
+    token_row = _make_token_row(credential_id=cred.id)
+    # user lookup returns None — triggers create-if-missing path
+    session = _session_returning(cred, None, token_row)
+    added_objects = []
+    session.add = MagicMock(side_effect=added_objects.append)
+
+    from shared.database import get_db
+
+    async def _fake_db():
+        yield session
+
+    app.dependency_overrides[get_db] = _fake_db
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post("/auth/login", json={"username": "alice", "password": "secret123"})
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+    assert resp.status_code == 200, resp.text
+    session.flush.assert_called_once()
+    added_users = [o for o in added_objects if isinstance(o, User)]
+    assert len(added_users) == 1
+    assert added_users[0].username == "alice"
+    assert added_users[0].credential_id == cred.id
+
+
+@pytest.mark.asyncio
 async def test_login_token_contains_uid():
     """JWT issued on login must carry a numeric uid matching the user's DB id."""
     import bcrypt
