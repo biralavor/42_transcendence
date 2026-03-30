@@ -83,6 +83,7 @@ export default function Chat() {
       clearTimeout(emitThrottle.current)
       typingTimers.current.forEach(id => clearTimeout(id))
       typingTimers.current.clear()
+      setTypingUsers([])
     }
   }, [joined, roomId])
 
