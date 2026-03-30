@@ -4,8 +4,11 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from jose import jwt
 
 from service.main import app
+from service.service import ACCESS_TOKEN_EXPIRE_DAYS, ALGORITHM, REFRESH_TOKEN_EXPIRE_DAYS
+from shared.config.settings import settings
 
 SAMPLE_REFRESH_TOKEN = "a" * 64  # 64 hex chars, valid token_hex(32) length
 
@@ -158,3 +161,57 @@ async def test_refresh_missing_credential_returns_401():
         app.dependency_overrides.pop(get_db, None)
 
     assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_refresh_access_token_exp_matches_access_window():
+    """JWT exp claim must reflect ACCESS_TOKEN_EXPIRE_DAYS, not the refresh window."""
+    token_row = _make_token_row()
+    cred = _make_credential()
+    session = _session_returning(token_row, cred)
+
+    from shared.database import get_db
+
+    async def _fake_db():
+        yield session
+
+    app.dependency_overrides[get_db] = _fake_db
+
+    before = datetime.now(timezone.utc)
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post("/auth/refresh", json={"refresh_token": SAMPLE_REFRESH_TOKEN})
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+    assert resp.status_code == 200
+    payload = jwt.decode(resp.json()["access_token"], settings.JWT_SECRET_KEY, algorithms=[ALGORITHM])
+    exp = datetime.fromtimestamp(payload["exp"], tz=timezone.utc)
+    expected = before + timedelta(days=ACCESS_TOKEN_EXPIRE_DAYS)
+    assert abs((exp - expected).total_seconds()) < 5
+
+
+@pytest.mark.asyncio
+async def test_refresh_token_expiry_matches_refresh_window():
+    """tokens.expires_at must be updated to ~now + REFRESH_TOKEN_EXPIRE_DAYS."""
+    token_row = _make_token_row()
+    cred = _make_credential()
+    session = _session_returning(token_row, cred)
+
+    from shared.database import get_db
+
+    async def _fake_db():
+        yield session
+
+    app.dependency_overrides[get_db] = _fake_db
+
+    before = datetime.now(timezone.utc)
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post("/auth/refresh", json={"refresh_token": SAMPLE_REFRESH_TOKEN})
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+    assert resp.status_code == 200
+    expected = before + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+    assert abs((token_row.expires_at - expected).total_seconds()) < 5
