@@ -1,4 +1,4 @@
-from datetime import datetime, timezone  # timezone used to get UTC then strip tzinfo
+from datetime import datetime, timezone
 
 from sqlalchemy import or_, select, case, func, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,7 +11,7 @@ async def create_match(db: AsyncSession, player1_id: int, player2_id: int) -> Ma
         player1_id=player1_id,
         player2_id=player2_id,
         status="ongoing",
-        started_at=datetime.now(timezone.utc).replace(tzinfo=None),
+        started_at=datetime.now(timezone.utc),
     )
     db.add(match)
     await db.commit()
@@ -29,7 +29,7 @@ async def finish_match(
     match.winner_id = winner_id
     match.score_p1 = score_p1
     match.score_p2 = score_p2
-    match.finished_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    match.finished_at = datetime.now(timezone.utc)
     match.status = "finished"
     await db.commit()
     await db.refresh(match)
