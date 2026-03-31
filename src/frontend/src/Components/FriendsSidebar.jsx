@@ -232,7 +232,7 @@ export default function FriendsSidebar({ userId, username, currentUser }) {
 
   const handleChat = (friendId) => {
     const [a, b] = [selfId, friendId].sort((x, y) => x - y)
-    navigate(`/chat/DM-${a}-${b}`, { state: { username: selfUsername } })
+    navigate(`/chat/DM-${a}-${b}`, { state: { username: selfUsername, userId: selfId } })
   }
 
   const handleInviteToGame = async (friend) => {
