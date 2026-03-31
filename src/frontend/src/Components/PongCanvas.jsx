@@ -46,8 +46,8 @@ function getRemoteBallPosition(ballFrame, gameState, canvasContext) {
 
 export default function PongCanvas(props)
 {
-  const player1Kind = props?.player1Kind;
-  const player2Kind = props?.player2Kind;
+  const player1Kind = props?.player1Kind || 'local';
+  const player2Kind = props?.player2Kind || 'local';
   const canvasRef = useRef(null);
   const keyStateRef = useRef(null);
   const gameStateRef = useRef(null);
