@@ -67,8 +67,6 @@ export default function Play() {
                     className="arcade-btn arcade-btn-primary"
                     onClick={handleOpenWaitingRoom}
                   >
-                    <PongCanvas player1Kind='local' player2Kind='local' />
-                  </div>
                     Test waiting room
                   </button>
 
@@ -99,7 +97,7 @@ export default function Play() {
               <div className="row g-4 align-items-start">
                 <div className="col-12 col-xl-8">
                   <div className="pong-board">
-                    <PongCanvas />
+                    <PongCanvas player1Kind='local' player2Kind='local' />
                   </div>
                 </div>
 
