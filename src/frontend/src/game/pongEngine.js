@@ -82,7 +82,7 @@ export class GameState {
   get shouldBroadcastGameEvents() {
     // TODO revise this logic
     return (this.isPlayer1Defending && this.player2.isRemote)
-      || (this.isPlayer1Defending && this.player1.isRemote);
+      || (this.isPlayer2Defending && this.player1.isRemote);
   }
 
   get frameCount() {
@@ -121,7 +121,6 @@ export function gameLoop(canvasContext, gameState, callbacks) {
         const remoteBallPosition = callbacks
               .getRemoteBallPosition(gameState.ball.position.frame);
         let ballAfterColision;
-        console.log(remoteBallPosition)
         if (remoteBallPosition == null) {
           console.log('skip ball frame')
           // do not update, keep frame count, frame skip
@@ -131,7 +130,6 @@ export function gameLoop(canvasContext, gameState, callbacks) {
         } else {
           ballAfterColision = Ball.copy(gameState.ball)
           ballAfterColision.position = remoteBallPosition
-          console.log("HOLA", ballAfterColision)
         }
         gameState.ball = ballAfterColision;
         const scored = System.goalDetection(gameState, canvasContext);
@@ -139,7 +137,6 @@ export function gameLoop(canvasContext, gameState, callbacks) {
       }
     }
 
-    render(canvasContext, gameState, callbacks.isKickoff);
     if (gameState.shouldBroadcastGameEvents) {
       // TODO
       //console.log('broadcast game relevant state to server')
@@ -147,4 +144,5 @@ export function gameLoop(canvasContext, gameState, callbacks) {
       // ball bounces into local player / goal
     }
   }
+  render(canvasContext, gameState, callbacks.isKickoff);
 }
