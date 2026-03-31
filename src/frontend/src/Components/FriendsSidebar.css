@@ -85,7 +85,6 @@
   font-family: 'VT323', monospace;
   font-size: 1rem;
   color: var(--metal-silver, #a8b2bd);
-  word-break: break-word;
 }
 
 .friends-actions,
@@ -126,14 +125,72 @@
   opacity: 0.75;
 }
 
+/* ≤ 480px: two rows — name on top, buttons below */
 .friends-friend-item {
+  flex-direction: column;
   align-items: flex-start;
-  gap: 0.5rem;
+  gap: 0.3rem;
 }
 
 .friends-actions-stack {
   flex-wrap: wrap;
-  justify-content: flex-end;
+  justify-content: flex-start;
+}
+
+/* 481px – 768px: one row, name capped at 12 characters then "…" */
+@media (min-width: 481px) and (max-width: 768px) {
+  .friends-friend-item {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+
+  .friends-friend-item .friends-user-info {
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  .friends-friend-item .friends-username {
+    max-width: 12ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .friends-actions-stack {
+    flex-wrap: nowrap;
+    justify-content: flex-end;
+  }
+}
+
+/* > 768px: one row, full name */
+@media (min-width: 769px) {
+  .friends-friend-item {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+
+  .friends-friend-item .friends-user-info {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .friends-friend-item .friends-username {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .friends-actions-stack {
+    flex-shrink: 0;
+    flex-wrap: nowrap;
+    justify-content: flex-end;
+  }
 }
 
 .friends-actions .arcade-btn[disabled] {

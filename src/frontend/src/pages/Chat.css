@@ -50,7 +50,7 @@
 
 .chat-layout .friends-sidebar {
   flex-shrink: 0;
-  width: 260px;
+  width: 300px;
   min-height: calc(100vh - 56px);
   position: sticky;
   top: 56px;
