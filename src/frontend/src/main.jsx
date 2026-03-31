@@ -10,11 +10,14 @@ import './theme/leaderboard.css'
 import './theme/about.css'
 import App from './App'
 import { AuthProvider } from './context/authContext'
+import { PresenceProvider } from './context/presenceContext'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <AuthProvider>
-      <App />
+      <PresenceProvider>
+        <App />
+      </PresenceProvider>
     </AuthProvider>
   </StrictMode>
 )

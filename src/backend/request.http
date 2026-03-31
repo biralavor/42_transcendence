@@ -15,22 +15,21 @@ POST https://localhost:8443/api/users/auth/login HTTP/1.1
 content-type: application/json
 
 {
-    "username": "bruno",
-    "password": "bruno23"
-}
-
-###
-POST https://localhost:8443/api/users/auth/login HTTP/1.1
-content-type: application/json
-
-{
     "username": "maurodri",
     "password": "maurodri123"
 }
 
-### Me (replace <token> with the access_token from login response)
+### Refresh (replace <refresh_token> with the refresh_token from login response)
+POST https://localhost:8443/api/users/auth/refresh HTTP/1.1
+content-type: application/json
+
+{
+    "refresh_token": "<refresh_token>"
+}
+
+### Me (replace <access_token> with the access_token from login response)
 GET https://localhost:8443/api/users/auth/me HTTP/1.1
-Authorization: Bearer <token>
+Authorization: Bearer <access_token>
 
 ### Register
 POST https://localhost:8443/api/users/auth/register HTTP/1.1
