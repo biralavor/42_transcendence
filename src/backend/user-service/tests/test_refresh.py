@@ -7,7 +7,7 @@ from httpx import ASGITransport, AsyncClient
 from jose import jwt
 
 from service.main import app
-from service.service import ACCESS_TOKEN_EXPIRE_DAYS, ALGORITHM, REFRESH_TOKEN_EXPIRE_DAYS
+from service.service import ACCESS_TOKEN_EXPIRE_MINUTES, ALGORITHM, REFRESH_TOKEN_EXPIRE_DAYS
 from shared.config.settings import settings
 
 SAMPLE_REFRESH_TOKEN = "a" * 64  # 64 hex chars, valid token_hex(32) length
@@ -165,7 +165,7 @@ async def test_refresh_missing_credential_returns_401():
 
 @pytest.mark.asyncio
 async def test_refresh_access_token_exp_matches_access_window():
-    """JWT exp claim must reflect ACCESS_TOKEN_EXPIRE_DAYS, not the refresh window."""
+    """JWT exp claim must reflect ACCESS_TOKEN_EXPIRE_MINUTES, not the refresh window."""
     token_row = _make_token_row()
     cred = _make_credential()
     session = _session_returning(token_row, cred)
@@ -187,13 +187,13 @@ async def test_refresh_access_token_exp_matches_access_window():
     assert resp.status_code == 200
     payload = jwt.decode(resp.json()["access_token"], settings.JWT_SECRET_KEY, algorithms=[ALGORITHM])
     exp = datetime.fromtimestamp(payload["exp"], tz=timezone.utc)
-    expected = before + timedelta(days=ACCESS_TOKEN_EXPIRE_DAYS)
+    expected = before + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     assert abs((exp - expected).total_seconds()) < 5
 
 
 @pytest.mark.asyncio
 async def test_refresh_token_expiry_matches_refresh_window():
-    """tokens.expires_at must be updated to ~now + REFRESH_TOKEN_EXPIRE_DAYS."""
+    """tokens.expires_at must be updated to ~now + REFRESH_TOKEN_EXPIRE_DAYS (7 days)."""
     token_row = _make_token_row()
     cred = _make_credential()
     session = _session_returning(token_row, cred)
