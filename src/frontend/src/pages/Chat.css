@@ -25,3 +25,22 @@
 .chat-msg strong {
   color: hsl(var(--sender-hue), 60%, 35%);
 }
+
+.chat-layout {
+  display: flex;
+  align-items: flex-start;
+  min-height: calc(100vh - 56px);
+}
+
+.chat-layout .chat-view {
+  flex: 1;
+  min-width: 0;
+}
+
+.chat-layout .friends-sidebar {
+  flex-shrink: 0;
+  width: 260px;
+  min-height: calc(100vh - 56px);
+  position: sticky;
+  top: 56px;
+}

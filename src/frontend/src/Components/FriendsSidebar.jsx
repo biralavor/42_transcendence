@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../context/authContext'
+import { usePresence } from '../context/presenceContext'
 import {
   buildInviteRoomId,
   createGameChannelClient,
@@ -7,6 +9,7 @@ import {
   isInviteExpired,
   sendGameChannelMessage,
 } from '../utils/gameInviteChannel'
+import './FriendsSidebar.css'
 
 const INVITE_TIMEOUT_MS = 60_000
 const DEFAULT_AVATAR = '/avatar_placeholder.jpg'
@@ -22,6 +25,8 @@ function mapIncomingInvite(data) {
 }
 
 export default function FriendsSidebar({ userId, username, currentUser }) {
+  const { auth } = useAuth()
+  const presenceMap = usePresence()
   const [friends, setFriends] = useState([])
   const [requests, setRequests] = useState([])
   const [searchQuery, setSearchQuery] = useState('')
@@ -199,21 +204,24 @@ export default function FriendsSidebar({ userId, username, currentUser }) {
     if (user) setPendingSent(prev => [...prev, user])
   }
 
-  const handleAccept = async (requesterId) => {
-    const res = await fetch(`/api/users/friends/${selfId}/accept/${requesterId}`, { method: 'PUT' })
+  const handleRespond = async (req, action) => {
+    const res = await fetch(`/api/users/friends/${selfId}/requests/${req.id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${auth.access_token}`,
+      },
+      body: JSON.stringify({ action }),
+    })
     if (!res.ok) return
-    setRequests(prev => prev.filter(r => r.requester_id !== requesterId))
-    const profileRes = await fetch(`/api/users/profile/${requesterId}`)
-    if (profileRes.ok) {
-      const user = await profileRes.json()
-      setFriends(prev => [...prev, user])
+    setRequests(prev => prev.filter(r => r.id !== req.id))
+    if (action === 'accept') {
+      const profileRes = await fetch(`/api/users/profile/${req.requester_id}`)
+      if (profileRes.ok) {
+        const newFriend = await profileRes.json()
+        setFriends(prev => [...prev, newFriend])
+      }
     }
-  }
-
-  const handleDecline = async (requesterId) => {
-    const res = await fetch(`/api/users/friends/${selfId}/${requesterId}`, { method: 'DELETE' })
-    if (!res.ok) return
-    setRequests(prev => prev.filter(r => r.requester_id !== requesterId))
   }
 
   const handleRemoveFriend = async (friendId) => {
@@ -357,7 +365,7 @@ export default function FriendsSidebar({ userId, username, currentUser }) {
 
   return (
     <aside className="friends-sidebar arcade-screen">
-      <h2 className="friends-sidebar-title">Players</h2>
+      <h2 className="friends-sidebar-title">Friends sidebar</h2>
 
       {inviteToast && (
         <div className={`friends-sidebar-alert friends-sidebar-alert-${inviteToast.tone}`} role="status">
@@ -447,13 +455,13 @@ export default function FriendsSidebar({ userId, username, currentUser }) {
                 <div className="friends-request-actions">
                   <button
                     className="arcade-btn arcade-btn-primary friends-btn"
-                    onClick={() => handleAccept(req.requester_id)}
+                    onClick={() => handleRespond(req, 'accept')}
                   >
                     ✓
                   </button>
                   <button
                     className="arcade-btn friends-btn friends-btn-decline"
-                    onClick={() => handleDecline(req.requester_id)}
+                    onClick={() => handleRespond(req, 'decline')}
                   >
                     ✗
                   </button>
@@ -473,11 +481,17 @@ export default function FriendsSidebar({ userId, username, currentUser }) {
             {friends.map(friend => {
               const waitingThisFriend = outgoingInvite?.friendId === friend.id
               const inviteDisabled = Boolean(outgoingInvite)
+              const status = presenceMap[friend.id] ?? friend.status
 
               return (
                 <li key={friend.id} className="friends-list-item friends-friend-item">
                   <div className="friends-user-info">
-                    <span className={`friends-status-dot friends-status-${friend.status}`} />
+                    <img
+                      src={friend.avatar_url || DEFAULT_AVATAR}
+                      alt={friend.username}
+                      className={`friends-avatar friends-avatar-${status}`}
+                    />
+                    <span className={`friends-status-dot friends-status-${status}`} />
                     <span className="friends-username">{friend.username}</span>
                   </div>
                   <div className="friends-actions friends-actions-stack">

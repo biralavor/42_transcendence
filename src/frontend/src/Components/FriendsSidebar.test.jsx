@@ -9,6 +9,15 @@ vi.mock('react-router-dom', async () => {
   return { ...actual, useNavigate: vi.fn() }
 })
 
+vi.mock('../context/authContext', () => ({
+  useAuth: () => ({ auth: { access_token: 'fake-token' } }),
+}))
+
+vi.mock('../context/presenceContext', () => ({
+  usePresence: vi.fn(() => ({})),
+}))
+import { usePresence } from '../context/presenceContext'
+
 function renderSidebar(userId = 1) {
   return render(
     <MemoryRouter>
@@ -51,6 +60,34 @@ describe('FriendsSidebar', () => {
     renderSidebar()
     await waitFor(() => {
       expect(screen.getByText(/no friends yet/i)).toBeInTheDocument()
+    })
+  })
+
+  it('shows avatar image for each friend', async () => {
+    vi.spyOn(global, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify([
+        { id: 2, username: 'bob', status: 'online', avatar_url: '/img/bob.jpg' },
+      ]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+    renderSidebar()
+    await waitFor(() => {
+      const img = screen.getByRole('img', { name: /bob/i })
+      expect(img).toBeInTheDocument()
+      expect(img).toHaveAttribute('src', '/img/bob.jpg')
+    })
+  })
+
+  it('falls back to placeholder when avatar_url is null', async () => {
+    vi.spyOn(global, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify([
+        { id: 2, username: 'bob', status: 'online', avatar_url: null },
+      ]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+    renderSidebar()
+    await waitFor(() => {
+      expect(screen.getByRole('img', { name: /bob/i })).toHaveAttribute('src', '/avatar_placeholder.jpg')
     })
   })
 
@@ -102,6 +139,66 @@ describe('FriendsSidebar', () => {
     expect(navigate).toHaveBeenCalledWith('/chat/DM-3-5', expect.any(Object))
   })
 
+  it('accept PUT includes Authorization header', async () => {
+    vi.spyOn(global, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([
+        { id: 7, requester_id: 2, requester_username: 'bob', status: 'pending' },
+      ]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response('{}', { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: 2, username: 'bob', status: 'offline' }), { status: 200 }))
+    renderSidebar(1)
+    fireEvent.click(await screen.findByRole('button', { name: /✓/ }))
+    await waitFor(() => {
+      const respondCall = global.fetch.mock.calls.find(([url, opts]) =>
+        url.includes('/requests/7') && opts?.method === 'PUT'
+      )
+      expect(respondCall[1].headers?.Authorization).toBe('Bearer fake-token')
+    })
+  })
+
+  it('accept button calls PUT /requests/{id} with action accept', async () => {
+    vi.spyOn(global, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([
+        { id: 7, requester_id: 2, requester_username: 'bob', status: 'pending' },
+      ]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response('{}', { status: 200 })) // respond call
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: 2, username: 'bob', status: 'offline' }), { status: 200 })) // profile re-fetch
+    renderSidebar(1)
+    fireEvent.click(await screen.findByRole('button', { name: /✓/ }))
+    await waitFor(() => {
+      const calls = global.fetch.mock.calls
+      const respondCall = calls.find(([url, opts]) =>
+        url.includes('/requests/7') && opts?.method === 'PUT'
+      )
+      expect(respondCall).toBeDefined()
+      expect(JSON.parse(respondCall[1].body)).toEqual({ action: 'accept' })
+    })
+  })
+
+  it('decline button calls PUT /requests/{id} with action decline', async () => {
+    vi.spyOn(global, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([
+        { id: 7, requester_id: 2, requester_username: 'bob', status: 'pending' },
+      ]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response('{}', { status: 200 })) // respond call (204 not valid in Response constructor)
+    renderSidebar(1)
+    fireEvent.click(await screen.findByRole('button', { name: /✗/ }))
+    await waitFor(() => {
+      const calls = global.fetch.mock.calls
+      const respondCall = calls.find(([url, opts]) =>
+        url.includes('/requests/7') && opts?.method === 'PUT'
+      )
+      expect(respondCall).toBeDefined()
+      expect(JSON.parse(respondCall[1].body)).toEqual({ action: 'decline' })
+    })
+  })
+
   it('shows search results when query is entered', async () => {
     vi.spyOn(global, 'fetch')
       .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
@@ -119,6 +216,64 @@ describe('FriendsSidebar', () => {
     await waitFor(() => {
       expect(screen.getByText('charlie')).toBeInTheDocument()
       expect(screen.getByRole('button', { name: /add friend/i })).toBeInTheDocument()
+    })
+  })
+
+  it('shows online dot when presenceMap says online', async () => {
+    usePresence.mockReturnValue({ 2: 'online' })
+    vi.spyOn(global, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify([
+        { id: 2, username: 'bob', status: 'offline', avatar_url: null },
+      ]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+    renderSidebar()
+    await waitFor(() => {
+      expect(document.querySelector('.friends-status-online')).toBeInTheDocument()
+    })
+  })
+
+  it('presenceMap online overrides REST offline status', async () => {
+    usePresence.mockReturnValue({ 2: 'online' })
+    vi.spyOn(global, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify([
+        { id: 2, username: 'bob', status: 'offline', avatar_url: null },
+      ]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+    renderSidebar()
+    await waitFor(() => {
+      expect(document.querySelector('.friends-status-online')).toBeInTheDocument()
+      expect(document.querySelector('.friends-status-offline')).not.toBeInTheDocument()
+    })
+  })
+
+  it('avatar has online border class when presenceMap says online', async () => {
+    usePresence.mockReturnValue({ 2: 'online' })
+    vi.spyOn(global, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify([
+        { id: 2, username: 'bob', status: 'offline', avatar_url: null },
+      ]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+    renderSidebar()
+    await waitFor(() => {
+      const img = screen.getByRole('img', { name: /bob/i })
+      expect(img.className).toContain('friends-avatar-online')
+    })
+  })
+
+  it('falls back to REST status when presenceMap is empty (e.g. after WS disconnect)', async () => {
+    usePresence.mockReturnValue({})  // simulates post-disconnect cleared map
+    vi.spyOn(global, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify([
+        { id: 2, username: 'bob', status: 'online', avatar_url: null },
+      ]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+    renderSidebar()
+    await waitFor(() => {
+      expect(document.querySelector('.friends-status-online')).toBeInTheDocument()
     })
   })
 })
