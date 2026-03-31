@@ -13,8 +13,8 @@ from sqlalchemy.exc import IntegrityError
 from shared.config.settings import settings
 
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_DAYS = 1
-REFRESH_TOKEN_EXPIRE_DAYS = 2
+ACCESS_TOKEN_EXPIRE_MINUTES = 15
+REFRESH_TOKEN_EXPIRE_DAYS = 7
 
 
 def create_access_token(data: dict, expires_delta: timedelta):
@@ -41,7 +41,7 @@ async def authenticate(login: Login, session: AsyncSession) -> LoginResponse:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials"
         )
-    access_token_expires = timedelta(days=ACCESS_TOKEN_EXPIRE_DAYS)
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={"sub": credential.username}, expires_delta=access_token_expires
     )
@@ -78,7 +78,7 @@ async def refresh_access_token(body: RefreshRequest, session: AsyncSession) -> L
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
     access_token = create_access_token(
         data={"sub": credential.username},
-        expires_delta=timedelta(days=ACCESS_TOKEN_EXPIRE_DAYS),
+        expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
     )
     raw_refresh_token = secrets.token_hex(32)
     tokens.refresh_token_hash = hashlib.sha256(raw_refresh_token.encode()).hexdigest()
