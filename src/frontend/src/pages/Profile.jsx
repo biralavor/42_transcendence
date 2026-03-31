@@ -5,6 +5,32 @@ import { getAvatarFilter } from '../utils/avatarFilter'
 import './Profile.css'
 import FriendsSidebar from '../Components/FriendsSidebar'
 
+function sanitizeAvatarUrl(rawUrl) {
+  const placeholder = '/avatar_placeholder.jpg'
+
+  if (typeof rawUrl !== 'string' || rawUrl.trim() === '') {
+    return placeholder
+  }
+
+  const url = rawUrl.trim()
+
+  // Allow relative URLs (served from this origin)
+  if (url.startsWith('/')) {
+    return url
+  }
+
+  try {
+    const parsed = new URL(url, window.location.origin)
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+      return parsed.toString()
+    }
+  } catch {
+    // Fall through to placeholder on parse errors
+  }
+
+  return placeholder
+}
+
 export default function Profile() {
   const _rawId = parseInt(localStorage.getItem('user_id'), 10)
   const USER_ID = Number.isNaN(_rawId) ? 1 : _rawId
@@ -37,7 +63,7 @@ export default function Profile() {
         setProfile({
           displayName: profileData.display_name ?? '',
           darkMode:    profileData.dark_mode ?? false,
-          avatarUrl:   profileData.avatar_url ?? '/avatar_placeholder.jpg',
+          avatarUrl:   sanitizeAvatarUrl(profileData.avatar_url),
           username:    profileData.username,
           bio:         profileData.bio ?? '',
           status:      profileData.status,
@@ -59,7 +85,12 @@ export default function Profile() {
     const { name, value, type, checked } = e.target
     setProfile(prev => ({
       ...prev,
-      [name]: type === 'checkbox' ? checked : value,
+      [name]:
+        type === 'checkbox'
+          ? checked
+          : name === 'avatarUrl'
+            ? sanitizeAvatarUrl(value)
+            : value,
     }))
   }
 
