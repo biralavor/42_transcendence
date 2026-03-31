@@ -1,3 +1,4 @@
+// src/frontend/src/Components/UserProfileModal.jsx
 import { useState, useEffect } from 'react'
 import './UserProfileModal.css'
 
@@ -5,21 +6,106 @@ const DEFAULT_AVATAR = '/avatar_placeholder.jpg'
 
 export default function UserProfileModal({ username, userId, currentUserId, onClose, onChat }) {
   const [profile, setProfile] = useState(null)
-  const [stats, setStats] = useState(null)
+  const [wins, setWins] = useState(0)
+  const [matches, setMatches] = useState(0)
   const [resolvedId, setResolvedId] = useState(userId ?? null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
   useEffect(() => {
-    // placeholder — data fetching added in Task 2
+    let cancelled = false
+
+    async function load() {
+      setLoading(true)
+      setError('')
+      try {
+        let targetId = userId ?? null
+
+        if (!targetId) {
+          const res = await fetch(`/api/users/search?q=${encodeURIComponent(username)}`)
+          if (!res.ok) throw new Error('User not found')
+          const results = await res.json()
+          const match = results.find(u => u.username === username)
+          if (!match) throw new Error(`No user "${username}"`)
+          targetId = match.id
+        }
+
+        if (cancelled) return
+        setResolvedId(targetId)
+
+        const [profileRes, historyRes] = await Promise.all([
+          fetch(`/api/users/profile/${targetId}`),
+          fetch(`/api/game/matches/history/${targetId}`),
+        ])
+
+        if (!profileRes.ok) throw new Error('Failed to load profile')
+        const profileData = await profileRes.json()
+        const historyData = historyRes.ok ? await historyRes.json() : []
+
+        if (cancelled) return
+        setProfile({
+          displayName: profileData.display_name ?? profileData.username,
+          username: profileData.username,
+          avatarUrl: profileData.avatar_url ?? DEFAULT_AVATAR,
+        })
+        setWins(historyData.filter(m => m.result === 'Win').length)
+        setMatches(historyData.length)
+      } catch (err) {
+        if (!cancelled) setError(err.message)
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+
+    load()
+    return () => { cancelled = true }
   }, [username, userId])
 
   return (
     <div className="upm-backdrop" role="dialog" aria-modal="true">
       <div className="upm-dialog">
         <button className="upm-close" onClick={onClose} aria-label="Close">×</button>
+
         {loading && <p className="upm-loading">Loading…</p>}
         {error && <p className="upm-error">{error}</p>}
+
+        {!loading && !error && profile && (
+          <>
+            <div className="upm-header">
+              <img
+                src={profile.avatarUrl}
+                alt={profile.username}
+                className="upm-avatar"
+              />
+              <div className="upm-names">
+                <p className="upm-display-name">{profile.displayName}</p>
+                <p className="upm-username">@{profile.username}</p>
+              </div>
+            </div>
+
+            <div className="upm-stats">
+              <div className="upm-stat">
+                <span className="upm-stat-value">{wins}</span>
+                <span className="upm-stat-label">Wins</span>
+              </div>
+              <div className="upm-stat">
+                <span className="upm-stat-value">{matches}</span>
+                <span className="upm-stat-label">Matches</span>
+              </div>
+            </div>
+
+            <div className="upm-actions">
+              {resolvedId && resolvedId !== currentUserId && (
+                <button
+                  className="arcade-btn arcade-btn-primary"
+                  onClick={() => onChat(resolvedId)}
+                >
+                  Chat
+                </button>
+              )}
+            </div>
+          </>
+        )}
       </div>
     </div>
   )
