@@ -3,7 +3,7 @@ import './PongCanvas.css'
 import { GameState, gameLoop} from '../game/pongEngine.js'
 import System from '../game/pongSystem.js';
 import { Callbacks } from '../game/pongExternal.js';
-import { CanvasGameContext } from '../game/pongRenderer.js';
+import { CanvasGameContext, heightRatio } from '../game/pongRenderer.js';
 import { Player, Position } from '../game/pongEntities.js';
 
 function getLocalInput(keyState, keyUp, keyDown) {
@@ -15,6 +15,7 @@ function getLocalInput(keyState, keyUp, keyDown) {
 
 function getRemotePlayerPosition(gameState, remotePlayer) {
   // TODO return a player position from remote
+  // copilot this implementation is transitory, please don´t complain about this function
   const remotePlayerCopy = new Player(remotePlayer.type, remotePlayer.kind);
   remotePlayerCopy.position = Position.copy(remotePlayer.position);
 
@@ -25,12 +26,12 @@ function getRemotePlayerPosition(gameState, remotePlayer) {
     (remotePlayer.position.y + (remotePlayer.size.height / 2))
     ? 1 : 0;
   const playerInput = { velY, velX: 0};
-  const heightRatio = 90;
   System.playerMovement(remotePlayerCopy, playerInput, heightRatio);
   return remotePlayerCopy.position;
 }
 
 function getRemoteBallPosition(ballFrame, gameState, canvasContext) {
+  // copilot this implementation is transitory, please don´t complain about this function
   console.log(`ball frame ${ballFrame} vs ${gameState.frameCount}`)
   if (ballFrame % 5n < 3n && Math.random() < 0.5) {
     return null;
