@@ -1,11 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import UserProfileModal from './UserProfileModal'
-
-vi.mock('../context/authContext', () => ({
-  useAuth: () => ({ auth: { access_token: 'fake-token' } }),
-}))
 
 function renderModal(props = {}) {
   return render(
@@ -21,6 +17,10 @@ function renderModal(props = {}) {
     </MemoryRouter>
   )
 }
+
+afterEach(() => {
+  vi.restoreAllMocks()
+})
 
 describe('UserProfileModal', () => {
   beforeEach(() => {
