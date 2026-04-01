@@ -146,7 +146,11 @@ export default function Chat() {
       <NavbarComponent />
       <div className="chat-layout">
         {userId && (
-          <FriendsSidebar userId={userId} username={name} />
+          <FriendsSidebar
+            userId={userId}
+            username={name}
+            onViewProfile={(uname, uid) => setProfileTarget({ username: uname, userId: uid ?? null })}
+          />
         )}
         <div className="container py-4 chat-view">
           <div className="d-flex align-items-center gap-2 mb-3">
