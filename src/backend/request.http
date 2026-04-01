@@ -85,3 +85,26 @@ GET https://localhost:8443/api/game/stats/1 HTTP/1.1
 
 ### Get match history for a user
 GET https://localhost:8443/api/game/matches/1 HTTP/1.1
+
+### ── TOURNAMENTS ────────────────────────────────────────────────────────────
+
+### Create tournament
+POST https://localhost:8443/api/game/tournaments HTTP/1.1
+content-type: application/json
+
+{
+    "name": "Spring Tournament",
+    "creator_id": 1,
+    "max_participants": 4
+}
+
+### Get tournament details (replace 1 with tournament id)
+GET https://localhost:8443/api/game/tournaments/1 HTTP/1.1
+
+### Join tournament (replace 1 with tournament id)
+POST https://localhost:8443/api/game/tournaments/1/join HTTP/1.1
+content-type: application/json
+
+{
+    "user_id": 2
+}

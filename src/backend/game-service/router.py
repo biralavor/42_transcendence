@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from service.history import get_match_history
-from service.persistence import create_match, finish_match, get_leaderboard, get_match, get_user_matches, get_user_stats
+from service.persistence import create_match, create_tournament, finish_match, get_leaderboard, get_match, get_tournament_with_participants, get_user_matches, get_user_stats, join_tournament
 from service.schemas import (
     LeaderboardEntryResponse,
     MatchCreateRequest,
@@ -12,6 +12,11 @@ from service.schemas import (
     MatchHistoryItem,
     MatchResponse,
     StatsResponse,
+    JoinTournamentRequest,
+    TournamentCreateRequest,
+    TournamentCreateResponse,
+    TournamentDetailResponse,
+    TournamentParticipantResponse,
 )
 from shared.database import get_db
 
@@ -49,6 +54,48 @@ async def user_matches(user_id: int, session: SessionDependency):
 @router.post("/matches", status_code=status.HTTP_201_CREATED, response_model=MatchResponse)
 async def start_match(body: MatchCreateRequest, session: SessionDependency):
     return await create_match(session, body.player1_id, body.player2_id)
+
+
+@router.post("/tournaments", status_code=status.HTTP_201_CREATED, response_model=TournamentCreateResponse)
+async def create_tournament_endpoint(body: TournamentCreateRequest, session: SessionDependency):
+    tournament = await create_tournament(session, body.name, body.creator_id, body.max_participants)
+    return TournamentCreateResponse(
+        id=tournament.id,
+        join_link=f"/api/tournaments/{tournament.id}/join",
+    )
+
+
+@router.get("/tournaments/{tournament_id}", response_model=TournamentDetailResponse)
+async def get_tournament(tournament_id: int, session: SessionDependency):
+    result = await get_tournament_with_participants(session, tournament_id)
+    if result is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tournament not found")
+    tournament, participants = result
+    return TournamentDetailResponse(
+        id=tournament.id,
+        name=tournament.name,
+        creator_id=tournament.creator_id,
+        max_participants=tournament.max_participants,
+        status=tournament.status,
+        created_at=tournament.created_at,
+        participants=[TournamentParticipantResponse(user_id=p.user_id, joined_at=p.joined_at) for p in participants],
+    )
+
+
+@router.post("/tournaments/{tournament_id}/join", status_code=status.HTTP_201_CREATED)
+async def join_tournament_endpoint(tournament_id: int, body: JoinTournamentRequest, session: SessionDependency):
+    result = await get_tournament_with_participants(session, tournament_id)
+    if result is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tournament not found")
+    tournament, participants = result
+    if tournament.status != "open":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Tournament already started")
+    if any(p.user_id == body.user_id for p in participants):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="User already registered")
+    if len(participants) >= tournament.max_participants:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Tournament is full")
+    await join_tournament(session, tournament_id, body.user_id)
+    return {"detail": "Joined successfully"}
 
 
 @router.post("/matches/{match_id}/finish", response_model=MatchResponse)

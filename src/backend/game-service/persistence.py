@@ -4,6 +4,8 @@ from sqlalchemy import or_, select, case, func, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from service.models.match import Match
+from service.models.tournament import Tournament
+from service.models.tournament_participant import TournamentParticipant
 
 
 async def create_match(db: AsyncSession, player1_id: int, player2_id: int) -> Match:
@@ -17,6 +19,45 @@ async def create_match(db: AsyncSession, player1_id: int, player2_id: int) -> Ma
     await db.commit()
     await db.refresh(match)
     return match
+
+
+async def create_tournament(
+    db: AsyncSession, name: str, creator_id: int, max_participants: int
+) -> Tournament:
+    tournament = Tournament(
+        name=name,
+        creator_id=creator_id,
+        max_participants=max_participants,
+        status="open",
+    )
+    db.add(tournament)
+    await db.commit()
+    await db.refresh(tournament)
+    return tournament
+
+
+async def get_tournament_with_participants(
+    db: AsyncSession, tournament_id: int
+) -> tuple[Tournament, list[TournamentParticipant]] | None:
+    result = await db.execute(select(Tournament).where(Tournament.id == tournament_id))
+    tournament = result.scalars().first()
+    if tournament is None:
+        return None
+    participants_result = await db.execute(
+        select(TournamentParticipant).where(TournamentParticipant.tournament_id == tournament_id)
+    )
+    participants = list(participants_result.scalars().all())
+    return tournament, participants
+
+
+async def join_tournament(
+    db: AsyncSession, tournament_id: int, user_id: int
+) -> TournamentParticipant:
+    participant = TournamentParticipant(tournament_id=tournament_id, user_id=user_id)
+    db.add(participant)
+    await db.commit()
+    await db.refresh(participant)
+    return participant
 
 
 async def finish_match(
