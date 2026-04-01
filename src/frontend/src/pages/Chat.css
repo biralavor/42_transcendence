@@ -49,11 +49,29 @@
 }
 
 .chat-layout .friends-sidebar {
-  flex-shrink: 0;
-  width: 260px;
-  min-height: calc(100vh - 56px);
+  flex: 0 0 clamp(220px, 25vw, 300px);
+  min-width: 0;
+  min-height: calc(100vh - var(--nav-height));
   position: sticky;
-  top: 56px;
+  top: var(--nav-height);
+  align-self: flex-start;
+}
+
+@media (max-width: 768px) {
+  .chat-layout {
+    flex-direction: column;
+  }
+
+  .chat-layout .friends-sidebar {
+    flex: unset;
+    width: 100%;
+    min-height: unset;
+    position: static;
+  }
+
+  .chat-layout .chat-view {
+    width: 100%;
+  }
 }
 
 .chat-sender-btn {

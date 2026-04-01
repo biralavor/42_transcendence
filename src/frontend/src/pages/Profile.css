@@ -199,7 +199,7 @@
 }
 
 .profile-sidebar-col {
-  flex: 0 0 260px;
+  flex: 0 0 clamp(220px, 25vw, 300px);
   min-width: 0;
 }
 
