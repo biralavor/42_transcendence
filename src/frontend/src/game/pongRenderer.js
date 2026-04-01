@@ -1,4 +1,4 @@
-import { GameState } from "./pongEngine";
+
 
 export const widthRatio = 160;
 export const heightRatio = 90;
@@ -8,6 +8,10 @@ export const aspectRatio = (widthRatio/heightRatio);
  * For string based color follow reference
  * https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Values/color_value
  * @typedef {(string|CanvasGradient|CanvasPattern)} Color
+ */
+
+/**
+ * @typedef {import("./pongEngine.js").GameState} GameState
  */
 
 
