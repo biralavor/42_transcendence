@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, TIMESTAMP
+from sqlalchemy import Column, Integer, String, TIMESTAMP, text
 from sqlalchemy.sql import func
 
 from shared.database import Base
@@ -12,5 +12,5 @@ class Tournament(Base):
     # Cross-service reference stored as plain integer (no ORM-level FK)
     creator_id = Column(Integer, nullable=False)
     max_participants = Column(Integer, nullable=False)
-    status = Column(String(20), nullable=False, server_default='waiting')
+    status = Column(String(20), nullable=False, server_default=text("'open'"))
     created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())

@@ -1,6 +1,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from service.history import get_match_history
@@ -61,7 +62,7 @@ async def create_tournament_endpoint(body: TournamentCreateRequest, session: Ses
     tournament = await create_tournament(session, body.name, body.creator_id, body.max_participants)
     return TournamentCreateResponse(
         id=tournament.id,
-        join_link=f"/api/tournaments/{tournament.id}/join",
+        join_link=f"/api/game/tournaments/{tournament.id}/join",
     )
 
 
@@ -94,7 +95,10 @@ async def join_tournament_endpoint(tournament_id: int, body: JoinTournamentReque
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="User already registered")
     if len(participants) >= tournament.max_participants:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Tournament is full")
-    await join_tournament(session, tournament_id, body.user_id)
+    try:
+        await join_tournament(session, tournament_id, body.user_id)
+    except IntegrityError:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="User already registered")
     return {"detail": "Joined successfully"}
 
 

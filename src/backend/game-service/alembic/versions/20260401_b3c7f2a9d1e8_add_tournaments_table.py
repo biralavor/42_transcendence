@@ -25,7 +25,7 @@ def upgrade() -> None:
         sa.Column('name', sa.String(length=100), nullable=False),
         sa.Column('creator_id', sa.Integer(), nullable=False),
         sa.Column('max_participants', sa.Integer(), nullable=False),
-        sa.Column('status', sa.String(length=20), nullable=False, server_default='waiting'),
+        sa.Column('status', sa.String(length=20), nullable=False, server_default=sa.text("'open'")),
         sa.Column('created_at', sa.TIMESTAMP(timezone=True), nullable=False, server_default=sa.text('now()')),
         sa.PrimaryKeyConstraint('id'),
     )
