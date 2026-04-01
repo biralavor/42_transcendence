@@ -45,6 +45,7 @@
   justify-content: space-between;
   padding: 0.35rem 0;
   border-bottom: 1px solid rgba(255,255,255,0.05);
+  font-size: 1.2rem;
 }
 
 .friends-request-item {
@@ -91,12 +92,14 @@
 .friends-actions,
 .friends-request-actions {
   display: flex;
-  gap: 0.25rem;
+  gap: 0.2rem;
 }
 
 .friends-btn {
-  padding: 0.15rem 0.5rem;
-  font-size: 0.8rem;
+  padding: 0.2rem 0.35rem;
+  font-size: 0.6rem;
+  min-width: 0;
+  white-space: nowrap;
 }
 
 .friends-btn-decline {
@@ -125,3 +128,172 @@
   padding: 0.15rem 0.45rem;
   opacity: 0.75;
 }
+
+/* <= 480px: two rows — name on top, buttons below */
+.friends-friend-item {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 0.3rem;
+}
+
+.friends-actions-stack {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 0.2rem;
+}
+
+/* 481px - 768px: one row, name capped at 12 characters then "..." */
+@media (min-width: 481px) and (max-width: 768px) {
+  .friends-friend-item {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.4rem;
+  }
+
+  .friends-friend-item .friends-user-info {
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  .friends-friend-item .friends-username,
+  .friends-friend-item .friends-username-btn {
+    max-width: 12ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    display: block;
+  }
+
+  .friends-actions-stack {
+    flex-shrink: 0;
+    flex-wrap: nowrap;
+    justify-content: flex-end;
+    gap: 0.2rem;
+  }
+}
+
+/* > 768px: one row, full name */
+@media (min-width: 769px) {
+  .friends-friend-item {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.4rem;
+  }
+
+  .friends-friend-item .friends-user-info {
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  .friends-friend-item .friends-username,
+  .friends-friend-item .friends-username-btn {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 10ch;
+    display: block;
+  }
+
+  .friends-actions-stack {
+    flex-shrink: 0;
+    flex-wrap: nowrap;
+    justify-content: flex-end;
+    gap: 0.2rem;
+  }
+}
+
+.friends-actions .arcade-btn[disabled] {
+  opacity: 0.7;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.friends-sidebar-alert {
+  margin-bottom: 1rem;
+  padding: 0.8rem 0.9rem;
+  border: 1px solid rgba(255,255,255,0.18);
+  font-family: 'VT323', monospace;
+  font-size: 1rem;
+  letter-spacing: 0.04em;
+}
+
+.friends-sidebar-alert-info {
+  background: rgba(244,208,63,0.12);
+  border-color: rgba(244,208,63,0.35);
+  color: #f7df78;
+}
+
+.friends-sidebar-alert-success {
+  background: rgba(76,175,80,0.14);
+  border-color: rgba(76,175,80,0.35);
+  color: #9fe6a2;
+}
+
+.friends-sidebar-alert-warning {
+  background: rgba(255,167,38,0.14);
+  border-color: rgba(255,167,38,0.35);
+  color: #ffcd7c;
+}
+
+.friends-sidebar-alert-danger {
+  background: rgba(239,154,154,0.14);
+  border-color: rgba(239,154,154,0.35);
+  color: #ef9a9a;
+}
+
+.friends-invite-banner {
+  margin-bottom: 1rem;
+  padding: 0.9rem;
+  border: 1px solid rgba(244,208,63,0.4);
+  background: rgba(244,208,63,0.08);
+}
+
+.friends-invite-banner-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin-bottom: 0.75rem;
+  font-family: 'VT323', monospace;
+  color: var(--metal-silver, #a8b2bd);
+}
+
+.friends-invite-banner-copy strong {
+  color: #f4d03f;
+  font-size: 1.1rem;
+}
+
+.friends-invite-banner-label {
+  color: #f4d03f;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.82rem;
+}
+
+.friends-invite-banner-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.friends-username-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  text-decoration: underline dotted;
+}
+
+.friends-username-btn:hover {
+  color: var(--accent-cyan, #00e5ff);
+}
+
