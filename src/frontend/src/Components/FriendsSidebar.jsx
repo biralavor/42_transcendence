@@ -24,7 +24,7 @@ function mapIncomingInvite(data) {
   }
 }
 
-export default function FriendsSidebar({ userId, username, currentUser }) {
+export default function FriendsSidebar({ userId, username, currentUser, onViewProfile }) {
   const { auth } = useAuth()
   const presenceMap = usePresence()
   const [friends, setFriends] = useState([])
@@ -492,7 +492,16 @@ export default function FriendsSidebar({ userId, username, currentUser }) {
                       className={`friends-avatar friends-avatar-${status}`}
                     />
                     <span className={`friends-status-dot friends-status-${status}`} />
-                    <span className="friends-username">{friend.username}</span>
+                    {onViewProfile ? (
+                      <button
+                        className="friends-username friends-username-btn"
+                        onClick={() => onViewProfile(friend.username, friend.id)}
+                      >
+                        {friend.username}
+                      </button>
+                    ) : (
+                      <span className="friends-username">{friend.username}</span>
+                    )}
                   </div>
                   <div className="friends-actions friends-actions-stack">
                     <button
