@@ -276,4 +276,49 @@ describe('FriendsSidebar', () => {
       expect(document.querySelector('.friends-status-online')).toBeInTheDocument()
     })
   })
+
+  it('calls onViewProfile with friend username and id when friend username is clicked', async () => {
+    const navigate = vi.fn()
+    useNavigate.mockReturnValue(navigate)
+    const onViewProfile = vi.fn()
+
+    vi.spyOn(global, 'fetch')
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify([{ id: 5, username: 'charlie', avatar_url: null, status: 'online' }]), { status: 200 })
+      )
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+
+    render(
+      <MemoryRouter>
+        <FriendsSidebar userId={1} onViewProfile={onViewProfile} />
+      </MemoryRouter>
+    )
+
+    const usernameBtn = await screen.findByRole('button', { name: 'charlie' })
+    fireEvent.click(usernameBtn)
+    expect(onViewProfile).toHaveBeenCalledWith('charlie', 5)
+  })
+
+  it('renders friend username as plain text when onViewProfile is not provided', async () => {
+    vi.spyOn(global, 'fetch')
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify([{ id: 5, username: 'charlie', avatar_url: null, status: 'online' }]), { status: 200 })
+      )
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+
+    render(
+      <MemoryRouter>
+        <FriendsSidebar userId={1} />
+      </MemoryRouter>
+    )
+
+    await screen.findByText('charlie')
+    // Should not be a button when no onViewProfile prop
+    const charlieElements = screen.getAllByText('charlie')
+    charlieElements.forEach(el => {
+      expect(el.tagName).not.toBe('BUTTON')
+    })
+  })
 })
