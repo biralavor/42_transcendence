@@ -568,8 +568,8 @@ export default function FriendsSidebar({ userId, username, currentUser, onViewPr
         >
           <div className="dm-offline-dialog" onClick={(e) => e.stopPropagation()}>
             <p>
-              <strong>{dmOfflineTarget.friendUsername}</strong> is not in this chat room right now.
-              Your message will be waiting for them.
+              Nobody is currently connected to this DM room.{' '}
+              <strong>{dmOfflineTarget.friendUsername}</strong> may not see your message right away.
             </p>
             <div className="dm-offline-actions">
               <button
