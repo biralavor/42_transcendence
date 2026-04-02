@@ -81,6 +81,9 @@ async def chat_websocket(websocket: WebSocket, room_slug: str, token: str = "") 
         if sender_uid is None:
             await websocket.close(code=4001)
             return
+        if sender_uid not in dm_participants:
+            await websocket.close(code=4003)
+            return
 
     await manager.connect(room_slug, websocket)
     try:

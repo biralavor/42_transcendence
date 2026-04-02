@@ -232,6 +232,23 @@ def test_dm_without_token_rejected():
         assert exc_info.value.code == 4001
 
 
+def test_dm_non_participant_rejected():
+    """An authenticated user who is NOT one of the two DM participants is rejected with 4003."""
+    import contextlib
+    import pytest
+    from starlette.websockets import WebSocketDisconnect
+
+    # uid=99 is not in DM-1-2 (participants are 1 and 2)
+    with contextlib.ExitStack() as stack:
+        for p in _ws_db_patches(sender_uid=99):
+            stack.enter_context(p)
+        client = TestClient(app)
+        with pytest.raises(WebSocketDisconnect) as exc_info:
+            with client.websocket_connect("/ws/chat/DM-1-2"):
+                pass
+        assert exc_info.value.code == 4003
+
+
 def test_blocked_sender_message_not_delivered():
     """If is_blocked returns True for (recipient, sender), message is dropped."""
     import contextlib
