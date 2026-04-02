@@ -106,3 +106,10 @@
 .upm-error {
   color: #ef9a9a;
 }
+
+.upm-action-msg {
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--accent-cyan, #00e5ff);
+  margin: 0.25rem 0;
+}

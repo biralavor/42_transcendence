@@ -1,16 +1,19 @@
 // src/frontend/src/Components/UserProfileModal.jsx
 import { useState, useEffect } from 'react'
+import { useAuth } from '../context/authContext'
 import './UserProfileModal.css'
 
 const DEFAULT_AVATAR = '/avatar_placeholder.jpg'
 
 export default function UserProfileModal({ username, userId, currentUserId, onClose, onChat }) {
+  const { auth } = useAuth()
   const [profile, setProfile] = useState(null)
   const [wins, setWins] = useState(0)
   const [matches, setMatches] = useState(0)
   const [resolvedId, setResolvedId] = useState(userId ?? null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [actionMsg, setActionMsg] = useState('')
 
   useEffect(() => {
     let cancelled = false
@@ -61,6 +64,34 @@ export default function UserProfileModal({ username, userId, currentUserId, onCl
     return () => { cancelled = true }
   }, [username, userId])
 
+  async function handleAddFriend() {
+    if (!currentUserId || !resolvedId) return
+    try {
+      const res = await fetch(`/api/users/friends/${currentUserId}/request/${resolvedId}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${auth.access_token}` },
+      })
+      setActionMsg(res.ok ? 'Friend request sent!' : 'Could not send request.')
+    } catch {
+      setActionMsg('Could not send request.')
+    }
+  }
+
+  async function handleBlock() {
+    if (!resolvedId) return
+    try {
+      const res = await fetch(`/api/chat/block/${resolvedId}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${auth.access_token}` },
+      })
+      setActionMsg(res.ok ? 'User blocked.' : 'Could not block user.')
+    } catch {
+      setActionMsg('Could not block user.')
+    }
+  }
+
+  const canAct = resolvedId && currentUserId && resolvedId !== currentUserId
+
   return (
     <div className="upm-backdrop" role="dialog" aria-modal="true">
       <div className="upm-dialog">
@@ -94,13 +125,31 @@ export default function UserProfileModal({ username, userId, currentUserId, onCl
               </div>
             </div>
 
+            {actionMsg && <p className="upm-action-msg">{actionMsg}</p>}
+
             <div className="upm-actions">
-              {resolvedId && resolvedId !== currentUserId && (
+              {canAct && (
                 <button
                   className="arcade-btn arcade-btn-primary"
                   onClick={() => onChat(resolvedId)}
                 >
                   Chat
+                </button>
+              )}
+              {canAct && (
+                <button
+                  className="arcade-btn arcade-btn-secondary"
+                  onClick={handleAddFriend}
+                >
+                  Add Friend
+                </button>
+              )}
+              {canAct && (
+                <button
+                  className="arcade-btn arcade-btn-danger"
+                  onClick={handleBlock}
+                >
+                  Block
                 </button>
               )}
             </div>

@@ -3,6 +3,10 @@ import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import UserProfileModal from './UserProfileModal'
 
+vi.mock('../context/authContext', () => ({
+  useAuth: () => ({ auth: { access_token: 'test-token' } }),
+}))
+
 function renderModal(props = {}) {
   return render(
     <MemoryRouter>
@@ -101,6 +105,46 @@ describe('UserProfileModal — with data', () => {
     const btn = await screen.findByRole('button', { name: /chat/i })
     btn.click()
     expect(onChat).toHaveBeenCalledWith(7)
+  })
+
+  it('shows Add Friend button', async () => {
+    renderModal()
+    expect(await screen.findByRole('button', { name: /add friend/i })).toBeInTheDocument()
+  })
+
+  it('shows Block button', async () => {
+    renderModal()
+    expect(await screen.findByRole('button', { name: /block/i })).toBeInTheDocument()
+  })
+
+  it('calls friend request endpoint when Add Friend is clicked', async () => {
+    vi.spyOn(global, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify([{ id: 7, username: 'alice' }]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ display_name: 'Alice', username: 'alice', avatar_url: '/av.jpg' }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(null, { status: 200 })) // friend request
+    renderModal()
+    const btn = await screen.findByRole('button', { name: /add friend/i })
+    btn.click()
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/users/friends/99/request/7'),
+      expect.objectContaining({ method: 'POST' })
+    )
+  })
+
+  it('calls block endpoint when Block is clicked', async () => {
+    vi.spyOn(global, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify([{ id: 7, username: 'alice' }]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ display_name: 'Alice', username: 'alice', avatar_url: '/av.jpg' }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 })) // block
+    renderModal()
+    const btn = await screen.findByRole('button', { name: /block/i })
+    btn.click()
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/chat/block/7'),
+      expect.objectContaining({ method: 'POST' })
+    )
   })
 })
 

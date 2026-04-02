@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { gameLoop, GameState } from './pongEngine.js'
 
 // Minimal canvas context mock — only what gameLoop/render needs

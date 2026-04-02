@@ -116,6 +116,7 @@ export default function Chat() {
   }
 
   function handleChatFromModal(targetUserId) {
+    if (!userId) return
     const [a, b] = [userId, targetUserId].sort((x, y) => x - y)
     setProfileTarget(null)
     navigate(`/chat/DM-${a}-${b}`, { state: { username: name, userId } })
