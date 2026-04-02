@@ -11,6 +11,9 @@ from service.models.message import Message
 
 
 async def get_or_create_room(db: AsyncSession, room_slug: str) -> ChatRoom:
+    # NOTE: rooms created here have room_type=NULL (neither "general" nor "dm").
+    # They are intentionally excluded from list_live_rooms (which filters room_type="general").
+    # This path is used by the WebSocket router for direct-URL room access.
     result = await db.execute(select(ChatRoom).where(ChatRoom.room_name == room_slug))
     room = result.scalars().first()
     if room is None:

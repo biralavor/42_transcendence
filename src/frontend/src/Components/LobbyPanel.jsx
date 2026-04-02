@@ -17,7 +17,10 @@ export default function LobbyPanel({ compact = false, onEnter, username, token }
     fetch('/api/chat/rooms', {
       headers: { Authorization: `Bearer ${token}` },
     })
-      .then(r => (r.ok ? r.json() : []))
+      .then(r => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`)
+        return r.json()
+      })
       .then(data => {
         setRooms(data)
         setLoading(false)
@@ -83,6 +86,7 @@ export default function LobbyPanel({ compact = false, onEnter, username, token }
                 className="lobby-panel__room-btn"
                 onClick={() => onEnter(room.room_name)}
                 aria-label={`${room.room_name}, ${room.active_connections} users`}
+                disabled={!username}
               >
                 <span className="lobby-panel__room-name">{room.room_name}</span>
                 <span className="lobby-panel__room-count">({room.active_connections})</span>
