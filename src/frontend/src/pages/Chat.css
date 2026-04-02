@@ -103,6 +103,9 @@
 
 @media (max-width: 768px) {
   .chat-layout .lobby-panel {
-    order: 3;
+    width: 100%;
+    min-height: unset;
+    border-left: none;
+    border-top: 1px solid var(--arcade-border, #333);
   }
 }

@@ -39,7 +39,7 @@ export default function Chat() {
 
   // Fetch userId (and name if not yet set) from auth/me
   useEffect(() => {
-    if ((userId && name) || !auth.access_token) return
+    if (userId || !auth.access_token) return
     const controller = new AbortController()
     fetch('/api/users/auth/me', {
       headers: { Authorization: `Bearer ${auth.access_token}` },
@@ -57,7 +57,7 @@ export default function Chat() {
           console.warn('Failed to fetch user identity for chat:', err)
       })
     return () => controller.abort()
-  }, [auth.access_token, userId, name])
+  }, [auth.access_token, userId])
 
   // Mark room as active (suppresses badge increments) and clear any existing count
   useEffect(() => {
@@ -143,6 +143,7 @@ export default function Chat() {
   }
 
   function handleEnterRoom(slug) {
+    if (!name) return  // auth/me fetch not yet resolved — LobbyPanel disables buttons when username is empty
     navigate(`/chat/${slug}`, { state: { username: name, userId } })
   }
 
