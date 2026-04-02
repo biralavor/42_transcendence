@@ -20,7 +20,7 @@ export default function Chat() {
   const location = useLocation()
   const navigate = useNavigate()
   const { auth } = useAuth()
-  const { clearUnread } = useUnread()
+  const { clearUnread, setActiveRoom } = useUnread()
   const autoName = location.state?.username ?? ''
   const passedUserId = location.state?.userId ?? null
   const [name, setName] = useState(autoName)
@@ -50,10 +50,12 @@ export default function Chat() {
     return () => controller.abort()
   }, [auth.access_token, userId])
 
-  // Clear unread count for this room whenever we enter it
+  // Mark room as active (suppresses badge increments) and clear any existing count
   useEffect(() => {
+    setActiveRoom(roomId)
     clearUnread(roomId)
-  }, [roomId, clearUnread])
+    return () => setActiveRoom(null)
+  }, [roomId, clearUnread, setActiveRoom])
 
   function join(e) {
     e.preventDefault()

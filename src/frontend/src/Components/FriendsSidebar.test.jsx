@@ -19,7 +19,7 @@ vi.mock('../context/presenceContext', () => ({
 import { usePresence } from '../context/presenceContext'
 
 vi.mock('../context/unreadContext', () => ({
-  useUnread: vi.fn(() => ({ unreadCounts: {}, clearUnread: vi.fn() })),
+  useUnread: vi.fn(() => ({ unreadCounts: {}, clearUnread: vi.fn(), setActiveRoom: vi.fn() })),
 }))
 import { useUnread } from '../context/unreadContext'
 
