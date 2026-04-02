@@ -25,7 +25,8 @@ export default function Chat() {
   const autoName = location.state?.username ?? ''
   const passedUserId = location.state?.userId ?? null
   const [name, setName] = useState(autoName)
-  const [joined, setJoined] = useState(!!autoName)
+  // Derived synchronously from nav state — always correct, no stale-state race
+  const joined = !!location.state?.username
   const [connected, setConnected] = useState(false)
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
@@ -66,12 +67,6 @@ export default function Chat() {
     clearUnread(roomId)
     return () => setActiveRoom(null)
   }, [roomId, clearUnread, setActiveRoom])
-
-  function join(e) {
-    e.preventDefault()
-    if (!name.trim()) return
-    setJoined(true)
-  }
 
   useEffect(() => {
     if (!joined || !roomId) return
@@ -119,6 +114,11 @@ export default function Chat() {
       bottomRef.current.scrollIntoView({ behavior: 'smooth' })
     }
   }, [messages])
+
+  // Redirect direct URL access to lobby (must be before any early returns)
+  useEffect(() => {
+    if (roomId && !joined) navigate('/chat', { replace: true })
+  }, [roomId, joined, navigate])
 
   function handleInputChange(e) {
     setInput(e.target.value)
@@ -182,34 +182,8 @@ export default function Chat() {
     )
   }
 
-  // ── Name form (direct URL access to a room without navigation state) ──────
-  if (!joined) {
-    return (
-      <>
-        <NavbarComponent />
-        <div className="container py-5 chat-join">
-          <h2 className="mb-4">
-            Join Room: <code>{roomId}</code>
-          </h2>
-          <form onSubmit={join}>
-            <div className="mb-3">
-              <input
-                className="form-control"
-                placeholder="Your name"
-                aria-label="Your name"
-                value={name}
-                onChange={e => setName(e.target.value)}
-                autoFocus
-              />
-            </div>
-            <button className="btn btn-primary w-100" type="submit">
-              Join
-            </button>
-          </form>
-        </div>
-      </>
-    )
-  }
+  // ── Direct URL access: wait for effect to redirect ───────────────────────
+  if (roomId && !joined) return null
 
   // ── Room view ─────────────────────────────────────────────────────────────
   return (
