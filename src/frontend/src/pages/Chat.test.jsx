@@ -28,10 +28,21 @@ vi.mock('../Components/FriendsSidebar', () => ({
   default: ({ userId }) => <div data-testid="friends-sidebar" data-userid={String(userId)} />,
 }))
 
-function renderChat(roomId = 'room1') {
+vi.mock('../Components/UserProfileModal', () => ({
+  default: ({ username, onClose }) => (
+    <div data-testid="profile-modal" data-username={username}>
+      <button onClick={onClose}>Close</button>
+    </div>
+  ),
+}))
+
+function renderChat(roomId = 'room1', locationState) {
+  const initialEntries = locationState
+    ? [{ pathname: `/chat/${roomId}`, state: locationState }]
+    : [`/chat/${roomId}`]
   return render(
     <AuthProvider>
-      <MemoryRouter initialEntries={[`/chat/${roomId}`]}>
+      <MemoryRouter initialEntries={initialEntries}>
         <Routes>
           <Route path="/chat/:roomId" element={<Chat />} />
         </Routes>
@@ -116,5 +127,29 @@ describe('Chat page', () => {
     expect(sidebar).toBeInTheDocument()
     expect(sidebar).toHaveAttribute('data-userid', '3')
     expect(screen.getByPlaceholderText(/type a message/i)).toBeInTheDocument()
+  })
+
+  it('shows profile modal when sender name is clicked', async () => {
+    renderChat('room1', { username: 'tester', userId: 1 })
+    await act(async () => {
+      mockWs.simulateOpen()
+      mockWs.simulateMessage({ sender: 'alice', content: 'hello' })
+    })
+    const senderBtn = screen.getByRole('button', { name: 'alice' })
+    fireEvent.click(senderBtn)
+    expect(screen.getByTestId('profile-modal')).toBeInTheDocument()
+    expect(screen.getByTestId('profile-modal')).toHaveAttribute('data-username', 'alice')
+  })
+
+  it('closes profile modal when onClose is called', async () => {
+    renderChat('room1', { username: 'tester', userId: 1 })
+    await act(async () => {
+      mockWs.simulateOpen()
+      mockWs.simulateMessage({ sender: 'alice', content: 'hello' })
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'alice' }))
+    expect(screen.getByTestId('profile-modal')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /close/i }))
+    expect(screen.queryByTestId('profile-modal')).not.toBeInTheDocument()
   })
 })

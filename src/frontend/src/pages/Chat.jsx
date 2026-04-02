@@ -1,9 +1,10 @@
 // src/frontend/src/pages/Chat.jsx
 import { useState, useEffect, useRef } from 'react'
-import { useParams, useLocation } from 'react-router-dom'
+import { useParams, useLocation, useNavigate } from 'react-router-dom'
 import { createWsClient } from '../utils/wsClient'
 import NavbarComponent from '../Components/Navbar'
 import FriendsSidebar from '../Components/FriendsSidebar'
+import UserProfileModal from '../Components/UserProfileModal'
 import { useAuth } from '../context/authContext'
 import './Chat.css'
 
@@ -16,6 +17,7 @@ function senderHue(name) {
 export default function Chat() {
   const { roomId } = useParams()
   const location = useLocation()
+  const navigate = useNavigate()
   const { auth } = useAuth()
   const autoName = location.state?.username ?? ''
   const passedUserId = location.state?.userId ?? null
@@ -26,6 +28,7 @@ export default function Chat() {
   const [input, setInput] = useState('')
   const [userId, setUserId] = useState(passedUserId)
   const [typingUsers, setTypingUsers] = useState([])
+  const [profileTarget, setProfileTarget] = useState(null) // { username, userId? }
   const wsRef = useRef(null)
   const bottomRef = useRef(null)
   const typingTimers = useRef(new Map())
@@ -112,6 +115,13 @@ export default function Chat() {
     setInput('')
   }
 
+  function handleChatFromModal(targetUserId) {
+    if (!userId) return
+    const [a, b] = [userId, targetUserId].sort((x, y) => x - y)
+    setProfileTarget(null)
+    navigate(`/chat/DM-${a}-${b}`, { state: { username: name, userId } })
+  }
+
   // ── Name form ─────────────────────────────────────────────────────────────
   if (!joined) {
     return (
@@ -137,7 +147,11 @@ export default function Chat() {
       <NavbarComponent />
       <div className="chat-layout">
         {userId && (
-          <FriendsSidebar userId={userId} username={name} />
+          <FriendsSidebar
+            userId={userId}
+            username={name}
+            onViewProfile={(uname, uid) => setProfileTarget({ username: uname, userId: uid ?? null })}
+          />
         )}
         <div className="container py-4 chat-view">
           <div className="d-flex align-items-center gap-2 mb-3">
@@ -152,7 +166,13 @@ export default function Chat() {
             )}
             {messages.map((msg, i) => (
               <div key={i} className="mb-2 chat-msg" style={{ '--sender-hue': senderHue(msg.sender ?? 'anon') }}>
-                <strong>{msg.sender ?? 'anon'}:</strong>{' '}
+                <button
+                  className="chat-sender-btn"
+                  onClick={() => setProfileTarget({ username: msg.sender ?? 'anon', userId: null })}
+                >
+                  {msg.sender ?? 'anon'}
+                </button>
+                {': '}
                 <span>{msg.content}</span>
               </div>
             ))}
@@ -175,6 +195,16 @@ export default function Chat() {
           </p>
         </div>
       </div>
+
+      {profileTarget && (
+        <UserProfileModal
+          username={profileTarget.username}
+          userId={profileTarget.userId}
+          currentUserId={userId}
+          onClose={() => setProfileTarget(null)}
+          onChat={handleChatFromModal}
+        />
+      )}
     </>
   )
 }
