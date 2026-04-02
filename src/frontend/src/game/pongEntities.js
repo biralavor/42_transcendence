@@ -1,4 +1,8 @@
-import { heightRatio, widthRatio } from "./pongRenderer";
+import { heightRatio, widthRatio } from "./pongRenderer.js";
+
+/**
+ * @typedef {import("./pongRenderer.js").Color} Color
+ */
 
 export class Position {
   /**

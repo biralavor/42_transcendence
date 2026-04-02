@@ -1,7 +1,18 @@
-import { GameState } from "./pongEngine.js";
 import { Ball, Player } from "./pongEntities.js";
-import { Callbacks } from "./pongExternal.js";
-import { CanvasGameContext } from "./pongRenderer.js";
+
+/**
+ * @typedef {import("./pongEngine.js").GameState} GameState
+ */
+
+/**
+ * @typedef {import("./pongExternal.js").Callbacks} Callbacks
+ */
+
+/**
+ * @typedef {import("./pongRenderer.js").CanvasGameContext} CanvasGameContext
+ */
+
+
 
 const MAX_PLAYER_VEL = 2;
 const PLAYER_VEL_RESISTANCE_FACTOR = 0.95;
@@ -182,7 +193,7 @@ export default class System {
   /**
    * @param {GameState} gameState
    * @param {CanvasGameContext} canvasContext
-   * @returns {Ball} ballAffterCollisions
+   * @returns {Ball} ballAfterCollision
    */
   static ballCollision(gameState, canvasContext) {
     const ballAfterCollision = collision(gameState, canvasContext);
