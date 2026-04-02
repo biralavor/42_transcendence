@@ -507,7 +507,7 @@ describe('FriendsSidebar — unread badge', () => {
     expect(await screen.findByText('3')).toBeInTheDocument()
   })
 
-  it('calls clearUnread when Chat button is clicked', async () => {
+  it('calls clearUnread when Chat button is clicked and friend is in room', async () => {
     const clearUnread = vi.fn()
     useUnread.mockReturnValue({ unreadCounts: { 'DM-1-99': 2 }, clearUnread })
     vi.spyOn(global, 'fetch')
@@ -520,8 +520,49 @@ describe('FriendsSidebar — unread badge', () => {
         <FriendsSidebar userId={1} username="me" />
       </MemoryRouter>
     )
-    const chatBtn = await screen.findByRole('button', { name: /^chat$/i })
-    chatBtn.click()
-    expect(clearUnread).toHaveBeenCalledWith('DM-1-99')
+    fireEvent.click(await screen.findByRole('button', { name: /^chat$/i }))
+    await waitFor(() => {
+      expect(clearUnread).toHaveBeenCalledWith('DM-1-99')
+    })
+  })
+
+  it('does NOT call clearUnread when offline modal is shown and user cancels', async () => {
+    const clearUnread = vi.fn()
+    useUnread.mockReturnValue({ unreadCounts: { 'DM-1-99': 2 }, clearUnread })
+    vi.spyOn(global, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify([{ id: 99, username: 'alice', status: 'online', avatar_url: '' }]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ active_connections: 0 }), { status: 200 }))
+    render(
+      <MemoryRouter>
+        <FriendsSidebar userId={1} username="me" />
+      </MemoryRouter>
+    )
+    fireEvent.click(await screen.findByRole('button', { name: /^chat$/i }))
+    await waitFor(() => screen.getByRole('dialog', { name: /friend not in chat/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^cancel$/i }))
+    expect(clearUnread).not.toHaveBeenCalled()
+  })
+
+  it('calls clearUnread when Open Chat is clicked in the offline modal', async () => {
+    const clearUnread = vi.fn()
+    useUnread.mockReturnValue({ unreadCounts: { 'DM-1-99': 2 }, clearUnread })
+    vi.spyOn(global, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify([{ id: 99, username: 'alice', status: 'online', avatar_url: '' }]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ active_connections: 0 }), { status: 200 }))
+    render(
+      <MemoryRouter>
+        <FriendsSidebar userId={1} username="me" />
+      </MemoryRouter>
+    )
+    fireEvent.click(await screen.findByRole('button', { name: /^chat$/i }))
+    await waitFor(() => screen.getByRole('dialog', { name: /friend not in chat/i }))
+    fireEvent.click(screen.getByRole('button', { name: /open chat/i }))
+    await waitFor(() => {
+      expect(clearUnread).toHaveBeenCalledWith('DM-1-99')
+    })
   })
 })

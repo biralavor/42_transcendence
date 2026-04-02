@@ -240,7 +240,6 @@ export default function FriendsSidebar({ userId, username, currentUser, onViewPr
 
   const handleChat = async (friendId, friendUsername) => {
     const slug = dmSlug(selfId, friendId)
-    clearUnread(slug)
     let friendIsInRoom = true
     try {
       const res = await fetch(`/api/chat/room/${slug}/active`, {
@@ -258,6 +257,7 @@ export default function FriendsSidebar({ userId, username, currentUser, onViewPr
       setDmOfflineTarget({ friendUsername, slug })
       return
     }
+    clearUnread(slug)
     navigate(`/chat/${slug}`, { state: { username: selfUsername, userId: selfId } })
   }
 
@@ -579,6 +579,7 @@ export default function FriendsSidebar({ userId, username, currentUser, onViewPr
                 onClick={() => {
                   const { slug } = dmOfflineTarget
                   setDmOfflineTarget(null)
+                  clearUnread(slug)
                   navigate(`/chat/${slug}`, { state: { username: selfUsername, userId: selfId } })
                 }}
               >
