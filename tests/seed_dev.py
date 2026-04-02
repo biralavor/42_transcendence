@@ -10,27 +10,37 @@ Or manually:
     docker compose exec user-service python3 /app/seed_dev.py
 
 Test accounts created:
-    username: alice   password: test123   id: (auto)
-    username: bob     password: test123   id: (auto)
-    username: charlie password: test123   id: (auto)
+    username: alice   password: 123dev   id: (auto)
+    username: bob     password: 123dev   id: (auto)
+    username: charlie password: 123dev   id: (auto)
+    username: joao    password: 123dev   id: (auto)
+    username: maria   password: 123dev   id: (auto)
 
 Friendships seeded:
-    alice  <-> bob     → accepted  (alice can see bob in friends list)
-    charlie -> alice   → pending   (alice sees charlie in pending requests)
+    alice   <-> bob     → accepted
+    alice   <-> charlie → accepted
+    alice   <-> joao    → accepted
+    maria   ->  alice   → pending
+    bob     <-> charlie → accepted
+    joao    ->  bob     → pending
+    bob     <-> maria   → accepted
+    charlie <-> joao    → accepted
+    charlie ->  maria   → pending
+    joao    <-> maria   → accepted
 
 Chat rooms seeded (fixed slugs used by TranscendenceHealthCheck.sh):
     hc-hist   → 2 messages: first-msg (Alice), second-msg (Bob)
-    hc-limit  → 60 messages msg0…msg59
-    hc-iso-a  → 1 message: secret-a (Alice)
+    hc-limit  → 60 messages msg0…msg59  (health-check limit test requires 60)
+    hc-iso-a  → 2 messages: secret-a, hello-a (Alice)
     hc-iso-b  → empty room (isolation test counterpart)
-    hc-order  → 3 messages: alpha, beta, gamma
+    hc-order  → 3 messages: alpha, beta, gamma  (health-check order test requires 3)
 """
 
 import asyncio
 import os
 import bcrypt
 from datetime import datetime
-from sqlalchemy import select, text
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 
 # ── DB URL — built from the same DB_* vars used by all services ─────
@@ -48,12 +58,63 @@ def _hash(password: str) -> str:
 
 
 USERS = [
-    dict(username="alice",   display_name="Alice",   status="online",  bio="Hi, I'm Alice!",   avatar_url=None),
-    dict(username="bob",     display_name="Bob",     status="offline", bio="Bob here.",         avatar_url=None),
-    dict(username="charlie", display_name="Charlie", status="online",  bio="Charlie checking in.", avatar_url=None),
+    dict(username="alice",   display_name="Alice",   status="online",  bio="Hi, I'm Alice!",        avatar_url=None),
+    dict(username="bob",     display_name="Bob",     status="offline", bio="Bob here.",              avatar_url=None),
+    dict(username="charlie", display_name="Charlie", status="online",  bio="Charlie checking in.",   avatar_url=None),
+    dict(username="joao",    display_name="João",    status="online",  bio="João aqui!",             avatar_url=None),
+    dict(username="maria",   display_name="Maria",   status="offline", bio="Hey, I'm Maria.",        avatar_url=None),
 ]
 
-PASSWORD = "test123"
+PASSWORD = "123dev"
+
+# (requester, addressee, status)
+FRIENDSHIPS = [
+    ("alice",   "bob",     "accepted"),
+    ("alice",   "charlie", "accepted"),
+    ("alice",   "joao",    "accepted"),
+    ("maria",   "alice",   "pending"),
+    ("bob",     "charlie", "accepted"),
+    ("joao",    "bob",     "pending"),
+    ("bob",     "maria",   "accepted"),
+    ("charlie", "joao",    "accepted"),
+    ("charlie", "maria",   "pending"),
+    ("joao",    "maria",   "accepted"),
+]
+
+
+def dt(s):
+    return datetime.strptime(s, "%Y-%m-%d %H:%M:%S")
+
+
+# (p1_username, p2_username, winner_username, s1, s2, started, finished)
+MATCHES = [
+    ("alice",   "bob",     "alice",   11,  7,  dt("2026-03-14 20:00:00"), dt("2026-03-14 20:12:00")),
+    ("bob",     "alice",   "bob",     11,  9,  dt("2026-03-15 18:30:00"), dt("2026-03-15 18:45:00")),
+    ("alice",   "charlie", "alice",   11,  4,  dt("2026-03-16 21:00:00"), dt("2026-03-16 21:10:00")),
+    ("charlie", "bob",     "charlie", 11,  8,  dt("2026-03-17 19:00:00"), dt("2026-03-17 19:13:00")),
+    ("alice",   "bob",     "alice",   11,  6,  dt("2026-03-18 20:00:00"), dt("2026-03-18 20:11:00")),
+    ("joao",    "alice",   "joao",    11,  3,  dt("2026-03-19 15:00:00"), dt("2026-03-19 15:10:00")),
+    ("maria",   "bob",     "maria",   11,  5,  dt("2026-03-20 17:00:00"), dt("2026-03-20 17:12:00")),
+    ("charlie", "joao",    "joao",    9,   11, dt("2026-03-21 20:00:00"), dt("2026-03-21 20:14:00")),
+    ("maria",   "alice",   "alice",   7,   11, dt("2026-03-22 19:00:00"), dt("2026-03-22 19:11:00")),
+    ("bob",     "joao",    "bob",     11,  10, dt("2026-03-23 21:00:00"), dt("2026-03-23 21:18:00")),
+    ("joao",    "maria",   "joao",    11,  6,  dt("2026-03-24 16:00:00"), dt("2026-03-24 16:09:00")),
+    ("alice",   "maria",   "alice",   11,  4,  dt("2026-03-25 20:00:00"), dt("2026-03-25 20:10:00")),
+    ("charlie", "maria",   "charlie", 11,  7,  dt("2026-03-26 18:00:00"), dt("2026-03-26 18:13:00")),
+    ("bob",     "charlie", "bob",     11,  9,  dt("2026-03-27 20:00:00"), dt("2026-03-27 20:15:00")),
+    ("maria",   "joao",    "maria",   11,  8,  dt("2026-03-28 19:00:00"), dt("2026-03-28 19:12:00")),
+    ("alice",   "joao",    "alice",   11,  5,  dt("2026-03-29 21:00:00"), dt("2026-03-29 21:09:00")),
+    ("joao",    "charlie", "charlie", 8,   11, dt("2026-03-30 17:00:00"), dt("2026-03-30 17:14:00")),
+    ("maria",   "charlie", "maria",   11,  9,  dt("2026-03-31 20:00:00"), dt("2026-03-31 20:16:00")),
+]
+
+CHAT_ROOMS = [
+    {"slug": "hc-hist",  "msgs": [("first-msg", "Alice"), ("second-msg", "Bob")]},
+    {"slug": "hc-limit", "msgs": [(f"msg{i}", "u") for i in range(60)]},   # health-check: limit test needs 60
+    {"slug": "hc-iso-a", "msgs": [("secret-a", "Alice"), ("hello-a", "Alice")]},
+    {"slug": "hc-iso-b", "msgs": []},
+    {"slug": "hc-order", "msgs": [("alpha", "u"), ("beta", "u"), ("gamma", "u")]},  # health-check: order test needs 3
+]
 
 
 async def seed():
@@ -106,86 +167,47 @@ async def seed():
             print(f"  [ok]   user '{u['username']}' created (id={uid})")
 
         # ── insert friendships ────────────────────────────────────────
-        alice_id   = user_ids.get("alice")
-        bob_id     = user_ids.get("bob")
-        charlie_id = user_ids.get("charlie")
-
-        if alice_id and bob_id:
+        for requester, addressee, status in FRIENDSHIPS:
+            r_id = user_ids.get(requester)
+            a_id = user_ids.get(addressee)
+            if not r_id or not a_id:
+                continue
             existing = await session.execute(
                 text("""
                     SELECT id FROM friendships
-                    WHERE (requester_id=:a AND addressee_id=:b)
-                       OR (requester_id=:b AND addressee_id=:a)
+                    WHERE (requester_id=:r AND addressee_id=:a)
+                       OR (requester_id=:a AND addressee_id=:r)
                 """),
-                {"a": alice_id, "b": bob_id},
+                {"r": r_id, "a": a_id},
             )
             if existing.fetchone():
-                print(f"  [skip] alice <-> bob friendship already exists")
+                print(f"  [skip] {requester} <-> {addressee} friendship already exists")
             else:
                 await session.execute(
                     text("""
                         INSERT INTO friendships (requester_id, addressee_id, status)
-                        VALUES (:r, :a, 'accepted')
+                        VALUES (:r, :a, :status)
                     """),
-                    {"r": alice_id, "a": bob_id},
+                    {"r": r_id, "a": a_id, "status": status},
                 )
-                print(f"  [ok]   alice <-> bob → accepted")
-
-        if charlie_id and alice_id:
-            existing = await session.execute(
-                text("""
-                    SELECT id FROM friendships
-                    WHERE (requester_id=:c AND addressee_id=:a)
-                       OR (requester_id=:a AND addressee_id=:c)
-                """),
-                {"c": charlie_id, "a": alice_id},
-            )
-            if existing.fetchone():
-                print(f"  [skip] charlie -> alice friendship already exists")
-            else:
-                await session.execute(
-                    text("""
-                        INSERT INTO friendships (requester_id, addressee_id, status)
-                        VALUES (:r, :a, 'pending')
-                    """),
-                    {"r": charlie_id, "a": alice_id},
-                )
-                print(f"  [ok]   charlie -> alice → pending")
+                print(f"  [ok]   {requester} -> {addressee} → {status}")
 
         # ── insert matches ────────────────────────────────────────────
-        def dt(s):
-            return datetime.strptime(s, "%Y-%m-%d %H:%M:%S")
-
-        MATCHES = [
-            # alice beat bob 11-7
-            dict(p1=alice_id,   p2=bob_id,     winner=alice_id,   s1=11, s2=7,
-                 started=dt("2026-03-14 20:00:00"), finished=dt("2026-03-14 20:12:00")),
-            # bob beat alice 11-9
-            dict(p1=bob_id,     p2=alice_id,   winner=bob_id,     s1=11, s2=9,
-                 started=dt("2026-03-15 18:30:00"), finished=dt("2026-03-15 18:45:00")),
-            # alice beat charlie 11-4
-            dict(p1=alice_id,   p2=charlie_id, winner=alice_id,   s1=11, s2=4,
-                 started=dt("2026-03-16 21:00:00"), finished=dt("2026-03-16 21:10:00")),
-            # charlie beat bob 11-8
-            dict(p1=charlie_id, p2=bob_id,     winner=charlie_id, s1=11, s2=8,
-                 started=dt("2026-03-17 19:00:00"), finished=dt("2026-03-17 19:13:00")),
-            # alice beat bob 11-6 (rematch)
-            dict(p1=alice_id,   p2=bob_id,     winner=alice_id,   s1=11, s2=6,
-                 started=dt("2026-03-18 20:00:00"), finished=dt("2026-03-18 20:11:00")),
-        ]
-
-        for m in MATCHES:
-            if not m["p1"] or not m["p2"]:
+        for p1_name, p2_name, winner_name, s1, s2, started, finished in MATCHES:
+            p1     = user_ids.get(p1_name)
+            p2     = user_ids.get(p2_name)
+            winner = user_ids.get(winner_name)
+            if not p1 or not p2 or not winner:
                 continue
             existing = await session.execute(
                 text("""
                     SELECT id FROM matches
                     WHERE player1_id=:p1 AND player2_id=:p2 AND started_at=:s
                 """),
-                {"p1": m["p1"], "p2": m["p2"], "s": m["started"]},
+                {"p1": p1, "p2": p2, "s": started},
             )
             if existing.fetchone():
-                print(f"  [skip] match {m['started']} already exists")
+                print(f"  [skip] match {started} already exists")
                 continue
 
             await session.execute(
@@ -198,22 +220,14 @@ async def seed():
                          :started, :finished, 'finished')
                 """),
                 {
-                    "p1": m["p1"], "p2": m["p2"], "winner": m["winner"],
-                    "s1": m["s1"], "s2": m["s2"],
-                    "started": m["started"], "finished": m["finished"],
+                    "p1": p1, "p2": p2, "winner": winner,
+                    "s1": s1, "s2": s2,
+                    "started": started, "finished": finished,
                 },
             )
-            print(f"  [ok]   match {m['started']} seeded ({m['s1']}-{m['s2']})")
+            print(f"  [ok]   match {started} seeded ({p1_name} {s1}-{s2} {p2_name})")
 
         # ── seed chat rooms ───────────────────────────────────────────
-        CHAT_ROOMS = [
-            {"slug": "hc-hist",  "msgs": [("first-msg", "Alice"), ("second-msg", "Bob")]},
-            {"slug": "hc-limit", "msgs": [(f"msg{i}", "u") for i in range(60)]},
-            {"slug": "hc-iso-a", "msgs": [("secret-a", "Alice")]},
-            {"slug": "hc-iso-b", "msgs": []},
-            {"slug": "hc-order", "msgs": [("alpha", "u"), ("beta", "u"), ("gamma", "u")]},
-        ]
-
         for room in CHAT_ROOMS:
             existing = await session.execute(
                 text("SELECT id FROM chat_rooms WHERE room_name = :slug"),
@@ -230,7 +244,6 @@ async def seed():
                     if count_row.fetchone()[0] >= len(room["msgs"]):
                         print(f"  [skip] chat room '{room['slug']}' already seeded")
                         continue
-                    # Room exists but messages are missing — insert them
                     for content, sender in room["msgs"]:
                         await session.execute(
                             text("INSERT INTO messages (room_id, content, sender_name) VALUES (:rid, :c, :s)"),
@@ -257,7 +270,7 @@ async def seed():
 
     await engine.dispose()
     print("\nDone. Login at https://localhost:8443 with any of the accounts above.")
-    print(f"  Credentials table is separate from users — login uses 'credentials'.")
+    print(f"  Password for all accounts: '{PASSWORD}'")
 
 
 if __name__ == "__main__":

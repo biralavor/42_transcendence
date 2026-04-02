@@ -76,7 +76,7 @@ seed:
 
 .PHONY: check
 check: wait test seed
-	bash tests/TranscendenceHealthCheck.sh | tee >(sed 's/\x1b\[[0-9;]*m//g' > release.txt)
+	PAGER=cat GIT_PAGER=cat bash tests/TranscendenceHealthCheck.sh | tee >(sed 's/\x1b\[[0-9;]*m//g' > release.txt) | cat
 
 # --- alembic migrations ---
 # Usage: make migrate-user MSG=add_avatar_url_to_users
