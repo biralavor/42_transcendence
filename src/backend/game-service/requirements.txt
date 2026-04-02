@@ -1,4 +1,5 @@
 # Base deps come from backend-base image.
 # Add only game-service-specific RUNTIME packages here.
 # Test-only deps (pytest, httpx) live in requirements-test.txt.
+httpx==0.28.1
 python-jose[cryptography]==3.5.0
