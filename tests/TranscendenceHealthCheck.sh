@@ -570,9 +570,9 @@ async def test():
 asyncio.run(test())
 "
 
-    # Pre-seeded room hc-limit has 60 messages; only last 50 should arrive
+    # Pre-seeded room hc-limit has 20 messages; only last 15 should arrive
     _chat_ws_test "$_PORT" "hc-limit" \
-        "Chat history: limit 50 — only last 50 of 60 messages delivered" \
+        "Chat history: limit 15 — only last 15 of 20 messages delivered" \
 "
 import asyncio, websockets, json
 async def test():
@@ -585,9 +585,9 @@ async def test():
                 received.append(json.loads(raw))
             except asyncio.TimeoutError:
                 break
-    assert len(received) == 50, f'Expected 50 history frames, got {len(received)}'
-    assert received[0]['content'] == 'msg10', f'Expected msg10, got {received[0][\"content\"]}'
-    assert received[-1]['content'] == 'msg59', f'Expected msg59, got {received[-1][\"content\"]}'
+    assert len(received) == 15, f'Expected 15 history frames, got {len(received)}'
+    assert received[0]['content'] == 'msg5', f'Expected msg5, got {received[0][\"content\"]}'
+    assert received[-1]['content'] == 'msg19', f'Expected msg19, got {received[-1][\"content\"]}'
 asyncio.run(test())
 "
 
@@ -711,7 +711,7 @@ if container_running user-service; then
     # Login — get tokens; user_id is resolved via /auth/me
     login_body=$(docker exec user-service wget -q -O - \
         --header="Content-Type: application/json" \
-        --post-data='{"username":"alice","password":"test123"}' \
+        --post-data='{"username":"alice","password":"123dev"}' \
         "http://127.0.0.1:${_UPORT}/auth/login" 2>/dev/null || echo "")
 
     if echo "$login_body" | grep -q '"access_token"'; then

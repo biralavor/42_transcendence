@@ -160,7 +160,7 @@ show-tables:
 
 .PHONY: show-table-contents
 show-table-contents:
-	@docker compose exec db sh -c \
+	@docker compose exec -T -e PAGER=cat db sh -c \
 		'for tbl in $$(psql -U $$POSTGRES_USER -d $$POSTGRES_DB -At \
 		-c "SELECT table_name FROM information_schema.tables \
 		WHERE table_schema='"'"'public'"'"' \
@@ -169,8 +169,9 @@ show-table-contents:
 		do \
 			echo ""; \
 			echo "=== $$tbl ==="; \
-			psql -U $$POSTGRES_USER -d $$POSTGRES_DB -c "SELECT * FROM $$tbl;"; \
+			psql -U $$POSTGRES_USER -d $$POSTGRES_DB -P pager=off -c "SELECT * FROM $$tbl;"; \
 		done'
+	@printf "Note: if you run 'make check' the password of registered seed_dev users is: 123dev\n\n"
 
 .PHONY: show-tables-full
 show-tables-full:

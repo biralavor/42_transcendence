@@ -30,7 +30,7 @@ Friendships seeded:
 
 Chat rooms seeded (fixed slugs used by TranscendenceHealthCheck.sh):
     hc-hist   → 2 messages: first-msg (Alice), second-msg (Bob)
-    hc-limit  → 60 messages msg0…msg59  (health-check limit test requires 60)
+    hc-limit  → 20 messages msg0…msg19  (health-check limit test requires 20)
     hc-iso-a  → 2 messages: secret-a, hello-a (Alice)
     hc-iso-b  → empty room (isolation test counterpart)
     hc-order  → 3 messages: alpha, beta, gamma  (health-check order test requires 3)
@@ -110,7 +110,7 @@ MATCHES = [
 
 CHAT_ROOMS = [
     {"slug": "hc-hist",  "msgs": [("first-msg", "Alice"), ("second-msg", "Bob")]},
-    {"slug": "hc-limit", "msgs": [(f"msg{i}", "u") for i in range(60)]},   # health-check: limit test needs 60
+    {"slug": "hc-limit", "msgs": [(f"msg{i}", "u") for i in range(20)]},   # health-check: limit test needs 20
     {"slug": "hc-iso-a", "msgs": [("secret-a", "Alice"), ("hello-a", "Alice")]},
     {"slug": "hc-iso-b", "msgs": []},
     {"slug": "hc-order", "msgs": [("alpha", "u"), ("beta", "u"), ("gamma", "u")]},  # health-check: order test needs 3
