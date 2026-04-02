@@ -71,41 +71,30 @@ describe('Chat page', () => {
     vi.clearAllMocks()
   })
 
-  it('shows name form before joining', () => {
-    renderChat()
-    expect(screen.getByPlaceholderText(/your name/i)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /join/i })).toBeInTheDocument()
-  })
-
-  it('shows chat view after entering a name and clicking Join', () => {
-    renderChat()
-    fireEvent.change(screen.getByPlaceholderText(/your name/i), {
-      target: { value: 'Alice' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: /join/i }))
+  it('shows chat view when joined via navigation state', () => {
+    renderChat('room1', { username: 'Alice', userId: 1 })
     expect(screen.getByPlaceholderText(/type a message/i)).toBeInTheDocument()
   })
 
+  it('direct URL access without nav state renders nothing (redirects to lobby)', () => {
+    renderChat('room1')
+    expect(screen.queryByPlaceholderText(/type a message/i)).not.toBeInTheDocument()
+  })
+
   it('send button is disabled when not yet connected', () => {
-    renderChat()
-    fireEvent.change(screen.getByPlaceholderText(/your name/i), { target: { value: 'Alice' } })
-    fireEvent.click(screen.getByRole('button', { name: /join/i }))
+    renderChat('room1', { username: 'Alice', userId: 1 })
     // onOpen not fired yet → disconnected
     expect(screen.getByRole('button', { name: /send/i })).toBeDisabled()
   })
 
   it('send button is enabled after connection opens', () => {
-    renderChat()
-    fireEvent.change(screen.getByPlaceholderText(/your name/i), { target: { value: 'Alice' } })
-    fireEvent.click(screen.getByRole('button', { name: /join/i }))
+    renderChat('room1', { username: 'Alice', userId: 1 })
     act(() => { mockWs.simulateOpen() })
     expect(screen.getByRole('button', { name: /send/i })).not.toBeDisabled()
   })
 
   it('send() calls ws.send with content and sender name', () => {
-    renderChat()
-    fireEvent.change(screen.getByPlaceholderText(/your name/i), { target: { value: 'Alice' } })
-    fireEvent.click(screen.getByRole('button', { name: /join/i }))
+    renderChat('room1', { username: 'Alice', userId: 1 })
     act(() => { mockWs.simulateOpen() })
     fireEvent.change(screen.getByPlaceholderText(/type a message/i), {
       target: { value: 'Hello!' },
@@ -115,9 +104,7 @@ describe('Chat page', () => {
   })
 
   it('received messages appear in the list', () => {
-    renderChat()
-    fireEvent.change(screen.getByPlaceholderText(/your name/i), { target: { value: 'Alice' } })
-    fireEvent.click(screen.getByRole('button', { name: /join/i }))
+    renderChat('room1', { username: 'Alice', userId: 1 })
     act(() => { mockWs.simulateMessage({ content: 'Hi there', sender: 'Bob' }) })
     expect(screen.getByText('Hi there')).toBeInTheDocument()
     expect(screen.getByText(/Bob/)).toBeInTheDocument()
