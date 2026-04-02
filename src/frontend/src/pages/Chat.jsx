@@ -20,13 +20,12 @@ export default function Chat() {
   const { roomId } = useParams()
   const location = useLocation()
   const navigate = useNavigate()
-  const { auth } = useAuth()
+  const { auth, isAuthReady } = useAuth()
   const { clearUnread, setActiveRoom } = useUnread()
   const autoName = location.state?.username ?? ''
   const passedUserId = location.state?.userId ?? null
   const [name, setName] = useState(autoName)
-  // Derived synchronously from nav state — always correct, no stale-state race
-  const joined = !!location.state?.username
+  const [joined, setJoined] = useState(!!autoName)
   const [connected, setConnected] = useState(false)
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
@@ -115,10 +114,18 @@ export default function Chat() {
     }
   }, [messages])
 
-  // Redirect direct URL access to lobby (must be before any early returns)
+  // Auto-join once identity is known — covers nav-state entry AND direct URL / refresh
   useEffect(() => {
-    if (roomId && !joined) navigate('/chat', { replace: true })
-  }, [roomId, joined, navigate])
+    if (name && roomId) setJoined(true)
+  }, [name, roomId])
+
+  // Safety-net redirect: auth fully loaded, no token, still no identity → go to lobby
+  // (PrivateRoute normally handles unauthenticated users before reaching here)
+  useEffect(() => {
+    if (roomId && !joined && isAuthReady && !auth.access_token) {
+      navigate('/chat', { replace: true })
+    }
+  }, [roomId, joined, isAuthReady, auth.access_token, navigate])
 
   function handleInputChange(e) {
     setInput(e.target.value)

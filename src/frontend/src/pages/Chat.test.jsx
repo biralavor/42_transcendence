@@ -76,8 +76,10 @@ describe('Chat page', () => {
     expect(screen.getByPlaceholderText(/type a message/i)).toBeInTheDocument()
   })
 
-  it('direct URL access without nav state renders nothing (redirects to lobby)', () => {
+  it('direct URL access without nav state waits for auth before showing room', () => {
+    // No location.state → joined starts false; room renders only after identity resolves
     renderChat('room1')
+    // auth/me is not mocked here so name stays empty → chat input not yet visible
     expect(screen.queryByPlaceholderText(/type a message/i)).not.toBeInTheDocument()
   })
 
