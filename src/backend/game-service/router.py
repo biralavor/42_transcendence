@@ -1,11 +1,24 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from service.history import get_match_history
-from service.persistence import create_match, create_tournament, finish_match, get_leaderboard, get_match, get_tournament_with_participants, get_user_matches, get_user_stats, join_tournament
+from service.persistence import (
+    TournamentFull,
+    TournamentNotFound,
+    TournamentNotOpen,
+    UserAlreadyRegistered,
+    create_match,
+    create_tournament,
+    finish_match,
+    get_leaderboard,
+    get_match,
+    get_tournament_with_participants,
+    get_user_matches,
+    get_user_stats,
+    join_tournament,
+)
 from service.schemas import (
     LeaderboardEntryResponse,
     MatchCreateRequest,
@@ -85,20 +98,16 @@ async def get_tournament(tournament_id: int, session: SessionDependency):
 
 @router.post("/tournaments/{tournament_id}/join", status_code=status.HTTP_201_CREATED)
 async def join_tournament_endpoint(tournament_id: int, body: JoinTournamentRequest, session: SessionDependency):
-    result = await get_tournament_with_participants(session, tournament_id)
-    if result is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tournament not found")
-    tournament, participants = result
-    if tournament.status != "open":
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Tournament already started")
-    if any(p.user_id == body.user_id for p in participants):
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="User already registered")
-    if len(participants) >= tournament.max_participants:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Tournament is full")
     try:
         await join_tournament(session, tournament_id, body.user_id)
-    except IntegrityError:
+    except TournamentNotFound:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tournament not found")
+    except TournamentNotOpen:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Tournament already started")
+    except UserAlreadyRegistered:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="User already registered")
+    except TournamentFull:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Tournament is full")
     return {"detail": "Joined successfully"}
 
 
