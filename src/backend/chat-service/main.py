@@ -1,3 +1,4 @@
+import re
 from fastapi import FastAPI, HTTPException, status, Depends, Response
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import jwt, JWTError
@@ -13,6 +14,7 @@ from service.persistence import (
 )
 
 _ALGORITHM = "HS256"
+_DM_SLUG_RE = re.compile(r"^DM-(\d+)-(\d+)$")
 _bearer = HTTPBearer()
 
 SessionDep = Annotated[AsyncSession, Depends(get_db)]
@@ -76,6 +78,16 @@ async def list_blocked(session: SessionDep, caller_uid: CallerUid):
 
 
 @app.get("/room/{room_slug}/active")
-async def room_active_connections(room_slug: str, _: CallerUid):
-    """Return active WebSocket connections in a room (in-process count)."""
+async def room_active_connections(room_slug: str, caller_uid: CallerUid):
+    """Return active WebSocket connections in a DM room.
+
+    Restricted to DM slugs (DM-{lo}-{hi}) where the caller is one of the two
+    participants. Returns 403 for non-DM slugs or unauthorised callers.
+    """
+    match = _DM_SLUG_RE.match(room_slug)
+    if match is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not a DM room")
+    lo, hi = int(match.group(1)), int(match.group(2))
+    if caller_uid not in (lo, hi):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not a participant")
     return {"active_connections": manager.active_connections(room_slug)}

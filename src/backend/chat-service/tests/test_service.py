@@ -306,3 +306,25 @@ async def test_get_room_active_requires_auth():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get("/room/DM-1-2/active")
     assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_get_room_active_non_participant_gets_403():
+    """A valid token whose uid is not in the DM slug must be rejected."""
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get(
+            "/room/DM-1-2/active",
+            headers={"Authorization": f"Bearer {_valid_token(uid=5)}"},
+        )
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_get_room_active_non_dm_slug_gets_403():
+    """Non-DM room slugs must be rejected even with a valid token."""
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get(
+            "/room/general/active",
+            headers={"Authorization": f"Bearer {_valid_token(uid=1)}"},
+        )
+    assert resp.status_code == 403
