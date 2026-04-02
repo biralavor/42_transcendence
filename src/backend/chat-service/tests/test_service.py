@@ -328,3 +328,68 @@ async def test_get_room_active_non_dm_slug_gets_403():
             headers={"Authorization": f"Bearer {_valid_token(uid=1)}"},
         )
     assert resp.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# General Public Rooms Tests (TDD for Task 1)
+# ---------------------------------------------------------------------------
+
+from persistence import create_general_room, list_live_rooms
+
+
+@pytest.mark.asyncio
+async def test_create_general_room_creates_row(db):
+    room = await create_general_room(db, room_name="coding", creator_name="alice")
+    assert room.id is not None
+    assert room.room_name == "coding"
+    assert room.room_type == "general"
+
+
+@pytest.mark.asyncio
+async def test_create_general_room_saves_system_message(db):
+    room = await create_general_room(db, room_name="gaming", creator_name="bob")
+    history = await get_room_history(db, room.id)
+    assert len(history) == 1
+    assert history[0].sender_name == "system"
+    assert "bob" in history[0].content
+
+
+@pytest.mark.asyncio
+async def test_create_general_room_rejects_duplicate(db):
+    from fastapi import HTTPException
+    await create_general_room(db, room_name="myroom", creator_name="alice")
+    with pytest.raises(HTTPException) as exc:
+        await create_general_room(db, room_name="myroom", creator_name="bob")
+    assert exc.value.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_create_general_room_rejects_invalid_name(db):
+    from fastapi import HTTPException
+    with pytest.raises(HTTPException) as exc:
+        await create_general_room(db, room_name="!!bad!!", creator_name="alice")
+    assert exc.value.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_list_live_rooms_returns_active_only(db):
+    await create_general_room(db, room_name="live", creator_name="alice")
+    await create_general_room(db, room_name="empty-room", creator_name="bob")
+    mock_manager = MagicMock()
+    mock_manager.active_connections.side_effect = lambda slug: 2 if slug == "live" else 0
+    result = await list_live_rooms(db, mock_manager)
+    assert len(result) == 1
+    assert result[0]["room_name"] == "live"
+    assert result[0]["active_connections"] == 2
+
+
+@pytest.mark.asyncio
+async def test_list_live_rooms_excludes_dm_rooms(db):
+    await create_general_room(db, room_name="general1", creator_name="alice")
+    await get_or_create_dm_room(db, user_a_id=10, user_b_id=20)
+    mock_manager = MagicMock()
+    mock_manager.active_connections.return_value = 1
+    result = await list_live_rooms(db, mock_manager)
+    names = [r["room_name"] for r in result]
+    assert "general1" in names
+    assert "DM-10-20" not in names

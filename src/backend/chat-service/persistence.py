@@ -1,4 +1,5 @@
 import asyncio
+import re
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -137,3 +138,41 @@ async def is_blocked(db: AsyncSession, blocker_id: int, blocked_id: int) -> bool
         select(Block).where(Block.blocker_id == blocker_id, Block.blocked_id == blocked_id)
     )
     return result.scalars().first() is not None
+
+
+_ROOM_NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9 \-]{0,49}$")
+
+
+async def create_general_room(
+    db: AsyncSession, room_name: str, creator_name: str
+) -> ChatRoom:
+    """Create a general public room. Raises 400 for invalid name, 409 for duplicate.
+    Auto-saves a system message so the room is immediately visible in the lobby."""
+    if not _ROOM_NAME_RE.match(room_name):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid room name: use 1–50 alphanumeric characters, spaces, or dashes",
+        )
+    room = ChatRoom(room_name=room_name, room_type="general")
+    db.add(room)
+    try:
+        await db.commit()
+        await db.refresh(room)
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=409, detail="Room name already exists")
+    await save_message(db, room.id, "system", f"Room created by {creator_name}")
+    return room
+
+
+async def list_live_rooms(db: AsyncSession, manager) -> list[dict]:
+    """Return all general rooms that have at least one active WebSocket connection."""
+    result = await db.execute(
+        select(ChatRoom).where(ChatRoom.room_type == "general")
+    )
+    rooms = result.scalars().all()
+    return [
+        {"room_name": r.room_name, "active_connections": manager.active_connections(r.room_name)}
+        for r in rooms
+        if manager.active_connections(r.room_name) > 0
+    ]
