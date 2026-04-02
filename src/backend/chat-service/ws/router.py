@@ -11,6 +11,8 @@ from service.persistence import get_or_create_room, save_message, get_room_histo
 
 router = APIRouter()
 manager = ConnectionManager()
+# Per-user notification connections, keyed by str(uid)
+notifications_manager = ConnectionManager()
 
 _ALGORITHM = "HS256"
 SENDER_MAX_LEN = 50
@@ -117,7 +119,40 @@ async def chat_websocket(websocket: WebSocket, room_slug: str, token: str = "") 
                     continue
 
                 await manager.broadcast(room_slug, data)
+
+                # Notify the DM recipient if they have a notifications socket open
+                if dm_participants is not None and isinstance(sender_uid, int):
+                    lo, hi = dm_participants
+                    recipient_uid = hi if sender_uid == lo else lo
+                    await notifications_manager.broadcast(str(recipient_uid), {
+                        "type": "new_dm",
+                        "from_user_id": sender_uid,
+                        "room_slug": room_slug,
+                        "preview": data["content"][:80],
+                    })
     except WebSocketDisconnect:
         pass
     finally:
         manager.disconnect(room_slug, websocket)
+
+
+@router.websocket("/ws/notifications")
+async def notifications_websocket(websocket: WebSocket, token: str = "") -> None:
+    uid = _uid_from_token(token)
+    if uid is None:
+        await websocket.accept()
+        await websocket.close(code=4001)
+        return
+
+    user_key = str(uid)
+    await notifications_manager.connect(user_key, websocket)
+    try:
+        while True:
+            # Keep-alive: discard any client messages; server only pushes
+            msg = await websocket.receive()
+            if msg.get("type") == "websocket.disconnect":
+                break
+    except (WebSocketDisconnect, RuntimeError):
+        pass
+    finally:
+        notifications_manager.disconnect(user_key, websocket)
