@@ -1,0 +1,109 @@
+.lobby-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  background: var(--arcade-bg, #1a1a2e);
+  border-left: 1px solid var(--arcade-border, #333);
+  min-height: calc(100vh - var(--nav-height));
+  width: clamp(200px, 22vw, 280px);
+  overflow-y: auto;
+}
+
+.lobby-panel--compact {
+  width: clamp(160px, 18vw, 220px);
+  font-size: 0.9rem;
+}
+
+.lobby-panel__title {
+  font-size: 1rem;
+  font-weight: bold;
+  color: var(--arcade-text, #eee);
+  margin: 0;
+}
+
+.lobby-panel__status {
+  color: var(--arcade-muted, #888);
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.lobby-panel__list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.lobby-panel__room-btn {
+  width: 100%;
+  background: none;
+  border: 1px solid var(--arcade-border, #333);
+  border-radius: 4px;
+  padding: 0.4rem 0.6rem;
+  color: var(--arcade-text, #eee);
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  text-align: left;
+}
+
+.lobby-panel__room-btn:hover {
+  border-color: var(--arcade-accent, #7c7cff);
+  background: rgba(124, 124, 255, 0.08);
+}
+
+.lobby-panel__room-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lobby-panel__room-count {
+  font-size: 0.8rem;
+  color: var(--arcade-muted, #888);
+  flex-shrink: 0;
+}
+
+.lobby-panel__create {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: auto;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--arcade-border, #333);
+}
+
+.lobby-panel__create-input {
+  background: var(--arcade-input-bg, #12122a);
+  border: 1px solid var(--arcade-border, #333);
+  border-radius: 4px;
+  padding: 0.4rem 0.6rem;
+  color: var(--arcade-text, #eee);
+  font-size: 0.9rem;
+  width: 100%;
+}
+
+.lobby-panel__create-input:focus {
+  outline: none;
+  border-color: var(--arcade-accent, #7c7cff);
+}
+
+.lobby-panel__error {
+  color: var(--arcade-error, #f87171);
+  font-size: 0.8rem;
+  margin: 0;
+}
+
+@media (max-width: 768px) {
+  .lobby-panel {
+    width: 100%;
+    min-height: unset;
+    border-left: none;
+    border-top: 1px solid var(--arcade-border, #333);
+  }
+}
