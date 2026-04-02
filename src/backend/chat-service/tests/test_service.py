@@ -13,7 +13,7 @@ from main import app
 from persistence import get_or_create_room, save_message, get_room_history
 from persistence import block_user, unblock_user, get_blocked_ids, is_blocked
 from persistence import get_or_create_dm_room
-
+from persistence import create_general_room, list_live_rooms
 
 @pytest_asyncio.fixture
 async def db():
@@ -333,9 +333,6 @@ async def test_get_room_active_non_dm_slug_gets_403():
 # ---------------------------------------------------------------------------
 # General Public Rooms Tests (TDD for Task 1)
 # ---------------------------------------------------------------------------
-
-from persistence import create_general_room, list_live_rooms
-
 
 @pytest.mark.asyncio
 async def test_create_general_room_creates_row(db):
