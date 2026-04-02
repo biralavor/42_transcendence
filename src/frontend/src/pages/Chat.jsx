@@ -6,6 +6,7 @@ import NavbarComponent from '../Components/Navbar'
 import FriendsSidebar from '../Components/FriendsSidebar'
 import UserProfileModal from '../Components/UserProfileModal'
 import { useAuth } from '../context/authContext'
+import { useUnread } from '../context/unreadContext'
 import './Chat.css'
 
 function senderHue(name) {
