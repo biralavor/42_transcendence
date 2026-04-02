@@ -60,12 +60,7 @@ class MatchHistoryItem(BaseModel):
 
 class TournamentCreateRequest(BaseModel):
     name: str
-    creator_id: int
     max_participants: Literal[4, 8]
-
-
-class JoinTournamentRequest(BaseModel):
-    user_id: int
 
 
 class TournamentCreateResponse(BaseModel):

@@ -19,6 +19,15 @@ content-type: application/json
     "password": "maurodri123"
 }
 
+###
+POST https://localhost:8443/api/users/auth/login HTTP/1.1
+content-type: application/json
+
+{
+    "username": "bira",
+    "password": "bira123"
+}
+
 ### Refresh (replace <refresh_token> with the refresh_token from login response)
 POST https://localhost:8443/api/users/auth/refresh HTTP/1.1
 content-type: application/json
@@ -88,23 +97,19 @@ GET https://localhost:8443/api/game/matches/1 HTTP/1.1
 
 ### ── TOURNAMENTS ────────────────────────────────────────────────────────────
 
-### Create tournament
+### Create tournament (replace <access_token> with the access_token from login response)
 POST https://localhost:8443/api/game/tournaments HTTP/1.1
 content-type: application/json
+Authorization: Bearer <access_token>
 
 {
     "name": "Spring Tournament",
-    "creator_id": 1,
     "max_participants": 4
 }
 
 ### Get tournament details (replace 1 with tournament id)
 GET https://localhost:8443/api/game/tournaments/1 HTTP/1.1
 
-### Join tournament (replace 1 with tournament id)
+### Join tournament (replace 1 with tournament id, replace <access_token>)
 POST https://localhost:8443/api/game/tournaments/1/join HTTP/1.1
-content-type: application/json
-
-{
-    "user_id": 2
-}
+Authorization: Bearer <access_token>

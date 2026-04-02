@@ -43,7 +43,8 @@ async def authenticate(login: Login, session: AsyncSession) -> LoginResponse:
         )
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={"sub": credential.username}, expires_delta=access_token_expires
+        data={"sub": credential.username, "credential_id": credential.id},
+        expires_delta=access_token_expires,
     )
     raw_refresh_token = secrets.token_hex(32)
     refresh_token_hash = hashlib.sha256(raw_refresh_token.encode()).hexdigest()
@@ -77,7 +78,7 @@ async def refresh_access_token(body: RefreshRequest, session: AsyncSession) -> L
     if credential is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
     access_token = create_access_token(
-        data={"sub": credential.username},
+        data={"sub": credential.username, "credential_id": credential.id},
         expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
     )
     raw_refresh_token = secrets.token_hex(32)

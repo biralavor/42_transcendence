@@ -3,6 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from service.auth import get_current_user_id
 from service.history import get_match_history
 from service.persistence import (
     TournamentFull,
@@ -26,7 +27,6 @@ from service.schemas import (
     MatchHistoryItem,
     MatchResponse,
     StatsResponse,
-    JoinTournamentRequest,
     TournamentCreateRequest,
     TournamentCreateResponse,
     TournamentDetailResponse,
@@ -71,8 +71,12 @@ async def start_match(body: MatchCreateRequest, session: SessionDependency):
 
 
 @router.post("/tournaments", status_code=status.HTTP_201_CREATED, response_model=TournamentCreateResponse)
-async def create_tournament_endpoint(body: TournamentCreateRequest, session: SessionDependency):
-    tournament = await create_tournament(session, body.name, body.creator_id, body.max_participants)
+async def create_tournament_endpoint(
+    body: TournamentCreateRequest,
+    session: SessionDependency,
+    creator_id: int = Depends(get_current_user_id),
+):
+    tournament = await create_tournament(session, body.name, creator_id, body.max_participants)
     return TournamentCreateResponse(
         id=tournament.id,
         join_link=f"/api/game/tournaments/{tournament.id}/join",
@@ -97,9 +101,13 @@ async def get_tournament(tournament_id: int, session: SessionDependency):
 
 
 @router.post("/tournaments/{tournament_id}/join", status_code=status.HTTP_201_CREATED)
-async def join_tournament_endpoint(tournament_id: int, body: JoinTournamentRequest, session: SessionDependency):
+async def join_tournament_endpoint(
+    tournament_id: int,
+    session: SessionDependency,
+    user_id: int = Depends(get_current_user_id),
+):
     try:
-        await join_tournament(session, tournament_id, body.user_id)
+        await join_tournament(session, tournament_id, user_id)
     except TournamentNotFound:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tournament not found")
     except TournamentNotOpen:
