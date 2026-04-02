@@ -84,7 +84,7 @@ async def save_message(
 
 
 async def get_room_history(
-    db: AsyncSession, room_pk: int, limit: int = 50
+    db: AsyncSession, room_pk: int, limit: int = 15
 ) -> list[Message]:
     # Fetch newest `limit` rows DESC, then reverse to deliver oldest-first to caller.
     result = await db.execute(

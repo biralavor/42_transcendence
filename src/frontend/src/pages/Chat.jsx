@@ -20,6 +20,7 @@ export default function Chat() {
   const location = useLocation()
   const navigate = useNavigate()
   const { auth } = useAuth()
+  const { clearUnread } = useUnread()
   const autoName = location.state?.username ?? ''
   const passedUserId = location.state?.userId ?? null
   const [name, setName] = useState(autoName)
@@ -48,6 +49,11 @@ export default function Chat() {
       .catch((err) => { if (err.name !== 'AbortError') console.warn('Failed to fetch user identity for chat sidebar:', err) })
     return () => controller.abort()
   }, [auth.access_token, userId])
+
+  // Clear unread count for this room whenever we enter it
+  useEffect(() => {
+    clearUnread(roomId)
+  }, [roomId, clearUnread])
 
   function join(e) {
     e.preventDefault()

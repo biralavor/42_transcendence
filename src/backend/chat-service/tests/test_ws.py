@@ -293,3 +293,61 @@ def test_non_dm_room_unaffected_by_block_logic():
             ws1.send_json({"sender": "alice", "content": "hi all", "user_id": 99})
             d = ws2.receive_json()
             assert d["content"] == "hi all"
+
+
+# ---------------------------------------------------------------------------
+# Notifications endpoint tests
+# ---------------------------------------------------------------------------
+
+import pytest
+
+
+def test_notifications_rejects_missing_token():
+    """Connection without a valid token is closed with code 4001."""
+    from starlette.websockets import WebSocketDisconnect as WsDisconnect
+    client = TestClient(app)
+    with pytest.raises(WsDisconnect) as exc_info:
+        with client.websocket_connect("/ws/notifications") as ws:
+            ws.receive_json()
+    assert exc_info.value.code == 4001
+
+
+def test_notifications_connects_with_valid_token():
+    """Valid JWT allows connection; no immediate message."""
+    import os
+    from jose import jwt as jose_jwt
+    # Both the test and settings.JWT_SECRET_KEY read the same env var — they always match.
+    secret = os.environ.get("JWT_SECRET_KEY", "changeme")
+    token = jose_jwt.encode({"uid": 42}, secret, algorithm="HS256")
+
+    client = TestClient(app)
+    # Just connecting and closing without error is the assertion
+    with client.websocket_connect(f"/ws/notifications?token={token}") as ws:
+        pass  # no exception = connected OK
+
+
+def test_notifications_receives_new_dm_event():
+    """Recipient connected to /ws/notifications receives new_dm when sender DMs them."""
+    import contextlib
+    import os
+    from jose import jwt as jose_jwt
+    # Both the test and settings.JWT_SECRET_KEY read the same env var — they always match.
+    secret = os.environ.get("JWT_SECRET_KEY", "changeme")
+    sender_token = jose_jwt.encode({"uid": 10}, secret, algorithm="HS256")
+    recipient_token = jose_jwt.encode({"uid": 20}, secret, algorithm="HS256")
+
+    async def mock_is_blocked(db, blocker_id, blocked_id):
+        return False
+
+    with contextlib.ExitStack() as stack:
+        for p in _ws_db_patches(is_blocked_fn=mock_is_blocked):
+            stack.enter_context(p)
+        client = TestClient(app)
+        with client.websocket_connect(f"/ws/notifications?token={recipient_token}") as notif_ws, \
+             client.websocket_connect(f"/ws/chat/DM-10-20?token={sender_token}") as chat_ws:
+            chat_ws.send_json({"content": "hey there", "sender": "sender10"})
+            event = notif_ws.receive_json()
+            assert event["type"] == "new_dm"
+            assert event["room_slug"] == "DM-10-20"
+            assert event["from_user_id"] == 10
+            assert "hey there" in event["preview"]

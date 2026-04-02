@@ -24,6 +24,10 @@ vi.mock('../context/presenceContext', () => ({
   usePresence: vi.fn(() => ({})),
 }))
 
+vi.mock('../context/unreadContext', () => ({
+  useUnread: vi.fn(() => ({ clearUnread: vi.fn() })),
+}))
+
 vi.mock('../Components/FriendsSidebar', () => ({
   default: ({ userId }) => <div data-testid="friends-sidebar" data-userid={String(userId)} />,
 }))
