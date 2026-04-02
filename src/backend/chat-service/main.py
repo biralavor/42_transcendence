@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.config.settings import settings
 from shared.database import get_db
-from service.ws.router import router as ws_router
+from service.ws.router import router as ws_router, manager
 from service.persistence import (
     get_or_create_dm_room,
     block_user, unblock_user, get_blocked_ids,
@@ -73,3 +73,9 @@ async def unblock(user_id: int, session: SessionDep, caller_uid: CallerUid):
 async def list_blocked(session: SessionDep, caller_uid: CallerUid):
     ids = await get_blocked_ids(session, user_id=caller_uid)
     return sorted(ids)
+
+
+@app.get("/room/{room_slug}/active")
+async def room_active_connections(room_slug: str, _: CallerUid):
+    """Return active WebSocket connections in a room (in-process count)."""
+    return {"active_connections": manager.active_connections(room_slug)}
