@@ -8,6 +8,7 @@ import {
   sendGameChannelMessage,
 } from '../utils/gameInviteChannel'
 import { usePresence } from '../context/presenceContext'
+import { useAuth } from '../context/authContext'
 import './FriendsSidebar.css'
 
 const INVITE_TIMEOUT_MS = 60_000
@@ -39,6 +40,7 @@ export default function FriendsSidebar({ userId, username, currentUser }) {
   const outgoingInviteRef = useRef(null)
   const presenceMap = usePresence()
 
+  const { auth } = useAuth()
   const selfId = currentUser?.id ?? userId
   const selfUsername = currentUser?.username ?? username ?? 'Player'
   const selfAvatarUrl = currentUser?.avatarUrl || currentUser?.avatar_url || DEFAULT_AVATAR
@@ -191,21 +193,35 @@ export default function FriendsSidebar({ userId, username, currentUser }) {
     if (user) setPendingSent(prev => [...prev, user])
   }
 
-  const handleAccept = async (requesterId) => {
-    const res = await fetch(`/api/users/friends/${selfId}/accept/${requesterId}`, { method: 'PUT' })
+  const handleAccept = async (req) => {
+    const res = await fetch(`/api/users/friends/${selfId}/requests/${req.id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${auth.access_token}`,
+      },
+      body: JSON.stringify({ action: 'accept' }),
+    })
     if (!res.ok) return
-    setRequests(prev => prev.filter(r => r.requester_id !== requesterId))
-    const profileRes = await fetch(`/api/users/profile/${requesterId}`)
+    setRequests(prev => prev.filter(r => r.id !== req.id))
+    const profileRes = await fetch(`/api/users/profile/${req.requester_id}`)
     if (profileRes.ok) {
       const newFriend = await profileRes.json()
       setFriends(prev => [...prev, newFriend])
     }
   }
 
-  const handleDecline = async (requesterId) => {
-    const res = await fetch(`/api/users/friends/${selfId}/${requesterId}`, { method: 'DELETE' })
+  const handleDecline = async (req) => {
+    const res = await fetch(`/api/users/friends/${selfId}/requests/${req.id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${auth.access_token}`,
+      },
+      body: JSON.stringify({ action: 'decline' }),
+    })
     if (!res.ok) return
-    setRequests(prev => prev.filter(r => r.requester_id !== requesterId))
+    setRequests(prev => prev.filter(r => r.id !== req.id))
   }
 
   const handleRemoveFriend = async (friendId) => {
@@ -429,13 +445,13 @@ export default function FriendsSidebar({ userId, username, currentUser }) {
                 <div className="friends-request-actions">
                   <button
                     className="arcade-btn arcade-btn-primary friends-btn"
-                    onClick={() => handleAccept(req.requester_id)}
+                    onClick={() => handleAccept(req)}
                   >
                     ✓
                   </button>
                   <button
                     className="arcade-btn friends-btn friends-btn-decline"
-                    onClick={() => handleDecline(req.requester_id)}
+                    onClick={() => handleDecline(req)}
                   >
                     ✗
                   </button>
