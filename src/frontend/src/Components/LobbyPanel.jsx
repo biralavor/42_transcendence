@@ -14,8 +14,12 @@ export default function LobbyPanel({ compact = false, onEnter, username, token }
       setLoading(false)
       return
     }
+    setLoading(true)
+    setFetchError('')
+    const controller = new AbortController()
     fetch('/api/chat/rooms', {
       headers: { Authorization: `Bearer ${token}` },
+      signal: controller.signal,
     })
       .then(r => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`)
@@ -25,15 +29,17 @@ export default function LobbyPanel({ compact = false, onEnter, username, token }
         setRooms(data)
         setLoading(false)
       })
-      .catch(() => {
+      .catch(err => {
+        if (err.name === 'AbortError') return
         setFetchError('Could not load rooms. Try refreshing.')
         setLoading(false)
       })
+    return () => controller.abort()
   }, [token])
 
   async function handleCreate(e) {
     e.preventDefault()
-    if (!newRoomName.trim()) return
+    if (!newRoomName.trim() || !token || !username) return
     setCreating(true)
     setCreateError('')
     try {
@@ -113,7 +119,7 @@ export default function LobbyPanel({ compact = false, onEnter, username, token }
           <button
             type="submit"
             className="arcade-btn arcade-btn-primary"
-            disabled={creating || !newRoomName.trim()}
+            disabled={creating || !newRoomName.trim() || !token || !username}
           >
             {creating ? 'Creating…' : 'Create'}
           </button>
