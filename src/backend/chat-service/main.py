@@ -1,3 +1,4 @@
+import re
 from fastapi import FastAPI, HTTPException, status, Depends, Response
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import jwt, JWTError
@@ -6,13 +7,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.config.settings import settings
 from shared.database import get_db
-from service.ws.router import router as ws_router
+from service.ws.router import router as ws_router, manager
 from service.persistence import (
     get_or_create_dm_room,
     block_user, unblock_user, get_blocked_ids,
 )
 
 _ALGORITHM = "HS256"
+_DM_SLUG_RE = re.compile(r"^DM-(\d+)-(\d+)$")
 _bearer = HTTPBearer()
 
 SessionDep = Annotated[AsyncSession, Depends(get_db)]
@@ -73,3 +75,19 @@ async def unblock(user_id: int, session: SessionDep, caller_uid: CallerUid):
 async def list_blocked(session: SessionDep, caller_uid: CallerUid):
     ids = await get_blocked_ids(session, user_id=caller_uid)
     return sorted(ids)
+
+
+@app.get("/room/{room_slug}/active")
+async def room_active_connections(room_slug: str, caller_uid: CallerUid):
+    """Return active WebSocket connections in a DM room.
+
+    Restricted to DM slugs (DM-{lo}-{hi}) where the caller is one of the two
+    participants. Returns 403 for non-DM slugs or unauthorised callers.
+    """
+    match = _DM_SLUG_RE.match(room_slug)
+    if match is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not a DM room")
+    lo, hi = int(match.group(1)), int(match.group(2))
+    if caller_uid not in (lo, hi):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not a participant")
+    return {"active_connections": manager.active_connections(room_slug)}

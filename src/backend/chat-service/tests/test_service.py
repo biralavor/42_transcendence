@@ -273,3 +273,58 @@ async def test_endpoints_require_auth():
         assert (await client.post("/block/2")).status_code == 403
         assert (await client.delete("/block/2")).status_code == 403
         assert (await client.get("/blocked")).status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_get_room_active_returns_count():
+    with patch("main.manager") as mock_manager:
+        mock_manager.active_connections.return_value = 1
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get(
+                "/room/DM-1-2/active",
+                headers={"Authorization": f"Bearer {_valid_token(uid=1)}"},
+            )
+    assert resp.status_code == 200
+    assert resp.json() == {"active_connections": 1}
+
+
+@pytest.mark.asyncio
+async def test_get_room_active_zero_when_empty():
+    with patch("main.manager") as mock_manager:
+        mock_manager.active_connections.return_value = 0
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get(
+                "/room/DM-3-7/active",
+                headers={"Authorization": f"Bearer {_valid_token(uid=3)}"},
+            )
+    assert resp.status_code == 200
+    assert resp.json() == {"active_connections": 0}
+
+
+@pytest.mark.asyncio
+async def test_get_room_active_requires_auth():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get("/room/DM-1-2/active")
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_get_room_active_non_participant_gets_403():
+    """A valid token whose uid is not in the DM slug must be rejected."""
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get(
+            "/room/DM-1-2/active",
+            headers={"Authorization": f"Bearer {_valid_token(uid=5)}"},
+        )
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_get_room_active_non_dm_slug_gets_403():
+    """Non-DM room slugs must be rejected even with a valid token."""
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get(
+            "/room/general/active",
+            headers={"Authorization": f"Bearer {_valid_token(uid=1)}"},
+        )
+    assert resp.status_code == 403

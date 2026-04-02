@@ -311,3 +311,32 @@
   line-height: 1;
   margin-left: 4px;
 }
+
+/* ── DM offline confirmation modal ──────────────────────────────────────── */
+.dm-offline-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1050;
+}
+
+.dm-offline-dialog {
+  background: var(--arcade-bg, #1a1a2e);
+  border: 1px solid var(--arcade-border, #444);
+  border-radius: 8px;
+  padding: 1.5rem 2rem;
+  max-width: 380px;
+  width: 90%;
+  text-align: center;
+  color: var(--arcade-text, #eee);
+}
+
+.dm-offline-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+  margin-top: 1.25rem;
+}
