@@ -100,12 +100,3 @@
 .chat-lobby-back:hover {
   color: var(--arcade-text, #eee);
 }
-
-@media (max-width: 768px) {
-  .chat-layout .lobby-panel {
-    width: 100%;
-    min-height: unset;
-    border-left: none;
-    border-top: 1px solid var(--arcade-border, #333);
-  }
-}
