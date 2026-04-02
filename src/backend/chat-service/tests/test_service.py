@@ -407,9 +407,8 @@ async def test_post_rooms_returns_201():
         yield session
     app.dependency_overrides[get_db] = fake_db
     try:
-        with patch("main.create_general_room", new=AsyncMock(
-            return_value=MagicMock(room_name="coding")
-        )):
+        mock_create = AsyncMock(return_value=MagicMock(room_name="coding"))
+        with patch("main.create_general_room", new=mock_create):
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 resp = await client.post(
                     "/rooms",
@@ -418,6 +417,10 @@ async def test_post_rooms_returns_201():
                 )
         assert resp.status_code == 201
         assert resp.json()["room_name"] == "coding"
+        mock_create.assert_awaited_once()
+        _, kwargs = mock_create.call_args
+        assert kwargs["room_name"] == "coding"
+        assert kwargs["creator_name"] == "alice"
     finally:
         app.dependency_overrides.pop(get_db, None)
 
@@ -440,6 +443,7 @@ async def test_post_rooms_returns_409_on_duplicate():
                     headers={"Authorization": f"Bearer {_valid_token(uid=1)}"},
                 )
         assert resp.status_code == 409
+        assert "already exists" in resp.json()["detail"].lower()
     finally:
         app.dependency_overrides.pop(get_db, None)
 
