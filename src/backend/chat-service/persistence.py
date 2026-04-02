@@ -171,8 +171,9 @@ async def list_live_rooms(db: AsyncSession, manager) -> list[dict]:
         select(ChatRoom).where(ChatRoom.room_type == "general")
     )
     rooms = result.scalars().all()
-    return [
-        {"room_name": r.room_name, "active_connections": manager.active_connections(r.room_name)}
-        for r in rooms
-        if manager.active_connections(r.room_name) > 0
-    ]
+    live = []
+    for r in rooms:
+        count = manager.active_connections(r.room_name)
+        if count > 0:
+            live.append({"room_name": r.room_name, "active_connections": count})
+    return live
