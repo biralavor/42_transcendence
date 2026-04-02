@@ -1,3 +1,4 @@
+import pytest
 import os
 import uuid
 import asyncio
@@ -298,9 +299,6 @@ def test_non_dm_room_unaffected_by_block_logic():
 # ---------------------------------------------------------------------------
 # Notifications endpoint tests
 # ---------------------------------------------------------------------------
-
-import pytest
-
 
 def test_notifications_rejects_missing_token():
     """Connection without a valid token is closed with code 4001."""

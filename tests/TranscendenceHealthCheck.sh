@@ -570,9 +570,9 @@ async def test():
 asyncio.run(test())
 "
 
-    # Pre-seeded room hc-limit has 20 messages; only last 15 should arrive
+    # Pre-seeded room hc-limit has 20 messages; default limit is 50 so all 20 arrive
     _chat_ws_test "$_PORT" "hc-limit" \
-        "Chat history: limit 15 — only last 15 of 20 messages delivered" \
+        "Chat history: all 20 messages delivered (default limit 50 > 20)" \
 "
 import asyncio, websockets, json
 async def test():
@@ -585,8 +585,8 @@ async def test():
                 received.append(json.loads(raw))
             except asyncio.TimeoutError:
                 break
-    assert len(received) == 15, f'Expected 15 history frames, got {len(received)}'
-    assert received[0]['content'] == 'msg5', f'Expected msg5, got {received[0][\"content\"]}'
+    assert len(received) == 20, f'Expected 20 history frames, got {len(received)}'
+    assert received[0]['content'] == 'msg0', f'Expected msg0, got {received[0]["content"]}'
     assert received[-1]['content'] == 'msg19', f'Expected msg19, got {received[-1][\"content\"]}'
 asyncio.run(test())
 "
