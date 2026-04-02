@@ -1,5 +1,6 @@
 import asyncio
-from sqlalchemy import select
+import re
+from sqlalchemy import select, exists
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException
@@ -10,6 +11,9 @@ from service.models.message import Message
 
 
 async def get_or_create_room(db: AsyncSession, room_slug: str) -> ChatRoom:
+    # NOTE: rooms created here have room_type=NULL (neither "general" nor "dm").
+    # They are intentionally excluded from list_live_rooms (which filters room_type="general").
+    # This path is used by the WebSocket router for direct-URL room access.
     result = await db.execute(select(ChatRoom).where(ChatRoom.room_name == room_slug))
     room = result.scalars().first()
     if room is None:
@@ -137,3 +141,48 @@ async def is_blocked(db: AsyncSession, blocker_id: int, blocked_id: int) -> bool
         select(Block).where(Block.blocker_id == blocker_id, Block.blocked_id == blocked_id)
     )
     return result.scalars().first() is not None
+
+
+_ROOM_NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9 \-]{0,49}$")
+
+
+async def create_general_room(
+    db: AsyncSession, room_name: str, creator_name: str
+) -> ChatRoom:
+    """Create a general public room. Raises 400 for invalid name, 409 for duplicate.
+    Auto-saves a system message so the room is immediately visible in the lobby."""
+    room_name = room_name.strip()
+    if not room_name or not _ROOM_NAME_RE.match(room_name):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid room name: use 1–50 alphanumeric characters, spaces, or dashes",
+        )
+    room = ChatRoom(room_name=room_name, room_type="general")
+    db.add(room)
+    try:
+        await db.commit()
+        await db.refresh(room)
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=409, detail="Room name already exists")
+    await save_message(db, room.id, "system", f"Room created by {creator_name}")
+    return room
+
+
+async def list_live_rooms(db: AsyncSession, manager) -> list[dict]:
+    """Return all general rooms that have at least one stored message AND at least one active
+    WebSocket connection — enforcing both conditions from the #209 visibility spec."""
+    has_message = exists().where(Message.room_id == ChatRoom.id)
+    result = await db.execute(
+        select(ChatRoom).where(
+            ChatRoom.room_type == "general",
+            has_message,
+        )
+    )
+    rooms = result.scalars().all()
+    live = []
+    for r in rooms:
+        count = manager.active_connections(r.room_name)
+        if count > 0:
+            live.append({"room_name": r.room_name, "active_connections": count})
+    return live

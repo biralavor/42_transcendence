@@ -32,6 +32,16 @@ vi.mock('../Components/FriendsSidebar', () => ({
   default: ({ userId }) => <div data-testid="friends-sidebar" data-userid={String(userId)} />,
 }))
 
+vi.mock('../Components/LobbyPanel', () => ({
+  default: ({ compact, onEnter }) => (
+    <div data-testid={compact ? 'lobby-sidebar' : 'lobby-panel'}>
+      <button type="button" onClick={() => onEnter('test-room')}>
+        Enter test-room
+      </button>
+    </div>
+  ),
+}))
+
 vi.mock('../Components/UserProfileModal', () => ({
   default: ({ username, onClose }) => (
     <div data-testid="profile-modal" data-username={username}>
@@ -155,5 +165,40 @@ describe('Chat page', () => {
     expect(screen.getByTestId('profile-modal')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /close/i }))
     expect(screen.queryByTestId('profile-modal')).not.toBeInTheDocument()
+  })
+
+  function renderChatLobby(locationState = { username: 'Alice', userId: 1 }) {
+    return render(
+      <AuthProvider>
+        <MemoryRouter initialEntries={[{ pathname: '/chat', state: locationState }]}>
+          <Routes>
+            <Route path="/chat" element={<Chat />} />
+            <Route path="/chat/:roomId" element={<Chat />} />
+          </Routes>
+        </MemoryRouter>
+      </AuthProvider>
+    )
+  }
+
+  it('shows full LobbyPanel when no roomId in URL', () => {
+    renderChatLobby()
+    expect(screen.getByTestId('lobby-panel')).toBeInTheDocument()
+    expect(screen.queryByPlaceholderText(/type a message/i)).not.toBeInTheDocument()
+  })
+
+  it('shows compact LobbySidebar alongside chat when in a room', () => {
+    renderChatJoined('general', 1)
+    expect(screen.getByTestId('lobby-sidebar')).toBeInTheDocument()
+    expect(screen.getByPlaceholderText(/type a message/i)).toBeInTheDocument()
+  })
+
+  it('shows ← Lobby link when inside a room', () => {
+    renderChatJoined('general', 1)
+    expect(screen.getByRole('link', { name: /lobby/i })).toBeInTheDocument()
+  })
+
+  it('does not show ← Lobby link on the lobby view', () => {
+    renderChatLobby()
+    expect(screen.queryByRole('link', { name: /lobby/i })).not.toBeInTheDocument()
   })
 })
