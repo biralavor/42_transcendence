@@ -119,7 +119,7 @@ async def unblock_user(db: AsyncSession, blocker_id: int, blocked_id: int) -> No
     row = result.scalars().first()
     if row is None:
         raise HTTPException(status_code=404, detail="Block not found")
-    db.delete(row)
+    await db.delete(row)
     await db.commit()
 
 

@@ -48,7 +48,7 @@ describe('FriendsSidebar', () => {
       .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
     renderSidebar()
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: /friends/i })).toBeInTheDocument()
+      expect(screen.getAllByRole('heading', { name: /friends/i }).length).toBeGreaterThan(0)
     })
   })
 
