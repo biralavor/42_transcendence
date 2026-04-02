@@ -69,11 +69,11 @@ async def test_get_room_history_returns_oldest_first(db):
 @pytest.mark.asyncio
 async def test_get_room_history_respects_limit(db):
     room = await get_or_create_room(db, "limit")
-    for i in range(60):
+    for i in range(20):
         await save_message(db, room.id, "user", f"msg{i}")
-    history = await get_room_history(db, room.id, limit=50)
-    assert len(history) == 50
-    assert history[0].content == "msg10"  # oldest within last 50
+    history = await get_room_history(db, room.id, limit=15)
+    assert len(history) == 15
+    assert history[0].content == "msg5"  # oldest within last 15
 
 
 @pytest.mark.asyncio

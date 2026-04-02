@@ -18,6 +18,11 @@ vi.mock('../context/presenceContext', () => ({
 }))
 import { usePresence } from '../context/presenceContext'
 
+vi.mock('../context/unreadContext', () => ({
+  useUnread: vi.fn(() => ({ unreadCounts: {}, clearUnread: vi.fn(), setActiveRoom: vi.fn() })),
+}))
+import { useUnread } from '../context/unreadContext'
+
 function renderSidebar(userId = 1) {
   return render(
     <MemoryRouter>
@@ -320,5 +325,39 @@ describe('FriendsSidebar', () => {
     charlieElements.forEach(el => {
       expect(el.tagName).not.toBe('BUTTON')
     })
+  })
+})
+
+describe('FriendsSidebar — unread badge', () => {
+  beforeEach(() => {
+    useNavigate.mockReturnValue(vi.fn())
+    vi.spyOn(global, 'fetch').mockImplementation(() =>
+      Promise.resolve(
+        new Response(JSON.stringify([{ id: 99, username: 'alice', status: 'online', avatar_url: '' }]), { status: 200 })
+      )
+    )
+  })
+
+  it('shows unread badge count on friend row', async () => {
+    useUnread.mockReturnValue({ unreadCounts: { 'DM-1-99': 3 }, clearUnread: vi.fn() })
+    render(
+      <MemoryRouter>
+        <FriendsSidebar userId={1} username="me" />
+      </MemoryRouter>
+    )
+    expect(await screen.findByText('3')).toBeInTheDocument()
+  })
+
+  it('calls clearUnread when Chat button is clicked', async () => {
+    const clearUnread = vi.fn()
+    useUnread.mockReturnValue({ unreadCounts: { 'DM-1-99': 2 }, clearUnread })
+    render(
+      <MemoryRouter>
+        <FriendsSidebar userId={1} username="me" />
+      </MemoryRouter>
+    )
+    const chatBtn = await screen.findByRole('button', { name: /^chat$/i })
+    chatBtn.click()
+    expect(clearUnread).toHaveBeenCalledWith('DM-1-99')
   })
 })

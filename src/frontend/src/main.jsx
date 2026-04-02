@@ -11,12 +11,15 @@ import './theme/about.css'
 import App from './App'
 import { AuthProvider } from './context/authContext'
 import { PresenceProvider } from './context/presenceContext'
+import { UnreadProvider } from './context/unreadContext'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <AuthProvider>
       <PresenceProvider>
-        <App />
+        <UnreadProvider>
+          <App />
+        </UnreadProvider>
       </PresenceProvider>
     </AuthProvider>
   </StrictMode>

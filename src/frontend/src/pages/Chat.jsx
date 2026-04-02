@@ -6,6 +6,7 @@ import NavbarComponent from '../Components/Navbar'
 import FriendsSidebar from '../Components/FriendsSidebar'
 import UserProfileModal from '../Components/UserProfileModal'
 import { useAuth } from '../context/authContext'
+import { useUnread } from '../context/unreadContext'
 import './Chat.css'
 
 function senderHue(name) {
@@ -19,6 +20,7 @@ export default function Chat() {
   const location = useLocation()
   const navigate = useNavigate()
   const { auth } = useAuth()
+  const { clearUnread, setActiveRoom } = useUnread()
   const autoName = location.state?.username ?? ''
   const passedUserId = location.state?.userId ?? null
   const [name, setName] = useState(autoName)
@@ -47,6 +49,13 @@ export default function Chat() {
       .catch((err) => { if (err.name !== 'AbortError') console.warn('Failed to fetch user identity for chat sidebar:', err) })
     return () => controller.abort()
   }, [auth.access_token, userId])
+
+  // Mark room as active (suppresses badge increments) and clear any existing count
+  useEffect(() => {
+    setActiveRoom(roomId)
+    clearUnread(roomId)
+    return () => setActiveRoom(null)
+  }, [roomId, clearUnread, setActiveRoom])
 
   function join(e) {
     e.preventDefault()

@@ -9,10 +9,16 @@ import {
 } from '../utils/gameInviteChannel'
 import { usePresence } from '../context/presenceContext'
 import { useAuth } from '../context/authContext'
+import { useUnread } from '../context/unreadContext'
 import './FriendsSidebar.css'
 
 const INVITE_TIMEOUT_MS = 60_000
 const DEFAULT_AVATAR = '/avatar_placeholder.jpg'
+
+function dmSlug(a, b) {
+  const [lo, hi] = [Number(a), Number(b)].sort((x, y) => x - y)
+  return `DM-${lo}-${hi}`
+}
 
 function mapIncomingInvite(data) {
   return {
@@ -39,6 +45,7 @@ export default function FriendsSidebar({ userId, username, currentUser, onViewPr
   const toastTimer = useRef(null)
   const outgoingInviteRef = useRef(null)
   const presenceMap = usePresence()
+  const { unreadCounts, clearUnread } = useUnread()
 
   const { auth } = useAuth()
   const selfId = currentUser?.id ?? userId
@@ -231,8 +238,9 @@ export default function FriendsSidebar({ userId, username, currentUser, onViewPr
   }
 
   const handleChat = (friendId) => {
-    const [a, b] = [selfId, friendId].sort((x, y) => x - y)
-    navigate(`/chat/DM-${a}-${b}`, { state: { username: selfUsername, userId: selfId } })
+    const slug = dmSlug(selfId, friendId)
+    clearUnread(slug)
+    navigate(`/chat/${slug}`, { state: { username: selfUsername, userId: selfId } })
   }
 
   const handleInviteToGame = async (friend) => {
@@ -492,6 +500,13 @@ export default function FriendsSidebar({ userId, username, currentUser, onViewPr
                     ) : (
                       <span className="friends-username">{friend.username}</span>
                     )}
+                    {(() => {
+                      const slug = dmSlug(selfId, friend.id)
+                      const count = unreadCounts[slug] ?? 0
+                      return count > 0 ? (
+                        <span className="friends-unread-badge">{count}</span>
+                      ) : null
+                    })()}
                   </div>
                   <div className="friends-actions friends-actions-stack">
                     <button
