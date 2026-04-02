@@ -4,12 +4,16 @@ import './LobbyPanel.css'
 export default function LobbyPanel({ compact = false, onEnter, username, token }) {
   const [rooms, setRooms] = useState([])
   const [loading, setLoading] = useState(true)
+  const [fetchError, setFetchError] = useState('')
   const [newRoomName, setNewRoomName] = useState('')
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState('')
 
   useEffect(() => {
-    if (!token) return
+    if (!token) {
+      setLoading(false)
+      return
+    }
     fetch('/api/chat/rooms', {
       headers: { Authorization: `Bearer ${token}` },
     })
@@ -18,7 +22,10 @@ export default function LobbyPanel({ compact = false, onEnter, username, token }
         setRooms(data)
         setLoading(false)
       })
-      .catch(() => setLoading(false))
+      .catch(() => {
+        setFetchError('Could not load rooms. Try refreshing.')
+        setLoading(false)
+      })
   }, [token])
 
   async function handleCreate(e) {
@@ -61,6 +68,8 @@ export default function LobbyPanel({ compact = false, onEnter, username, token }
 
       {loading ? (
         <p className="lobby-panel__status">Loading…</p>
+      ) : fetchError ? (
+        <p className="lobby-panel__error" role="alert">{fetchError}</p>
       ) : rooms.length === 0 ? (
         <p className="lobby-panel__status">
           {compact ? 'No live rooms.' : 'No live rooms yet. Create the first one!'}
