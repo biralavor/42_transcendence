@@ -123,9 +123,12 @@ describe('FriendsSidebar', () => {
       )
       .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ active_connections: 1 }), { status: 200 }))
     renderSidebar(3)  // userId=3, friendId=5 → /chat/DM-3-5
     fireEvent.click(await screen.findByRole('button', { name: /chat/i }))
-    expect(navigate).toHaveBeenCalledWith('/chat/DM-3-5', expect.any(Object))
+    await waitFor(() => {
+      expect(navigate).toHaveBeenCalledWith('/chat/DM-3-5', expect.any(Object))
+    })
   })
 
   it('chat button produces same DM slug regardless of which user initiates', async () => {
@@ -139,9 +142,12 @@ describe('FriendsSidebar', () => {
       )
       .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ active_connections: 1 }), { status: 200 }))
     renderSidebar(5)  // userId=5, friendId=3 → /chat/DM-3-5 (canonicalized)
     fireEvent.click(await screen.findByRole('button', { name: /chat/i }))
-    expect(navigate).toHaveBeenCalledWith('/chat/DM-3-5', expect.any(Object))
+    await waitFor(() => {
+      expect(navigate).toHaveBeenCalledWith('/chat/DM-3-5', expect.any(Object))
+    })
   })
 
   it('accept PUT includes Authorization header', async () => {
@@ -326,10 +332,163 @@ describe('FriendsSidebar', () => {
       expect(el.tagName).not.toBe('BUTTON')
     })
   })
+
+  it('shows offline modal when friend is not in DM room', async () => {
+    const navigate = vi.fn()
+    useNavigate.mockReturnValue(navigate)
+    vi.spyOn(global, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify([
+        { id: 5, username: 'dave', display_name: 'Dave', status: 'online', avatar_url: null },
+      ]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ active_connections: 0 }), { status: 200 }))
+    renderSidebar(3)
+    fireEvent.click(await screen.findByRole('button', { name: /^chat$/i }))
+    await waitFor(() => {
+      expect(screen.getByRole('dialog', { name: /friend not in chat/i })).toBeInTheDocument()
+      expect(screen.getAllByText(/dave/).length).toBeGreaterThan(0)
+    })
+    expect(navigate).not.toHaveBeenCalled()
+  })
+
+  it('Open Chat button navigates to DM room and closes modal', async () => {
+    const navigate = vi.fn()
+    useNavigate.mockReturnValue(navigate)
+    vi.spyOn(global, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify([
+        { id: 5, username: 'dave', display_name: 'Dave', status: 'online', avatar_url: null },
+      ]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ active_connections: 0 }), { status: 200 }))
+    renderSidebar(3)
+    fireEvent.click(await screen.findByRole('button', { name: /^chat$/i }))
+    await waitFor(() => screen.getByRole('dialog', { name: /friend not in chat/i }))
+    fireEvent.click(screen.getByRole('button', { name: /open chat/i }))
+    expect(navigate).toHaveBeenCalledWith('/chat/DM-3-5', { state: { username: expect.any(String), userId: 3 } })
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+  })
+
+  it('Cancel button closes modal without navigating', async () => {
+    const navigate = vi.fn()
+    useNavigate.mockReturnValue(navigate)
+    vi.spyOn(global, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify([
+        { id: 5, username: 'dave', display_name: 'Dave', status: 'online', avatar_url: null },
+      ]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ active_connections: 0 }), { status: 200 }))
+    renderSidebar(3)
+    fireEvent.click(await screen.findByRole('button', { name: /^chat$/i }))
+    await waitFor(() => screen.getByRole('dialog', { name: /friend not in chat/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^cancel$/i }))
+    expect(navigate).not.toHaveBeenCalled()
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+  })
+
+  it('navigates immediately when friend is already in DM room', async () => {
+    const navigate = vi.fn()
+    useNavigate.mockReturnValue(navigate)
+    vi.spyOn(global, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify([
+        { id: 5, username: 'dave', display_name: 'Dave', status: 'online', avatar_url: null },
+      ]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ active_connections: 1 }), { status: 200 }))
+    renderSidebar(3)
+    fireEvent.click(await screen.findByRole('button', { name: /^chat$/i }))
+    await waitFor(() => {
+      expect(navigate).toHaveBeenCalledWith('/chat/DM-3-5', expect.any(Object))
+    })
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('backdrop click closes the offline modal without navigating', async () => {
+    const navigate = vi.fn()
+    useNavigate.mockReturnValue(navigate)
+    vi.spyOn(global, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify([
+        { id: 5, username: 'dave', display_name: 'Dave', status: 'online', avatar_url: null },
+      ]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ active_connections: 0 }), { status: 200 }))
+    renderSidebar(3)
+    fireEvent.click(await screen.findByRole('button', { name: /^chat$/i }))
+    await waitFor(() => screen.getByRole('dialog', { name: /friend not in chat/i }))
+    fireEvent.click(screen.getByRole('dialog', { name: /friend not in chat/i }))
+    expect(navigate).not.toHaveBeenCalled()
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+  })
+
+  it('Escape key closes the offline modal without navigating', async () => {
+    const navigate = vi.fn()
+    useNavigate.mockReturnValue(navigate)
+    vi.spyOn(global, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify([
+        { id: 5, username: 'dave', display_name: 'Dave', status: 'online', avatar_url: null },
+      ]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ active_connections: 0 }), { status: 200 }))
+    renderSidebar(3)
+    fireEvent.click(await screen.findByRole('button', { name: /^chat$/i }))
+    await waitFor(() => screen.getByRole('dialog', { name: /friend not in chat/i }))
+    fireEvent.keyDown(screen.getByRole('dialog', { name: /friend not in chat/i }), { key: 'Escape' })
+    expect(navigate).not.toHaveBeenCalled()
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+  })
+
+  it('navigates immediately when active endpoint call fails (network error)', async () => {
+    const navigate = vi.fn()
+    useNavigate.mockReturnValue(navigate)
+    vi.spyOn(global, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify([
+        { id: 5, username: 'dave', display_name: 'Dave', status: 'online', avatar_url: null },
+      ]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockRejectedValueOnce(new Error('network error'))
+    renderSidebar(3)
+    fireEvent.click(await screen.findByRole('button', { name: /^chat$/i }))
+    await waitFor(() => {
+      expect(navigate).toHaveBeenCalledWith('/chat/DM-3-5', expect.any(Object))
+    })
+  })
+
+  it('navigates immediately when active endpoint returns non-2xx (fail-open)', async () => {
+    const navigate = vi.fn()
+    useNavigate.mockReturnValue(navigate)
+    vi.spyOn(global, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify([
+        { id: 5, username: 'dave', display_name: 'Dave', status: 'online', avatar_url: null },
+      ]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response('Unauthorized', { status: 401 }))
+    renderSidebar(3)
+    fireEvent.click(await screen.findByRole('button', { name: /^chat$/i }))
+    await waitFor(() => {
+      expect(navigate).toHaveBeenCalledWith('/chat/DM-3-5', expect.any(Object))
+    })
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
 })
 
 describe('FriendsSidebar — unread badge', () => {
   beforeEach(() => {
+    vi.restoreAllMocks()
     useNavigate.mockReturnValue(vi.fn())
     vi.spyOn(global, 'fetch').mockImplementation(() =>
       Promise.resolve(
@@ -351,6 +510,11 @@ describe('FriendsSidebar — unread badge', () => {
   it('calls clearUnread when Chat button is clicked', async () => {
     const clearUnread = vi.fn()
     useUnread.mockReturnValue({ unreadCounts: { 'DM-1-99': 2 }, clearUnread })
+    vi.spyOn(global, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify([{ id: 99, username: 'alice', status: 'online', avatar_url: '' }]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ active_connections: 1 }), { status: 200 }))
     render(
       <MemoryRouter>
         <FriendsSidebar userId={1} username="me" />

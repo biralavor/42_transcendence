@@ -39,6 +39,7 @@ export default function FriendsSidebar({ userId, username, currentUser, onViewPr
   const [outgoingInvite, setOutgoingInvite] = useState(null)
   const [incomingInvite, setIncomingInvite] = useState(null)
   const [inviteToast, setInviteToast] = useState(null)
+  const [dmOfflineTarget, setDmOfflineTarget] = useState(null) // { friendUsername, slug }
   const navigate = useNavigate()
   const searchTimer = useRef(null)
   const outgoingInviteTimer = useRef(null)
@@ -237,9 +238,26 @@ export default function FriendsSidebar({ userId, username, currentUser, onViewPr
     setFriends(prev => prev.filter(f => f.id !== friendId))
   }
 
-  const handleChat = (friendId) => {
+  const handleChat = async (friendId, friendUsername) => {
     const slug = dmSlug(selfId, friendId)
     clearUnread(slug)
+    let friendIsInRoom = true
+    try {
+      const res = await fetch(`/api/chat/room/${slug}/active`, {
+        headers: { Authorization: `Bearer ${auth.access_token}` },
+      })
+      if (res.ok) {
+        const data = await res.json()
+        friendIsInRoom = data.active_connections > 0
+      }
+      // non-ok response (e.g. 401/500) → navigate anyway (fail-open, same as network error)
+    } catch {
+      // network error — navigate anyway
+    }
+    if (!friendIsInRoom) {
+      setDmOfflineTarget({ friendUsername, slug })
+      return
+    }
     navigate(`/chat/${slug}`, { state: { username: selfUsername, userId: selfId } })
   }
 
@@ -362,7 +380,8 @@ export default function FriendsSidebar({ userId, username, currentUser, onViewPr
   const visibleResults = searchResults.filter(u => !excludedIds.has(u.id))
 
   return (
-    <aside className="friends-sidebar arcade-screen">
+    <>
+      <aside className="friends-sidebar arcade-screen">
       <h2 className="friends-sidebar-title">Friends sidebar</h2>
 
       {inviteToast && (
@@ -511,7 +530,7 @@ export default function FriendsSidebar({ userId, username, currentUser, onViewPr
                   <div className="friends-actions friends-actions-stack">
                     <button
                       className="arcade-btn arcade-btn-primary friends-btn"
-                      onClick={() => handleChat(friend.id)}
+                      onClick={() => handleChat(friend.id, friend.username)}
                     >
                       Chat
                     </button>
@@ -536,5 +555,46 @@ export default function FriendsSidebar({ userId, username, currentUser, onViewPr
         )}
       </div>
     </aside>
+
+      {dmOfflineTarget && (
+        <div
+          className="dm-offline-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Friend not in chat"
+          tabIndex={-1}
+          onClick={() => setDmOfflineTarget(null)}
+          onKeyDown={(e) => e.key === 'Escape' && setDmOfflineTarget(null)}
+        >
+          <div className="dm-offline-dialog" onClick={(e) => e.stopPropagation()}>
+            <p>
+              <strong>{dmOfflineTarget.friendUsername}</strong> is not in this chat room right now.
+              Your message will be waiting for them.
+            </p>
+            <div className="dm-offline-actions">
+              <button
+                type="button"
+                className="arcade-btn arcade-btn-primary"
+                autoFocus
+                onClick={() => {
+                  const { slug } = dmOfflineTarget
+                  setDmOfflineTarget(null)
+                  navigate(`/chat/${slug}`, { state: { username: selfUsername, userId: selfId } })
+                }}
+              >
+                Open Chat
+              </button>
+              <button
+                type="button"
+                className="arcade-btn arcade-btn-secondary"
+                onClick={() => setDmOfflineTarget(null)}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   )
 }
