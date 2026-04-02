@@ -393,3 +393,85 @@ async def test_list_live_rooms_excludes_dm_rooms(db):
     names = [r["room_name"] for r in result]
     assert "general1" in names
     assert "DM-10-20" not in names
+
+
+# ---------------------------------------------------------------------------
+# Endpoint Tests for POST /rooms and GET /rooms (TDD for Task 2)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_post_rooms_returns_201():
+    session = _make_session()
+    async def fake_db():
+        yield session
+    app.dependency_overrides[get_db] = fake_db
+    try:
+        with patch("main.create_general_room", new=AsyncMock(
+            return_value=MagicMock(room_name="coding")
+        )):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                resp = await client.post(
+                    "/rooms",
+                    json={"room_name": "coding", "creator_name": "alice"},
+                    headers={"Authorization": f"Bearer {_valid_token(uid=1)}"},
+                )
+        assert resp.status_code == 201
+        assert resp.json()["room_name"] == "coding"
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_post_rooms_returns_409_on_duplicate():
+    from fastapi import HTTPException as FHTTPException
+    session = _make_session()
+    async def fake_db():
+        yield session
+    app.dependency_overrides[get_db] = fake_db
+    try:
+        with patch("main.create_general_room", new=AsyncMock(
+            side_effect=FHTTPException(status_code=409, detail="Room name already exists")
+        )):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                resp = await client.post(
+                    "/rooms",
+                    json={"room_name": "existing", "creator_name": "alice"},
+                    headers={"Authorization": f"Bearer {_valid_token(uid=1)}"},
+                )
+        assert resp.status_code == 409
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_get_rooms_returns_list():
+    session = _make_session()
+    async def fake_db():
+        yield session
+    app.dependency_overrides[get_db] = fake_db
+    try:
+        with patch("main.list_live_rooms", new=AsyncMock(
+            return_value=[{"room_name": "general", "active_connections": 3}]
+        )):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                resp = await client.get(
+                    "/rooms",
+                    headers={"Authorization": f"Bearer {_valid_token(uid=1)}"},
+                )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 1
+        assert data[0]["room_name"] == "general"
+        assert data[0]["active_connections"] == 3
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_rooms_endpoints_require_auth():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        assert (await client.post(
+            "/rooms", json={"room_name": "x", "creator_name": "y"}
+        )).status_code == 403
+        assert (await client.get("/rooms")).status_code == 403
