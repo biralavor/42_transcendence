@@ -66,11 +66,11 @@ async def get_current_user(
 ) -> CurrentUser:
     """Authenticate user via JWT and return profile.
     
-    Pattern from game-service (updated to use uid from JWT):
+    Pattern from game-service (adapted for credential-backed identity):
     1. Decode JWT locally (validate signature)
-    2. Extract uid (user.id directly)
-    3. Query users table (fast path for repeat logins)
-    4. If not found: call user-service GET /auth/me to create user row
+    2. Extract credential_id from the token
+    3. Resolve credential_id -> users.id via the local users table
+    4. If not found locally: call user-service GET /auth/me to create/fetch user row
     5. Return full CurrentUser object
     """
     try:

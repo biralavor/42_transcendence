@@ -77,20 +77,25 @@ async def chat_websocket(websocket: WebSocket, room_slug: str, token: str = "") 
 
     # DM rooms require a verified identity — decode once at connect, bind for the session
     sender_uid: int | None = None
+    sender_username: str | None = None
     if dm_participants is not None:
         credential_id = _uid_from_token(token)
         if credential_id is None:
             await websocket.close(code=4001)
             return
         
-        # Look up the actual user.id from credential_id
+        # Look up the actual user.id and username from credential_id
         async with AsyncSessionLocal() as db:
             result = await db.execute(
-                text("SELECT id FROM users WHERE credential_id = :cid"),
+                text("SELECT id, username FROM users WHERE credential_id = :cid"),
                 {"cid": credential_id},
             )
             row = result.first()
-            sender_uid = row[0] if row else None
+            if row:
+                sender_uid = row[0]
+                sender_username = row[1]
+            else:
+                sender_uid = None
         
         if sender_uid is None:
             await websocket.close(code=4001)
@@ -113,11 +118,13 @@ async def chat_websocket(websocket: WebSocket, room_slug: str, token: str = "") 
                 # Typing event — broadcast only, never persisted
                 if isinstance(data, dict) and data.get("type") == "typing":
                     sender = data.get("sender")
-                    if isinstance(sender, str) and 0 < len(sender) <= SENDER_MAX_LEN:
+                    # For DMs, use verified sender_username; for public rooms, trust client
+                    typing_sender = sender_username if dm_participants is not None else sender
+                    if isinstance(typing_sender, str) and 0 < len(typing_sender) <= SENDER_MAX_LEN:
                         if not await _sender_is_blocked(dm_participants, sender_uid, db):
                             await manager.broadcast(
                                 room_slug,
-                                {"type": "typing", "sender": sender, "sender_uid": sender_uid},
+                                {"type": "typing", "sender": typing_sender, "sender_uid": sender_uid},
                             )
                     continue
 
@@ -129,13 +136,25 @@ async def chat_websocket(websocket: WebSocket, room_slug: str, token: str = "") 
                 if await _sender_is_blocked(dm_participants, sender_uid, db):
                     continue
 
+                # For DMs, use verified sender_username; for public rooms, trust client sender
+                message_sender = sender_username if dm_participants is not None else data["sender"]
+                
                 try:
-                    await save_message(db, room.id, data["sender"], data["content"])
+                    await save_message(db, room.id, message_sender, data["content"])
                 except SQLAlchemyError:
                     await websocket.send_json({"error": "failed to save message"})
                     continue
 
-                await manager.broadcast(room_slug, data)
+                # For DMs, broadcast with verified sender; for public rooms, use client data
+                if dm_participants is not None:
+                    broadcast_data = {
+                        "content": data["content"],
+                        "sender": message_sender,
+                    }
+                else:
+                    broadcast_data = data
+                
+                await manager.broadcast(room_slug, broadcast_data)
 
                 # Notify the DM recipient if they have a notifications socket open
                 if dm_participants is not None and isinstance(sender_uid, int):

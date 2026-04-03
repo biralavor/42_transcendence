@@ -42,13 +42,13 @@ async def authenticate(login: Login, session: AsyncSession) -> LoginResponse:
             detail="Invalid credentials"
         )
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    # Ensure User entry exists for this credential (chat-service needs uid=user.id in token)
+    # Ensure a User entry exists for this credential so other services can resolve credential_id -> user.id.
     user_row = await session.execute(select(User).where(User.credential_id == credential.id))
     user = user_row.scalars().first()
     if user is None:
         user = User(username=credential.username, credential_id=credential.id)
         session.add(user)
-        await session.flush()  # populate user.id; final commit happens below with the token row
+        await session.flush()  # Assign user.id now; the final commit below persists both the User and token row.
     access_token = create_access_token(
         data={"sub": credential.username, "credential_id": credential.id},
         expires_delta=access_token_expires,
