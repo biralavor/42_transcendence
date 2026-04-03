@@ -125,72 +125,27 @@
   opacity: 0.75;
 }
 
-/* ≤ 480px: two rows — name on top, buttons below */
+/* All screens: two rows — name/avatar/status on top, buttons below */
 .friends-friend-item {
+  display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 0.3rem;
+  gap: 0.5rem;
+}
+
+.friends-user-info {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
 }
 
 .friends-actions-stack {
+  display: flex;
+  flex-direction: row;
   flex-wrap: wrap;
+  gap: 0.3rem;
   justify-content: flex-start;
-}
-
-/* 481px – 768px: one row, name capped at 12 characters then "…" */
-@media (min-width: 481px) and (max-width: 768px) {
-  .friends-friend-item {
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.5rem;
-  }
-
-  .friends-friend-item .friends-user-info {
-    min-width: 0;
-    flex: 1;
-    overflow: hidden;
-  }
-
-  .friends-friend-item .friends-username {
-    max-width: 12ch;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .friends-actions-stack {
-    flex-wrap: nowrap;
-    justify-content: flex-end;
-  }
-}
-
-/* > 768px: one row, full name */
-@media (min-width: 769px) {
-  .friends-friend-item {
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.5rem;
-  }
-
-  .friends-friend-item .friends-user-info {
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-  }
-
-  .friends-friend-item .friends-username {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .friends-actions-stack {
-    flex-shrink: 0;
-    flex-wrap: nowrap;
-    justify-content: flex-end;
-  }
 }
 
 .friends-actions .arcade-btn[disabled] {
