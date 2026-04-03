@@ -1,13 +1,19 @@
 import asyncio
-from sqlalchemy import select
+import re
+from sqlalchemy import select, exists
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import HTTPException
 
+from service.models.block import Block
 from service.models.chat_room import ChatRoom
 from service.models.message import Message
 
 
 async def get_or_create_room(db: AsyncSession, room_slug: str) -> ChatRoom:
+    # NOTE: rooms created here have room_type=NULL (neither "general" nor "dm").
+    # They are intentionally excluded from list_live_rooms (which filters room_type="general").
+    # This path is used by the WebSocket router for direct-URL room access.
     result = await db.execute(select(ChatRoom).where(ChatRoom.room_name == room_slug))
     room = result.scalars().first()
     if room is None:
@@ -36,6 +42,41 @@ async def get_or_create_room(db: AsyncSession, room_slug: str) -> ChatRoom:
     return room
 
 
+async def get_or_create_dm_room(db: AsyncSession, user_a_id: int, user_b_id: int) -> ChatRoom:
+    """Return (or create) the private DM room for two users.
+
+    Room name is always DM-{min_id}-{max_id} regardless of argument order.
+    """
+    lo, hi = sorted((user_a_id, user_b_id))
+    slug = f"DM-{lo}-{hi}"
+    result = await db.execute(select(ChatRoom).where(ChatRoom.room_name == slug))
+    room = result.scalars().first()
+    if room is None:
+        room = ChatRoom(room_name=slug, room_type="dm")
+        db.add(room)
+        try:
+            await db.commit()
+            await db.refresh(room)
+        except IntegrityError:
+            await db.rollback()
+            # Another concurrent session already inserted the row; fetch it.
+            # Retry up to 3 times with a short backoff in case the committing
+            # transaction hasn't become visible yet.
+            for attempt in range(3):
+                result2 = await db.execute(
+                    select(ChatRoom).where(ChatRoom.room_name == slug)
+                )
+                room = result2.scalars().first()
+                if room is not None:
+                    break
+                await asyncio.sleep(0.05 * (attempt + 1))
+            else:
+                raise RuntimeError(
+                    f"DM room '{slug}' not found after concurrent insert"
+                )
+    return room
+
+
 async def save_message(
     db: AsyncSession, room_pk: int, sender_name: str, content: str
 ) -> Message:
@@ -58,3 +99,90 @@ async def get_room_history(
     )
     rows = result.scalars().all()
     return list(reversed(rows))
+
+
+async def block_user(db: AsyncSession, blocker_id: int, blocked_id: int) -> None:
+    """Block blocked_id from blocker's perspective. Idempotent."""
+    result = await db.execute(
+        select(Block).where(Block.blocker_id == blocker_id, Block.blocked_id == blocked_id)
+    )
+    if result.scalars().first() is not None:
+        return
+    db.add(Block(blocker_id=blocker_id, blocked_id=blocked_id))
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()  # concurrent insert — already blocked
+
+
+async def unblock_user(db: AsyncSession, blocker_id: int, blocked_id: int) -> None:
+    """Remove a block. Raises 404 if no block exists."""
+    result = await db.execute(
+        select(Block).where(Block.blocker_id == blocker_id, Block.blocked_id == blocked_id)
+    )
+    row = result.scalars().first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Block not found")
+    await db.delete(row)
+    await db.commit()
+
+
+async def get_blocked_ids(db: AsyncSession, user_id: int) -> set[int]:
+    """Return the set of user IDs blocked by user_id."""
+    result = await db.execute(
+        select(Block.blocked_id).where(Block.blocker_id == user_id)
+    )
+    return set(result.scalars().all())
+
+
+async def is_blocked(db: AsyncSession, blocker_id: int, blocked_id: int) -> bool:
+    """Return True if blocker_id has blocked blocked_id."""
+    result = await db.execute(
+        select(Block).where(Block.blocker_id == blocker_id, Block.blocked_id == blocked_id)
+    )
+    return result.scalars().first() is not None
+
+
+_ROOM_NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9 \-]{0,49}$")
+
+
+async def create_general_room(
+    db: AsyncSession, room_name: str, creator_name: str
+) -> ChatRoom:
+    """Create a general public room. Raises 400 for invalid name, 409 for duplicate.
+    Auto-saves a system message so the room is immediately visible in the lobby."""
+    room_name = room_name.strip()
+    if not room_name or not _ROOM_NAME_RE.match(room_name):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid room name: use 1–50 alphanumeric characters, spaces, or dashes",
+        )
+    room = ChatRoom(room_name=room_name, room_type="general")
+    db.add(room)
+    try:
+        await db.commit()
+        await db.refresh(room)
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=409, detail="Room name already exists")
+    await save_message(db, room.id, "system", f"Room created by {creator_name}")
+    return room
+
+
+async def list_live_rooms(db: AsyncSession, manager) -> list[dict]:
+    """Return all general rooms that have at least one stored message AND at least one active
+    WebSocket connection — enforcing both conditions from the #209 visibility spec."""
+    has_message = exists().where(Message.room_id == ChatRoom.id)
+    result = await db.execute(
+        select(ChatRoom).where(
+            ChatRoom.room_type == "general",
+            has_message,
+        )
+    )
+    rooms = result.scalars().all()
+    live = []
+    for r in rooms:
+        count = manager.active_connections(r.room_name)
+        if count > 0:
+            live.append({"room_name": r.room_name, "active_connections": count})
+    return live

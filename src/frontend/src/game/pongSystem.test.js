@@ -15,7 +15,7 @@ describe('System.goalDetection', () => {
     let state
 
     beforeEach(() => {
-        state = new GameState()
+        state = new GameState('local', 'local')
     })
 
     it('awards player2 a point when ball exits the left boundary', () => {
@@ -53,20 +53,22 @@ describe('System.goalDetection', () => {
     })
 
     it('resets ball velocity to initial after a left goal', () => {
+        // Ball exits left → player2 scores → ball resets toward player1 (velX = +4)
         state.ball.position.x = -state.ball.size.width - 1
         state.ball.position.velX = -7
         state.ball.position.velY = 3
         System.goalDetection(state, mockCanvasContext)
-        expect(state.ball.position.velX).toBe(-4)
+        expect(state.ball.position.velX).toBe(4)
         expect(state.ball.position.velY).toBe(0)
     })
 
     it('resets ball velocity to initial after a right goal', () => {
+        // Ball exits right → player1 scores → ball resets toward player2 (velX = -4)
         state.ball.position.x = mockCanvasContext.widthRatio + 1
         state.ball.position.velX = 7
         state.ball.position.velY = -3
         System.goalDetection(state, mockCanvasContext)
-        expect(state.ball.position.velX).toBe(4)
+        expect(state.ball.position.velX).toBe(-4)
         expect(state.ball.position.velY).toBe(0)
     })
 

@@ -36,6 +36,15 @@ export default function App() {
         />
 
         <Route
+          path="/chat"
+          element={(
+            <PrivateRoute>
+              <Chat />
+            </PrivateRoute>
+          )}
+        />
+
+        <Route
           path="/chat/:roomId"
           element={(
             <PrivateRoute>

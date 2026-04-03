@@ -1,7 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useAuth } from '../context/authContext'
-import { usePresence } from '../context/presenceContext'
 import {
   buildInviteRoomId,
   createGameChannelClient,
@@ -9,10 +7,18 @@ import {
   isInviteExpired,
   sendGameChannelMessage,
 } from '../utils/gameInviteChannel'
+import { usePresence } from '../context/presenceContext'
+import { useAuth } from '../context/authContext'
+import { useUnread } from '../context/unreadContext'
 import './FriendsSidebar.css'
 
 const INVITE_TIMEOUT_MS = 60_000
 const DEFAULT_AVATAR = '/avatar_placeholder.jpg'
+
+function dmSlug(a, b) {
+  const [lo, hi] = [Number(a), Number(b)].sort((x, y) => x - y)
+  return `DM-${lo}-${hi}`
+}
 
 function mapIncomingInvite(data) {
   return {
@@ -24,9 +30,7 @@ function mapIncomingInvite(data) {
   }
 }
 
-export default function FriendsSidebar({ userId, username, currentUser }) {
-  const { auth } = useAuth()
-  const presenceMap = usePresence()
+export default function FriendsSidebar({ userId, username, currentUser, onViewProfile }) {
   const [friends, setFriends] = useState([])
   const [requests, setRequests] = useState([])
   const [searchQuery, setSearchQuery] = useState('')
@@ -35,12 +39,16 @@ export default function FriendsSidebar({ userId, username, currentUser }) {
   const [outgoingInvite, setOutgoingInvite] = useState(null)
   const [incomingInvite, setIncomingInvite] = useState(null)
   const [inviteToast, setInviteToast] = useState(null)
+  const [dmOfflineTarget, setDmOfflineTarget] = useState(null) // { friendUsername, slug }
   const navigate = useNavigate()
   const searchTimer = useRef(null)
   const outgoingInviteTimer = useRef(null)
   const toastTimer = useRef(null)
   const outgoingInviteRef = useRef(null)
+  const presenceMap = usePresence()
+  const { unreadCounts, clearUnread } = useUnread()
 
+  const { auth } = useAuth()
   const selfId = currentUser?.id ?? userId
   const selfUsername = currentUser?.username ?? username ?? 'Player'
   const selfAvatarUrl = currentUser?.avatarUrl || currentUser?.avatar_url || DEFAULT_AVATAR
@@ -52,7 +60,6 @@ export default function FriendsSidebar({ userId, username, currentUser }) {
   const showInviteToast = useCallback((message, tone = 'info', duration = 4200) => {
     clearTimeout(toastTimer.current)
     setInviteToast({ message, tone })
-
     if (duration > 0)
       toastTimer.current = setTimeout(() => setInviteToast(null), duration)
   }, [])
@@ -127,10 +134,8 @@ export default function FriendsSidebar({ userId, username, currentUser }) {
 
         if (data.type === 'game_invite') {
           const invite = mapIncomingInvite(data)
-
           if (isInviteExpired(invite.expiresAt))
             return
-
           setIncomingInvite(invite)
           showInviteToast(`${invite.fromUsername} invited you to a match.`, 'info')
           return
@@ -138,12 +143,9 @@ export default function FriendsSidebar({ userId, username, currentUser }) {
 
         if (data.type === 'game_invite_response') {
           const activeInvite = outgoingInviteRef.current
-
           if (!activeInvite || data.room_id !== activeInvite.roomId)
             return
-
           resetOutgoingInvite()
-
           if (data.status === 'accepted') {
             showInviteToast(`${activeInvite.friendUsername} accepted your invite.`, 'success', 2200)
             navigateToWaitingRoom(activeInvite.roomId, {
@@ -153,12 +155,10 @@ export default function FriendsSidebar({ userId, username, currentUser }) {
             })
             return
           }
-
           if (data.status === 'declined') {
             showInviteToast(`${activeInvite.friendUsername} declined the match invite.`, 'warning')
             return
           }
-
           if (data.status === 'timeout')
             showInviteToast(`The invite to ${activeInvite.friendUsername} expired.`, 'warning')
         }
@@ -167,7 +167,6 @@ export default function FriendsSidebar({ userId, username, currentUser }) {
           setIncomingInvite((prev) => {
             if (!prev || prev.roomId !== data.room_id)
               return prev
-
             showInviteToast('That invite expired before it was accepted.', 'warning')
             return null
           })
@@ -182,12 +181,10 @@ export default function FriendsSidebar({ userId, username, currentUser }) {
     const q = e.target.value
     setSearchQuery(q)
     clearTimeout(searchTimer.current)
-
     if (q.length < 2) {
       setSearchResults([])
       return
     }
-
     searchTimer.current = setTimeout(() => {
       fetch(`/api/users/search?q=${encodeURIComponent(q)}`)
         .then(r => r.json())
@@ -204,24 +201,35 @@ export default function FriendsSidebar({ userId, username, currentUser }) {
     if (user) setPendingSent(prev => [...prev, user])
   }
 
-  const handleRespond = async (req, action) => {
+  const handleAccept = async (req) => {
     const res = await fetch(`/api/users/friends/${selfId}/requests/${req.id}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${auth.access_token}`,
       },
-      body: JSON.stringify({ action }),
+      body: JSON.stringify({ action: 'accept' }),
     })
     if (!res.ok) return
     setRequests(prev => prev.filter(r => r.id !== req.id))
-    if (action === 'accept') {
-      const profileRes = await fetch(`/api/users/profile/${req.requester_id}`)
-      if (profileRes.ok) {
-        const newFriend = await profileRes.json()
-        setFriends(prev => [...prev, newFriend])
-      }
+    const profileRes = await fetch(`/api/users/profile/${req.requester_id}`)
+    if (profileRes.ok) {
+      const newFriend = await profileRes.json()
+      setFriends(prev => [...prev, newFriend])
     }
+  }
+
+  const handleDecline = async (req) => {
+    const res = await fetch(`/api/users/friends/${selfId}/requests/${req.id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${auth.access_token}`,
+      },
+      body: JSON.stringify({ action: 'decline' }),
+    })
+    if (!res.ok) return
+    setRequests(prev => prev.filter(r => r.id !== req.id))
   }
 
   const handleRemoveFriend = async (friendId) => {
@@ -230,9 +238,27 @@ export default function FriendsSidebar({ userId, username, currentUser }) {
     setFriends(prev => prev.filter(f => f.id !== friendId))
   }
 
-  const handleChat = (friendId) => {
-    const [a, b] = [selfId, friendId].sort((x, y) => x - y)
-    navigate(`/chat/DM-${a}-${b}`, { state: { username: selfUsername, userId: selfId } })
+  const handleChat = async (friendId, friendUsername) => {
+    const slug = dmSlug(selfId, friendId)
+    let friendIsInRoom = true
+    try {
+      const res = await fetch(`/api/chat/room/${slug}/active`, {
+        headers: { Authorization: `Bearer ${auth.access_token}` },
+      })
+      if (res.ok) {
+        const data = await res.json()
+        friendIsInRoom = data.active_connections > 0
+      }
+      // non-ok response (e.g. 401/500) → navigate anyway (fail-open, same as network error)
+    } catch {
+      // network error — navigate anyway
+    }
+    if (!friendIsInRoom) {
+      setDmOfflineTarget({ friendUsername, slug })
+      return
+    }
+    clearUnread(slug)
+    navigate(`/chat/${slug}`, { state: { username: selfUsername, userId: selfId } })
   }
 
   const handleInviteToGame = async (friend) => {
@@ -256,12 +282,9 @@ export default function FriendsSidebar({ userId, username, currentUser }) {
       setOutgoingInvite((prev) => {
         if (!prev || prev.roomId !== roomId)
           return prev
-
         return null
       })
-
       showInviteToast(`${friend.username} did not answer the match invite in time.`, 'warning')
-
       try {
         await sendInviteEvent(friend.id, {
           type: 'game_invite_timeout',
@@ -295,18 +318,15 @@ export default function FriendsSidebar({ userId, username, currentUser }) {
   const handleIncomingInviteAccept = async () => {
     if (!incomingInvite)
       return
-
     if (isInviteExpired(incomingInvite.expiresAt)) {
       setIncomingInvite(null)
       showInviteToast('That invite already expired.', 'warning')
       return
     }
-
     const senderId = incomingInvite.fromUserId
     const senderUsername = incomingInvite.fromUsername
     const senderAvatarUrl = incomingInvite.fromAvatarUrl
     const roomId = incomingInvite.roomId
-
     try {
       await sendInviteEvent(senderId, {
         type: 'game_invite_response',
@@ -317,7 +337,6 @@ export default function FriendsSidebar({ userId, username, currentUser }) {
         from_avatar_url: selfAvatarUrl,
         to_user_id: senderId,
       })
-
       setIncomingInvite(null)
       navigateToWaitingRoom(roomId, {
         id: senderId,
@@ -333,10 +352,8 @@ export default function FriendsSidebar({ userId, username, currentUser }) {
   const handleIncomingInviteDecline = async () => {
     if (!incomingInvite)
       return
-
     const senderId = incomingInvite.fromUserId
     const roomId = incomingInvite.roomId
-
     try {
       await sendInviteEvent(senderId, {
         type: 'game_invite_response',
@@ -350,7 +367,6 @@ export default function FriendsSidebar({ userId, username, currentUser }) {
     } catch (error) {
       console.error(error)
     }
-
     setIncomingInvite(null)
     showInviteToast('Invite declined.', 'warning')
   }
@@ -364,7 +380,8 @@ export default function FriendsSidebar({ userId, username, currentUser }) {
   const visibleResults = searchResults.filter(u => !excludedIds.has(u.id))
 
   return (
-    <aside className="friends-sidebar arcade-screen">
+    <>
+      <aside className="friends-sidebar arcade-screen">
       <h2 className="friends-sidebar-title">Friends sidebar</h2>
 
       {inviteToast && (
@@ -455,13 +472,13 @@ export default function FriendsSidebar({ userId, username, currentUser }) {
                 <div className="friends-request-actions">
                   <button
                     className="arcade-btn arcade-btn-primary friends-btn"
-                    onClick={() => handleRespond(req, 'accept')}
+                    onClick={() => handleAccept(req)}
                   >
                     ✓
                   </button>
                   <button
                     className="arcade-btn friends-btn friends-btn-decline"
-                    onClick={() => handleRespond(req, 'decline')}
+                    onClick={() => handleDecline(req)}
                   >
                     ✗
                   </button>
@@ -481,7 +498,7 @@ export default function FriendsSidebar({ userId, username, currentUser }) {
             {friends.map(friend => {
               const waitingThisFriend = outgoingInvite?.friendId === friend.id
               const inviteDisabled = Boolean(outgoingInvite)
-              const status = presenceMap[friend.id] ?? friend.status
+              const onlineStatus = presenceMap[friend.id] ?? friend.status
 
               return (
                 <li key={friend.id} className="friends-list-item friends-friend-item">
@@ -489,15 +506,31 @@ export default function FriendsSidebar({ userId, username, currentUser }) {
                     <img
                       src={friend.avatar_url || DEFAULT_AVATAR}
                       alt={friend.username}
-                      className={`friends-avatar friends-avatar-${status}`}
+                      className={`friends-avatar friends-avatar-${onlineStatus}`}
                     />
-                    <span className={`friends-status-dot friends-status-${status}`} />
-                    <span className="friends-username">{friend.username}</span>
+                    <span className={`friends-status-dot friends-status-${onlineStatus}`} />
+                    {onViewProfile ? (
+                      <button
+                        className="friends-username friends-username-btn"
+                        onClick={() => onViewProfile(friend.username, friend.id)}
+                      >
+                        {friend.username}
+                      </button>
+                    ) : (
+                      <span className="friends-username">{friend.username}</span>
+                    )}
+                    {(() => {
+                      const slug = dmSlug(selfId, friend.id)
+                      const count = unreadCounts[slug] ?? 0
+                      return count > 0 ? (
+                        <span className="friends-unread-badge">{count}</span>
+                      ) : null
+                    })()}
                   </div>
                   <div className="friends-actions friends-actions-stack">
                     <button
                       className="arcade-btn arcade-btn-primary friends-btn"
-                      onClick={() => handleChat(friend.id)}
+                      onClick={() => handleChat(friend.id, friend.username)}
                     >
                       Chat
                     </button>
@@ -522,5 +555,47 @@ export default function FriendsSidebar({ userId, username, currentUser }) {
         )}
       </div>
     </aside>
+
+      {dmOfflineTarget && (
+        <div
+          className="dm-offline-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Friend not in chat"
+          tabIndex={-1}
+          onClick={() => setDmOfflineTarget(null)}
+          onKeyDown={(e) => e.key === 'Escape' && setDmOfflineTarget(null)}
+        >
+          <div className="dm-offline-dialog" onClick={(e) => e.stopPropagation()}>
+            <p>
+              Nobody is currently connected to this DM room.{' '}
+              <strong>{dmOfflineTarget.friendUsername}</strong> may not see your message right away.
+            </p>
+            <div className="dm-offline-actions">
+              <button
+                type="button"
+                className="arcade-btn arcade-btn-primary"
+                autoFocus
+                onClick={() => {
+                  const { slug } = dmOfflineTarget
+                  setDmOfflineTarget(null)
+                  clearUnread(slug)
+                  navigate(`/chat/${slug}`, { state: { username: selfUsername, userId: selfId } })
+                }}
+              >
+                Open Chat
+              </button>
+              <button
+                type="button"
+                className="arcade-btn arcade-btn-secondary"
+                onClick={() => setDmOfflineTarget(null)}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   )
 }

@@ -42,6 +42,8 @@ async def authenticate(login: Login, session: AsyncSession) -> LoginResponse:
             detail="Invalid credentials"
         )
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    # User creation is delegated to get_me() via fallback pattern in other services.
+    # This ensures single source of truth for user creation.
     access_token = create_access_token(
         data={"sub": credential.username, "credential_id": credential.id},
         expires_delta=access_token_expires,
@@ -77,6 +79,7 @@ async def refresh_access_token(body: RefreshRequest, session: AsyncSession) -> L
     credential = result.scalars().first()
     if credential is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
+    # User creation is delegated to get_me() via fallback pattern in other services.
     access_token = create_access_token(
         data={"sub": credential.username, "credential_id": credential.id},
         expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),

@@ -20,6 +20,14 @@ def _make_credential(username: str = "alice"):
     return cred
 
 
+def _make_user(username: str = "alice", credential_id: int = 1):
+    user = MagicMock()
+    user.id = 1
+    user.username = username
+    user.credential_id = credential_id
+    return user
+
+
 def _make_token_row(expired: bool = False):
     token = MagicMock()
     token.credential_id = 1
@@ -50,7 +58,8 @@ async def test_refresh_success_returns_new_tokens():
     """Valid refresh token returns a new access_token and refresh_token."""
     token_row = _make_token_row()
     cred = _make_credential()
-    session = _session_returning(token_row, cred)
+    user = _make_user()
+    session = _session_returning(token_row, cred, user)
 
     from shared.database import get_db
 
@@ -77,7 +86,8 @@ async def test_refresh_rotates_token_hash():
     """Successful refresh updates the stored hash (token rotation)."""
     token_row = _make_token_row()
     cred = _make_credential()
-    session = _session_returning(token_row, cred)
+    user = _make_user()
+    session = _session_returning(token_row, cred, user)
 
     from shared.database import get_db
 
@@ -168,7 +178,8 @@ async def test_refresh_access_token_exp_matches_access_window():
     """JWT exp claim must reflect ACCESS_TOKEN_EXPIRE_MINUTES, not the refresh window."""
     token_row = _make_token_row()
     cred = _make_credential()
-    session = _session_returning(token_row, cred)
+    user = _make_user()
+    session = _session_returning(token_row, cred, user)
 
     from shared.database import get_db
 
@@ -196,7 +207,8 @@ async def test_refresh_token_expiry_matches_refresh_window():
     """tokens.expires_at must be updated to ~now + REFRESH_TOKEN_EXPIRE_DAYS (7 days)."""
     token_row = _make_token_row()
     cred = _make_credential()
-    session = _session_returning(token_row, cred)
+    user = _make_user()
+    session = _session_returning(token_row, cred, user)
 
     from shared.database import get_db
 

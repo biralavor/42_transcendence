@@ -29,7 +29,7 @@ const publicLinks = [
 
 const privateLinks = [
   {
-    to: '/chat/general',
+    to: '/chat',
     label: 'Chat',
     isActive: (pathname) => pathname.startsWith('/chat'),
   },
@@ -47,13 +47,13 @@ export default function NavbarComponent() {
 
   const links = isAuthenticated
     ? [
-        publicLinks[0],
-        publicLinks[1],
-        privateLinks[0],
-        publicLinks[2],
-        publicLinks[3],
-        privateLinks[1],
-      ]
+      publicLinks[0],
+      publicLinks[1],
+      privateLinks[0],
+      publicLinks[2],
+      publicLinks[3],
+      privateLinks[1],
+    ]
     : publicLinks
 
   useEffect(() => {
@@ -100,9 +100,8 @@ export default function NavbarComponent() {
                 <Link
                   key={link.to}
                   to={link.to}
-                  className={`pong-nav__link ${
-                    link.isActive(location.pathname) ? 'is-active' : ''
-                  }`}
+                  className={`pong-nav__link ${link.isActive(location.pathname) ? 'is-active' : ''
+                    }`}
                 >
                   {link.label}
                 </Link>

@@ -12,7 +12,8 @@
 }
 
 .chat-share-url {
-  font-size: 0.85em;
+  font-size: 0.80rem;
+  font-family: 'Courier New', Courier, monospace;
 }
 
 .chat-msg {
@@ -30,6 +31,7 @@
   display: flex;
   align-items: flex-start;
   min-height: calc(100vh - var(--nav-height));
+  width: 100%;
 }
 
 .chat-layout .chat-view {
@@ -37,10 +39,72 @@
   min-width: 0;
 }
 
+.chat-typing {
+  font-size: 0.80rem;
+  font-family: 'Courier New', Courier, monospace;
+  color: #cfc867;
+  font-style: italic;
+  min-height: 1.25rem;
+  padding: 0.1rem 0.25rem;
+  margin-bottom: 0.25rem;
+}
+
 .chat-layout .friends-sidebar {
-  flex-shrink: 0;
-  width: 300px;
+  flex: 0 0 clamp(220px, 25vw, 300px);
+  min-width: 0;
   min-height: calc(100vh - var(--nav-height));
   position: sticky;
   top: var(--nav-height);
+  align-self: flex-start;
+}
+
+@media (max-width: 768px) {
+  .chat-layout {
+    flex-direction: column;
+  }
+
+  .chat-layout .friends-sidebar {
+    flex: unset;
+    width: 100%;
+    min-height: unset;
+    position: static;
+  }
+
+  .chat-layout .lobby-panel {
+    flex: unset;
+    width: 100%;
+    min-height: unset;
+    position: static;
+  }
+
+  .chat-layout .chat-view {
+    width: 100%;
+  }
+}
+
+.chat-sender-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  font-weight: bold;
+  color: hsl(var(--sender-hue), 60%, 35%);
+  cursor: pointer;
+  font-size: inherit;
+  font-family: inherit;
+  text-decoration: underline dotted;
+}
+
+.chat-sender-btn:hover {
+  color: hsl(var(--sender-hue), 70%, 25%);
+}
+
+.chat-lobby-back {
+  font-size: 0.85rem;
+  color: var(--arcade-muted, #888);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.chat-lobby-back:hover {
+  color: var(--arcade-text, #eee);
 }
