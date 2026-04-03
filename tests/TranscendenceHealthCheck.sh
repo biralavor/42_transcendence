@@ -836,7 +836,7 @@ fi
 # ── 22. User Service Unit Tests ───────────────────────────────────────────────
 section "User Service Unit Tests"
 if container_running user-service; then
-    out=$(docker exec user-service sh -c "pip install -q --root-user-action=ignore pytest==8.3.5 httpx==0.28.1 pytest-asyncio==0.24.0 2>/dev/null && cd /app && pytest service/tests/ -v" 2>&1) && rc=0 || rc=$?
+    out=$(docker exec user-service sh -c "pip install -q --root-user-action=ignore pytest==8.3.5 httpx==0.28.1 pytest-asyncio==0.24.0 && cd /app && pytest service/tests/ -v" 2>&1) && rc=0 || rc=$?
     
     grep_out=$(printf "%s\n" "$out" | grep '::' | grep -E '(PASSED|FAILED)') || true
     if [[ -z "$grep_out" ]]; then
@@ -854,6 +854,9 @@ if container_running user-service; then
 
         pt_fail=$(printf "%s\n" "$out" | grep -oE '[0-9]+ failed' | awk '{print $1}' | tail -1) || true; pt_fail=${pt_fail:-0}
         if [[ $rc -ne 0 || $pt_fail -gt 0 ]]; then
+            if [[ $rc -ne 0 && $pt_fail -eq 0 ]]; then
+                fail "User Service unit tests exited with error code $rc"
+            fi
             printf "%s\n" "$out" | tail -15
         fi
     fi
@@ -864,7 +867,7 @@ fi
 # ── 23. Game Service Unit Tests ───────────────────────────────────────────────
 section "Game Service Unit Tests"
 if container_running game-service; then
-    out=$(docker exec game-service sh -c "pip install -q --root-user-action=ignore pytest==8.3.5 httpx==0.28.1 pytest-asyncio==0.24.0 2>/dev/null && cd /app && pytest service/tests/ -v" 2>&1) && rc=0 || rc=$?
+    out=$(docker exec game-service sh -c "pip install -q --root-user-action=ignore pytest==8.3.5 httpx==0.28.1 pytest-asyncio==0.24.0 && cd /app && pytest service/tests/ -v" 2>&1) && rc=0 || rc=$?
     
     grep_out=$(printf "%s\n" "$out" | grep '::' | grep -E '(PASSED|FAILED)') || true
     if [[ -z "$grep_out" ]]; then
@@ -882,6 +885,9 @@ if container_running game-service; then
 
         pt_fail=$(printf "%s\n" "$out" | grep -oE '[0-9]+ failed' | awk '{print $1}' | tail -1) || true; pt_fail=${pt_fail:-0}
         if [[ $rc -ne 0 || $pt_fail -gt 0 ]]; then
+            if [[ $rc -ne 0 && $pt_fail -eq 0 ]]; then
+                fail "Game Service unit tests exited with error code $rc"
+            fi
             printf "%s\n" "$out" | tail -15
         fi
     fi
@@ -892,7 +898,7 @@ fi
 # ── 24. Chat Service Unit Tests ───────────────────────────────────────────────
 section "Chat Service Unit Tests"
 if container_running chat-service; then
-    out=$(docker exec chat-service sh -c "pip install -q --root-user-action=ignore pytest==8.3.5 httpx==0.28.1 pytest-asyncio==0.23.8 asyncpg==0.30.0 2>/dev/null && cd /app && pytest service/tests/test_service.py -v" 2>&1) && rc=0 || rc=$?
+    out=$(docker exec chat-service sh -c "pip install -q --root-user-action=ignore pytest==8.3.5 httpx==0.28.1 pytest-asyncio==0.23.8 asyncpg==0.30.0 && cd /app && pytest service/tests/test_service.py -v" 2>&1) && rc=0 || rc=$?
     
     grep_out=$(printf "%s\n" "$out" | grep '::' | grep -E '(PASSED|FAILED)') || true
     if [[ -z "$grep_out" ]]; then
@@ -910,6 +916,9 @@ if container_running chat-service; then
 
         pt_fail=$(printf "%s\n" "$out" | grep -oE '[0-9]+ failed' | awk '{print $1}' | tail -1) || true; pt_fail=${pt_fail:-0}
         if [[ $rc -ne 0 || $pt_fail -gt 0 ]]; then
+            if [[ $rc -ne 0 && $pt_fail -eq 0 ]]; then
+                fail "Chat Service unit tests exited with error code $rc"
+            fi
             printf "%s\n" "$out" | tail -15
         fi
     fi
@@ -944,6 +953,9 @@ if container_running frontend; then
         vt_fail=$(printf "%s\n" "$tests_line" | grep -oE '[0-9]+ failed' | awk '{print $1}') || true; vt_fail=${vt_fail:-0}
         
         if [[ $vitest_rc -ne 0 || $vt_fail -gt 0 ]]; then
+            if [[ $vitest_rc -ne 0 && $vt_fail -eq 0 ]]; then
+                fail "Frontend unit tests exited with error code $vitest_rc"
+            fi
             printf "%s\n" "$vitest_out" | tail -15
         fi
     fi
