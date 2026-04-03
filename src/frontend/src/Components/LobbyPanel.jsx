@@ -81,7 +81,7 @@ export default function LobbyPanel({ compact = false, onEnter, username, token }
         <p className="lobby-panel__error" role="alert">{fetchError}</p>
       ) : rooms.length === 0 ? (
         <p className="lobby-panel__status">
-          {compact ? 'No live rooms.' : 'No live rooms yet. Create the first one!'}
+          {compact ? 'No public live rooms.' : 'No public live rooms yet. Create the first one!'}
         </p>
       ) : (
         <ul className="lobby-panel__list">
@@ -102,34 +102,32 @@ export default function LobbyPanel({ compact = false, onEnter, username, token }
         </ul>
       )}
 
-      {!compact && (
-        <form
-          className="lobby-panel__create"
-          onSubmit={handleCreate}
-          aria-label="Create a new room"
+      <form
+        className="lobby-panel__create"
+        onSubmit={handleCreate}
+        aria-label="Create a new room"
+      >
+        <input
+          className="lobby-panel__create-input"
+          placeholder="New room name…"
+          value={newRoomName}
+          onChange={e => setNewRoomName(e.target.value)}
+          maxLength={50}
+          aria-label="New room name"
+        />
+        <button
+          type="submit"
+          className="arcade-btn arcade-btn-primary"
+          disabled={creating || !newRoomName.trim() || !token || !username}
         >
-          <input
-            className="lobby-panel__create-input"
-            placeholder="New room name…"
-            value={newRoomName}
-            onChange={e => setNewRoomName(e.target.value)}
-            maxLength={50}
-            aria-label="New room name"
-          />
-          <button
-            type="submit"
-            className="arcade-btn arcade-btn-primary"
-            disabled={creating || !newRoomName.trim() || !token || !username}
-          >
-            {creating ? 'Creating…' : 'Create'}
-          </button>
-          {createError && (
-            <p className="lobby-panel__error" role="alert">
-              {createError}
-            </p>
-          )}
-        </form>
-      )}
+          {creating ? 'Creating…' : 'Create'}
+        </button>
+        {createError && (
+          <p className="lobby-panel__error" role="alert">
+            {createError}
+          </p>
+        )}
+      </form>
     </div>
   )
 }

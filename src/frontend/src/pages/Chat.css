@@ -31,6 +31,7 @@
   display: flex;
   align-items: flex-start;
   min-height: calc(100vh - var(--nav-height));
+  width: 100%;
 }
 
 .chat-layout .chat-view {
@@ -63,6 +64,13 @@
   }
 
   .chat-layout .friends-sidebar {
+    flex: unset;
+    width: 100%;
+    min-height: unset;
+    position: static;
+  }
+
+  .chat-layout .lobby-panel {
     flex: unset;
     width: 100%;
     min-height: unset;

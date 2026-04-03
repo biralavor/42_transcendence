@@ -8,11 +8,18 @@
   min-height: calc(100vh - var(--nav-height));
   width: clamp(200px, 22vw, 280px);
   overflow-y: auto;
+  flex: 1;
+  min-width: 0;
 }
 
 .lobby-panel--compact {
   width: clamp(160px, 18vw, 220px);
   font-size: 0.9rem;
+  flex: 0 0 clamp(160px, 18vw, 220px);
+  min-height: calc(100vh - var(--nav-height));
+  position: sticky;
+  top: var(--nav-height);
+  align-self: flex-start;
 }
 
 .lobby-panel__title {
@@ -105,5 +112,16 @@
     min-height: unset;
     border-left: none;
     border-top: 1px solid var(--arcade-border, #333);
+    flex: 1;
+    flex-basis: auto;
+    position: static;
+  }
+
+  .lobby-panel--compact {
+    flex: 1;
+    flex-basis: auto;
+    min-height: auto;
+    width: 100%;
+    position: static;
   }
 }

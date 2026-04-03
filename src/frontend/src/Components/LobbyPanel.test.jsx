@@ -43,7 +43,7 @@ describe('LobbyPanel', () => {
     )
     renderLobby()
     await waitFor(() =>
-      expect(screen.getByText(/no live rooms/i)).toBeInTheDocument()
+      expect(screen.getByText(/no public live rooms/i)).toBeInTheDocument()
     )
   })
 
@@ -60,13 +60,13 @@ describe('LobbyPanel', () => {
     expect(onEnter).toHaveBeenCalledWith('coding')
   })
 
-  it('hides the create form in compact mode', async () => {
+  it('shows the create form in both compact and full modes', async () => {
     vi.spyOn(global, 'fetch').mockResolvedValueOnce(
       new Response(JSON.stringify([]), { status: 200 })
     )
     renderLobby({ compact: true })
     await waitFor(() =>
-      expect(screen.queryByLabelText(/new room name/i)).not.toBeInTheDocument()
+      expect(screen.getByLabelText(/new room name/i)).toBeInTheDocument()
     )
   })
 
