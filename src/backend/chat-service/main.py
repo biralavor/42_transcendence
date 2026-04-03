@@ -39,7 +39,20 @@ def _decode_uid(credentials: HTTPAuthorizationCredentials = Depends(_bearer)) ->
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token uid is not a valid integer")
 
 
+def _decode_username(credentials: HTTPAuthorizationCredentials = Depends(_bearer)) -> str:
+    """Decode the Bearer JWT and return the caller's username (sub claim)."""
+    try:
+        payload = jwt.decode(credentials.credentials, settings.JWT_SECRET_KEY, algorithms=[_ALGORITHM])
+        sub = payload.get("sub")
+        if not sub:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token missing sub")
+        return str(sub)
+    except JWTError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+
+
 CallerUid = Annotated[int, Depends(_decode_uid)]
+CallerUsername = Annotated[str, Depends(_decode_username)]
 
 
 @app.get("/health")
@@ -81,14 +94,13 @@ async def list_blocked(session: SessionDep, caller_uid: CallerUid):
 
 class RoomCreate(BaseModel):
     room_name: str
-    creator_name: str
 
 
 @app.post("/rooms", status_code=201)
-async def create_room(body: RoomCreate, session: SessionDep, caller_uid: CallerUid):
+async def create_room(body: RoomCreate, session: SessionDep, caller_uid: CallerUid, caller_username: CallerUsername):
     """Create a new general public room. Returns 400 for invalid name, 409 for duplicate."""
     room = await create_general_room(
-        session, room_name=body.room_name, creator_name=body.creator_name
+        session, room_name=body.room_name, creator_name=caller_username
     )
     return {"room_name": room.room_name}
 

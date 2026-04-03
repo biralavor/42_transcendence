@@ -49,7 +49,7 @@ export default function LobbyPanel({ compact = false, onEnter, username, token }
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ room_name: newRoomName.trim(), creator_name: username }),
+        body: JSON.stringify({ room_name: newRoomName.trim() }),
       })
       if (res.status === 201) {
         const data = await res.json()

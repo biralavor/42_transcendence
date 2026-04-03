@@ -409,7 +409,7 @@ async def test_post_rooms_returns_201():
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 resp = await client.post(
                     "/rooms",
-                    json={"room_name": "coding", "creator_name": "alice"},
+                    json={"room_name": "coding"},
                     headers={"Authorization": f"Bearer {_valid_token(uid=1)}"},
                 )
         assert resp.status_code == 201
@@ -417,6 +417,7 @@ async def test_post_rooms_returns_201():
         mock_create.assert_awaited_once()
         _, kwargs = mock_create.call_args
         assert kwargs["room_name"] == "coding"
+        # creator_name comes from JWT sub claim, not from request body
         assert kwargs["creator_name"] == "alice"
     finally:
         app.dependency_overrides.pop(get_db, None)
@@ -436,7 +437,7 @@ async def test_post_rooms_returns_409_on_duplicate():
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 resp = await client.post(
                     "/rooms",
-                    json={"room_name": "existing", "creator_name": "alice"},
+                    json={"room_name": "existing"},
                     headers={"Authorization": f"Bearer {_valid_token(uid=1)}"},
                 )
         assert resp.status_code == 409
@@ -473,6 +474,6 @@ async def test_get_rooms_returns_list():
 async def test_rooms_endpoints_require_auth():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         assert (await client.post(
-            "/rooms", json={"room_name": "x", "creator_name": "y"}
+            "/rooms", json={"room_name": "x"}
         )).status_code == 403
         assert (await client.get("/rooms")).status_code == 403
