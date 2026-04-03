@@ -4,7 +4,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from shared.database import get_db
 from shared.ws.presence import presence_manager
@@ -20,11 +20,8 @@ SessionDep = Annotated[AsyncSession, Depends(get_db)]
 
 
 async def set_user_status(user_id: int, status: str, session: AsyncSession) -> None:
-    result = await session.execute(select(User).where(User.id == user_id))
-    user = result.scalars().first()
-    if user is not None:
-        user.status = status
-        await session.commit()
+    await session.execute(update(User).where(User.id == user_id).values(status=status))
+    await session.commit()
 
 
 @router.websocket("/ws/presence")
