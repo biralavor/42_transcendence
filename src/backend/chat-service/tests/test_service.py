@@ -162,9 +162,9 @@ def _make_session():
     return session
 
 
-def _valid_token(uid: int = 1) -> str:
+def _valid_token(credential_id: int = 1) -> str:
     from datetime import timedelta, datetime, timezone
-    payload = {"sub": "alice", "uid": uid, "exp": datetime.now(timezone.utc) + timedelta(minutes=5)}
+    payload = {"sub": "alice", "credential_id": credential_id, "exp": datetime.now(timezone.utc) + timedelta(minutes=5)}
     return jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm="HS256")
 
 
@@ -182,7 +182,7 @@ async def test_post_dm_returns_room_name():
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 resp = await client.post(
                     "/dm/2",
-                    headers={"Authorization": f"Bearer {_valid_token(uid=1)}"},
+                    headers={"Authorization": f"Bearer {_valid_token(credential_id=3)}"},
                 )
         assert resp.status_code == 200
         assert resp.json()["room_name"] == "DM-1-2"
@@ -201,7 +201,7 @@ async def test_post_dm_self_returns_400():
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.post(
                 "/dm/1",
-                headers={"Authorization": f"Bearer {_valid_token(uid=1)}"},
+                headers={"Authorization": f"Bearer {_valid_token(credential_id=1)}"},
             )
         assert resp.status_code == 400
     finally:
@@ -220,7 +220,7 @@ async def test_post_block_returns_204():
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 resp = await client.post(
                     "/block/2",
-                    headers={"Authorization": f"Bearer {_valid_token(uid=1)}"},
+                    headers={"Authorization": f"Bearer {_valid_token(credential_id=1)}"},
                 )
         assert resp.status_code == 204
     finally:
@@ -239,7 +239,7 @@ async def test_delete_block_returns_204():
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 resp = await client.delete(
                     "/block/2",
-                    headers={"Authorization": f"Bearer {_valid_token(uid=1)}"},
+                    headers={"Authorization": f"Bearer {_valid_token(credential_id=1)}"},
                 )
         assert resp.status_code == 204
     finally:
@@ -258,7 +258,7 @@ async def test_get_blocked_returns_list():
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 resp = await client.get(
                     "/blocked",
-                    headers={"Authorization": f"Bearer {_valid_token(uid=1)}"},
+                    headers={"Authorization": f"Bearer {_valid_token(credential_id=1)}"},
                 )
         assert resp.status_code == 200
         assert set(resp.json()) == {3, 5}
@@ -282,7 +282,7 @@ async def test_get_room_active_returns_count():
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.get(
                 "/room/DM-1-2/active",
-                headers={"Authorization": f"Bearer {_valid_token(uid=1)}"},
+                headers={"Authorization": f"Bearer {_valid_token(credential_id=1)}"},
             )
     assert resp.status_code == 200
     assert resp.json() == {"active_connections": 1}
@@ -295,7 +295,7 @@ async def test_get_room_active_zero_when_empty():
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.get(
                 "/room/DM-3-7/active",
-                headers={"Authorization": f"Bearer {_valid_token(uid=3)}"},
+                headers={"Authorization": f"Bearer {_valid_token(credential_id=3)}"},
             )
     assert resp.status_code == 200
     assert resp.json() == {"active_connections": 0}
@@ -314,7 +314,7 @@ async def test_get_room_active_non_participant_gets_403():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get(
             "/room/DM-1-2/active",
-            headers={"Authorization": f"Bearer {_valid_token(uid=5)}"},
+            headers={"Authorization": f"Bearer {_valid_token(credential_id=5)}"},
         )
     assert resp.status_code == 403
 
@@ -325,7 +325,7 @@ async def test_get_room_active_non_dm_slug_gets_403():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get(
             "/room/general/active",
-            headers={"Authorization": f"Bearer {_valid_token(uid=1)}"},
+            headers={"Authorization": f"Bearer {_valid_token(credential_id=1)}"},
         )
     assert resp.status_code == 403
 
@@ -410,7 +410,7 @@ async def test_post_rooms_returns_201():
                 resp = await client.post(
                     "/rooms",
                     json={"room_name": "coding"},
-                    headers={"Authorization": f"Bearer {_valid_token(uid=1)}"},
+                    headers={"Authorization": f"Bearer {_valid_token(credential_id=1)}"},
                 )
         assert resp.status_code == 201
         assert resp.json()["room_name"] == "coding"
@@ -438,7 +438,7 @@ async def test_post_rooms_returns_409_on_duplicate():
                 resp = await client.post(
                     "/rooms",
                     json={"room_name": "existing"},
-                    headers={"Authorization": f"Bearer {_valid_token(uid=1)}"},
+                    headers={"Authorization": f"Bearer {_valid_token(credential_id=1)}"},
                 )
         assert resp.status_code == 409
         assert "already exists" in resp.json()["detail"].lower()
@@ -459,7 +459,7 @@ async def test_get_rooms_returns_list():
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 resp = await client.get(
                     "/rooms",
-                    headers={"Authorization": f"Bearer {_valid_token(uid=1)}"},
+                    headers={"Authorization": f"Bearer {_valid_token(credential_id=1)}"},
                 )
         assert resp.status_code == 200
         data = resp.json()

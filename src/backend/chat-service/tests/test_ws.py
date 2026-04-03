@@ -333,7 +333,7 @@ def test_notifications_connects_with_valid_token():
     from jose import jwt as jose_jwt
     # Both the test and settings.JWT_SECRET_KEY read the same env var — they always match.
     secret = os.environ.get("JWT_SECRET_KEY", "changeme")
-    token = jose_jwt.encode({"uid": 42}, secret, algorithm="HS256")
+    token = jose_jwt.encode({"credential_id": 42}, secret, algorithm="HS256")
 
     client = TestClient(app)
     # Just connecting and closing without error is the assertion
@@ -348,8 +348,8 @@ def test_notifications_receives_new_dm_event():
     from jose import jwt as jose_jwt
     # Both the test and settings.JWT_SECRET_KEY read the same env var — they always match.
     secret = os.environ.get("JWT_SECRET_KEY", "changeme")
-    sender_token = jose_jwt.encode({"uid": 10}, secret, algorithm="HS256")
-    recipient_token = jose_jwt.encode({"uid": 20}, secret, algorithm="HS256")
+    sender_token = jose_jwt.encode({"credential_id": 10}, secret, algorithm="HS256")
+    recipient_token = jose_jwt.encode({"credential_id": 20}, secret, algorithm="HS256")
 
     async def mock_is_blocked(db, blocker_id, blocked_id):
         return False
