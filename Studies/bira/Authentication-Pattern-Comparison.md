@@ -25,16 +25,17 @@ This document documents the **unified hybrid authentication pattern** implemente
 **Entry Point: `authenticate()` (POST /auth/login)**
 ```
 1. Validate username + password vs credentials table
-2. Create User row if missing
-3. Create/Update Tokens row
-4. Return JWT with {sub, uid}
+2. Create/update Tokens row (refresh token hash, expiration)
+3. Return JWT with {sub, credential_id}
+4. NOTE: User row creation DELEGATED to get_me() via fallback pattern
 ```
 
-**Entry Point: `get_me()` (GET /auth/me)**
+**Entry Point: `get_me()` (GET /auth/me) — SINGLE SOURCE OF USER CREATION**
 ```
 1. Decode JWT (validates token)
-2. Create User row if missing (auto-populates users table)
+2. Create User row if missing (lazy-create on first login via fallback)
 3. Return full User profile {id, username, status, display_name, bio, ...}
+4. Called by game-service and chat-service fallback when user not found locally
 ```
 
 ### Game-Service
@@ -97,7 +98,7 @@ This document documents the **unified hybrid authentication pattern** implemente
 | **Fast Path Latency** | N/A | ~5ms (local DB query) | ~5ms (local DB query) |
 | **Fallback Latency** | N/A | ~500ms (network + create) | ~500ms (network + create) |
 | **Network Calls** | ✅ 0 per request | ✅ 0 in fast path, ≤1 fallback | ✅ 0 in fast path, ≤1 fallback |
-| **Caching Strategy** | Auto-create on login | Lazy-create on first request | Lazy-create on first request |
+| **Caching Strategy** | Lazy-create on first request (via get_me fallback) | Lazy-create on first request | Lazy-create on first request |
 | **WebSocket Support** | N/A | N/A | ✅ Credential_id → user.id resolution |
 | **DM Participant Validation** | N/A | N/A | ✅ Uses correct user.id from credential_id |
 | **Service Dependencies** | None (auth source) | user-service (optional fallback) | user-service (optional fallback) |
@@ -107,18 +108,53 @@ This document documents the **unified hybrid authentication pattern** implemente
 
 ## Implementation Details
 
-### User-Service: Token Claims
+### User-Service: User Creation (Single Source of Truth)
 
-**At Login (`authenticate()`):**
-- JWT payload: `{sub: username, credential_id: credential.id, exp: timestamp}`
-- `credential_id` is the Credentials table primary key
-- Used by all services for user.id lookup
+**User Creation ONLY in `get_me()` (April 3, 2026 Centralization)**
 
-**At Profile (`get_me()`):**
-- Validates token, enriches user profile
-- Auto-creates User row if missing (defensive)
-- Returns full `User` object with profile data
-- Single responsibility: user profile management & lazy creation
+**Why centralize in `get_me()`?**
+```python
+# BEFORE (Wrong - 3 creation points):
+authenticate()           # Creates user ❌
+refresh_access_token()   # Creates user ❌
+get_me()                 # Creates user ❌
+
+# AFTER (Correct - 1 creation point):
+authenticate()           # NO user creation ✅
+refresh_access_token()   # NO user creation ✅
+get_me()                 # ONLY user creation point ✅
+```
+
+**How Services Now Trigger User Creation:**
+```python
+# Service (game-service or chat-service)
+async def get_current_user(credentials):
+    credential_id = jwt.decode(token)["credential_id"]
+    
+    # Try fast path
+    user_id = query(f"SELECT id FROM users WHERE credential_id = {credential_id}")
+    if user_id:
+        return user_id  # ✅ User exists, return immediately
+    
+    # Fallback: user not found locally
+    # Call user-service GET /auth/me
+    resp = await client.get(
+        f"{USER_SERVICE_URL}/auth/me",
+        headers={"Authorization": f"Bearer {token}"}
+    )
+    # ↑ This calls get_me() which CREATE THE USER ROW ← ← ← Single source
+    
+    # Retry query after creation
+    user_id = query(f"SELECT id FROM users WHERE credential_id = {credential_id}")
+    return user_id
+```
+
+**Benefits of Single Source of Truth:**
+- No duplicate user creation logic (was in 3 places)
+- Consistent behavior (same code path for all users)
+- Clear audit trail (all users created via get_me())
+- Easier maintenance (change logic in one place)
+- Simpler fallback pattern (services "trust" get_me() to create user)
 
 ### Game-Service: Hybrid Pattern (Recommended)
 
@@ -359,14 +395,30 @@ Client → Service: Decode JWT locally (~1ms)
 
 **Solution:** Resolve credential_id → user.id before any business logic
 
-### 4. Notifications Need Correct User Identity
+### 5. User Creation Centralized to Single Function
 
-**Issue Encountered:** Notifications sent to credential_id instead of user.id
-- Recipient browser listening on correct user.id socket
-- But notification sent to credential_id socket
-- Message received but unread count not updated
+**Issue Discovered (April 3, 2026):** User creation was scattered across 3 functions:
+- `authenticate()` — created user on login ❌
+- `refresh_access_token()` — created user on token refresh ("be defensive") ❌
+- `get_me()` — created user on profile fetch ✅
 
-**Solution:** Ensure all WebSocket keys use user.id consistently
+**Problem:** No single source of truth for user creation
+- Duplicate logic in 3 places
+- Inconsistent behavior (different error handling)
+- Hard to maintain and audit
+- Fragile: change logic in one place, others break silently
+
+**Solution (April 3, 2026):** Centralize ALL user creation in `get_me()`
+- Remove user creation from `authenticate()` 
+- Remove user creation from `refresh_access_token()`
+- Keep ONLY in `get_me()` 
+
+**Result:**
+- ✅ Single source of truth (get_me)
+- ✅ Services use fallback pattern to trigger creation
+- ✅ No duplicate logic
+- ✅ Clear audit trail
+- ✅ All 289 tests pass
 
 ---
 

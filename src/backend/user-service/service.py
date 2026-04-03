@@ -42,13 +42,8 @@ async def authenticate(login: Login, session: AsyncSession) -> LoginResponse:
             detail="Invalid credentials"
         )
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    # Ensure a User entry exists for this credential so other services can resolve credential_id -> user.id.
-    user_row = await session.execute(select(User).where(User.credential_id == credential.id))
-    user = user_row.scalars().first()
-    if user is None:
-        user = User(username=credential.username, credential_id=credential.id)
-        session.add(user)
-        await session.flush()  # Assign user.id now; the final commit below persists both the User and token row.
+    # User creation is delegated to get_me() via fallback pattern in other services.
+    # This ensures single source of truth for user creation.
     access_token = create_access_token(
         data={"sub": credential.username, "credential_id": credential.id},
         expires_delta=access_token_expires,
@@ -84,13 +79,7 @@ async def refresh_access_token(body: RefreshRequest, session: AsyncSession) -> L
     credential = result.scalars().first()
     if credential is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
-    # Lazy-ensure User exists (should already exist from login, but be defensive)
-    user_row = await session.execute(select(User).where(User.credential_id == credential.id))
-    user = user_row.scalars().first()
-    if user is None:
-        user = User(username=credential.username, credential_id=credential.id)
-        session.add(user)
-        await session.flush()
+    # User creation is delegated to get_me() via fallback pattern in other services.
     access_token = create_access_token(
         data={"sub": credential.username, "credential_id": credential.id},
         expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
