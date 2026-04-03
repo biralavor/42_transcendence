@@ -1,9 +1,28 @@
 from datetime import datetime, timezone
 
 from sqlalchemy import or_, select, case, func, union_all
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from service.models.match import Match
+from service.models.tournament import Tournament
+from service.models.tournament_participant import TournamentParticipant
+
+
+class TournamentNotFound(Exception):
+    pass
+
+
+class TournamentNotOpen(Exception):
+    pass
+
+
+class UserAlreadyRegistered(Exception):
+    pass
+
+
+class TournamentFull(Exception):
+    pass
 
 
 async def create_match(db: AsyncSession, player1_id: int, player2_id: int) -> Match:
@@ -17,6 +36,68 @@ async def create_match(db: AsyncSession, player1_id: int, player2_id: int) -> Ma
     await db.commit()
     await db.refresh(match)
     return match
+
+
+async def create_tournament(
+    db: AsyncSession, name: str, creator_id: int, max_participants: int
+) -> Tournament:
+    tournament = Tournament(
+        name=name,
+        creator_id=creator_id,
+        max_participants=max_participants,
+        status="open",
+    )
+    db.add(tournament)
+    await db.commit()
+    await db.refresh(tournament)
+    return tournament
+
+
+async def get_tournament_with_participants(
+    db: AsyncSession, tournament_id: int
+) -> tuple[Tournament, list[TournamentParticipant]] | None:
+    result = await db.execute(select(Tournament).where(Tournament.id == tournament_id))
+    tournament = result.scalars().first()
+    if tournament is None:
+        return None
+    participants_result = await db.execute(
+        select(TournamentParticipant).where(TournamentParticipant.tournament_id == tournament_id)
+    )
+    participants = list(participants_result.scalars().all())
+    return tournament, participants
+
+
+async def join_tournament(
+    db: AsyncSession, tournament_id: int, user_id: int
+) -> TournamentParticipant:
+    # Lock the tournament row so concurrent requests cannot both pass the
+    # capacity check before either one commits.
+    result = await db.execute(
+        select(Tournament).where(Tournament.id == tournament_id).with_for_update()
+    )
+    tournament = result.scalars().first()
+    if tournament is None:
+        raise TournamentNotFound()
+    if tournament.status != "open":
+        raise TournamentNotOpen()
+
+    count_result = await db.execute(
+        select(func.count())
+        .select_from(TournamentParticipant)
+        .where(TournamentParticipant.tournament_id == tournament_id)
+    )
+    if count_result.scalar() >= tournament.max_participants:
+        raise TournamentFull()
+
+    participant = TournamentParticipant(tournament_id=tournament_id, user_id=user_id)
+    db.add(participant)
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise UserAlreadyRegistered()
+    await db.refresh(participant)
+    return participant
 
 
 async def finish_match(
