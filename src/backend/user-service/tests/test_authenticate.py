@@ -142,8 +142,8 @@ async def test_login_creates_user_row_when_missing():
 
 
 @pytest.mark.asyncio
-async def test_login_token_contains_uid():
-    """JWT issued on login must carry a numeric uid matching the user's DB id."""
+async def test_login_token_contains_identity_claims():
+    """JWT issued on login must carry sub (username) and credential_id claims."""
     import bcrypt
     from unittest.mock import AsyncMock, MagicMock
     from service.main import app
@@ -173,7 +173,7 @@ async def test_login_token_contains_uid():
     session = AsyncMock()
     session.execute.side_effect = [
         _result(cred),       # find credential
-        _result(user),       # find user for uid
+        _result(user),       # find user row
         _result(token_row),  # find token row
     ]
 
@@ -187,6 +187,7 @@ async def test_login_token_contains_uid():
         assert resp.status_code == 200
         token = resp.json()["access_token"]
         payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=["HS256"])
-        assert payload["uid"] == 42
+        assert payload["sub"] == "alice"
+        assert payload["credential_id"] == 7
     finally:
         app.dependency_overrides.pop(get_db, None)
