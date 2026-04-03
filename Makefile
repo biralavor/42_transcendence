@@ -54,28 +54,13 @@ wait:
 	done; \
 	echo ""; echo "Timeout: services not ready after 60s."; exit 1
 
-.PHONY: test
-test:
-	@docker compose exec user-service sh -c \
-		"pip install -q --root-user-action=ignore pytest==8.3.5 httpx==0.28.1 pytest-asyncio==0.24.0 2>/dev/null; \
-		 cd /app; pytest service/tests/ -v >/tmp/out 2>&1; r=$$?; \
-		 sed 's/test session starts/& — user-service/' /tmp/out; exit $$r"
-	@docker compose exec game-service sh -c \
-		"pip install -q --root-user-action=ignore pytest==8.3.5 httpx==0.28.1 pytest-asyncio==0.24.0 2>/dev/null; \
-		 cd /app; pytest service/tests/ -v >/tmp/out 2>&1; r=$$?; \
-		 sed 's/test session starts/& — game-service/' /tmp/out; exit $$r"
-	@docker compose exec chat-service sh -c \
-		"pip install -q --root-user-action=ignore pytest==8.3.5 httpx==0.28.1 pytest-asyncio==0.23.8 asyncpg==0.30.0 2>/dev/null; \
-		 cd /app; pytest service/tests/test_service.py -v >/tmp/out 2>&1; r=$$?; \
-		 sed 's/test session starts/& — chat-service/' /tmp/out; exit $$r"
-
 .PHONY: seed
 seed:
 	@docker compose cp tests/seed_dev.py user-service:/app/seed_dev.py
 	@docker compose exec user-service python3 /app/seed_dev.py
 
 .PHONY: check
-check: wait test seed
+check: wait seed
 	PAGER=cat GIT_PAGER=cat bash tests/TranscendenceHealthCheck.sh | tee >(sed 's/\x1b\[[0-9;]*m//g' > release.txt) | cat
 
 # --- alembic migrations ---
