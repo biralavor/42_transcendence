@@ -833,27 +833,132 @@ else
     info "game-service container not running — skipping match history suite"
 fi
 
-# ── 22. Frontend Unit Tests ───────────────────────────────────────────────────
+# ── 22. User Service Unit Tests ───────────────────────────────────────────────
+section "User Service Unit Tests"
+if container_running user-service; then
+    out=$(docker exec user-service sh -c "pip install -q --root-user-action=ignore pytest==8.3.5 httpx==0.28.1 pytest-asyncio==0.24.0 && cd /app && pytest service/tests/ -v" 2>&1) && rc=0 || rc=$?
+    
+    grep_out=$(printf "%s\n" "$out" | grep '::' | grep -E '(PASSED|FAILED)') || true
+    if [[ -z "$grep_out" ]]; then
+        fail "User Service unit tests failed (pytest crashed or no tests found)"
+        printf "%s\n" "$out"
+    else
+        while read -r line; do
+            test_name=$(echo "$line" | awk '{print $1}' | sed 's/.*:://')
+            if [[ "$line" == *"PASSED"* ]]; then
+                pass "$test_name"
+            elif [[ "$line" == *"FAILED"* ]]; then
+                fail "$test_name"
+            fi
+        done <<< "$grep_out"
+
+        pt_fail=$(printf "%s\n" "$out" | grep -oE '[0-9]+ failed' | awk '{print $1}' | tail -1) || true; pt_fail=${pt_fail:-0}
+        if [[ $rc -ne 0 || $pt_fail -gt 0 ]]; then
+            if [[ $rc -ne 0 && $pt_fail -eq 0 ]]; then
+                fail "User Service unit tests exited with error code $rc"
+            fi
+            printf "%s\n" "$out" | tail -15
+        fi
+    fi
+else
+    info "user-service container not running — skipping unit tests"
+fi
+
+# ── 23. Game Service Unit Tests ───────────────────────────────────────────────
+section "Game Service Unit Tests"
+if container_running game-service; then
+    out=$(docker exec game-service sh -c "pip install -q --root-user-action=ignore pytest==8.3.5 httpx==0.28.1 pytest-asyncio==0.24.0 && cd /app && pytest service/tests/ -v" 2>&1) && rc=0 || rc=$?
+    
+    grep_out=$(printf "%s\n" "$out" | grep '::' | grep -E '(PASSED|FAILED)') || true
+    if [[ -z "$grep_out" ]]; then
+        fail "Game Service unit tests failed (pytest crashed or no tests found)"
+        printf "%s\n" "$out"
+    else
+        while read -r line; do
+            test_name=$(echo "$line" | awk '{print $1}' | sed 's/.*:://')
+            if [[ "$line" == *"PASSED"* ]]; then
+                pass "$test_name"
+            elif [[ "$line" == *"FAILED"* ]]; then
+                fail "$test_name"
+            fi
+        done <<< "$grep_out"
+
+        pt_fail=$(printf "%s\n" "$out" | grep -oE '[0-9]+ failed' | awk '{print $1}' | tail -1) || true; pt_fail=${pt_fail:-0}
+        if [[ $rc -ne 0 || $pt_fail -gt 0 ]]; then
+            if [[ $rc -ne 0 && $pt_fail -eq 0 ]]; then
+                fail "Game Service unit tests exited with error code $rc"
+            fi
+            printf "%s\n" "$out" | tail -15
+        fi
+    fi
+else
+    info "game-service container not running — skipping unit tests"
+fi
+
+# ── 24. Chat Service Unit Tests ───────────────────────────────────────────────
+section "Chat Service Unit Tests"
+if container_running chat-service; then
+    out=$(docker exec chat-service sh -c "pip install -q --root-user-action=ignore pytest==8.3.5 httpx==0.28.1 pytest-asyncio==0.23.8 asyncpg==0.30.0 && cd /app && pytest service/tests/test_service.py -v" 2>&1) && rc=0 || rc=$?
+    
+    grep_out=$(printf "%s\n" "$out" | grep '::' | grep -E '(PASSED|FAILED)') || true
+    if [[ -z "$grep_out" ]]; then
+        fail "Chat Service unit tests failed (pytest crashed or no tests found)"
+        printf "%s\n" "$out"
+    else
+        while read -r line; do
+            test_name=$(echo "$line" | awk '{print $1}' | sed 's/.*:://')
+            if [[ "$line" == *"PASSED"* ]]; then
+                pass "$test_name"
+            elif [[ "$line" == *"FAILED"* ]]; then
+                fail "$test_name"
+            fi
+        done <<< "$grep_out"
+
+        pt_fail=$(printf "%s\n" "$out" | grep -oE '[0-9]+ failed' | awk '{print $1}' | tail -1) || true; pt_fail=${pt_fail:-0}
+        if [[ $rc -ne 0 || $pt_fail -gt 0 ]]; then
+            if [[ $rc -ne 0 && $pt_fail -eq 0 ]]; then
+                fail "Chat Service unit tests exited with error code $rc"
+            fi
+            printf "%s\n" "$out" | tail -15
+        fi
+    fi
+else
+    info "chat-service container not running — skipping unit tests"
+fi
+
+# ── 25. Frontend Unit Tests ───────────────────────────────────────────────────
 section "Frontend Unit Tests"
 if container_running frontend; then
     vitest_out=$(docker exec frontend npx vitest run --reporter=verbose 2>&1) && vitest_rc=0 || vitest_rc=$?
-    printf "%s\n" "$vitest_out" | tail -5
+    
+    # Strip ANSI colors/carriage returns and match standard tick/cross characters.
+    # We exclude file summary lines by matching out lines with .jsx/.js and test counts.
+    clean_out=$(printf "%s\n" "$vitest_out" | sed -e 's/\x1b\[[0-9;]*m//g' -e 's/\r//g')
+    grep_out=$(printf "%s\n" "$clean_out" | grep -E '^[[:space:]]*(✔|√|✓|✖|×|✗)' | grep -vE '\.(jsx?|tsx?)[[:space:]]*\([0-9]+') || true
 
-    files_line=$(printf "%s\n" "$vitest_out" | grep -E '^\s+Test Files\s+') || true
-    tests_line=$(printf "%s\n" "$vitest_out" | grep -E '^\s+Tests\s+') || true
+    if [[ -z "$grep_out" ]]; then
+        fail "Frontend unit tests failed (vitest crashed or no tests found)"
+        printf "%s\n" "$vitest_out"
+    else
+        while IFS= read -r line; do
+            test_name=$(echo "$line" | sed -E 's/^[[:space:]]*(✔|√|✓|✖|×|✗)[[:space:]]*//')
+            if echo "$line" | grep -qE '✔|√|✓'; then
+                pass "$test_name"
+            else
+                fail "$test_name"
+            fi
+        done <<< "$grep_out"
 
-    vf_pass=$(printf "%s\n" "$files_line" | grep -oP '\d+(?= passed)' | head -1) || true; vf_pass=${vf_pass:-0}
-    vf_fail=$(printf "%s\n" "$files_line" | grep -oP '\d+(?= failed)' | head -1) || true; vf_fail=${vf_fail:-0}
-    vt_pass=$(printf "%s\n" "$tests_line" | grep -oP '\d+(?= passed)' | head -1) || true; vt_pass=${vt_pass:-0}
-    vt_fail=$(printf "%s\n" "$tests_line" | grep -oP '\d+(?= failed)' | head -1) || true; vt_fail=${vt_fail:-0}
-
-    ((SUITE_PASS[$CURRENT_SUITE] += vf_pass + vt_pass)) || true
-    ((SUITE_FAIL[$CURRENT_SUITE] += vf_fail + vt_fail)) || true
-    if [[ $vitest_rc -ne 0 && $vt_fail -eq 0 ]]; then
-        fail "Frontend unit tests (vitest) failed — run 'docker exec frontend npx vitest run' for details"
+        tests_line=$(printf "%s\n" "$clean_out" | grep -E '^[[:space:]]*Tests[[:space:]]+') || true
+        vt_fail=$(printf "%s\n" "$tests_line" | grep -oE '[0-9]+ failed' | awk '{print $1}') || true; vt_fail=${vt_fail:-0}
+        
+        if [[ $vitest_rc -ne 0 || $vt_fail -gt 0 ]]; then
+            if [[ $vitest_rc -ne 0 && $vt_fail -eq 0 ]]; then
+                fail "Frontend unit tests exited with error code $vitest_rc"
+            fi
+            printf "%s\n" "$vitest_out" | tail -15
+        fi
     fi
-    ((PASS += vf_pass + vt_pass)) || true
-    ((FAIL += vf_fail + vt_fail)) || true
 else
     info "frontend container not running — skipping unit tests"
 fi

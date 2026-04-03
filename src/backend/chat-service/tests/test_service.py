@@ -6,7 +6,6 @@ from sqlalchemy.pool import NullPool
 from jose import jwt
 from unittest.mock import AsyncMock, MagicMock, patch
 from httpx import ASGITransport, AsyncClient
-from functools import wraps
 
 from shared.config.settings import settings
 from shared.database import get_db
@@ -155,20 +154,53 @@ async def test_get_or_create_dm_room_is_idempotent(db):
 def _make_session():
     """Create a mock AsyncSession that simulates database responses.
     
-    By default, returns None for all queries (simulating empty database).
-    Tests can override as needed.
+    Handles two critical queries for get_current_user():
+    1. SELECT id FROM users WHERE credential_id = ? → returns [credential_id] (user_id=credential_id for tests)
+    2. SELECT id, username, status, ... FROM users WHERE id = :uid → returns full profile row
     """
+    # Mapping of test credential_ids to human-readable usernames
+    _user_names = {1: "alice", 2: "bob", 3: "charlie", 4: "diana", 5: "eve", 7: "frank"}
+    
     session = AsyncMock()
     
     async def mock_execute(query, params=None):
-        # Create a result mock that handles .scalars() and .first()
-        scalars_mock = MagicMock()
-        scalars_mock.first.return_value = None  # Empty result by default
-        scalars_mock.all.return_value = []
-        
+        # Create a result mock for the response
         result_mock = MagicMock()
+        
+        # Convert query and params to strings for matching
+        query_str = str(query)
+        params_str = str(params) if params else ""
+        
+        # Query 1: Lookup user by credential_id (returns just user_id)
+        # For tests, we use credential_id as user_id for simplicity
+        if "credential_id" in params_str or "cid" in params_str:
+            # Extract credential_id from params dict
+            if params:
+                cred_id = params.get("cid", params.get("credential_id", 1))
+            else:
+                cred_id = 1
+            result_mock.first.return_value = [cred_id]  # user_id = credential_id
+        # Query 2: Get user profile by id (returns full row for CurrentUser)
+        elif "uid" in params_str or ":uid" in query_str:
+            # Extract user_id from params
+            if params:
+                uid = params.get("uid", 1)
+            else:
+                uid = 1
+            # Use sensible username from mapping, or fallback to user{id}
+            username = _user_names.get(uid, f"user{uid}")
+            # Return a row matching: SELECT id, username, status, display_name, bio
+            result_mock.first.return_value = (uid, username, "online", username.capitalize(), f"Bio for {username}")
+        else:
+            # For other queries (blocks, rooms, etc), return empty
+            result_mock.first.return_value = None
+        
+        # Support .scalars() chain for queries using .scalars().first()
+        scalars_mock = MagicMock()
+        scalars_mock.first.return_value = None
+        scalars_mock.all.return_value = []
         result_mock.scalars.return_value = scalars_mock
-        result_mock.first.return_value = None  # For single row queries
+        
         return result_mock
     
     session.execute = AsyncMock(side_effect=mock_execute)
@@ -181,62 +213,6 @@ def _valid_token(credential_id: int = 1) -> str:
     return jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm="HS256")
 
 
-def _mock_user_service_response(credential_id: int = 1):
-    """Mock httpx.AsyncClient's response from user-service GET /auth/me.
-    
-    Returns a mock response with status 200 and a valid MeResponse JSON.
-    """
-    mock_response = MagicMock()
-    mock_response.status_code = 200
-    mock_response.json.return_value = {
-        "id": credential_id,  # Simplified: use credential_id as user.id for tests
-        "username": f"user{credential_id}",
-        "credential_id": credential_id,
-        "display_name": f"User {credential_id}",
-        "status": "online",
-        "avatar_url": None,
-        "created_at": None,
-        "bio": None,
-        "dark_mode": False,
-    }
-    return mock_response
-
-
-def _mock_httpx_client(credential_id: int = 1):
-    """Create a properly mocked httpx.AsyncClient for testing.
-    
-    Returns an AsyncMock that can be used with: async with httpx.AsyncClient() as client:
-    """
-    mock_response = _mock_user_service_response(credential_id=credential_id)
-    mock_client = AsyncMock()
-    mock_client.get = AsyncMock(return_value=mock_response)
-    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-    mock_client.__aexit__ = AsyncMock(return_None=None)
-    return mock_client
-
-
-def _auth_mock_decorator(test_func):
-    """Decorator: automatically mock httpx.AsyncClient for endpoint tests.
-    
-    This allows domain tests with mocked get_db to avoid making real HTTP calls
-    to user-service when authenticating. The mock client returns a valid user
-    response that allows the endpoint to pass authentication.
-    """
-    @wraps(test_func)
-    async def wrapper(*args, **kwargs):
-        # Create a properly configured mock for httpx.AsyncClient
-        mock_response = _mock_user_service_response()
-        
-        mock_client = AsyncMock()
-        mock_client.get = AsyncMock(return_value=mock_response)
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=None)
-        
-        with patch("httpx.AsyncClient", return_value=mock_client):
-            return await test_func(*args, **kwargs)
-    return wrapper
-
-
 @pytest.mark.asyncio
 async def test_post_dm_returns_room_name():
     session = _make_session()
@@ -247,15 +223,11 @@ async def test_post_dm_returns_room_name():
     try:
         with patch("main.get_or_create_dm_room", new=AsyncMock(
             return_value=MagicMock(room_name="DM-1-2")
-        )), patch("httpx.AsyncClient") as mock_httpx:
-            # Mock the user-service HTTP call
-            mock_resp = _mock_user_service_response(credential_id=3)
-            mock_httpx.return_value.__aenter__.return_value.get = AsyncMock(return_value=mock_resp)
-            
+        )):
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 resp = await client.post(
                     "/dm/2",
-                    headers={"Authorization": f"Bearer {_valid_token(credential_id=3)}"},
+                    headers={"Authorization": f"Bearer {_valid_token(credential_id=1)}"},
                 )
         assert resp.status_code == 200
         assert resp.json()["room_name"] == "DM-1-2"
@@ -271,14 +243,11 @@ async def test_post_dm_self_returns_400():
 
     app.dependency_overrides[get_db] = fake_db
     try:
-        with patch("httpx.AsyncClient") as mock_httpx:
-            mock_resp = _mock_user_service_response(credential_id=1)
-            mock_httpx.return_value.__aenter__.return_value.get = AsyncMock(return_value=mock_resp)
-            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-                resp = await client.post(
-                    "/dm/1",
-                    headers={"Authorization": f"Bearer {_valid_token(credential_id=1)}"},
-                )
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post(
+                "/dm/1",
+                headers={"Authorization": f"Bearer {_valid_token(credential_id=1)}"},
+            )
         assert resp.status_code == 400
     finally:
         app.dependency_overrides.pop(get_db, None)
@@ -292,9 +261,7 @@ async def test_post_block_returns_204():
 
     app.dependency_overrides[get_db] = fake_db
     try:
-        with patch("main.block_user", new=AsyncMock()), patch("httpx.AsyncClient") as mock_httpx:
-            mock_resp = _mock_user_service_response(credential_id=1)
-            mock_httpx.return_value.__aenter__.return_value.get = AsyncMock(return_value=mock_resp)
+        with patch("main.block_user", new=AsyncMock()):
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 resp = await client.post(
                     "/block/2",
@@ -313,9 +280,7 @@ async def test_delete_block_returns_204():
 
     app.dependency_overrides[get_db] = fake_db
     try:
-        with patch("main.unblock_user", new=AsyncMock()), patch("httpx.AsyncClient") as mock_httpx:
-            mock_resp = _mock_user_service_response(credential_id=1)
-            mock_httpx.return_value.__aenter__.return_value.get = AsyncMock(return_value=mock_resp)
+        with patch("main.unblock_user", new=AsyncMock()):
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 resp = await client.delete(
                     "/block/2",
@@ -334,9 +299,7 @@ async def test_get_blocked_returns_list():
 
     app.dependency_overrides[get_db] = fake_db
     try:
-        with patch("main.get_blocked_ids", new=AsyncMock(return_value={3, 5})), patch("httpx.AsyncClient") as mock_httpx:
-            mock_resp = _mock_user_service_response(credential_id=1)
-            mock_httpx.return_value.__aenter__.return_value.get = AsyncMock(return_value=mock_resp)
+        with patch("main.get_blocked_ids", new=AsyncMock(return_value={3, 5})):
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 resp = await client.get(
                     "/blocked",
@@ -359,32 +322,42 @@ async def test_endpoints_require_auth():
 
 @pytest.mark.asyncio
 async def test_get_room_active_returns_count():
-    with patch("main.manager") as mock_manager, patch("httpx.AsyncClient") as mock_httpx:
-        mock_manager.active_connections.return_value = 1
-        mock_resp = _mock_user_service_response(credential_id=1)
-        mock_httpx.return_value.__aenter__.return_value.get = AsyncMock(return_value=mock_resp)
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            resp = await client.get(
-                "/room/DM-1-2/active",
-                headers={"Authorization": f"Bearer {_valid_token(credential_id=1)}"},
-            )
-    assert resp.status_code == 200
-    assert resp.json() == {"active_connections": 1}
+    session = _make_session()
+    async def fake_db():
+        yield session
+    app.dependency_overrides[get_db] = fake_db
+    try:
+        with patch("main.manager") as mock_manager:
+            mock_manager.active_connections.return_value = 1
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                resp = await client.get(
+                    "/room/DM-1-2/active",
+                    headers={"Authorization": f"Bearer {_valid_token(credential_id=1)}"},
+                )
+        assert resp.status_code == 200
+        assert resp.json() == {"active_connections": 1}
+    finally:
+        app.dependency_overrides.pop(get_db, None)
 
 
 @pytest.mark.asyncio
 async def test_get_room_active_zero_when_empty():
-    with patch("main.manager") as mock_manager, patch("httpx.AsyncClient") as mock_httpx:
-        mock_manager.active_connections.return_value = 0
-        mock_resp = _mock_user_service_response(credential_id=3)
-        mock_httpx.return_value.__aenter__.return_value.get = AsyncMock(return_value=mock_resp)
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            resp = await client.get(
-                "/room/DM-3-7/active",
-                headers={"Authorization": f"Bearer {_valid_token(credential_id=3)}"},
-            )
-    assert resp.status_code == 200
-    assert resp.json() == {"active_connections": 0}
+    session = _make_session()
+    async def fake_db():
+        yield session
+    app.dependency_overrides[get_db] = fake_db
+    try:
+        with patch("main.manager") as mock_manager:
+            mock_manager.active_connections.return_value = 0
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                resp = await client.get(
+                    "/room/DM-3-7/active",
+                    headers={"Authorization": f"Bearer {_valid_token(credential_id=3)}"},
+                )
+        assert resp.status_code == 200
+        assert resp.json() == {"active_connections": 0}
+    finally:
+        app.dependency_overrides.pop(get_db, None)
 
 
 @pytest.mark.asyncio
@@ -397,29 +370,37 @@ async def test_get_room_active_requires_auth():
 @pytest.mark.asyncio
 async def test_get_room_active_non_participant_gets_403():
     """A valid token whose uid is not in the DM slug must be rejected."""
-    with patch("httpx.AsyncClient") as mock_httpx:
-        mock_resp = _mock_user_service_response(credential_id=5)
-        mock_httpx.return_value.__aenter__.return_value.get = AsyncMock(return_value=mock_resp)
+    session = _make_session()
+    async def fake_db():
+        yield session
+    app.dependency_overrides[get_db] = fake_db
+    try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.get(
                 "/room/DM-1-2/active",
                 headers={"Authorization": f"Bearer {_valid_token(credential_id=5)}"},
             )
-    assert resp.status_code == 403
+        assert resp.status_code == 403
+    finally:
+        app.dependency_overrides.pop(get_db, None)
 
 
 @pytest.mark.asyncio
 async def test_get_room_active_non_dm_slug_gets_403():
     """Non-DM room slugs must be rejected even with a valid token."""
-    with patch("httpx.AsyncClient") as mock_httpx:
-        mock_resp = _mock_user_service_response(credential_id=1)
-        mock_httpx.return_value.__aenter__.return_value.get = AsyncMock(return_value=mock_resp)
+    session = _make_session()
+    async def fake_db():
+        yield session
+    app.dependency_overrides[get_db] = fake_db
+    try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.get(
                 "/room/general/active",
                 headers={"Authorization": f"Bearer {_valid_token(credential_id=1)}"},
             )
-    assert resp.status_code == 403
+        assert resp.status_code == 403
+    finally:
+        app.dependency_overrides.pop(get_db, None)
 
 
 # ---------------------------------------------------------------------------
@@ -497,9 +478,7 @@ async def test_post_rooms_returns_201():
     app.dependency_overrides[get_db] = fake_db
     try:
         mock_create = AsyncMock(return_value=MagicMock(room_name="coding"))
-        with patch("main.create_general_room", new=mock_create), patch("httpx.AsyncClient") as mock_httpx:
-            mock_resp = _mock_user_service_response(credential_id=1)
-            mock_httpx.return_value.__aenter__.return_value.get = AsyncMock(return_value=mock_resp)
+        with patch("main.create_general_room", new=mock_create):
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 resp = await client.post(
                     "/rooms",
@@ -527,9 +506,7 @@ async def test_post_rooms_returns_409_on_duplicate():
     try:
         with patch("main.create_general_room", new=AsyncMock(
             side_effect=FHTTPException(status_code=409, detail="Room name already exists")
-        )), patch("httpx.AsyncClient") as mock_httpx:
-            mock_resp = _mock_user_service_response(credential_id=1)
-            mock_httpx.return_value.__aenter__.return_value.get = AsyncMock(return_value=mock_resp)
+        )):
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 resp = await client.post(
                     "/rooms",
@@ -551,9 +528,7 @@ async def test_get_rooms_returns_list():
     try:
         with patch("main.list_live_rooms", new=AsyncMock(
             return_value=[{"room_name": "general", "active_connections": 3}]
-        )), patch("httpx.AsyncClient") as mock_httpx:
-            mock_resp = _mock_user_service_response(credential_id=1)
-            mock_httpx.return_value.__aenter__.return_value.get = AsyncMock(return_value=mock_resp)
+        )):
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 resp = await client.get(
                     "/rooms",
