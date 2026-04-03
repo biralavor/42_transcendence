@@ -42,6 +42,7 @@ async def authenticate(login: Login, session: AsyncSession) -> LoginResponse:
             detail="Invalid credentials"
         )
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    # Ensure User entry exists for this credential (chat-service needs uid=user.id in token)
     user_row = await session.execute(select(User).where(User.credential_id == credential.id))
     user = user_row.scalars().first()
     if user is None:
@@ -49,7 +50,7 @@ async def authenticate(login: Login, session: AsyncSession) -> LoginResponse:
         session.add(user)
         await session.flush()  # populate user.id; final commit happens below with the token row
     access_token = create_access_token(
-        data={"sub": credential.username, "credential_id": credential.id},
+        data={"sub": credential.username, "uid": user.id},
         expires_delta=access_token_expires,
     )
     raw_refresh_token = secrets.token_hex(32)
@@ -83,8 +84,15 @@ async def refresh_access_token(body: RefreshRequest, session: AsyncSession) -> L
     credential = result.scalars().first()
     if credential is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
+    # Lazy-ensure User exists (should already exist from login, but be defensive)
+    user_row = await session.execute(select(User).where(User.credential_id == credential.id))
+    user = user_row.scalars().first()
+    if user is None:
+        user = User(username=credential.username, credential_id=credential.id)
+        session.add(user)
+        await session.flush()
     access_token = create_access_token(
-        data={"sub": credential.username, "credential_id": credential.id},
+        data={"sub": credential.username, "uid": user.id},
         expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
     )
     raw_refresh_token = secrets.token_hex(32)

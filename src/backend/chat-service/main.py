@@ -1,7 +1,7 @@
 import re
+import httpx
 from fastapi import FastAPI, HTTPException, status, Depends, Response
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from jose import jwt, JWTError
 from typing import Annotated
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,44 +15,48 @@ from service.persistence import (
     create_general_room, list_live_rooms,
 )
 
-_ALGORITHM = "HS256"
 _DM_SLUG_RE = re.compile(r"^DM-(\d+)-(\d+)$")
 _bearer = HTTPBearer()
 
 SessionDep = Annotated[AsyncSession, Depends(get_db)]
 
 app = FastAPI(title="Chat Service")
-app.include_router(ws_router)
 
 
-def _decode_uid(credentials: HTTPAuthorizationCredentials = Depends(_bearer)) -> int:
-    """Decode the Bearer JWT and return the caller's user id (uid claim)."""
-    try:
-        payload = jwt.decode(credentials.credentials, settings.JWT_SECRET_KEY, algorithms=[_ALGORITHM])
-        uid = payload.get("uid")
-        if uid is None:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token missing uid")
-        return int(uid)
-    except JWTError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-    except (ValueError, TypeError):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token uid is not a valid integer")
+class CurrentUser(BaseModel):
+    """User model from GET /auth/me (user-service)."""
+    id: int
+    username: str
+    status: str
+    display_name: str | None = None
+    bio: str | None = None
 
 
-def _decode_username(credentials: HTTPAuthorizationCredentials = Depends(_bearer)) -> str:
-    """Decode the Bearer JWT and return the caller's username (sub claim)."""
-    try:
-        payload = jwt.decode(credentials.credentials, settings.JWT_SECRET_KEY, algorithms=[_ALGORITHM])
-        sub = payload.get("sub")
-        if not sub:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token missing sub")
-        return str(sub)
-    except JWTError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(_bearer),
+) -> CurrentUser:
+    """Call user-service GET /auth/me to authenticate and get user profile.
+    
+    This is the single source of truth for user identity across all services.
+    """
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(
+                f"{settings.USER_SERVICE_URL}/auth/me",
+                headers={"Authorization": f"Bearer {credentials.credentials}"},
+                timeout=10.0,
+            )
+            response.raise_for_status()
+            data = response.json()
+            return CurrentUser(**data)
+        except httpx.HTTPError as e:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Failed to authenticate user"
+            ) from e
 
 
-CallerUid = Annotated[int, Depends(_decode_uid)]
-CallerUsername = Annotated[str, Depends(_decode_username)]
+CallerUser = Annotated[CurrentUser, Depends(get_current_user)]
 
 
 @app.get("/health")
@@ -66,29 +70,29 @@ def root():
 
 
 @app.post("/dm/{friend_id}", status_code=200)
-async def create_dm_room(friend_id: int, session: SessionDep, caller_uid: CallerUid):
+async def create_dm_room(friend_id: int, session: SessionDep, caller: CallerUser):
     """Idempotently create or return the DM room between caller and friend_id."""
-    if friend_id == caller_uid:
+    if friend_id == caller.id:
         raise HTTPException(status_code=400, detail="Cannot DM yourself")
-    room = await get_or_create_dm_room(session, user_a_id=caller_uid, user_b_id=friend_id)
+    room = await get_or_create_dm_room(session, user_a_id=caller.id, user_b_id=friend_id)
     return {"room_name": room.room_name}
 
 
 @app.post("/block/{user_id}", status_code=204)
-async def block(user_id: int, session: SessionDep, caller_uid: CallerUid):
-    await block_user(session, blocker_id=caller_uid, blocked_id=user_id)
+async def block(user_id: int, session: SessionDep, caller: CallerUser):
+    await block_user(session, blocker_id=caller.id, blocked_id=user_id)
     return Response(status_code=204)
 
 
 @app.delete("/block/{user_id}", status_code=204)
-async def unblock(user_id: int, session: SessionDep, caller_uid: CallerUid):
-    await unblock_user(session, blocker_id=caller_uid, blocked_id=user_id)
+async def unblock(user_id: int, session: SessionDep, caller: CallerUser):
+    await unblock_user(session, blocker_id=caller.id, blocked_id=user_id)
     return Response(status_code=204)
 
 
 @app.get("/blocked", status_code=200)
-async def list_blocked(session: SessionDep, caller_uid: CallerUid):
-    ids = await get_blocked_ids(session, user_id=caller_uid)
+async def list_blocked(session: SessionDep, caller: CallerUser):
+    ids = await get_blocked_ids(session, user_id=caller.id)
     return sorted(ids)
 
 
@@ -97,22 +101,22 @@ class RoomCreate(BaseModel):
 
 
 @app.post("/rooms", status_code=201)
-async def create_room(body: RoomCreate, session: SessionDep, caller_uid: CallerUid, caller_username: CallerUsername):
+async def create_room(body: RoomCreate, session: SessionDep, caller: CallerUser):
     """Create a new general public room. Returns 400 for invalid name, 409 for duplicate."""
     room = await create_general_room(
-        session, room_name=body.room_name, creator_name=caller_username
+        session, room_name=body.room_name, creator_name=caller.username
     )
     return {"room_name": room.room_name}
 
 
 @app.get("/rooms", status_code=200)
-async def get_live_rooms(session: SessionDep, caller_uid: CallerUid):
+async def get_live_rooms(session: SessionDep, caller: CallerUser):
     """List all general rooms with at least one active WebSocket connection."""
     return await list_live_rooms(session, manager)
 
 
 @app.get("/room/{room_slug}/active")
-async def room_active_connections(room_slug: str, caller_uid: CallerUid):
+async def room_active_connections(room_slug: str, caller: CallerUser):
     """Return active WebSocket connections in a DM room.
 
     Restricted to DM slugs (DM-{lo}-{hi}) where the caller is one of the two
@@ -122,6 +126,9 @@ async def room_active_connections(room_slug: str, caller_uid: CallerUid):
     if match is None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not a DM room")
     lo, hi = int(match.group(1)), int(match.group(2))
-    if caller_uid not in (lo, hi):
+    if caller.id not in (lo, hi):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not a participant")
     return {"active_connections": manager.active_connections(room_slug)}
+
+
+app.include_router(ws_router)

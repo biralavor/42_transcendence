@@ -1,3 +1,4 @@
+import os
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -9,6 +10,7 @@ class Settings(BaseSettings):
     DB_NAME: str = "transcendence_db"
     DB_ECHO: bool = False
     JWT_SECRET_KEY: str = "changeme"
+    USER_SERVICE_URL: str = os.getenv("USER_SERVICE_URL", "http://user-service:8000")
 
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> str:
