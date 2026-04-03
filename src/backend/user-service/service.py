@@ -50,7 +50,7 @@ async def authenticate(login: Login, session: AsyncSession) -> LoginResponse:
         session.add(user)
         await session.flush()  # populate user.id; final commit happens below with the token row
     access_token = create_access_token(
-        data={"sub": credential.username, "uid": user.id},
+        data={"sub": credential.username, "credential_id": credential.id},
         expires_delta=access_token_expires,
     )
     raw_refresh_token = secrets.token_hex(32)
@@ -92,7 +92,7 @@ async def refresh_access_token(body: RefreshRequest, session: AsyncSession) -> L
         session.add(user)
         await session.flush()
     access_token = create_access_token(
-        data={"sub": credential.username, "uid": user.id},
+        data={"sub": credential.username, "credential_id": credential.id},
         expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
     )
     raw_refresh_token = secrets.token_hex(32)

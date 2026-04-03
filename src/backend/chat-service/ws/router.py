@@ -2,6 +2,7 @@
 import re
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from jose import jwt
+from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from shared.ws.manager import ConnectionManager
@@ -20,11 +21,11 @@ _DM_RE = re.compile(r"^DM-(\d+)-(\d+)$")
 
 
 def _uid_from_token(token: str) -> int | None:
-    """Decode JWT and return the uid claim, or None if invalid/missing."""
+    """Decode JWT and return the credential_id claim, or None if invalid/missing."""
     try:
         payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[_ALGORITHM])
-        uid = payload.get("uid")
-        return int(uid) if uid is not None else None
+        credential_id = payload.get("credential_id")
+        return int(credential_id) if credential_id is not None else None
     except Exception:
         return None
 
@@ -77,7 +78,20 @@ async def chat_websocket(websocket: WebSocket, room_slug: str, token: str = "") 
     # DM rooms require a verified identity — decode once at connect, bind for the session
     sender_uid: int | None = None
     if dm_participants is not None:
-        sender_uid = _uid_from_token(token)
+        credential_id = _uid_from_token(token)
+        if credential_id is None:
+            await websocket.close(code=4001)
+            return
+        
+        # Look up the actual user.id from credential_id
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                text("SELECT id FROM users WHERE credential_id = :cid"),
+                {"cid": credential_id},
+            )
+            row = result.first()
+            sender_uid = row[0] if row else None
+        
         if sender_uid is None:
             await websocket.close(code=4001)
             return
@@ -141,7 +155,21 @@ async def chat_websocket(websocket: WebSocket, room_slug: str, token: str = "") 
 
 @router.websocket("/ws/notifications")
 async def notifications_websocket(websocket: WebSocket, token: str = "") -> None:
-    uid = _uid_from_token(token)
+    credential_id = _uid_from_token(token)
+    if credential_id is None:
+        await websocket.accept()
+        await websocket.close(code=4001)
+        return
+
+    # Look up the actual user.id from credential_id
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            text("SELECT id FROM users WHERE credential_id = :cid"),
+            {"cid": credential_id},
+        )
+        row = result.first()
+        uid = row[0] if row else None
+    
     if uid is None:
         await websocket.accept()
         await websocket.close(code=4001)

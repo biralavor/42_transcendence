@@ -1,10 +1,13 @@
 import re
+import os
 import httpx
 from fastapi import FastAPI, HTTPException, status, Depends, Response
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import Annotated
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
+from jose import jwt, JWTError, ExpiredSignatureError
+from sqlalchemy import text
 
 from shared.config.settings import settings
 from shared.database import get_db
@@ -15,16 +18,20 @@ from service.persistence import (
     create_general_room, list_live_rooms,
 )
 
+_ALGORITHM = "HS256"
 _DM_SLUG_RE = re.compile(r"^DM-(\d+)-(\d+)$")
 _bearer = HTTPBearer()
+_USER_SERVICE_PORT = os.getenv("USER_SERVICE_PORT", "8001")
+_USER_SERVICE_URL = f"http://user-service:{_USER_SERVICE_PORT}"
 
 SessionDep = Annotated[AsyncSession, Depends(get_db)]
 
 app = FastAPI(title="Chat Service")
 
 
+
 class CurrentUser(BaseModel):
-    """User model from GET /auth/me (user-service)."""
+    """User model returned from get_current_user()."""
     id: int
     username: str
     status: str
@@ -32,28 +39,103 @@ class CurrentUser(BaseModel):
     bio: str | None = None
 
 
+async def _get_user_profile(db: AsyncSession, user_id: int) -> CurrentUser | None:
+    """Query users table by id. Returns full CurrentUser or None."""
+    result = await db.execute(
+        text(
+            "SELECT id, username, status, display_name, bio "
+            "FROM users WHERE id = :uid"
+        ),
+        {"uid": user_id},
+    )
+    row = result.first()
+    if not row:
+        return None
+    return CurrentUser(
+        id=row[0],
+        username=row[1],
+        status=row[2],
+        display_name=row[3],
+        bio=row[4],
+    )
+
+
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(_bearer),
+    db: AsyncSession = Depends(get_db),
 ) -> CurrentUser:
-    """Call user-service GET /auth/me to authenticate and get user profile.
+    """Authenticate user via JWT and return profile.
     
-    This is the single source of truth for user identity across all services.
+    Pattern from game-service (updated to use uid from JWT):
+    1. Decode JWT locally (validate signature)
+    2. Extract uid (user.id directly)
+    3. Query users table (fast path for repeat logins)
+    4. If not found: call user-service GET /auth/me to create user row
+    5. Return full CurrentUser object
     """
-    async with httpx.AsyncClient() as client:
-        try:
-            response = await client.get(
-                f"{settings.USER_SERVICE_URL}/auth/me",
-                headers={"Authorization": f"Bearer {credentials.credentials}"},
-                timeout=10.0,
-            )
-            response.raise_for_status()
-            data = response.json()
-            return CurrentUser(**data)
-        except httpx.HTTPError as e:
+    try:
+        payload = jwt.decode(
+            credentials.credentials, settings.JWT_SECRET_KEY, algorithms=[_ALGORITHM]
+        )
+        credential_id: int | None = payload.get("credential_id")
+        if credential_id is None:
             raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Failed to authenticate user"
-            ) from e
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
+            )
+    except ExpiredSignatureError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired"
+        ) from exc
+    except JWTError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
+        ) from exc
+
+    # Fast path: lookup user by credential_id
+    result = await db.execute(
+        text("SELECT id FROM users WHERE credential_id = :cid"),
+        {"cid": credential_id},
+    )
+    row = result.first()
+    if row is not None:
+        user_id = row[0]
+        user = await _get_user_profile(db, user_id)
+        if user is not None:
+            return user
+
+    # Fallback: call user-service /auth/me to auto-create the user row
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(
+            f"{_USER_SERVICE_URL}/auth/me",
+            headers={"Authorization": f"Bearer {credentials.credentials}"},
+        )
+    if resp.status_code == 401:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail=resp.json().get("detail", "Invalid token")
+        )
+    if resp.status_code != 200:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail="User service unavailable"
+        )
+
+    # Re-query after user-service created the row
+    result = await db.execute(
+        text("SELECT id FROM users WHERE credential_id = :cid"),
+        {"cid": credential_id},
+    )
+    row = result.first()
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+        )
+
+    user_id = row[0]
+    user = await _get_user_profile(db, user_id)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+        )
+    return user
 
 
 CallerUser = Annotated[CurrentUser, Depends(get_current_user)]
