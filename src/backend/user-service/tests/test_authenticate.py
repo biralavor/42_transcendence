@@ -74,11 +74,13 @@ async def test_login_returns_tokens_without_user_id():
 async def test_subsequent_login_updates_token_not_duplicates():
     """Second login: existing Tokens row is updated in-place, no new row added."""
     cred = _make_credential()
-    existing_token = _make_token_row(credential_id=cred.id)
-    user = MagicMock()
-    user.id = 1
-    # execute calls: 1=credentials, 2=user (for uid), 3=tokens (found)
-    session = _session_returning(cred, user, existing_token)
+    existing_token = MagicMock()
+    existing_token.credential_id = cred.id
+    existing_token.refresh_token_hash = "oldhash"
+    existing_token.expires_at = None
+    
+    # execute calls: 1=credentials, 2=tokens (found)
+    session = _session_returning(cred, existing_token)
 
     added_objects = []
     session.add = MagicMock(side_effect=added_objects.append)
@@ -110,14 +112,18 @@ async def test_subsequent_login_updates_token_not_duplicates():
 
 
 @pytest.mark.asyncio
-async def test_login_creates_user_row_when_missing():
-    """If no User row exists at login time, one is created and a token is still issued."""
+async def test_login_does_not_create_user_row():
+    """After (April 3, 2026) centralization: authenticate() does NOT create users.
+    
+    User creation is delegated to get_me() which is called by other services'
+    fallback pattern when the user is not found locally.
+    """
     from service.models.user import User
 
     cred = _make_credential()
     token_row = _make_token_row(credential_id=cred.id)
-    # user lookup returns None — triggers create-if-missing path
-    session = _session_returning(cred, None, token_row)
+    # user lookup returns None — but we DON'T create a user in authenticate()
+    session = _session_returning(cred, token_row)
     added_objects = []
     session.add = MagicMock(side_effect=added_objects.append)
 
@@ -134,11 +140,11 @@ async def test_login_creates_user_row_when_missing():
         app.dependency_overrides.pop(get_db, None)
 
     assert resp.status_code == 200, resp.text
-    session.flush.assert_called_once()
+    
+    # Verify NO user was created by authenticate()
+    # (user creation happens only in get_me() via fallback pattern)
     added_users = [o for o in added_objects if isinstance(o, User)]
-    assert len(added_users) == 1
-    assert added_users[0].username == "alice"
-    assert added_users[0].credential_id == cred.id
+    assert len(added_users) == 0, "authenticate() must NOT create users; that's get_me()'s job"
 
 
 @pytest.mark.asyncio
