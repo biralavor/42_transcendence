@@ -2,6 +2,8 @@ import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import { getStoredAuth, saveAuth, clearAuth } from './authStorage'
 import { getTimeUntilExpiry } from '../utils/jwtUtils'
 import { manualRefreshToken } from '../utils/apiClient'
+import { startInactivityTracker, stopInactivityTracker, resetInactivityTimer } from '../utils/inactivityTracker'
+import InactivityWarning from '../Components/InactivityWarning'
 
 export const AuthContext = createContext(null)
 
@@ -12,6 +14,7 @@ export function AuthProvider({ children }) {
     token_type: null,
   })
   const [isAuthReady, setIsAuthReady] = useState(false)
+  const [showInactivityWarning, setShowInactivityWarning] = useState(false)
 
   useEffect(() => {
     const storedAuth = getStoredAuth()
@@ -96,6 +99,30 @@ export function AuthProvider({ children }) {
     }
   }, [auth.access_token]) // Re-run only when access_token changes
 
+  const handleInactivityLogout = () => {
+    logout()
+    window.location.href = '/login?reason=inactivity_logout'
+  }
+
+  const handleStayLoggedIn = () => {
+    setShowInactivityWarning(false)
+    resetInactivityTimer(true)
+  }
+
+  useEffect(() => {
+    if (!isAuthenticated) return
+
+    startInactivityTracker({
+      onWarning: () => setShowInactivityWarning(true),
+      onLogout: handleInactivityLogout
+    })
+
+    return () => {
+      stopInactivityTracker()
+      setShowInactivityWarning(false)
+    }
+  }, [isAuthenticated])
+
   const isAuthenticated = Boolean(
     auth.access_token && auth.refresh_token && auth.token_type
   )
@@ -114,6 +141,12 @@ export function AuthProvider({ children }) {
   return (
     <AuthContext.Provider value={value}>
       {children}
+      {showInactivityWarning && (
+        <InactivityWarning
+          onStayLoggedIn={handleStayLoggedIn}
+          onLogoutNow={handleInactivityLogout}
+        />
+      )}
     </AuthContext.Provider>
   )
 }

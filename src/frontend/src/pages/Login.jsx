@@ -1,4 +1,4 @@
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
 import './Login.css'
 import NavbarComponent from '../Components/Navbar'
 import { useState } from 'react'
@@ -6,8 +6,16 @@ import { useAuth } from '../context/authContext'
 import { apiJson } from '../utils/apiClient'
 
 export default function Login() {
+  const location = useLocation()
+  const queryParams = new URLSearchParams(location.search)
+  const reason = queryParams.get('reason')
+
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const [info, setInfo] = useState(() => {
+    if (reason === 'inactivity_logout') return 'Your session expired due to inactivity. Please sign in again.'
+    return ''
+  })
   const [isSubmitting, setIsSubmitting] = useState(false)
   const { login } = useAuth()
   const navigate = useNavigate()
@@ -27,6 +35,7 @@ export default function Login() {
 
     setError('')
     setSuccess('')
+    setInfo('')
     setFormData((prev) => ({
       ...prev,
       [name]: newValue,
@@ -154,6 +163,12 @@ export default function Login() {
                   </label>
                 </div>
               </div>
+
+              {info && (
+                <div className="alert alert-info text-center mb-2" role="alert">
+                  {info}
+                </div>
+              )}
 
               {error && (
                 <div className="alert alert-danger text-center mb-2" role="alert">
