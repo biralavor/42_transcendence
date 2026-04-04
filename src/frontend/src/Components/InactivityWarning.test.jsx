@@ -14,6 +14,7 @@ describe('InactivityWarning', () => {
     });
 
     afterEach(() => {
+    vi.useRealTimers();
         vi.restoreAllMocks();
     });
 

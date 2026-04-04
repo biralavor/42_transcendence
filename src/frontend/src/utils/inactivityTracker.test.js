@@ -14,6 +14,7 @@ describe('inactivityTracker', () => {
 
   afterEach(() => {
     stopInactivityTracker();
+    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
