@@ -3,9 +3,9 @@ let lastActivityTime = Date.now();
 let isWarning = false;
 let config = null;
 
-export const DEFAULT_WARNING_THRESHOLD_MS = 15 * 60 * 1000;    // 15 minutes
-export const DEFAULT_LOGOUT_THRESHOLD_MS = 20 * 60 * 1000;     // 20 minutes
-export const ACTIVITY_DEBOUNCE_MS = 10 * 1000;                 // 10 seconds
+export const DEFAULT_WARNING_THRESHOLD_MINUTES = 15;
+export const DEFAULT_LOGOUT_THRESHOLD_MINUTES = 20;
+export const ACTIVITY_DEBOUNCE_SECONDS = 10;
 
 export const ACTIVITY_EVENTS = [
   'mousemove',
@@ -18,8 +18,8 @@ export const ACTIVITY_EVENTS = [
 
 export function startInactivityTracker(options = {}) {
   config = {
-    warningThresholdMs: DEFAULT_WARNING_THRESHOLD_MS,
-    logoutThresholdMs: DEFAULT_LOGOUT_THRESHOLD_MS,
+    warningThresholdMs: DEFAULT_WARNING_THRESHOLD_MINUTES * 60 * 1000,
+    logoutThresholdMs: DEFAULT_LOGOUT_THRESHOLD_MINUTES * 60 * 1000,
     checkIntervalMs: 1000,
     onWarning: () => {},
     onLogout: () => {},

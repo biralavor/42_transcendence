@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { useEffect } from 'react'
-import { resetInactivityTimer, ACTIVITY_EVENTS, ACTIVITY_DEBOUNCE_MS } from './utils/inactivityTracker'
+import { resetInactivityTimer, ACTIVITY_EVENTS, ACTIVITY_DEBOUNCE_SECONDS } from './utils/inactivityTracker'
 import Home from './pages/Home'
 import Login from './pages/Login'
 import About from './pages/About'
@@ -20,7 +20,7 @@ export default function App() {
 
     const handleActivity = () => {
       const now = Date.now()
-      if (now - lastResetTime >= ACTIVITY_DEBOUNCE_MS) {
+      if (now - lastResetTime >= ACTIVITY_DEBOUNCE_SECONDS * 1000) {
         resetInactivityTimer(false)
         lastResetTime = now
       }
