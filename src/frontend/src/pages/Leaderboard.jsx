@@ -38,49 +38,32 @@ export default function Leaderboard() {
         const userIds = leaderboardData.map((row) => row.user_id)
         const uniqueUserIds = [...new Set(userIds)]
 
-        // Fetch all required user profiles in a single batch request to avoid
-        // issuing one HTTP request per user (N+1 pattern).
         let usernamesByIdResult = {}
         if (uniqueUserIds.length > 0) {
-          try {
-            const batchResp = await fetch('/api/users/profiles/batch', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({ user_ids: uniqueUserIds }),
-              signal: controller.signal,
-            })
+          // Start with sensible defaults for all users in case individual fetches fail.
+          usernamesByIdResult = uniqueUserIds.reduce((acc, userId) => {
+            acc[userId] = `Player ${userId}`
+            return acc
+          }, {})
 
-            // Start with sensible defaults for all users in case the batch
-            // response is partial or missing entries.
-            usernamesByIdResult = uniqueUserIds.reduce((acc, userId) => {
-              acc[userId] = `Player ${userId}`
-              return acc
-            }, {})
-
-            if (batchResp.ok) {
-              const profiles = await batchResp.json()
-              // Support either { user_id, username } or { id, username } shapes.
-              for (const profile of profiles || []) {
-                const id = profile.user_id ?? profile.id
-                if (id != null && Object.prototype.hasOwnProperty.call(usernamesByIdResult, id)) {
-                  if (profile.username) {
-                    usernamesByIdResult[id] = profile.username
-                  }
+          // Fetch profiles concurrently using the individual profile endpoint
+          // because the /profiles/batch endpoint is not implemented on the backend.
+          const profilePromises = uniqueUserIds.map(async (userId) => {
+            try {
+              const resp = await fetch(`/api/users/profile/${userId}`, {
+                signal: controller.signal,
+              })
+              if (resp.ok) {
+                const profile = await resp.json()
+                if (profile.username) {
+                  usernamesByIdResult[userId] = profile.username
                 }
               }
+            } catch (e) {
+              // Ignore individual network errors; fallback remains "Player {id}"
             }
-          } catch {
-            // On any error, fall back to the default "Player {id}" labels
-            // already populated in usernamesByIdResult.
-            if (Object.keys(usernamesByIdResult).length === 0) {
-              usernamesByIdResult = uniqueUserIds.reduce((acc, userId) => {
-                acc[userId] = `Player ${userId}`
-                return acc
-              }, {})
-            }
-          }
+          })
+          await Promise.all(profilePromises)
         }
 
         if (controller.signal.aborted || cancelled) return
