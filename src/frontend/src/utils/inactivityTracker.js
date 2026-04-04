@@ -34,8 +34,9 @@ export function startInactivityTracker(options = {}) {
     const idleTime = Date.now() - lastActivityTime;
 
     if (idleTime >= config.logoutThresholdMs) {
+      const onLogout = config.onLogout;
       stopInactivityTracker();
-      if (config.onLogout) config.onLogout();
+      if (onLogout) onLogout();
     } else if (idleTime >= config.warningThresholdMs && !isWarning) {
       isWarning = true;
       if (config.onWarning) config.onWarning();
