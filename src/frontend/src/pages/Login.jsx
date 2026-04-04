@@ -3,6 +3,7 @@ import './Login.css'
 import NavbarComponent from '../Components/Navbar'
 import { useState } from 'react'
 import { useAuth } from '../context/authContext'
+import { apiJson } from '../utils/apiClient'
 
 export default function Login() {
   const [error, setError] = useState('')
@@ -39,35 +40,13 @@ export default function Login() {
     setIsSubmitting(true)
 
     try {
-      const response = await fetch('/api/users/auth/login', {
+      const data = await apiJson('/api/users/auth/login', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({
           username: formData.username,
           password: formData.password,
         }),
       })
-
-      let data = null
-
-      try {
-        data = await response.json()
-      } catch {
-        // resposta vazia ou não-JSON (ex: HTML de erro do nginx)
-      }
-
-      if (!response.ok) {
-        const message =
-          (data && data.detail) ||
-          (response.status
-            ? `Login failed. (HTTP ${response.status})`
-            : 'Login failed.')
-
-        setError(message)
-        return
-      }
 
       if (!data) {
         setError('Login failed: invalid server response.')
@@ -77,8 +56,8 @@ export default function Login() {
       login(data, formData.rememberMe)
       navigate('/profile')
     } catch (err) {
-      console.error(err)
-      setError('Unable to connect to the server.')
+      console.error('[Login] Error:', err.message)
+      setError(err.message || 'Unable to connect to the server.')
     } finally {
       setIsSubmitting(false)
     }

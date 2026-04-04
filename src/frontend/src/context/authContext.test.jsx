@@ -1,6 +1,15 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { AuthProvider, useAuth } from './authContext'
+
+// Mock the dependencies
+vi.mock('../utils/jwtUtils', () => ({
+  getTimeUntilExpiry: vi.fn(() => 900000), // Default: 15 min (safe for most tests)
+}))
+
+vi.mock('../utils/apiClient', () => ({
+  manualRefreshToken: vi.fn(),
+}))
 
 const MOCK_AUTH = {
   access_token: 'acc',
@@ -20,13 +29,13 @@ beforeEach(() => {
 describe('AuthProvider — hydration', () => {
   it('isAuthReady becomes true after mount', async () => {
     const { result } = renderHook(() => useAuth(), { wrapper })
-    await act(async () => {})
+    await act(async () => { })
     expect(result.current.isAuthReady).toBe(true)
   })
 
   it('isAuthenticated is false when storage is empty on mount', async () => {
     const { result } = renderHook(() => useAuth(), { wrapper })
-    await act(async () => {})
+    await act(async () => { })
     expect(result.current.isAuthenticated).toBe(false)
   })
 
@@ -35,7 +44,7 @@ describe('AuthProvider — hydration', () => {
     sessionStorage.setItem('refresh_token', 'ref')
     sessionStorage.setItem('token_type', 'bearer')
     const { result } = renderHook(() => useAuth(), { wrapper })
-    await act(async () => {})
+    await act(async () => { })
     expect(result.current.isAuthenticated).toBe(true)
   })
 
@@ -44,7 +53,7 @@ describe('AuthProvider — hydration', () => {
     localStorage.setItem('refresh_token', 'ref')
     localStorage.setItem('token_type', 'bearer')
     const { result } = renderHook(() => useAuth(), { wrapper })
-    await act(async () => {})
+    await act(async () => { })
     expect(result.current.isAuthenticated).toBe(true)
   })
 })
@@ -73,7 +82,7 @@ describe('AuthProvider — logout', () => {
     sessionStorage.setItem('refresh_token', 'ref')
     sessionStorage.setItem('token_type', 'bearer')
     const { result } = renderHook(() => useAuth(), { wrapper })
-    await act(async () => {})
+    await act(async () => { })
     expect(result.current.isAuthenticated).toBe(true)
     await act(async () => { result.current.logout() })
     expect(result.current.isAuthenticated).toBe(false)
@@ -84,8 +93,158 @@ describe('AuthProvider — logout', () => {
 
 describe('useAuth', () => {
   it('throws when used outside AuthProvider', () => {
-    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => { })
     expect(() => renderHook(() => useAuth())).toThrow('useAuth must be used within an AuthProvider')
     spy.mockRestore()
+  })
+})
+
+describe('AuthProvider — Expiry Timer', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.useFakeTimers()
+    localStorage.clear()
+    sessionStorage.clear()
+  })
+
+  afterEach(() => {
+    vi.runOnlyPendingTimers()
+    vi.useRealTimers()
+  })
+
+  it('should set up expiry timer when token is logged in', async () => {
+    const { getTimeUntilExpiry } = await import('../utils/jwtUtils')
+    getTimeUntilExpiry.mockReturnValue(900000) // 15 min from now
+
+    const { result } = renderHook(() => useAuth(), { wrapper })
+
+    await act(async () => {
+      result.current.login({
+        access_token: 'test_token',
+        refresh_token: 'test_refresh',
+        token_type: 'bearer',
+      })
+    })
+
+    // Timer should have been set up
+    expect(getTimeUntilExpiry).toHaveBeenCalled()
+  })
+
+  it('should attempt refresh when timer fires', async () => {
+    const { getTimeUntilExpiry } = await import('../utils/jwtUtils')
+    const { manualRefreshToken } = await import('../utils/apiClient')
+
+    getTimeUntilExpiry.mockReturnValue(60000) // 1 min from now
+    manualRefreshToken.mockResolvedValue({
+      access_token: 'new_token',
+      refresh_token: 'new_refresh',
+      token_type: 'bearer',
+    })
+
+    const { result } = renderHook(() => useAuth(), { wrapper })
+
+    await act(async () => {
+      result.current.login({
+        access_token: 'test_token',
+        refresh_token: 'test_refresh',
+        token_type: 'bearer',
+      })
+    })
+
+    // Advance time to when refresh timer should fire
+    // Timer fires at: 60000 - 30000 = 30000ms
+    await act(async () => {
+      vi.advanceTimersByTime(31000)
+    })
+
+    expect(manualRefreshToken).toHaveBeenCalled()
+  })
+
+  it('should logout if token is already expired', async () => {
+    const { getTimeUntilExpiry } = await import('../utils/jwtUtils')
+    const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => { })
+
+    getTimeUntilExpiry.mockReturnValue(-1000) // Already expired
+
+    const { result } = renderHook(() => useAuth(), { wrapper })
+
+    await act(async () => {
+      result.current.login({
+        access_token: 'expired_token',
+        refresh_token: 'test_refresh',
+        token_type: 'bearer',
+      })
+    })
+
+    // Should have logged out due to expiry
+    expect(result.current.isAuthenticated).toBe(false)
+    consoleWarnSpy.mockRestore()
+  })
+
+  it('should logout if refresh fails', async () => {
+    const { getTimeUntilExpiry } = await import('../utils/jwtUtils')
+    const { manualRefreshToken } = await import('../utils/apiClient')
+    const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => { })
+
+    getTimeUntilExpiry.mockReturnValue(60000) // 1 min from now
+    manualRefreshToken.mockResolvedValue(null) // Refresh failed
+
+    const { result } = renderHook(() => useAuth(), { wrapper })
+
+    await act(async () => {
+      result.current.login({
+        access_token: 'test_token',
+        refresh_token: 'test_refresh',
+        token_type: 'bearer',
+      })
+    })
+
+    expect(result.current.isAuthenticated).toBe(true)
+
+    // Advance time to timer fire
+    await act(async () => {
+      vi.advanceTimersByTime(31000)
+    })
+
+    // Should have logged out after failed refresh
+    expect(result.current.isAuthenticated).toBe(false)
+    consoleWarnSpy.mockRestore()
+  })
+
+  it('should clear timer when token is cleared (logout)', async () => {
+    const { getTimeUntilExpiry } = await import('../utils/jwtUtils')
+    const clearTimeoutSpy = vi.spyOn(global, 'clearTimeout')
+
+    getTimeUntilExpiry.mockReturnValue(900000)
+
+    const { result } = renderHook(() => useAuth(), { wrapper })
+
+    await act(async () => {
+      result.current.login({
+        access_token: 'test_token',
+        refresh_token: 'test_refresh',
+        token_type: 'bearer',
+      })
+    })
+
+    // Now logout
+    await act(async () => {
+      result.current.logout()
+    })
+
+    // clearTimeout should have been called
+    expect(clearTimeoutSpy).toHaveBeenCalled()
+    clearTimeoutSpy.mockRestore()
+  })
+
+  it('should not throw if no token on initial mount', async () => {
+    const { result } = renderHook(() => useAuth(), { wrapper })
+    await act(async () => { })
+
+    expect(result.current.isAuthenticated).toBe(false)
+    expect(() => {
+      // Accessing result should not throw
+      result.current.auth
+    }).not.toThrow()
   })
 })

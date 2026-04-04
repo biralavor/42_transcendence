@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useLocation, useNavigate, Link } from 'react-router-dom'
 import { createWsClient } from '../utils/wsClient'
+import { apiCall } from '../utils/apiClient'
 import NavbarComponent from '../Components/Navbar'
 import FriendsSidebar from '../Components/FriendsSidebar'
 import LobbyPanel from '../Components/LobbyPanel'
@@ -41,8 +42,7 @@ export default function Chat() {
   useEffect(() => {
     if (userId || !auth.access_token) return
     const controller = new AbortController()
-    fetch('/api/users/auth/me', {
-      headers: { Authorization: `Bearer ${auth.access_token}` },
+    apiCall('/api/users/auth/me', {
       signal: controller.signal,
     })
       .then(r => (r.ok ? r.json() : null))

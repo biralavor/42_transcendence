@@ -1,27 +1,13 @@
 import { useAuth } from '../context/authContext'
-import AuthRequired from './AuthRequired'
-import NavbarComponent from './Navbar'
-import './AuthRequired.css'
+import { Navigate } from 'react-router-dom'
+import AuthLoading from './AuthLoading'
 
-function AuthLoading() {
-  return (
-    <>
-      <NavbarComponent />
-
-      <main className="auth-required-page">
-        <section
-          className="auth-required-card"
-          aria-busy="true"
-          aria-live="polite"
-        >
-          <h1>Loading</h1>
-          <p>Checking authentication status...</p>
-        </section>
-      </main>
-    </>
-  )
-}
-
+/**
+ * PrivateRoute: Protects routes that require authentication
+ * - Loading state: shows loading message
+ * - Not authenticated: redirects to /login
+ * - Authenticated: renders children
+ */
 export default function PrivateRoute({ children }) {
   const { isAuthenticated, isAuthReady } = useAuth()
 
@@ -29,7 +15,7 @@ export default function PrivateRoute({ children }) {
     return <AuthLoading />
 
   if (!isAuthenticated)
-    return <AuthRequired />
+    return <Navigate to="/login" replace />
 
   return children
 }
