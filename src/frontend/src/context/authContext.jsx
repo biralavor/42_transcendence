@@ -109,6 +109,10 @@ export function AuthProvider({ children }) {
     resetInactivityTimer(true)
   }
 
+  const isAuthenticated = Boolean(
+    auth.access_token && auth.refresh_token && auth.token_type
+  )
+
   useEffect(() => {
     if (!isAuthenticated) return
 
@@ -122,10 +126,6 @@ export function AuthProvider({ children }) {
       setShowInactivityWarning(false)
     }
   }, [isAuthenticated])
-
-  const isAuthenticated = Boolean(
-    auth.access_token && auth.refresh_token && auth.token_type
-  )
 
   const value = useMemo(() => ({
     auth,
