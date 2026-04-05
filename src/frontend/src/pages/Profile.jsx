@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef } from 'react'
 import NavbarComponent from '../Components/Navbar'
 import { getAvatarFilter } from '../utils/avatarFilter'
-import { apiCall, apiJson } from '../utils/apiClient'
+import { apiCall } from '../utils/apiClient'
 import './Profile.css'
 import FriendsSidebar from '../Components/FriendsSidebar'
 import { useAuth } from '../context/authContext'
