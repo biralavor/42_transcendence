@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef } from 'react'
 import NavbarComponent from '../Components/Navbar'
 import { getAvatarFilter } from '../utils/avatarFilter'
-import { apiCall } from '../utils/apiClient'
+import { apiCall, apiJson } from '../utils/apiClient'
 import './Profile.css'
 import FriendsSidebar from '../Components/FriendsSidebar'
 import { useAuth } from '../context/authContext'
@@ -102,7 +102,7 @@ export default function Profile() {
   const handleSave = async (e) => {
     e.preventDefault()
     try {
-      const resp = await apiCall(`/api/users/profile/${userId}`, {
+      const resp = await apiJson(`/api/users/profile/${userId}`, {
         method: 'PUT',
         body: JSON.stringify({
           display_name: profile.displayName,
