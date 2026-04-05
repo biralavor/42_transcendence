@@ -1,4 +1,6 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { useEffect } from 'react'
+import { resetInactivityTimer, ACTIVITY_EVENTS, ACTIVITY_DEBOUNCE_SECONDS } from './utils/inactivityTracker'
 import Home from './pages/Home'
 import Login from './pages/Login'
 import About from './pages/About'
@@ -13,6 +15,28 @@ import PrivateRoute from './Components/PrivateRoute'
 import GameWaitingRoom from './pages/GameWaitingRoom'
 
 export default function App() {
+  useEffect(() => {
+    let lastResetTime = 0
+
+    const handleActivity = () => {
+      const now = Date.now()
+      if (now - lastResetTime >= ACTIVITY_DEBOUNCE_SECONDS * 1000) {
+        resetInactivityTimer(false)
+        lastResetTime = now
+      }
+    }
+
+    ACTIVITY_EVENTS.forEach(event => {
+      window.addEventListener(event, handleActivity, { capture: true, passive: true })
+    })
+
+    return () => {
+      ACTIVITY_EVENTS.forEach(event => {
+        window.removeEventListener(event, handleActivity, { capture: true, passive: true })
+      })
+    }
+  }, [])
+
   return (
     <BrowserRouter>
       <Routes>
@@ -23,8 +47,8 @@ export default function App() {
         <Route path="/leaderboard" element={<Leaderboard />} />
         <Route path="/register" element={<Register />} />
         <Route path="/pong-develop" element={<PongCanvas
-                                               player1Kind='local'
-                                               player2Kind='remote-ai' />} />
+          player1Kind='local'
+          player2Kind='remote-ai' />} />
 
         <Route
           path="/profile"

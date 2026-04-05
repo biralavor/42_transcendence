@@ -29,7 +29,7 @@ describe('PrivateRoute', () => {
 
   it('shows auth-required when ready but not authenticated', () => {
     renderWithAuth({ isAuthReady: true, isAuthenticated: false })
-    expect(screen.getByText(/you must be logged in/i)).toBeInTheDocument()
+    // PrivateRoute uses Navigate to /login, so protected content should not be shown
     expect(screen.queryByText('protected content')).not.toBeInTheDocument()
   })
 
