@@ -3,7 +3,6 @@ import NavbarComponent from '../Components/Navbar'
 
 export default function Leaderboard() {
   const [entries, setEntries] = useState([])
-  const [usernamesById, setUsernamesById] = useState({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -34,40 +33,6 @@ export default function Leaderboard() {
         // Skip updates if the request was aborted or the effect was cancelled.
         if (controller.signal.aborted || cancelled) return
         setEntries(leaderboardData)
-
-        const userIds = leaderboardData.map((row) => row.user_id)
-        const uniqueUserIds = [...new Set(userIds)]
-
-        let usernamesByIdResult = {}
-        if (uniqueUserIds.length > 0) {
-          // Start with sensible defaults for all users in case individual fetches fail.
-          usernamesByIdResult = uniqueUserIds.reduce((acc, userId) => {
-            acc[userId] = `Player ${userId}`
-            return acc
-          }, {})
-
-          // Fetch profiles concurrently using the individual profile endpoint
-          // because the /profiles/batch endpoint is not implemented on the backend.
-          const profilePromises = uniqueUserIds.map(async (userId) => {
-            try {
-              const resp = await fetch(`/api/users/profile/${userId}`, {
-                signal: controller.signal,
-              })
-              if (resp.ok) {
-                const profile = await resp.json()
-                if (profile.username) {
-                  usernamesByIdResult[userId] = profile.username
-                }
-              }
-            } catch (e) {
-              // Ignore individual network errors; fallback remains "Player {id}"
-            }
-          })
-          await Promise.all(profilePromises)
-        }
-
-        if (controller.signal.aborted || cancelled) return
-        setUsernamesById(usernamesByIdResult)
       } catch (requestError) {
         // Ignore abort errors; otherwise report a generic failure.  Avoid
         // updating state if the component has unmounted or the request was aborted.
@@ -105,9 +70,9 @@ export default function Leaderboard() {
     return {
       highestPoints,
       longestWins,
-      risingPlayer: usernamesById[rising.user_id] || `Player ${rising.user_id}`,
+      risingPlayer: rising.username || `Player ${rising.user_id}`,
     }
-  }, [entries, usernamesById])
+  }, [entries])
 
   return (
     <div className="arcade-shell">
@@ -183,7 +148,7 @@ export default function Leaderboard() {
                         return (
                           <tr key={entry.user_id} className={rowClass}>
                             <td>#{entry.rank}</td>
-                            <td>{usernamesById[entry.user_id] || `Player ${entry.user_id}`}</td>
+                            <td>{entry.username || `Player ${entry.user_id}`}</td>
                             <td>{entry.wins}</td>
                             <td>{entry.losses}</td>
                             <td>{entry.total_games}</td>

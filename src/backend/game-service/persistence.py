@@ -1,13 +1,12 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import or_, select, case, func, union_all, join
+from sqlalchemy import or_, select, case, func, union_all, table, column, String, Integer
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from service.models.match import Match
 from service.models.tournament import Tournament
 from service.models.tournament_participant import TournamentParticipant
-from user_service.models.user import User
 
 
 class TournamentNotFound(Exception):
@@ -221,7 +220,10 @@ async def get_leaderboard(db: AsyncSession, limit: int = 20) -> list[dict]:
         .subquery()
     )
 
-    # Join aggregated stats with User table to include username.
+    # Define users table reference without importing the model (allows cross-service join)
+    users = table('users', column('id', Integer), column('username', String))
+
+    # Join aggregated stats with users table to include username.
     stmt = (
         select(
             agg.c.user_id,
@@ -232,9 +234,9 @@ async def get_leaderboard(db: AsyncSession, limit: int = 20) -> list[dict]:
             agg.c.goals_conceded,
             agg.c.goal_difference,
             agg.c.points,
-            User.username,
+            users.c.username,
         )
-        .join(User, agg.c.user_id == User.id)
+        .join(users, agg.c.user_id == users.c.id)
         .order_by(
             agg.c.points.desc(),
             agg.c.goal_difference.desc(),
