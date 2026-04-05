@@ -30,6 +30,7 @@ class StatsResponse(BaseModel):
 class LeaderboardEntryResponse(BaseModel):
     rank: int
     user_id: int
+    username: str
     wins: int
     losses: int
     total_games: int

@@ -3,7 +3,6 @@ import NavbarComponent from '../Components/Navbar'
 
 export default function Leaderboard() {
   const [entries, setEntries] = useState([])
-  const [usernamesById, setUsernamesById] = useState({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -34,57 +33,6 @@ export default function Leaderboard() {
         // Skip updates if the request was aborted or the effect was cancelled.
         if (controller.signal.aborted || cancelled) return
         setEntries(leaderboardData)
-
-        const userIds = leaderboardData.map((row) => row.user_id)
-        const uniqueUserIds = [...new Set(userIds)]
-
-        // Fetch all required user profiles in a single batch request to avoid
-        // issuing one HTTP request per user (N+1 pattern).
-        let usernamesByIdResult = {}
-        if (uniqueUserIds.length > 0) {
-          try {
-            const batchResp = await fetch('/api/users/profiles/batch', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({ user_ids: uniqueUserIds }),
-              signal: controller.signal,
-            })
-
-            // Start with sensible defaults for all users in case the batch
-            // response is partial or missing entries.
-            usernamesByIdResult = uniqueUserIds.reduce((acc, userId) => {
-              acc[userId] = `Player ${userId}`
-              return acc
-            }, {})
-
-            if (batchResp.ok) {
-              const profiles = await batchResp.json()
-              // Support either { user_id, username } or { id, username } shapes.
-              for (const profile of profiles || []) {
-                const id = profile.user_id ?? profile.id
-                if (id != null && Object.prototype.hasOwnProperty.call(usernamesByIdResult, id)) {
-                  if (profile.username) {
-                    usernamesByIdResult[id] = profile.username
-                  }
-                }
-              }
-            }
-          } catch {
-            // On any error, fall back to the default "Player {id}" labels
-            // already populated in usernamesByIdResult.
-            if (Object.keys(usernamesByIdResult).length === 0) {
-              usernamesByIdResult = uniqueUserIds.reduce((acc, userId) => {
-                acc[userId] = `Player ${userId}`
-                return acc
-              }, {})
-            }
-          }
-        }
-
-        if (controller.signal.aborted || cancelled) return
-        setUsernamesById(usernamesByIdResult)
       } catch (requestError) {
         // Ignore abort errors; otherwise report a generic failure.  Avoid
         // updating state if the component has unmounted or the request was aborted.
@@ -122,9 +70,9 @@ export default function Leaderboard() {
     return {
       highestPoints,
       longestWins,
-      risingPlayer: usernamesById[rising.user_id] || `Player ${rising.user_id}`,
+      risingPlayer: rising.username || `Player ${rising.user_id}`,
     }
-  }, [entries, usernamesById])
+  }, [entries])
 
   return (
     <div className="arcade-shell">
@@ -200,7 +148,7 @@ export default function Leaderboard() {
                         return (
                           <tr key={entry.user_id} className={rowClass}>
                             <td>#{entry.rank}</td>
-                            <td>{usernamesById[entry.user_id] || `Player ${entry.user_id}`}</td>
+                            <td>{entry.username || `Player ${entry.user_id}`}</td>
                             <td>{entry.wins}</td>
                             <td>{entry.losses}</td>
                             <td>{entry.total_games}</td>

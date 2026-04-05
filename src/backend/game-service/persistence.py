@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import or_, select, case, func, union_all
+from sqlalchemy import or_, select, case, func, union_all, table, column, String, Integer
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -171,7 +171,7 @@ async def get_leaderboard(db: AsyncSession, limit: int = 20) -> list[dict]:
         limit: Maximum number of leaderboard entries to return.
 
     Returns:
-        A list of dicts, each containing user_id, wins, losses, total_games,
+        A list of dicts, each containing user_id, username, wins, losses, total_games,
         goals_scored, goals_conceded, goal_difference, points and rank.
     """
     # Conditions to filter finished matches.  We name this tuple clearly so it's
@@ -220,11 +220,23 @@ async def get_leaderboard(db: AsyncSession, limit: int = 20) -> list[dict]:
         .subquery()
     )
 
-    # Apply ordering and limit.  The ordering matches the requirements: points
-    # descending, then goal_difference, then goals_scored, and finally user_id
-    # ascending as a deterministic tie‑breaker.
+    # Define users table reference without importing the model (allows cross-service join)
+    users = table('users', column('id', Integer), column('username', String))
+
+    # Join aggregated stats with users table to include username.
     stmt = (
-        select(agg)
+        select(
+            agg.c.user_id,
+            agg.c.wins,
+            agg.c.losses,
+            agg.c.total_games,
+            agg.c.goals_scored,
+            agg.c.goals_conceded,
+            agg.c.goal_difference,
+            agg.c.points,
+            users.c.username,
+        )
+        .join(users, agg.c.user_id == users.c.id)
         .order_by(
             agg.c.points.desc(),
             agg.c.goal_difference.desc(),
