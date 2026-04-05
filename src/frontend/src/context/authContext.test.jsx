@@ -247,4 +247,160 @@ describe('AuthProvider — Expiry Timer', () => {
       result.current.auth
     }).not.toThrow()
   })
+
+  it('should refresh immediately when token is near-expiry (< 30s remaining)', async () => {
+    const { getTimeUntilExpiry } = await import('../utils/jwtUtils')
+    const { manualRefreshToken } = await import('../utils/apiClient')
+
+    getTimeUntilExpiry.mockReturnValue(10000) // Only 10s until expiry (< 30s buffer)
+    manualRefreshToken.mockResolvedValue({
+      access_token: 'new_token',
+      refresh_token: 'new_refresh',
+      token_type: 'bearer',
+    })
+
+    const { result } = renderHook(() => useAuth(), { wrapper })
+
+    await act(async () => {
+      result.current.login({
+        access_token: 'test_token',
+        refresh_token: 'test_refresh',
+        token_type: 'bearer',
+      })
+    })
+
+    // Should refresh immediately (delay should be 0, not clamped to 1000ms)
+    // Timer fires at: max(10000 - 30000, 0) = max(-20000, 0) = 0
+    await act(async () => {
+      vi.advanceTimersByTime(0) // Fire immediately
+    })
+
+    expect(manualRefreshToken).toHaveBeenCalled()
+  })
+
+  it('should handle edge case: token expires in 1 second', async () => {
+    const { getTimeUntilExpiry } = await import('../utils/jwtUtils')
+    const { manualRefreshToken } = await import('../utils/apiClient')
+
+    getTimeUntilExpiry.mockReturnValue(1000) // 1 second until expiry
+    manualRefreshToken.mockResolvedValue({
+      access_token: 'new_token',
+      refresh_token: 'new_refresh',
+      token_type: 'bearer',
+    })
+
+    const { result } = renderHook(() => useAuth(), { wrapper })
+
+    await act(async () => {
+      result.current.login({
+        access_token: 'test_token',
+        refresh_token: 'test_refresh',
+        token_type: 'bearer',
+      })
+    })
+
+    // Should refresh immediately, not wait 1000ms
+    // Timer fires at: max(1000 - 30000, 0) = 0
+    await act(async () => {
+      vi.advanceTimersByTime(0)
+    })
+
+    expect(manualRefreshToken).toHaveBeenCalled()
+  })
+
+  it('should preserve remember-me (localStorage) during proactive refresh', async () => {
+    const { getTimeUntilExpiry } = await import('../utils/jwtUtils')
+    const { manualRefreshToken } = await import('../utils/apiClient')
+    const authStorageModule = await import('../context/authStorage')
+
+    getTimeUntilExpiry.mockReturnValue(60000) // 1 min
+    manualRefreshToken.mockResolvedValue({
+      access_token: 'new_token_xyz',
+      refresh_token: 'new_refresh_token',
+      token_type: 'bearer',
+    })
+
+    // Track saveAuth calls to verify remember-me is preserved
+    const saveSpy = vi.spyOn(authStorageModule, 'saveAuth')
+
+    const { result } = renderHook(() => useAuth(), { wrapper })
+
+    // User logs in with "remember me" (localStorage)
+    await act(async () => {
+      result.current.login(
+        {
+          access_token: 'test_token',
+          refresh_token: 'test_refresh',
+          token_type: 'bearer',
+        },
+        true // Remember me!
+      )
+    })
+
+    // Verify tokens were saved to localStorage
+    expect(saveSpy).toHaveBeenLastCalledWith(
+      expect.any(Object),
+      true // localStorage
+    )
+
+    // Advance time to trigger proactive refresh
+    await act(async () => {
+      vi.advanceTimersByTime(31000)
+    })
+
+    // After refresh, tokens should STILL be saved to localStorage
+    // (not sessionStorage), preserving the remember-me choice
+    const lastCall = saveSpy.mock.calls[saveSpy.mock.calls.length - 1]
+    expect(lastCall[1]).toBe(true) // Should still be localStorage (rememberMe = true)
+
+    saveSpy.mockRestore()
+  })
+
+  it('should preserve non-remember-me (sessionStorage) during proactive refresh', async () => {
+    const { getTimeUntilExpiry } = await import('../utils/jwtUtils')
+    const { manualRefreshToken } = await import('../utils/apiClient')
+    const authStorageModule = await import('../context/authStorage')
+
+    getTimeUntilExpiry.mockReturnValue(60000) // 1 min
+    manualRefreshToken.mockResolvedValue({
+      access_token: 'new_token_xyz',
+      refresh_token: 'new_refresh_token',
+      token_type: 'bearer',
+    })
+
+    // Track saveAuth calls to verify remember-me is NOT set
+    const saveSpy = vi.spyOn(authStorageModule, 'saveAuth')
+
+    const { result } = renderHook(() => useAuth(), { wrapper })
+
+    // User logs in WITHOUT "remember me" (sessionStorage)
+    await act(async () => {
+      result.current.login(
+        {
+          access_token: 'test_token',
+          refresh_token: 'test_refresh',
+          token_type: 'bearer',
+        },
+        false // No remember me
+      )
+    })
+
+    // Verify tokens were saved to sessionStorage
+    expect(saveSpy).toHaveBeenLastCalledWith(
+      expect.any(Object),
+      false // sessionStorage
+    )
+
+    // Advance time to trigger proactive refresh
+    await act(async () => {
+      vi.advanceTimersByTime(31000)
+    })
+
+    // After refresh, tokens should STILL be saved to sessionStorage
+    // (not localStorage), preserving the non-remember-me choice
+    const lastCall = saveSpy.mock.calls[saveSpy.mock.calls.length - 1]
+    expect(lastCall[1]).toBe(false) // Should still be sessionStorage (rememberMe = false)
+
+    saveSpy.mockRestore()
+  })
 })

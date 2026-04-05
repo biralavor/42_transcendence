@@ -67,7 +67,7 @@ export function AuthProvider({ children }) {
 
     // Refresh 30 seconds before expiry (safety buffer for clock skew/network delay)
     const REFRESH_BUFFER_MS = 30 * 1000
-    const delayMs = Math.max(timeUntilExpiry - REFRESH_BUFFER_MS, 1000)
+    const delayMs = Math.max(timeUntilExpiry - REFRESH_BUFFER_MS, 0)
 
     console.debug(
       `[authContext] Token expires in ${Math.ceil(timeUntilExpiry / 1000)}s, refresh scheduled in ${Math.ceil(delayMs / 1000)}s`
@@ -79,8 +79,10 @@ export function AuthProvider({ children }) {
         const newAuth = await manualRefreshToken()
         if (newAuth) {
           // Refresh succeeded, update the token
-          // This will trigger this useEffect again with the new token
-          login(newAuth)
+          // Preserve original storage choice (remember-me preference)
+          const storedAuth = getStoredAuth()
+          const shouldRememberMe = storedAuth?.storageType === 'local'
+          login(newAuth, shouldRememberMe)
           console.debug('[authContext] Proactive token refresh succeeded')
         } else {
           // Refresh failed, user needs to log in again
