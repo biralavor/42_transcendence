@@ -314,6 +314,38 @@ describe('apiClient', () => {
 
       await expect(apiJson('/api/endpoint')).rejects.toThrow('HTTP 500')
     })
+
+    it('should merge custom headers with Content-Type (not overwrite)', async () => {
+      fetchMock.mockResolvedValueOnce(
+        new Response(JSON.stringify({}), { status: 200 })
+      )
+
+      await apiJson('/api/endpoint', {
+        headers: { 'X-Custom-Header': 'custom-value' },
+      })
+
+      const call = fetchMock.mock.calls[0]
+      // Content-Type should be preserved
+      expect(call[1].headers['Content-Type']).toBe('application/json')
+      // Custom header should also be present
+      expect(call[1].headers['X-Custom-Header']).toBe('custom-value')
+    })
+
+    it('should allow custom headers to override default headers', async () => {
+      fetchMock.mockResolvedValueOnce(
+        new Response(JSON.stringify({}), { status: 200 })
+      )
+
+      await apiJson('/api/endpoint', {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      })
+
+      const call = fetchMock.mock.calls[0]
+      // Custom Content-Type should be used (not the default)
+      expect(call[1].headers['Content-Type']).toBe(
+        'application/x-www-form-urlencoded'
+      )
+    })
   })
 
   describe('manualRefreshToken', () => {
@@ -362,6 +394,82 @@ describe('apiClient', () => {
         token_type: 'bearer',
       })
       expect(authStorage.getStoredAuth).toHaveBeenCalled()
+    })
+
+    it('should preserve storageType (remember-me) when refreshing from localStorage', async () => {
+      // Simulate token stored in localStorage (remember-me case)
+      authStorage.getStoredAuth.mockReturnValueOnce({
+        access_token: 'old_token',
+        refresh_token: 'refresh_token_456',
+        token_type: 'bearer',
+        storageType: 'local', // ← Key: stored in localStorage
+      })
+
+      // First call returns 401
+      fetchMock.mockResolvedValueOnce(new Response(null, { status: 401 }))
+
+      // Refresh succeeds
+      fetchMock.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            access_token: 'new_token_xyz',
+            refresh_token: 'new_refresh_token',
+            token_type: 'bearer',
+          }),
+          { status: 200 }
+        )
+      )
+
+      // Retry succeeds
+      fetchMock.mockResolvedValueOnce(
+        new Response(JSON.stringify({ success: true }), { status: 200 })
+      )
+
+      await apiCall('/api/protected')
+
+      // When saving refreshed tokens, should save to localStorage (preserve remember-me)
+      expect(authStorage.saveAuth).toHaveBeenCalledWith(
+        expect.objectContaining({ access_token: 'new_token_xyz' }),
+        true // ← Should be TRUE for localStorage
+      )
+    })
+
+    it('should preserve storageType when refreshing from sessionStorage', async () => {
+      // Simulate token stored in sessionStorage (non-remember-me case)
+      authStorage.getStoredAuth.mockReturnValueOnce({
+        access_token: 'old_token',
+        refresh_token: 'refresh_token_456',
+        token_type: 'bearer',
+        storageType: 'session', // ← Key: stored in sessionStorage
+      })
+
+      // First call returns 401
+      fetchMock.mockResolvedValueOnce(new Response(null, { status: 401 }))
+
+      // Refresh succeeds
+      fetchMock.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            access_token: 'new_token_xyz',
+            refresh_token: 'new_refresh_token',
+            token_type: 'bearer',
+          }),
+          { status: 200 }
+        )
+      )
+
+      // Retry succeeds
+      fetchMock.mockResolvedValueOnce(
+        new Response(JSON.stringify({ success: true }), { status: 200 })
+      )
+
+      await apiCall('/api/protected')
+
+      // When saving refreshed tokens, should save to sessionStorage
+      expect(authStorage.saveAuth).toHaveBeenCalledWith(
+        expect.objectContaining({ access_token: 'new_token_xyz' }),
+        false // ← Should be FALSE for sessionStorage
+      )
     })
   })
 })

@@ -52,8 +52,9 @@ async function attemptTokenRefresh() {
       return null
     }
 
-    // Save new tokens
-    saveAuth(newAuth, storedAuth.rememberMe ?? false)
+    // Save new tokens to same storage as original (persist remember-me preference)
+    const shouldRemember = storedAuth.storageType === 'local'
+    saveAuth(newAuth, shouldRemember)
     console.debug('[apiClient] Token refreshed successfully')
     return newAuth
   } catch (err) {
@@ -208,9 +209,13 @@ export async function apiCall(url, options = {}) {
  * }
  */
 export async function apiJson(url, options = {}) {
+  // Extract custom headers from options, leaving the rest
+  // This prevents ...options from overwriting our merged headers
+  const { headers: customHeaders, ...restOptions } = options
+
   const response = await apiCall(url, {
-    headers: { 'Content-Type': 'application/json', ...options.headers },
-    ...options,
+    ...restOptions,
+    headers: { 'Content-Type': 'application/json', ...customHeaders },
   })
 
   if (!response.ok) {
