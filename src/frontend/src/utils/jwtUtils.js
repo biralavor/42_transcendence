@@ -29,8 +29,15 @@ export function decodeJWT(token) {
 
   try {
     // Decode base64url payload (part[1])
-    // Base64url uses - instead of +, _ instead of /
-    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/')
+    // Base64url uses - instead of +, _ instead of /, and omits padding
+    let base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/')
+    
+    // Add base64 padding if needed (must be multiple of 4)
+    const padding = 4 - (base64.length % 4)
+    if (padding !== 4) {
+      base64 += '='.repeat(padding)
+    }
+    
     const jsonStr = atob(base64) // Decode base64 to string
     const payload = JSON.parse(jsonStr)
     return payload
