@@ -39,7 +39,7 @@ Chat rooms seeded (fixed slugs used by TranscendenceHealthCheck.sh):
 import asyncio
 import os
 import bcrypt
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 
@@ -83,7 +83,7 @@ FRIENDSHIPS = [
 
 
 def dt(s):
-    return datetime.strptime(s, "%Y-%m-%d %H:%M:%S")
+    return datetime.strptime(s, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
 
 
 # (p1_username, p2_username, winner_username, s1, s2, started, finished)
