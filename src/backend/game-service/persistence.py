@@ -1,3 +1,4 @@
+import random
 from datetime import datetime, timezone
 
 from sqlalchemy import or_, select, case, func, union_all, table, column, String, Integer
@@ -6,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from service.models.match import Match
 from service.models.tournament import Tournament
+from service.models.tournament_match import TournamentMatch
 from service.models.tournament_participant import TournamentParticipant
 
 
@@ -22,6 +24,14 @@ class UserAlreadyRegistered(Exception):
 
 
 class TournamentFull(Exception):
+    pass
+
+
+class NotTournamentCreator(Exception):
+    pass
+
+
+class TournamentNotEnoughParticipants(Exception):
     pass
 
 
@@ -55,7 +65,7 @@ async def create_tournament(
 
 async def get_tournament_with_participants(
     db: AsyncSession, tournament_id: int
-) -> tuple[Tournament, list[TournamentParticipant]] | None:
+) -> tuple[Tournament, list[TournamentParticipant], list[TournamentMatch]] | None:
     result = await db.execute(select(Tournament).where(Tournament.id == tournament_id))
     tournament = result.scalars().first()
     if tournament is None:
@@ -64,7 +74,11 @@ async def get_tournament_with_participants(
         select(TournamentParticipant).where(TournamentParticipant.tournament_id == tournament_id)
     )
     participants = list(participants_result.scalars().all())
-    return tournament, participants
+    matches_result = await db.execute(
+        select(TournamentMatch).where(TournamentMatch.tournament_id == tournament_id)
+    )
+    matches = list(matches_result.scalars().all())
+    return tournament, participants, matches
 
 
 async def join_tournament(
@@ -98,6 +112,66 @@ async def join_tournament(
         raise UserAlreadyRegistered()
     await db.refresh(participant)
     return participant
+
+
+async def start_tournament(
+    db: AsyncSession, tournament_id: int, user_id: int
+) -> tuple[Tournament, list[TournamentMatch]]:
+    result = await db.execute(
+        select(Tournament).where(Tournament.id == tournament_id).with_for_update()
+    )
+    tournament = result.scalars().first()
+    if tournament is None:
+        raise TournamentNotFound()
+    if tournament.status != "open":
+        raise TournamentNotOpen()
+    if tournament.creator_id != user_id:
+        raise NotTournamentCreator()
+
+    participants_result = await db.execute(
+        select(TournamentParticipant).where(
+            TournamentParticipant.tournament_id == tournament_id
+        )
+    )
+    participants = list(participants_result.scalars().all())
+    if len(participants) != tournament.max_participants:
+        raise TournamentNotEnoughParticipants()
+
+    random.shuffle(participants)
+
+    tournament_matches: list[TournamentMatch] = []
+    num_matches = tournament.max_participants // 2
+    for i in range(num_matches):
+        p1 = participants[i * 2]
+        p2 = participants[i * 2 + 1]
+
+        match = Match(
+            player1_id=p1.user_id,
+            player2_id=p2.user_id,
+            status="ongoing",
+            started_at=datetime.now(timezone.utc),
+        )
+        db.add(match)
+        await db.flush()
+
+        tm = TournamentMatch(
+            tournament_id=tournament_id,
+            match_id=match.id,
+            round=1,
+            position=i,
+            player1_id=p1.user_id,
+            player2_id=p2.user_id,
+            status="pending",
+        )
+        db.add(tm)
+        tournament_matches.append(tm)
+
+    tournament.status = "in_progress"
+    await db.commit()
+    for tm in tournament_matches:
+        await db.refresh(tm)
+    await db.refresh(tournament)
+    return tournament, tournament_matches
 
 
 async def finish_match(

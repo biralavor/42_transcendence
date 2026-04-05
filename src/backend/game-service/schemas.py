@@ -76,6 +76,20 @@ class TournamentParticipantResponse(BaseModel):
     joined_at: datetime
 
 
+class TournamentMatchResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    tournament_id: int
+    match_id: int | None
+    round: int
+    position: int
+    player1_id: int | None
+    player2_id: int | None
+    winner_id: int | None
+    status: str
+
+
 class TournamentDetailResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -86,3 +100,4 @@ class TournamentDetailResponse(BaseModel):
     status: str
     created_at: datetime
     participants: list[TournamentParticipantResponse]
+    matches: list[TournamentMatchResponse] = []

@@ -6,7 +6,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from service.auth import get_current_user_id
 from service.history import get_match_history
 from service.persistence import (
+    NotTournamentCreator,
     TournamentFull,
+    TournamentNotEnoughParticipants,
     TournamentNotFound,
     TournamentNotOpen,
     UserAlreadyRegistered,
@@ -19,6 +21,7 @@ from service.persistence import (
     get_user_matches,
     get_user_stats,
     join_tournament,
+    start_tournament,
 )
 from service.schemas import (
     LeaderboardEntryResponse,
@@ -30,8 +33,10 @@ from service.schemas import (
     TournamentCreateRequest,
     TournamentCreateResponse,
     TournamentDetailResponse,
+    TournamentMatchResponse,
     TournamentParticipantResponse,
 )
+from service.ws.router import manager as ws_manager
 from shared.database import get_db
 
 router = APIRouter()
@@ -88,7 +93,7 @@ async def get_tournament(tournament_id: int, session: SessionDependency):
     result = await get_tournament_with_participants(session, tournament_id)
     if result is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tournament not found")
-    tournament, participants = result
+    tournament, participants, matches = result
     return TournamentDetailResponse(
         id=tournament.id,
         name=tournament.name,
@@ -97,6 +102,7 @@ async def get_tournament(tournament_id: int, session: SessionDependency):
         status=tournament.status,
         created_at=tournament.created_at,
         participants=[TournamentParticipantResponse(user_id=p.user_id, joined_at=p.joined_at) for p in participants],
+        matches=[TournamentMatchResponse.model_validate(m) for m in matches],
     )
 
 
@@ -119,6 +125,45 @@ async def join_tournament_endpoint(
     return {"detail": "Joined successfully"}
 
 
+@router.post("/tournaments/{tournament_id}/start", response_model=TournamentDetailResponse)
+async def start_tournament_endpoint(
+    tournament_id: int,
+    session: SessionDependency,
+    user_id: int = Depends(get_current_user_id),
+):
+    try:
+        tournament, matches = await start_tournament(session, tournament_id, user_id)
+    except TournamentNotFound:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tournament not found")
+    except TournamentNotOpen:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Tournament already started")
+    except NotTournamentCreator:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the creator can start the tournament")
+    except TournamentNotEnoughParticipants:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Tournament is not full yet")
+
+    result = await get_tournament_with_participants(session, tournament_id)
+    tournament, participants, _ = result
+
+    response = TournamentDetailResponse(
+        id=tournament.id,
+        name=tournament.name,
+        creator_id=tournament.creator_id,
+        max_participants=tournament.max_participants,
+        status=tournament.status,
+        created_at=tournament.created_at,
+        participants=[TournamentParticipantResponse(user_id=p.user_id, joined_at=p.joined_at) for p in participants],
+        matches=[TournamentMatchResponse.model_validate(m) for m in matches],
+    )
+
+    await ws_manager.broadcast(
+        f"tournament_{tournament_id}",
+        {"type": "tournament_updated", "tournament_id": tournament_id},
+    )
+
+    return response
+
+
 @router.post("/matches/{match_id}/finish", response_model=MatchResponse)
 async def end_match(match_id: int, body: MatchFinishRequest, session: SessionDependency):
     match = await get_match(session, match_id)
@@ -126,4 +171,6 @@ async def end_match(match_id: int, body: MatchFinishRequest, session: SessionDep
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Match not found")
     if match.status == "finished":
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Match already finished")
+    if body.winner_id not in (match.player1_id, match.player2_id):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="winner_id must be one of the match players")
     return await finish_match(session, match_id, body.winner_id, body.score_p1, body.score_p2)
