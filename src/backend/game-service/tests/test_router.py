@@ -36,6 +36,7 @@ def client():
     app.dependency_overrides[get_db] = _override_get_db
     yield TestClient(app)
     app.dependency_overrides.clear()
+    asyncio.run(_truncate())
 
 
 # --------------------------------------------------------------------------- #
