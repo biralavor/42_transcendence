@@ -7,6 +7,25 @@ import './Profile.css'
 import FriendsSidebar from '../Components/FriendsSidebar'
 import { useAuth } from '../context/authContext'
 
+function getSafeAvatarUrl(avatarUrl) {
+  if (!avatarUrl || typeof avatarUrl !== 'string') {
+    return ''
+  }
+  const trimmed = avatarUrl.trim()
+  if (!trimmed) {
+    return ''
+  }
+  try {
+    const url = new URL(trimmed, window.location.origin)
+    if (url.protocol === 'http:' || url.protocol === 'https:') {
+      return url.toString()
+    }
+  } catch {
+    // fall through to return empty string
+  }
+  return ''
+}
+
 export default function Profile() {
   const { auth } = useAuth()
   const [userId, setUserId] = useState(null)
@@ -148,7 +167,7 @@ export default function Profile() {
               <div className="profile-header">
                 <div className="profile-avatar-wrapper">
                   <img
-                    src={profile.avatarUrl}
+                    src={getSafeAvatarUrl(profile?.avatarUrl)}
                     alt="User avatar"
                     className="profile-avatar"
                     style={{ filter: getAvatarFilter(userId) }}
