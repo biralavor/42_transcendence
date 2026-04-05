@@ -55,6 +55,7 @@ export default function Login() {
           username: formData.username,
           password: formData.password,
         }),
+        skipRefreshOn401: true, // Login endpoint 401 = bad credentials, not expired session
       })
 
       if (!data) {

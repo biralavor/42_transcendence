@@ -398,7 +398,9 @@ describe('apiClient', () => {
 
     it('should preserve storageType (remember-me) when refreshing from localStorage', async () => {
       // Simulate token stored in localStorage (remember-me case)
-      authStorage.getStoredAuth.mockReturnValueOnce({
+      // Note: mockReturnValue (not Once) because getStoredAuth is called twice:
+      // 1) in apiCall() to add Authorization header, 2) in attemptTokenRefresh()
+      authStorage.getStoredAuth.mockReturnValue({
         access_token: 'old_token',
         refresh_token: 'refresh_token_456',
         token_type: 'bearer',
@@ -436,7 +438,9 @@ describe('apiClient', () => {
 
     it('should preserve storageType when refreshing from sessionStorage', async () => {
       // Simulate token stored in sessionStorage (non-remember-me case)
-      authStorage.getStoredAuth.mockReturnValueOnce({
+      // Note: mockReturnValue (not Once) because getStoredAuth is called twice:
+      // 1) in apiCall() to add Authorization header, 2) in attemptTokenRefresh()
+      authStorage.getStoredAuth.mockReturnValue({
         access_token: 'old_token',
         refresh_token: 'refresh_token_456',
         token_type: 'bearer',

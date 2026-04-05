@@ -100,7 +100,12 @@ describe('InactivityWarning', () => {
 
     it('should display Escape key hint to users', () => {
         render(<InactivityWarning onStayLoggedIn={vi.fn()} onLogoutNow={vi.fn()} />)
-        expect(screen.getByText(/Press.*Escape.*dismiss/i)).toBeInTheDocument()
+        // Check for visible hint text (may be split by <kbd> tag)
+        const tipText = screen.getByText(/Press/)
+        expect(tipText).toHaveTextContent('Press')
+        expect(tipText).toHaveTextContent('dismiss')
+        // Also verify the <kbd> tag with Escape is present
+        expect(screen.getByText('Escape')).toBeInTheDocument()
     })
 
     it('should clean up event listener on unmount', () => {

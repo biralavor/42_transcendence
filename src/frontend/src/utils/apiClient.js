@@ -140,7 +140,8 @@ function handleLogout() {
  */
 export async function apiCall(url, options = {}) {
   // Merge options
-  const headers = { ...options.headers }
+  const { skipRefreshOn401, ...callOptions } = options
+  const headers = { ...callOptions.headers }
 
   // Add Authorization header if we have a token
   const storedAuth = getStoredAuth()
@@ -158,15 +159,15 @@ export async function apiCall(url, options = {}) {
   }
 
   const fetchOptions = {
-    ...options,
+    ...callOptions,
     headers,
   }
 
   // Make the request
   let response = await fetch(url, fetchOptions)
 
-  // Handle 401 Unauthorized
-  if (response.status === 401) {
+  // Handle 401 Unauthorized (unless explicitly disabled for this endpoint)
+  if (response.status === 401 && !skipRefreshOn401) {
     console.debug('[apiClient] Got 401 - attempting token refresh')
 
     // Attempt to refresh token (with queue to prevent duplicates)
@@ -209,12 +210,13 @@ export async function apiCall(url, options = {}) {
  * }
  */
 export async function apiJson(url, options = {}) {
-  // Extract custom headers from options, leaving the rest
+  // Extract custom headers and skipRefreshOn401 from options, leaving the rest
   // This prevents ...options from overwriting our merged headers
-  const { headers: customHeaders, ...restOptions } = options
+  const { headers: customHeaders, skipRefreshOn401, ...restOptions } = options
 
   const response = await apiCall(url, {
     ...restOptions,
+    skipRefreshOn401,
     headers: { 'Content-Type': 'application/json', ...customHeaders },
   })
 

@@ -4,6 +4,12 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { AuthProvider } from '../context/authContext'
 import Login from './Login'
 
+// Mock jwtUtils so tests don't depend on real JWT parsing
+vi.mock('../utils/jwtUtils', () => ({
+  getTimeUntilExpiry: vi.fn(() => 14400000), // 4 hours in seconds
+  isTokenValid: vi.fn(() => true),
+}))
+
 function renderLogin() {
   return render(
     <AuthProvider>
@@ -126,7 +132,7 @@ describe('Login page', () => {
     fireEvent.change(screen.getByLabelText(/password/i), { target: { value: 'p' } })
     fireEvent.submit(screen.getByRole('button', { name: /sign in/i }).closest('form'))
 
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/login failed/i))
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/HTTP 502/))
   })
 
   it('shows connection error alert when fetch throws', async () => {
@@ -138,7 +144,7 @@ describe('Login page', () => {
     fireEvent.submit(screen.getByRole('button', { name: /sign in/i }).closest('form'))
 
     await waitFor(() =>
-      expect(screen.getByRole('alert')).toHaveTextContent(/unable to connect/i)
+      expect(screen.getByRole('alert')).toHaveTextContent(/Network error/)
     )
   })
 

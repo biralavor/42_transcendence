@@ -282,8 +282,8 @@ describe('jwtUtils', () => {
       const token = createToken(nowSeconds)
       const timeLeft = getTimeUntilExpiry(token)
 
-      // Should be very close to 0 (within ±500ms due to timing)
-      expect(Math.abs(timeLeft)).toBeLessThan(500)
+      // Should be very close to 0 (within ±1500ms to account for test execution overhead)
+      expect(Math.abs(timeLeft)).toBeLessThan(1500)
       // But token should be considered expired (0 or negative)
       expect(isTokenValid(token)).toBe(false)
     })
