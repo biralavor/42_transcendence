@@ -1,0 +1,18 @@
+/* Game Page Styles */
+
+.game-page {
+  width: 100%;
+  height: calc(100vh - var(--nav-height)); /* Subtract navbar height */
+  margin-top: var(--nav-height);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+  overflow: hidden;
+}
+
+.game-page > * {
+  width: 100%;
+  height: 100%;
+}

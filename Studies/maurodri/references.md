@@ -20,3 +20,6 @@
 
 ### useRef initialization
 - https://react.dev/reference/react/useRef#avoiding-recreating-the-ref-contents
+
+### requestAnimationFrame
+- https://css-tricks.com/using-requestanimationframe-with-react-hooks/

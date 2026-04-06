@@ -1,8 +1,10 @@
+import pytest
 import os
 import uuid
 import asyncio
 import threading
 import queue
+from unittest.mock import patch, AsyncMock
 from starlette.testclient import TestClient
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker as async_sessionmaker
@@ -119,3 +121,248 @@ def test_ws_history_delivered_on_connect():
         assert msg1["sender"] == "Alice"
         assert msg2["content"] == "second message"
         assert msg2["sender"] == "Bob"
+
+
+# ---------------------------------------------------------------------------
+# Helpers for block-filter tests (no real DB needed)
+# ---------------------------------------------------------------------------
+
+def _make_fake_room(room_id=1):
+    """Return a minimal fake room object for WS router mocking."""
+    class FakeRoom:
+        id = room_id
+    return FakeRoom()
+
+
+def _ws_db_patches(is_blocked_fn=None, sender_uid=None):
+    """Return a list of patch context managers that mock all DB calls in ws/router.py.
+
+    sender_uid: when set, patches _uid_from_token to return this value so DM
+                rooms accept the connection without a real JWT.
+    """
+    import contextlib
+    from unittest.mock import MagicMock
+
+    fake_room = _make_fake_room()
+
+    async def mock_get_or_create_room(db, slug):
+        return fake_room
+
+    async def mock_get_room_history(db, room_id):
+        return []
+
+    async def mock_save_message(db, room_id, sender, content):
+        pass
+
+    @contextlib.asynccontextmanager
+    async def mock_session():
+        yield MagicMock()
+
+    patches = [
+        patch("service.ws.router.get_or_create_room", side_effect=mock_get_or_create_room),
+        patch("service.ws.router.get_room_history", side_effect=mock_get_room_history),
+        patch("service.ws.router.save_message", side_effect=mock_save_message),
+        patch("service.ws.router.AsyncSessionLocal", new=mock_session),
+    ]
+    if is_blocked_fn is not None:
+        patches.append(patch("service.ws.router.is_blocked", side_effect=is_blocked_fn))
+    if sender_uid is not None:
+        patches.append(patch("service.ws.router._uid_from_token", return_value=sender_uid))
+    return patches
+
+
+# ---------------------------------------------------------------------------
+# Typing-event tests
+# ---------------------------------------------------------------------------
+
+def test_typing_event_broadcast():
+    """A typing event is broadcast to other clients; type and sender are preserved."""
+    import contextlib
+    with contextlib.ExitStack() as stack:
+        for p in _ws_db_patches():
+            stack.enter_context(p)
+        client = TestClient(app)
+        with client.websocket_connect("/ws/chat/room-typing") as ws1, \
+             client.websocket_connect("/ws/chat/room-typing") as ws2:
+            ws1.send_json({"type": "typing", "sender": "alice"})
+            data = ws2.receive_json()
+            assert data == {"type": "typing", "sender": "alice", "sender_uid": None}
+
+
+def test_typing_event_not_persisted():
+    """Typing events are broadcast but save_message is never called for them."""
+    import contextlib
+    save_calls = []
+
+    async def tracking_save(db, room_id, sender, content):
+        save_calls.append(content)
+
+    with contextlib.ExitStack() as stack:
+        for p in _ws_db_patches():
+            stack.enter_context(p)
+        # Override the no-op save_message with a tracking version (applied last → wins)
+        stack.enter_context(patch("service.ws.router.save_message", side_effect=tracking_save))
+        client = TestClient(app)
+        with client.websocket_connect("/ws/chat/room-typing-persist") as ws:
+            ws.send_json({"type": "typing", "sender": "alice"})
+            ws.send_json({"content": "hello", "sender": "alice"})
+            # Consume both broadcasts (typing + chat) so both are fully processed
+            ws.receive_json()
+
+    assert save_calls == ["hello"]
+
+
+# ---------------------------------------------------------------------------
+# Block-filter tests
+# ---------------------------------------------------------------------------
+
+def test_dm_without_token_rejected():
+    """Connecting to a DM room without a token is rejected with close code 4001."""
+    import contextlib
+    import pytest
+    from starlette.websockets import WebSocketDisconnect
+
+    with contextlib.ExitStack() as stack:
+        for p in _ws_db_patches():
+            stack.enter_context(p)
+        client = TestClient(app)
+        with pytest.raises(WebSocketDisconnect) as exc_info:
+            with client.websocket_connect("/ws/chat/DM-1-2"):
+                pass
+        assert exc_info.value.code == 4001
+
+
+def test_dm_non_participant_rejected():
+    """An authenticated user who is NOT one of the two DM participants is rejected with 4003."""
+    import contextlib
+    import pytest
+    from starlette.websockets import WebSocketDisconnect
+
+    # uid=99 is not in DM-1-2 (participants are 1 and 2)
+    with contextlib.ExitStack() as stack:
+        for p in _ws_db_patches(sender_uid=99):
+            stack.enter_context(p)
+        client = TestClient(app)
+        with pytest.raises(WebSocketDisconnect) as exc_info:
+            with client.websocket_connect("/ws/chat/DM-1-2"):
+                pass
+        assert exc_info.value.code == 4003
+
+
+def test_blocked_sender_message_not_delivered():
+    """If is_blocked returns True for (recipient, sender), message is dropped."""
+    import contextlib
+    room = "DM-10-20"
+
+    async def mock_is_blocked(db, blocker_id, blocked_id):
+        return blocker_id == 10 and blocked_id == 20
+
+    with contextlib.ExitStack() as stack:
+        for p in _ws_db_patches(is_blocked_fn=mock_is_blocked, sender_uid=20):
+            stack.enter_context(p)
+        client = TestClient(app)
+        with client.websocket_connect(f"/ws/chat/{room}") as ws_blocker, \
+             client.websocket_connect(f"/ws/chat/{room}") as ws_sender:
+            ws_sender.send_json({"sender": "bob", "content": "blocked msg"})
+
+            result = queue.Queue()
+            def try_recv():
+                try:
+                    result.put(ws_blocker.receive_json())
+                except Exception:
+                    result.put(None)
+            t = threading.Thread(target=try_recv, daemon=True)
+            t.start()
+            t.join(timeout=0.5)
+            received = result.get() if not result.empty() else None
+            assert received is None or received.get("content") != "blocked msg"
+
+
+def test_unblocked_sender_message_delivered():
+    """Without a block, messages are delivered normally in DM rooms."""
+    import contextlib
+
+    async def mock_is_blocked(db, blocker_id, blocked_id):
+        return False
+
+    with contextlib.ExitStack() as stack:
+        for p in _ws_db_patches(is_blocked_fn=mock_is_blocked, sender_uid=30):
+            stack.enter_context(p)
+        client = TestClient(app)
+        room = "DM-30-40"
+        with client.websocket_connect(f"/ws/chat/{room}") as ws1, \
+             client.websocket_connect(f"/ws/chat/{room}") as ws2:
+            ws1.send_json({"sender": "alice", "content": "hello"})
+            d = ws2.receive_json()
+            assert d["content"] == "hello"
+
+
+def test_non_dm_room_unaffected_by_block_logic():
+    """Non-DM rooms (no DM-{a}-{b} slug) are not filtered even with user_id."""
+    import contextlib
+
+    with contextlib.ExitStack() as stack:
+        for p in _ws_db_patches():
+            stack.enter_context(p)
+        client = TestClient(app)
+        room = "general-chat-nomock"
+        with client.websocket_connect(f"/ws/chat/{room}") as ws1, \
+             client.websocket_connect(f"/ws/chat/{room}") as ws2:
+            ws1.send_json({"sender": "alice", "content": "hi all", "user_id": 99})
+            d = ws2.receive_json()
+            assert d["content"] == "hi all"
+
+
+# ---------------------------------------------------------------------------
+# Notifications endpoint tests
+# ---------------------------------------------------------------------------
+
+def test_notifications_rejects_missing_token():
+    """Connection without a valid token is closed with code 4001."""
+    from starlette.websockets import WebSocketDisconnect as WsDisconnect
+    client = TestClient(app)
+    with pytest.raises(WsDisconnect) as exc_info:
+        with client.websocket_connect("/ws/notifications") as ws:
+            ws.receive_json()
+    assert exc_info.value.code == 4001
+
+
+def test_notifications_connects_with_valid_token():
+    """Valid JWT allows connection; no immediate message."""
+    import os
+    from jose import jwt as jose_jwt
+    # Both the test and settings.JWT_SECRET_KEY read the same env var — they always match.
+    secret = os.environ.get("JWT_SECRET_KEY", "changeme")
+    token = jose_jwt.encode({"credential_id": 42}, secret, algorithm="HS256")
+
+    client = TestClient(app)
+    # Just connecting and closing without error is the assertion
+    with client.websocket_connect(f"/ws/notifications?token={token}") as ws:
+        pass  # no exception = connected OK
+
+
+def test_notifications_receives_new_dm_event():
+    """Recipient connected to /ws/notifications receives new_dm when sender DMs them."""
+    import contextlib
+    import os
+    from jose import jwt as jose_jwt
+    # Both the test and settings.JWT_SECRET_KEY read the same env var — they always match.
+    secret = os.environ.get("JWT_SECRET_KEY", "changeme")
+    sender_token = jose_jwt.encode({"credential_id": 10}, secret, algorithm="HS256")
+    recipient_token = jose_jwt.encode({"credential_id": 20}, secret, algorithm="HS256")
+
+    async def mock_is_blocked(db, blocker_id, blocked_id):
+        return False
+
+    with contextlib.ExitStack() as stack:
+        for p in _ws_db_patches(is_blocked_fn=mock_is_blocked):
+            stack.enter_context(p)
+        client = TestClient(app)
+        with client.websocket_connect(f"/ws/notifications?token={recipient_token}") as notif_ws, \
+             client.websocket_connect(f"/ws/chat/DM-10-20?token={sender_token}") as chat_ws:
+            chat_ws.send_json({"content": "hey there", "sender": "sender10"})
+            event = notif_ws.receive_json()
+            assert event["type"] == "new_dm"
+            assert event["room_slug"] == "DM-10-20"
+            assert event["from_user_id"] == 10
+            assert "hey there" in event["preview"]

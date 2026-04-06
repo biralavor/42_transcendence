@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -26,6 +27,19 @@ class StatsResponse(BaseModel):
     goals_conceded: int
 
 
+class LeaderboardEntryResponse(BaseModel):
+    rank: int
+    user_id: int
+    username: str
+    wins: int
+    losses: int
+    total_games: int
+    goals_scored: int
+    goals_conceded: int
+    goal_difference: int
+    points: int
+
+
 class MatchCreateRequest(BaseModel):
     player1_id: int
     player2_id: int
@@ -43,3 +57,47 @@ class MatchHistoryItem(BaseModel):
     result: str   # "Win" | "Loss"
     score: str    # e.g. "11-3" (user score first, ASCII hyphen)
     date: str     # finished_at ISO string, "" if null
+
+
+class TournamentCreateRequest(BaseModel):
+    name: str
+    max_participants: Literal[4, 8]
+
+
+class TournamentCreateResponse(BaseModel):
+    id: int
+    join_link: str
+
+
+class TournamentParticipantResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    user_id: int
+    joined_at: datetime
+
+
+class TournamentMatchResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    tournament_id: int
+    match_id: int | None
+    round: int
+    position: int
+    player1_id: int | None
+    player2_id: int | None
+    winner_id: int | None
+    status: str
+
+
+class TournamentDetailResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    creator_id: int
+    max_participants: int
+    status: str
+    created_at: datetime
+    participants: list[TournamentParticipantResponse]
+    matches: list[TournamentMatchResponse] = []

@@ -1,26 +1,27 @@
 from fastapi import status, HTTPException
-from service.schemas import Login, LoginResponse, RegisterRequest, RegisterResponse, UpdateProfileRequest
+from service.schemas import Login, LoginResponse, RefreshRequest, RegisterRequest, RegisterResponse, UpdateProfileRequest, MeResponse
 from service.models.credentials import Credentials, Tokens
 from service.models.user import User
 from datetime import datetime, timedelta, timezone
 import bcrypt
 import hashlib
 import secrets
-from jose import jwt
+from jose import jwt, ExpiredSignatureError, JWTError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
+from shared.config.settings import settings
 
-SECRET_KEY = "secret"
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+ACCESS_TOKEN_EXPIRE_MINUTES = 15
+REFRESH_TOKEN_EXPIRE_DAYS = 7
 
 
 def create_access_token(data: dict, expires_delta: timedelta):
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + expires_delta
     to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm=ALGORITHM)
 
 
 def hash_password(password: str) -> bytes:
@@ -41,26 +42,56 @@ async def authenticate(login: Login, session: AsyncSession) -> LoginResponse:
             detail="Invalid credentials"
         )
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    # User creation is delegated to get_me() via fallback pattern in other services.
+    # This ensures single source of truth for user creation.
     access_token = create_access_token(
-        data={"sub": credential.username}, expires_delta=access_token_expires
+        data={"sub": credential.username, "credential_id": credential.id},
+        expires_delta=access_token_expires,
     )
     raw_refresh_token = secrets.token_hex(32)
     refresh_token_hash = hashlib.sha256(raw_refresh_token.encode()).hexdigest()
-    tokens = Tokens(
-        credential_id=credential.id,
-        token_type="bearer",
-        refresh_token_hash=refresh_token_hash,
-        expires_at=datetime.now(timezone.utc) + timedelta(days=30),
-    )
-    session.add(tokens)
+    token_row = await session.execute(select(Tokens).where(Tokens.credential_id == credential.id))
+    tokens = token_row.scalars().first()
+    if tokens is None:
+        tokens = Tokens(credential_id=credential.id, token_type="bearer")
+        session.add(tokens)
+    tokens.refresh_token_hash = refresh_token_hash
+    tokens.expires_at = datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+
     await session.commit()
-    user_row = await session.execute(select(User).where(User.username == credential.username))
-    user = user_row.scalars().first()
     return LoginResponse(
         access_token=access_token,
         token_type="bearer",
         refresh_token=raw_refresh_token,
-        user_id=user.id,
+    )
+
+
+async def refresh_access_token(body: RefreshRequest, session: AsyncSession) -> LoginResponse:
+    token_hash = hashlib.sha256(body.refresh_token.encode()).hexdigest()
+    token_row = await session.execute(select(Tokens).where(Tokens.refresh_token_hash == token_hash))
+    tokens = token_row.scalars().first()
+    if tokens is None or tokens.expires_at <= datetime.now(timezone.utc):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired refresh token",
+        )
+    result = await session.execute(select(Credentials).where(Credentials.id == tokens.credential_id))
+    credential = result.scalars().first()
+    if credential is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
+    # User creation is delegated to get_me() via fallback pattern in other services.
+    access_token = create_access_token(
+        data={"sub": credential.username, "credential_id": credential.id},
+        expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
+    )
+    raw_refresh_token = secrets.token_hex(32)
+    tokens.refresh_token_hash = hashlib.sha256(raw_refresh_token.encode()).hexdigest()
+    tokens.expires_at = datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+    await session.commit()
+    return LoginResponse(
+        access_token=access_token,
+        token_type="bearer",
+        refresh_token=raw_refresh_token,
     )
 
 
@@ -80,18 +111,48 @@ async def register_credentials(register_request: RegisterRequest, session: Async
         session.add(credentials)
         await session.commit()
         await session.refresh(credentials)
-    except IntegrityError:
+    except IntegrityError as exc:
         await session.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="User already exists"
-        )
+        ) from exc
     return RegisterResponse(username=credentials.username)
 
 
 async def get_profile(user_id: int, session: AsyncSession) -> User | None:
     result = await session.execute(select(User).where(User.id == user_id))
     return result.scalars().first()
+
+
+async def get_me(token: str, session: AsyncSession) -> MeResponse:
+    try:
+        payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise JWTError("missing sub")
+    except ExpiredSignatureError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token expired",
+        ) from exc
+    except JWTError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token",
+        ) from exc
+    result = await session.execute(select(Credentials).where(Credentials.username == username))
+    credential = result.scalars().first()
+    if credential is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+    user_row = await session.execute(select(User).where(User.credential_id == credential.id))
+    user = user_row.scalars().first()
+    if user is None:
+        user = User(username=credential.username, credential_id=credential.id)
+        session.add(user)
+        await session.commit()
+        await session.refresh(user)
+    return user
 
 
 async def update_profile(

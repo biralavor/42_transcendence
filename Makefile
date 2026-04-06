@@ -54,29 +54,14 @@ wait:
 	done; \
 	echo ""; echo "Timeout: services not ready after 60s."; exit 1
 
-.PHONY: test
-test:
-	@docker compose exec user-service sh -c \
-		"pip install -q --root-user-action=ignore pytest==8.3.5 httpx==0.28.1 pytest-asyncio==0.24.0 2>/dev/null; \
-		 cd /app; pytest service/tests/ -v >/tmp/out 2>&1; r=$$?; \
-		 sed 's/test session starts/& — user-service/' /tmp/out; exit $$r"
-	@docker compose exec game-service sh -c \
-		"pip install -q --root-user-action=ignore pytest==8.3.5 httpx==0.28.1 pytest-asyncio==0.24.0 2>/dev/null; \
-		 cd /app; pytest service/tests/ -v >/tmp/out 2>&1; r=$$?; \
-		 sed 's/test session starts/& — game-service/' /tmp/out; exit $$r"
-	@docker compose exec chat-service sh -c \
-		"pip install -q --root-user-action=ignore pytest==8.3.5 httpx==0.28.1 pytest-asyncio==0.23.8 asyncpg==0.30.0 2>/dev/null; \
-		 cd /app; pytest service/tests/test_service.py -v >/tmp/out 2>&1; r=$$?; \
-		 sed 's/test session starts/& — chat-service/' /tmp/out; exit $$r"
-
 .PHONY: seed
 seed:
 	@docker compose cp tests/seed_dev.py user-service:/app/seed_dev.py
 	@docker compose exec user-service python3 /app/seed_dev.py
 
 .PHONY: check
-check: wait test seed
-	bash tests/TranscendenceHealthCheck.sh | tee >(sed 's/\x1b\[[0-9;]*m//g' > release.txt)
+check: wait seed
+	PAGER=cat GIT_PAGER=cat bash tests/TranscendenceHealthCheck.sh | tee >(sed 's/\x1b\[[0-9;]*m//g' > release.txt) | cat
 
 # --- alembic migrations ---
 # Usage: make migrate-user MSG=add_avatar_url_to_users
@@ -160,7 +145,7 @@ show-tables:
 
 .PHONY: show-table-contents
 show-table-contents:
-	@docker compose exec db sh -c \
+	@docker compose exec -T -e PAGER=cat db sh -c \
 		'for tbl in $$(psql -U $$POSTGRES_USER -d $$POSTGRES_DB -At \
 		-c "SELECT table_name FROM information_schema.tables \
 		WHERE table_schema='"'"'public'"'"' \
@@ -169,8 +154,9 @@ show-table-contents:
 		do \
 			echo ""; \
 			echo "=== $$tbl ==="; \
-			psql -U $$POSTGRES_USER -d $$POSTGRES_DB -c "SELECT * FROM $$tbl;"; \
+			psql -U $$POSTGRES_USER -d $$POSTGRES_DB -P pager=off -c "SELECT * FROM $$tbl;"; \
 		done'
+	@printf "Note: if you run 'make check' the password of registered seed_dev users is: 123dev\n\n"
 
 .PHONY: show-tables-full
 show-tables-full:

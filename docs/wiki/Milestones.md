@@ -27,8 +27,8 @@
 | Docker Compose + 3 microservices | DevOps | ✅ Done |
 | TLS nginx reverse proxy | DevOps | ✅ Done |
 | JWT authentication (register / login) | user-service | ✅ Done |
-| Database schema (users, games, chat) | db | ⬜ In progress |
-| React + Vite frontend scaffold | frontend | ⬜ In progress |
+| Database schema (users, games, chat) | db | ✅ Done |
+| React + Vite frontend scaffold | frontend | ✅ Done  |
 | Privacy Policy + Terms of Service pages | frontend | ⬜ Todo |
 | Health check endpoints (all services) | DevOps | ✅ Done |
 
@@ -335,14 +335,14 @@
 ### Final documentation pass
 > After code is stable — last thing before dry run.
 
-1. README.md: roles, module list, quick-start (`make`), team members
-2. Privacy Policy page: complete, real content, accessible from footer
-3. Terms of Service page: complete, real content, accessible from footer
-4. CLAUDE.md / wiki: update status of all milestone items
-5. Git history: meaningful commits from all team members (evaluation checks this)
+1. Privacy Policy page: complete, real content, accessible from footer
+2. Terms of Service page: complete, real content, accessible from footer
+3. README.md: roles, module list, quick-start (`make`), team members
+4. Wiki: update status of all milestone items
+5. Git history: meaningful commits from all team members
 
 ### Evaluation dry run
-> Simulate the full evaluation sheet (`42-Trancendence-Evaluation-version-19.pdf`).
+> Simulate an evaluation
 
 1. `make` from a clean clone — verify single command starts everything
 2. Register + login as a new user
@@ -361,18 +361,29 @@
 
 ## Module Points Summary
 
-| Category | Modules | Points |
-|----------|---------|--------|
-| Major Web (WebSockets + Chat + Profiles) | 3 | 6 |
-| Major UserMgmt (Standard Auth) | 1 | 2 |
-| Major AI (AI Opponent) | 1 | 2 |
-| Major Gaming (Pong + Remote) | 2 | 4 |
-| Major DevOps (Microservices) | 1 | 2 |
-| Minor Web (Framework + ORM + Search + Upload + Notifications) | 5 | 5 |
-| Minor Accessibility (Browser Compat) | 1 | 1 |
-| Minor UserMgmt (Stats + Activity Analytics) | 2 | 2 |
-| Minor Gaming (Tournament + Customization + Gamification + Spectator) | 4 | 4 |
-| Minor DataAnalytics (Export/Import) | 1 | 1 |
-| **Total** | **21** | **29** |
+| Category | Module | Points | Ready |
+|----------|---------|--------|-------|
+| Major Web | Real-Time Features | 2 | ✅ |
+| Major Web | User Interaction | 2 | ✅ |
+| Minor Web | Frontend Framework | 1 | ✅ |
+| Minor Web | Backend Framework | 1 | ✅ |
+| Minor Web | ORM | 1 | ✅ |
+| Minor Web | Search | 1 | ❌ |
+| Minor Web | Upload | 1 | ❌ |
+| Minor Web | Notifications | 1 | ❌ |
+| Minor Accessibility | Browser Compat. | 1 | ❌ |
+| Major UserMgmt | Standard Auth | 2 | ❌ |
+| Minor UserMgmt | Stats | 1 | ❌ |
+| Minor UserMgmt | Activity Analytics | 1 | ❌ |
+| Major AI | AI Opponent | 2 | ❌ |
+| Major Gaming & UX | Web-Based Game | 2 | ✅ |
+| Major Gaming & UX | Remote Players | 2 | ❌ |
+| Minor Gaming | Tournament | 1 | ❌ |
+| Minor Gaming | Customization | 1 | ❌ |
+| Minor Gaming | Gamification | 1 | ❌ |
+| Minor Gaming | Spectator | 1 | ❌ |
+| Major DevOps | Microservices | 2 | ✅ |
+| Minor DataAnalytics (Export/Import) | 1 | ❌ |
+| **Total** | - | **28** | 25% (7/28) |
 
-> Minimum required: **14 points**. Target: **16–18 points**. This plan targets **29** — buffer for anything that doesn't fully pass evaluation.
+> Minimum required: **14 points**. Target: **16–18 points**. This plan targets **28** — buffer for anything that doesn't fully pass evaluation.

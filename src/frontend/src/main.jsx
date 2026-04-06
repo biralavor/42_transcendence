@@ -10,11 +10,17 @@ import './theme/leaderboard.css'
 import './theme/about.css'
 import App from './App'
 import { AuthProvider } from './context/authContext'
+import { PresenceProvider } from './context/presenceContext'
+import { UnreadProvider } from './context/unreadContext'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <AuthProvider>
-      <App />
+      <PresenceProvider>
+        <UnreadProvider>
+          <App />
+        </UnreadProvider>
+      </PresenceProvider>
     </AuthProvider>
   </StrictMode>
 )

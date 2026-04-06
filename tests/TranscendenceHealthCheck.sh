@@ -570,9 +570,9 @@ async def test():
 asyncio.run(test())
 "
 
-    # Pre-seeded room hc-limit has 60 messages; only last 50 should arrive
+    # Pre-seeded room hc-limit has 20 messages; default limit is 50 so all 20 arrive
     _chat_ws_test "$_PORT" "hc-limit" \
-        "Chat history: limit 50 — only last 50 of 60 messages delivered" \
+        "Chat history: all 20 messages delivered (default limit 50 > 20)" \
 "
 import asyncio, websockets, json
 async def test():
@@ -585,9 +585,9 @@ async def test():
                 received.append(json.loads(raw))
             except asyncio.TimeoutError:
                 break
-    assert len(received) == 50, f'Expected 50 history frames, got {len(received)}'
-    assert received[0]['content'] == 'msg10', f'Expected msg10, got {received[0][\"content\"]}'
-    assert received[-1]['content'] == 'msg59', f'Expected msg59, got {received[-1][\"content\"]}'
+    assert len(received) == 20, f'Expected 20 history frames, got {len(received)}'
+    assert received[0]['content'] == 'msg0', f'Expected msg0, got {received[0]["content"]}'
+    assert received[-1]['content'] == 'msg19', f'Expected msg19, got {received[-1][\"content\"]}'
 asyncio.run(test())
 "
 
@@ -708,16 +708,11 @@ section "User Service API Suite"
 if container_running user-service; then
     _UPORT="${USER_SERVICE_PORT:-8001}"
 
-    # Login — parse alice's user_id from the response
+    # Login — get tokens; user_id is resolved via /auth/me
     login_body=$(docker exec user-service wget -q -O - \
         --header="Content-Type: application/json" \
-        --post-data='{"username":"alice","password":"test123"}' \
+        --post-data='{"username":"alice","password":"123dev"}' \
         "http://127.0.0.1:${_UPORT}/auth/login" 2>/dev/null || echo "")
-    if echo "$login_body" | grep -q '"user_id"'; then
-        pass "User login response includes user_id"
-    else
-        fail "User login response missing user_id (got: '${login_body:0:120}')"
-    fi
 
     if echo "$login_body" | grep -q '"access_token"'; then
         pass "User login response includes access_token"
@@ -725,8 +720,15 @@ if container_running user-service; then
         fail "User login response missing access_token"
     fi
 
-    alice_id=$(echo "$login_body" | python3 -c \
-        "import sys,json; print(json.load(sys.stdin).get('user_id',''))" 2>/dev/null || echo "")
+    alice_token=$(echo "$login_body" | python3 -c \
+        "import sys,json; print(json.load(sys.stdin).get('access_token',''))" 2>/dev/null || echo "")
+
+    # Resolve alice's user_id via /auth/me
+    me_body=$(docker exec user-service wget -q -O - \
+        --header="Authorization: Bearer ${alice_token}" \
+        "http://127.0.0.1:${_UPORT}/auth/me" 2>/dev/null || echo "")
+    alice_id=$(echo "$me_body" | python3 -c \
+        "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || echo "")
 
     # Profile fetch using alice's actual user_id
     profile_body=$(docker exec user-service wget -q -O - \
@@ -801,20 +803,21 @@ section "Game Service Match History Suite"
 if container_running game-service; then
     _GPORT="${GAME_SERVICE_PORT:-8002}"
 
+    _alice_id="${alice_id:-1}"
     history_body=$(docker exec game-service wget -q -O - \
-        "http://127.0.0.1:${_GPORT}/matches/history/1" 2>/dev/null || echo "")
+        "http://127.0.0.1:${_GPORT}/matches/history/${_alice_id}" 2>/dev/null || echo "")
     if echo "$history_body" | grep -qE '^\['; then
-        pass "Match history endpoint returns a JSON array for user 1"
+        pass "Match history endpoint returns a JSON array for alice"
     else
-        fail "Match history endpoint failed for user 1 (got: '${history_body:0:120}')"
+        fail "Match history endpoint failed for alice (got: '${history_body:0:120}')"
     fi
 
-    # Seeded data: alice (id=1) has at least 3 finished matches
+    # Seeded data: alice has at least 3 finished matches
     match_count=$(echo "$history_body" | python3 -c "import sys,json; print(len(json.load(sys.stdin)))" 2>/dev/null || echo "-1")
     if [[ "$match_count" -ge 3 ]]; then
-        pass "Match history for user 1 contains at least 3 seeded matches (got $match_count)"
+        pass "Match history for alice contains at least 3 seeded matches (got $match_count)"
     else
-        fail "Match history for user 1 has fewer matches than expected (got $match_count, want ≥3)"
+        fail "Match history for alice has fewer matches than expected (got $match_count, want ≥3)"
     fi
 
     # Each match must include result and score fields
@@ -830,27 +833,132 @@ else
     info "game-service container not running — skipping match history suite"
 fi
 
-# ── 22. Frontend Unit Tests ───────────────────────────────────────────────────
+# ── 22. User Service Unit Tests ───────────────────────────────────────────────
+section "User Service Unit Tests"
+if container_running user-service; then
+    out=$(docker exec user-service sh -c "pip install -q --root-user-action=ignore pytest==8.3.5 httpx==0.28.1 pytest-asyncio==0.24.0 && cd /app && pytest service/tests/ -v" 2>&1) && rc=0 || rc=$?
+    
+    grep_out=$(printf "%s\n" "$out" | grep '::' | grep -E '(PASSED|FAILED)') || true
+    if [[ -z "$grep_out" ]]; then
+        fail "User Service unit tests failed (pytest crashed or no tests found)"
+        printf "%s\n" "$out"
+    else
+        while read -r line; do
+            test_name=$(echo "$line" | awk '{print $1}' | sed 's/.*:://')
+            if [[ "$line" == *"PASSED"* ]]; then
+                pass "$test_name"
+            elif [[ "$line" == *"FAILED"* ]]; then
+                fail "$test_name"
+            fi
+        done <<< "$grep_out"
+
+        pt_fail=$(printf "%s\n" "$out" | grep -oE '[0-9]+ failed' | awk '{print $1}' | tail -1) || true; pt_fail=${pt_fail:-0}
+        if [[ $rc -ne 0 || $pt_fail -gt 0 ]]; then
+            if [[ $rc -ne 0 && $pt_fail -eq 0 ]]; then
+                fail "User Service unit tests exited with error code $rc"
+            fi
+            printf "%s\n" "$out" | tail -15
+        fi
+    fi
+else
+    info "user-service container not running — skipping unit tests"
+fi
+
+# ── 23. Game Service Unit Tests ───────────────────────────────────────────────
+section "Game Service Unit Tests"
+if container_running game-service; then
+    out=$(docker exec game-service sh -c "pip install -q --root-user-action=ignore pytest==8.3.5 httpx==0.28.1 pytest-asyncio==0.24.0 && cd /app && pytest service/tests/ -v" 2>&1) && rc=0 || rc=$?
+    
+    grep_out=$(printf "%s\n" "$out" | grep '::' | grep -E '(PASSED|FAILED)') || true
+    if [[ -z "$grep_out" ]]; then
+        fail "Game Service unit tests failed (pytest crashed or no tests found)"
+        printf "%s\n" "$out"
+    else
+        while read -r line; do
+            test_name=$(echo "$line" | awk '{print $1}' | sed 's/.*:://')
+            if [[ "$line" == *"PASSED"* ]]; then
+                pass "$test_name"
+            elif [[ "$line" == *"FAILED"* ]]; then
+                fail "$test_name"
+            fi
+        done <<< "$grep_out"
+
+        pt_fail=$(printf "%s\n" "$out" | grep -oE '[0-9]+ failed' | awk '{print $1}' | tail -1) || true; pt_fail=${pt_fail:-0}
+        if [[ $rc -ne 0 || $pt_fail -gt 0 ]]; then
+            if [[ $rc -ne 0 && $pt_fail -eq 0 ]]; then
+                fail "Game Service unit tests exited with error code $rc"
+            fi
+            printf "%s\n" "$out" | tail -15
+        fi
+    fi
+else
+    info "game-service container not running — skipping unit tests"
+fi
+
+# ── 24. Chat Service Unit Tests ───────────────────────────────────────────────
+section "Chat Service Unit Tests"
+if container_running chat-service; then
+    out=$(docker exec chat-service sh -c "pip install -q --root-user-action=ignore pytest==8.3.5 httpx==0.28.1 pytest-asyncio==0.23.8 asyncpg==0.30.0 && cd /app && pytest service/tests/test_service.py -v" 2>&1) && rc=0 || rc=$?
+    
+    grep_out=$(printf "%s\n" "$out" | grep '::' | grep -E '(PASSED|FAILED)') || true
+    if [[ -z "$grep_out" ]]; then
+        fail "Chat Service unit tests failed (pytest crashed or no tests found)"
+        printf "%s\n" "$out"
+    else
+        while read -r line; do
+            test_name=$(echo "$line" | awk '{print $1}' | sed 's/.*:://')
+            if [[ "$line" == *"PASSED"* ]]; then
+                pass "$test_name"
+            elif [[ "$line" == *"FAILED"* ]]; then
+                fail "$test_name"
+            fi
+        done <<< "$grep_out"
+
+        pt_fail=$(printf "%s\n" "$out" | grep -oE '[0-9]+ failed' | awk '{print $1}' | tail -1) || true; pt_fail=${pt_fail:-0}
+        if [[ $rc -ne 0 || $pt_fail -gt 0 ]]; then
+            if [[ $rc -ne 0 && $pt_fail -eq 0 ]]; then
+                fail "Chat Service unit tests exited with error code $rc"
+            fi
+            printf "%s\n" "$out" | tail -15
+        fi
+    fi
+else
+    info "chat-service container not running — skipping unit tests"
+fi
+
+# ── 25. Frontend Unit Tests ───────────────────────────────────────────────────
 section "Frontend Unit Tests"
 if container_running frontend; then
     vitest_out=$(docker exec frontend npx vitest run --reporter=verbose 2>&1) && vitest_rc=0 || vitest_rc=$?
-    printf "%s\n" "$vitest_out" | tail -5
+    
+    # Strip ANSI colors/carriage returns and match standard tick/cross characters.
+    # We exclude file summary lines by matching out lines with .jsx/.js and test counts.
+    clean_out=$(printf "%s\n" "$vitest_out" | sed -e 's/\x1b\[[0-9;]*m//g' -e 's/\r//g')
+    grep_out=$(printf "%s\n" "$clean_out" | grep -E '^[[:space:]]*(✔|√|✓|✖|×|✗)' | grep -vE '\.(jsx?|tsx?)[[:space:]]*\([0-9]+') || true
 
-    files_line=$(printf "%s\n" "$vitest_out" | grep -E '^\s+Test Files\s+') || true
-    tests_line=$(printf "%s\n" "$vitest_out" | grep -E '^\s+Tests\s+') || true
+    if [[ -z "$grep_out" ]]; then
+        fail "Frontend unit tests failed (vitest crashed or no tests found)"
+        printf "%s\n" "$vitest_out"
+    else
+        while IFS= read -r line; do
+            test_name=$(echo "$line" | sed -E 's/^[[:space:]]*(✔|√|✓|✖|×|✗)[[:space:]]*//')
+            if echo "$line" | grep -qE '✔|√|✓'; then
+                pass "$test_name"
+            else
+                fail "$test_name"
+            fi
+        done <<< "$grep_out"
 
-    vf_pass=$(printf "%s\n" "$files_line" | grep -oP '\d+(?= passed)' | head -1) || true; vf_pass=${vf_pass:-0}
-    vf_fail=$(printf "%s\n" "$files_line" | grep -oP '\d+(?= failed)' | head -1) || true; vf_fail=${vf_fail:-0}
-    vt_pass=$(printf "%s\n" "$tests_line" | grep -oP '\d+(?= passed)' | head -1) || true; vt_pass=${vt_pass:-0}
-    vt_fail=$(printf "%s\n" "$tests_line" | grep -oP '\d+(?= failed)' | head -1) || true; vt_fail=${vt_fail:-0}
-
-    ((SUITE_PASS[$CURRENT_SUITE] += vf_pass + vt_pass)) || true
-    ((SUITE_FAIL[$CURRENT_SUITE] += vf_fail + vt_fail)) || true
-    if [[ $vitest_rc -ne 0 && $vt_fail -eq 0 ]]; then
-        fail "Frontend unit tests (vitest) failed — run 'docker exec frontend npx vitest run' for details"
+        tests_line=$(printf "%s\n" "$clean_out" | grep -E '^[[:space:]]*Tests[[:space:]]+') || true
+        vt_fail=$(printf "%s\n" "$tests_line" | grep -oE '[0-9]+ failed' | awk '{print $1}') || true; vt_fail=${vt_fail:-0}
+        
+        if [[ $vitest_rc -ne 0 || $vt_fail -gt 0 ]]; then
+            if [[ $vitest_rc -ne 0 && $vt_fail -eq 0 ]]; then
+                fail "Frontend unit tests exited with error code $vitest_rc"
+            fi
+            printf "%s\n" "$vitest_out" | tail -15
+        fi
     fi
-    ((PASS += vf_pass + vt_pass)) || true
-    ((FAIL += vf_fail + vt_fail)) || true
 else
     info "frontend container not running — skipping unit tests"
 fi

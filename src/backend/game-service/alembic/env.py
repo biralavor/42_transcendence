@@ -18,10 +18,10 @@ from shared.config.settings import settings  # noqa: E402
 from shared.database import Base             # noqa: E402
 
 # Import the service models so Alembic can detect them in Base.metadata
-from service.models.match import Match  # noqa: E402, F401
+from service.models import Match, Tournament, TournamentParticipant  # noqa: E402, F401
 
 # Tables owned by this service — Alembic will ONLY manage these.
-_SERVICE_TABLES = {"matches"}
+_SERVICE_TABLES = {"matches", "tournaments", "tournament_participants"}
 
 # Each service gets its own version-tracking table so they don't collide.
 _VERSION_TABLE = "alembic_version_game"

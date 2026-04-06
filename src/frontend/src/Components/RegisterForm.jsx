@@ -1,8 +1,11 @@
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useState } from 'react'
+import { useAuth } from '../context/authContext'
 import './RegisterForm.css'
 
 const RegisterForm = () => {
+  const { login } = useAuth()
+  const navigate = useNavigate()
   const [formData, setFormData] = useState({
     // capture only the fields needed for account creation. Email is no
     // longer collected in this simplified registration flow.
@@ -82,6 +85,22 @@ const RegisterForm = () => {
         setSuccess(data.message)
       else
         setSuccess('Account created successfully!!')
+
+      const loginResponse = await fetch('/api/users/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          username: formData.username,
+          password: formData.password,
+        }),
+      })
+
+      if (loginResponse.ok) {
+        const loginData = await loginResponse.json()
+        login(loginData)
+        navigate('/profile')
+      }
 
       setFormData({
         username: '',

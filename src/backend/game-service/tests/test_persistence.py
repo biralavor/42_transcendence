@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sess
 from sqlalchemy.pool import NullPool
 
 from shared.config.settings import settings
-from persistence import create_match, finish_match, get_match, get_user_stats, get_user_matches
+from persistence import create_match, finish_match, get_leaderboard, get_match, get_user_stats, get_user_matches
 
 
 @pytest_asyncio.fixture
@@ -120,3 +120,41 @@ async def test_get_user_stats_counts_goals_as_player2(db):
     assert stats["wins"] == 1
     assert stats["goals_scored"] == 7
     assert stats["goals_conceded"] == 3
+
+
+@pytest.mark.asyncio
+async def test_get_leaderboard_orders_by_points_then_goal_difference(db):
+    m1 = await create_match(db, player1_id=1, player2_id=2)
+    await finish_match(db, m1.id, winner_id=1, score_p1=7, score_p2=3)
+
+    m2 = await create_match(db, player1_id=2, player2_id=3)
+    await finish_match(db, m2.id, winner_id=2, score_p1=6, score_p2=1)
+
+    m3 = await create_match(db, player1_id=1, player2_id=3)
+    await finish_match(db, m3.id, winner_id=1, score_p1=5, score_p2=0)
+
+    leaderboard = await get_leaderboard(db)
+
+    assert len(leaderboard) == 3
+    assert leaderboard[0]["user_id"] == 1
+    assert leaderboard[0]["points"] == 6
+    assert leaderboard[0]["rank"] == 1
+
+    assert leaderboard[1]["user_id"] == 2
+    assert leaderboard[1]["points"] == 3
+    assert leaderboard[1]["goal_difference"] == 1
+    assert leaderboard[1]["rank"] == 2
+
+    assert leaderboard[2]["user_id"] == 3
+    assert leaderboard[2]["points"] == 0
+    assert leaderboard[2]["rank"] == 3
+
+
+@pytest.mark.asyncio
+async def test_get_leaderboard_applies_limit(db):
+    for user_id in (1, 2, 3):
+        match = await create_match(db, player1_id=user_id, player2_id=99)
+        await finish_match(db, match.id, winner_id=user_id, score_p1=3, score_p2=0)
+
+    leaderboard = await get_leaderboard(db, limit=2)
+    assert len(leaderboard) == 2

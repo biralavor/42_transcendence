@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 from pydantic import BaseModel, ConfigDict
 
 
@@ -12,7 +12,6 @@ class LoginResponse(BaseModel):
     access_token: str
     token_type: str
     refresh_token: str
-    user_id: int
 
 
 class RegisterRequest(BaseModel):
@@ -35,6 +34,20 @@ class ProfileResponse(BaseModel):
     created_at:   Optional[datetime] = None
     bio:          Optional[str] = None
     dark_mode:    bool = False
+
+
+class MeResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id:            int
+    username:      str
+    credential_id: Optional[int] = None
+    display_name:  Optional[str] = None
+    status:        str
+    avatar_url:    Optional[str] = None
+    created_at:    Optional[datetime] = None
+    bio:           Optional[str] = None
+    dark_mode:     bool = False
 
 
 class UpdateProfileRequest(BaseModel):
@@ -65,3 +78,11 @@ class FriendRequestResponse(BaseModel):
     created_at:         Optional[datetime] = None
     requester_username: Optional[str] = None
     addressee_username: Optional[str] = None
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str
+
+
+class FriendRequestAction(BaseModel):
+    action: Literal["accept", "decline"]
