@@ -101,8 +101,8 @@ function PongCanvasMultiplayer(props) {
       // Send game_start to initialize the session
       ws.send(JSON.stringify({
         type: 'game_start',
-        player1_id: player1Id,
-        player2_id: player2Id,
+        player1_id: parseInt(player1Id, 10),
+        player2_id: parseInt(player2Id, 10),
       }))
     }
 
