@@ -19,20 +19,23 @@ export default function GamePage() {
   const player2Id = location.state?.player2_id || location.state?.opponent?.id
 
   useEffect(() => {
-    // Redirect to play if no room context
-    if (!roomId) {
+    // Redirect to play if no room context or missing player IDs
+    if (!roomId || !player1Id || !player2Id) {
       navigate('/play')
-      return
     }
-  }, [roomId, navigate])
+  }, [roomId, player1Id, player2Id, navigate])
+
+  if (!roomId || !player1Id || !player2Id) {
+    return null // Prevent rendering the canvas with missing IDs while navigating away
+  }
 
   function handleGameEnd(result) {
     console.log('Game ended:', result)
     // Navigate back to play or show result screen
-    navigate('/play', { 
-      state: { 
-        gameResult: result 
-      } 
+    navigate('/play', {
+      state: {
+        gameResult: result
+      }
     })
   }
 
