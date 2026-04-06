@@ -104,9 +104,9 @@ class GameSession:
             self.ball.x,
             self.ball.y,
             self.BALL_RADIUS,
-            self.paddles.p1,
-            self.PADDLE_WIDTH,
-            self.PADDLE_HEIGHT,
+            paddle_y=self.paddles.p1,
+            paddle_x=0.0,
+            paddle_height=self.PADDLE_HEIGHT,
         ):
             self.ball.x = self.PADDLE_WIDTH + self.BALL_RADIUS
             self._reflect_ball_off_paddle(self.paddles.p1)
@@ -116,9 +116,9 @@ class GameSession:
             self.ball.x,
             self.ball.y,
             self.BALL_RADIUS,
-            self.paddles.p2,
-            self.CANVAS_WIDTH - self.PADDLE_WIDTH,
-            self.PADDLE_HEIGHT,
+            paddle_y=self.paddles.p2,
+            paddle_x=self.CANVAS_WIDTH - self.PADDLE_WIDTH,
+            paddle_height=self.PADDLE_HEIGHT,
         ):
             self.ball.x = self.CANVAS_WIDTH - self.PADDLE_WIDTH - self.BALL_RADIUS
             self._reflect_ball_off_paddle(self.paddles.p2)
