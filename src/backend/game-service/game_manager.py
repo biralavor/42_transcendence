@@ -80,6 +80,8 @@ class GameManager:
         if not broadcast_callback:
             return
         tick_interval = GameSession.TICK_INTERVAL  # ~0.0333 seconds
+        loop = asyncio.get_running_loop()
+        next_tick = loop.time() + tick_interval
         try:
             while session.is_active:
                 session.tick()
@@ -93,7 +95,10 @@ class GameManager:
                     session.is_active = False
                     break
                 
-                await asyncio.sleep(tick_interval)
+                now = loop.time()
+                sleep_time = max(0.0, next_tick - now)
+                await asyncio.sleep(sleep_time)
+                next_tick += tick_interval
         
         except asyncio.CancelledError:
             pass
