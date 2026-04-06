@@ -2,7 +2,7 @@ import { useRef, useEffect, useState } from 'react'
 import './PongCanvas.css'
 import { GameState } from '../game/pongEngine.js'
 import { Callbacks } from '../game/pongExternal.js';
-import { CanvasGameContext } from '../game/pongRenderer.js';
+import { CanvasGameContext, render } from '../game/pongRenderer.js';
 import { Player, Position } from '../game/pongEntities.js';
 
 /**
@@ -21,7 +21,7 @@ function PongCanvasMultiplayer(props) {
   const gameId = props?.gameId || 'default-game'
   const player1Id = props?.player1Id
   const player2Id = props?.player2Id
-  const onGameEnd = props?.onGameEnd || (() => {})
+  const onGameEnd = props?.onGameEnd || (() => { })
 
   const canvasRef = useRef(null)
   const keyStateRef = useRef({
@@ -214,9 +214,8 @@ function PongCanvasMultiplayer(props) {
       // Send input to server
       sendInput(direction)
 
-      // For now, just render the server state
-      // In a real implementation, you would use the render() function from pongRenderer
-      // to draw the game state
+      // Render the server state using the existing renderer
+      render(canvasContext, gameStateRef.current, () => false)
 
       loopRef.current = requestAnimationFrame(renderLoop)
     }
