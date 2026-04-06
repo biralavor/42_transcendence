@@ -1,11 +1,11 @@
 # Note: sys.path is set by main.py (Docker) or test file (host) — not repeated here.
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Security, status
-from fastapi.exceptions import WebSocketException
-import json
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from jose import jwt
+from sqlalchemy import text
 
+from shared.config.settings import settings
 from shared.ws.manager import ConnectionManager
 from shared.database import AsyncSessionLocal
-from service.auth import get_current_user_id
 from service.persistence import create_match, finish_match
 from service.game_manager import game_manager
 from sqlalchemy.exc import SQLAlchemyError
@@ -35,7 +35,7 @@ async def _broadcast_state(game_id: str, state_snapshot: dict) -> None:
 
 
 @router.websocket("/ws/game/{game_id}")
-async def game_websocket(websocket: WebSocket, game_id: str) -> None:
+async def game_websocket(websocket: WebSocket, game_id: str, token: str | None = None) -> None:
     """
     WebSocket handler for in-game communication during a Pong match.
     
@@ -46,11 +46,39 @@ async def game_websocket(websocket: WebSocket, game_id: str) -> None:
     The game loop runs independently in game_manager and broadcasts state
     to all connected clients each tick. This handler only processes inputs.
     """
+    # Allow healthcheck script to connect without auth
+    if game_id == "healthcheck":
+        await manager.connect(game_id, websocket)
+        return
+
+    if not token:
+        await websocket.close(code=4001)
+        return
+
+    try:
+        payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
+        credential_id = payload.get("credential_id")
+        if credential_id is None:
+            await websocket.close(code=4001)
+            return
+            
+        # Resolve credential_id -> user.id (Hybrid Pattern Fast Path)
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                text("SELECT id FROM users WHERE credential_id = :cid"),
+                {"cid": credential_id}
+            )
+            row = result.fetchone()
+            if not row:
+                await websocket.close(code=4001)
+                return
+            player_id = row[0]
+    except Exception:
+        await websocket.close(code=4001)
+        return
+
     # Accept the connection
     await manager.connect(game_id, websocket)
-    
-    # Track which player this connection belongs to
-    player_id: int | None = None
     
     try:
         while True:
@@ -68,6 +96,10 @@ async def game_websocket(websocket: WebSocket, game_id: str) -> None:
                 player2_id = data.get("player2_id")
                 
                 if not isinstance(player1_id, int) or not isinstance(player2_id, int):
+                    continue
+                
+                # Verify the authenticated user is part of this game
+                if player_id not in (player1_id, player2_id):
                     continue
                 
                 # Check if this is a new game or joining an existing setup
@@ -98,27 +130,14 @@ async def game_websocket(websocket: WebSocket, game_id: str) -> None:
                     except ValueError:
                         # Game already exists, that's fine
                         pass
-                
-                # Store which player this connection is
-                if player_id is None:
-                    player_id = player1_id if manager.active_connections(game_id) == 1 else player2_id
             
             # Handle player input (with latency filtering)
             elif event_type == "input":
                 # Get the session
                 session = game_manager.get_session(game_id)
                 if session:
-                    # Identify this player if we haven't already
-                    if player_id is None:
-                        # Infer from current connections
-                        if manager.active_connections(game_id) == 1:
-                            player_id = session.player1_id
-                        elif manager.active_connections(game_id) == 2:
-                            player_id = session.player2_id
-                    
-                    # Process input (latency filtering happens in game_manager)
-                    if player_id:
-                        await game_manager.handle_player_input(game_id, player_id, data)
+                    # Process input using verified DB player_id
+                    await game_manager.handle_player_input(game_id, player_id, data)
             
             # Handle game_end: finish the match and clean up
             elif event_type == "game_end":
