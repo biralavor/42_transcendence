@@ -86,7 +86,7 @@ async def game_websocket(websocket: WebSocket, game_id: str, token: str | None =
         return
 
     try:
-        payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
+        payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=["HS256"])
         credential_id = payload.get("credential_id")
         if credential_id is None:
             await websocket.close(code=4001)

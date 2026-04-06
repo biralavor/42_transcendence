@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import NavbarComponent from '../Components/Navbar'
 import { createWsClient } from '../utils/wsClient'
 import './GameWaitingRoom.css'
+import { useAuth } from '../context/authContext'
 
 const DEFAULT_AVATAR = '/avatar_placeholder.jpg'
 
@@ -18,6 +19,7 @@ export default function GameWaitingRoom() {
   const { roomId } = useParams()
   const location = useLocation()
   const navigate = useNavigate()
+  const { auth } = useAuth()
   const wsRef = useRef(null)
 
   const hasInviteContext = Boolean(
@@ -48,7 +50,11 @@ export default function GameWaitingRoom() {
 
   useEffect(() => {
     const scheme = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const url = `${scheme}//${window.location.host}/api/game/ws/game/${roomId}`
+    let url = `${scheme}//${window.location.host}/api/game/ws/game/${roomId}`
+
+    if (auth?.access_token) {
+      url += `?token=${auth.access_token}`
+    }
 
     const ws = createWsClient(url, {
       onOpen: () => {
@@ -91,7 +97,7 @@ export default function GameWaitingRoom() {
     wsRef.current = ws
 
     return () => ws.close()
-  }, [roomId, currentUser.id, opponent.id, navigate])
+  }, [roomId, currentUser.id, opponent.id, navigate, auth?.access_token])
 
   useEffect(() => {
     if (currentReady && opponentReady && !gameStartReceived) {

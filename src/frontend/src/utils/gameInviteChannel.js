@@ -16,18 +16,23 @@ export function buildInviteRoomId(userAId, userBId) {
   return `invite-${a}-${b}-${Date.now()}`
 }
 
-export function createGameChannelClient(channelId, handlers = {}) {
-  return createWsClient(`${getWsBaseUrl()}/${channelId}`, handlers)
+export function createGameChannelClient(channelId, token, handlers = {}) {
+  let url = `${getWsBaseUrl()}/${channelId}`
+  if (token) url += `?token=${token}`
+  return createWsClient(url, handlers)
 }
 
-export function sendGameChannelMessage(channelId, payload, { closeDelay = 120 } = {}) {
+export function sendGameChannelMessage(channelId, payload, token, { closeDelay = 120 } = {}) {
   return new Promise((resolve, reject) => {
     if (typeof window === 'undefined' || typeof window.WebSocket === 'undefined') {
       reject(new Error('WebSocket is not available in this environment.'))
       return
     }
 
-    const ws = new WebSocket(`${getWsBaseUrl()}/${channelId}`)
+    let url = `${getWsBaseUrl()}/${channelId}`
+    if (token) url += `?token=${token}`
+
+    const ws = new WebSocket(url)
     let settled = false
     let closeTimer = null
 

@@ -93,8 +93,8 @@ export default function FriendsSidebar({ userId, username, currentUser, onViewPr
   }, [navigate, selfId, selfUsername, selfAvatarUrl])
 
   const sendInviteEvent = useCallback(async (targetUserId, payload) => {
-    await sendGameChannelMessage(getGameChannelIdForUser(targetUserId), payload)
-  }, [])
+    await sendGameChannelMessage(getGameChannelIdForUser(targetUserId), payload, auth.access_token)
+  }, [auth.access_token])
 
   useEffect(() => {
     if (!selfId)
@@ -127,7 +127,7 @@ export default function FriendsSidebar({ userId, username, currentUser, onViewPr
     if (!selfId || typeof window === 'undefined' || typeof window.WebSocket === 'undefined')
       return undefined
 
-    const inviteClient = createGameChannelClient(getGameChannelIdForUser(selfId), {
+    const inviteClient = createGameChannelClient(getGameChannelIdForUser(selfId), auth.access_token, {
       onMessage: (data) => {
         if (!data || typeof data !== 'object')
           return
@@ -382,179 +382,179 @@ export default function FriendsSidebar({ userId, username, currentUser, onViewPr
   return (
     <>
       <aside className="friends-sidebar arcade-screen">
-      <h2 className="friends-sidebar-title">Friends sidebar</h2>
+        <h2 className="friends-sidebar-title">Friends sidebar</h2>
 
-      {inviteToast && (
-        <div className={`friends-sidebar-alert friends-sidebar-alert-${inviteToast.tone}`} role="status">
-          {inviteToast.message}
-        </div>
-      )}
-
-      {incomingInvite && (
-        <div className="friends-invite-banner" role="alert">
-          <div className="friends-invite-banner-copy">
-            <span className="friends-invite-banner-label">Match invite</span>
-            <strong>{incomingInvite.fromUsername}</strong> wants to play right now.
+        {inviteToast && (
+          <div className={`friends-sidebar-alert friends-sidebar-alert-${inviteToast.tone}`} role="status">
+            {inviteToast.message}
           </div>
-          <div className="friends-invite-banner-actions">
-            <button
-              type="button"
-              className="arcade-btn arcade-btn-primary friends-btn"
-              onClick={handleIncomingInviteAccept}
-            >
-              Accept
-            </button>
-            <button
-              type="button"
-              className="arcade-btn arcade-btn-secondary friends-btn"
-              onClick={handleIncomingInviteDecline}
-            >
-              Decline
-            </button>
+        )}
+
+        {incomingInvite && (
+          <div className="friends-invite-banner" role="alert">
+            <div className="friends-invite-banner-copy">
+              <span className="friends-invite-banner-label">Match invite</span>
+              <strong>{incomingInvite.fromUsername}</strong> wants to play right now.
+            </div>
+            <div className="friends-invite-banner-actions">
+              <button
+                type="button"
+                className="arcade-btn arcade-btn-primary friends-btn"
+                onClick={handleIncomingInviteAccept}
+              >
+                Accept
+              </button>
+              <button
+                type="button"
+                className="arcade-btn arcade-btn-secondary friends-btn"
+                onClick={handleIncomingInviteDecline}
+              >
+                Decline
+              </button>
+            </div>
           </div>
+        )}
+
+        <div className="friends-search">
+          <input
+            className="form-control arcade-input friends-search-input"
+            type="text"
+            placeholder="Search players…"
+            value={searchQuery}
+            onChange={handleSearchChange}
+          />
         </div>
-      )}
 
-      <div className="friends-search">
-        <input
-          className="form-control arcade-input friends-search-input"
-          type="text"
-          placeholder="Search players…"
-          value={searchQuery}
-          onChange={handleSearchChange}
-        />
-      </div>
+        {searchQuery.length >= 2 && (
+          <div className="friends-section">
+            <h3 className="friends-section-title">Results</h3>
+            {visibleResults.length === 0 ? (
+              <p className="friends-empty">No players found.</p>
+            ) : (
+              <ul className="friends-list">
+                {visibleResults.map(user => (
+                  <li key={user.id} className="friends-list-item">
+                    <span className="friends-username">{user.username}</span>
+                    <button
+                      className="arcade-btn arcade-btn-secondary friends-btn"
+                      onClick={() => handleAddFriend(user.id)}
+                    >
+                      Add Friend
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
 
-      {searchQuery.length >= 2 && (
-        <div className="friends-section">
-          <h3 className="friends-section-title">Results</h3>
-          {visibleResults.length === 0 ? (
-            <p className="friends-empty">No players found.</p>
-          ) : (
+        {pendingSent.length > 0 && (
+          <div className="friends-section">
+            <h3 className="friends-section-title">Pending</h3>
             <ul className="friends-list">
-              {visibleResults.map(user => (
+              {pendingSent.map(user => (
                 <li key={user.id} className="friends-list-item">
                   <span className="friends-username">{user.username}</span>
-                  <button
-                    className="arcade-btn arcade-btn-secondary friends-btn"
-                    onClick={() => handleAddFriend(user.id)}
-                  >
-                    Add Friend
-                  </button>
+                  <span className="friends-pending-badge">Pending</span>
                 </li>
               ))}
             </ul>
-          )}
-        </div>
-      )}
+          </div>
+        )}
 
-      {pendingSent.length > 0 && (
-        <div className="friends-section">
-          <h3 className="friends-section-title">Pending</h3>
-          <ul className="friends-list">
-            {pendingSent.map(user => (
-              <li key={user.id} className="friends-list-item">
-                <span className="friends-username">{user.username}</span>
-                <span className="friends-pending-badge">Pending</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {requests.length > 0 && (
-        <div className="friends-section">
-          <h3 className="friends-section-title">Requests</h3>
-          <ul className="friends-list">
-            {requests.map(req => (
-              <li key={req.id} className="friends-list-item friends-request-item">
-                <span className="friends-username">{req.requester_username ?? `Player #${req.requester_id}`}</span>
-                <div className="friends-request-actions">
-                  <button
-                    className="arcade-btn arcade-btn-primary friends-btn"
-                    onClick={() => handleAccept(req)}
-                  >
-                    ✓
-                  </button>
-                  <button
-                    className="arcade-btn friends-btn friends-btn-decline"
-                    onClick={() => handleDecline(req)}
-                  >
-                    ✗
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      <div className="friends-section">
-        <h3 className="friends-section-title">Friends</h3>
-        {friends.length === 0 ? (
-          <p className="friends-empty">No friends yet.</p>
-        ) : (
-          <ul className="friends-list">
-            {friends.map(friend => {
-              const waitingThisFriend = outgoingInvite?.friendId === friend.id
-              const inviteDisabled = Boolean(outgoingInvite)
-              const onlineStatus = presenceMap[friend.id] ?? friend.status
-
-              return (
-                <li key={friend.id} className="friends-list-item friends-friend-item">
-                  <div className="friends-user-info">
-                    <img
-                      src={friend.avatar_url || DEFAULT_AVATAR}
-                      alt={friend.username}
-                      className={`friends-avatar friends-avatar-${onlineStatus}`}
-                    />
-                    <span className={`friends-status-dot friends-status-${onlineStatus}`} />
-                    {onViewProfile ? (
-                      <button
-                        className="friends-username friends-username-btn"
-                        onClick={() => onViewProfile(friend.username, friend.id)}
-                      >
-                        {friend.username}
-                      </button>
-                    ) : (
-                      <span className="friends-username">{friend.username}</span>
-                    )}
-                    {(() => {
-                      const slug = dmSlug(selfId, friend.id)
-                      const count = unreadCounts[slug] ?? 0
-                      return count > 0 ? (
-                        <span className="friends-unread-badge">{count}</span>
-                      ) : null
-                    })()}
-                  </div>
-                  <div className="friends-actions friends-actions-stack">
+        {requests.length > 0 && (
+          <div className="friends-section">
+            <h3 className="friends-section-title">Requests</h3>
+            <ul className="friends-list">
+              {requests.map(req => (
+                <li key={req.id} className="friends-list-item friends-request-item">
+                  <span className="friends-username">{req.requester_username ?? `Player #${req.requester_id}`}</span>
+                  <div className="friends-request-actions">
                     <button
                       className="arcade-btn arcade-btn-primary friends-btn"
-                      onClick={() => handleChat(friend.id, friend.username)}
+                      onClick={() => handleAccept(req)}
                     >
-                      Chat
-                    </button>
-                    <button
-                      className="arcade-btn arcade-btn-secondary friends-btn"
-                      onClick={() => handleInviteToGame(friend)}
-                      disabled={inviteDisabled}
-                    >
-                      {waitingThisFriend ? 'Waiting...' : 'Invite'}
+                      ✓
                     </button>
                     <button
                       className="arcade-btn friends-btn friends-btn-decline"
-                      onClick={() => handleRemoveFriend(friend.id)}
+                      onClick={() => handleDecline(req)}
                     >
                       ✗
                     </button>
                   </div>
                 </li>
-              )
-            })}
-          </ul>
+              ))}
+            </ul>
+          </div>
         )}
-      </div>
-    </aside>
+
+        <div className="friends-section">
+          <h3 className="friends-section-title">Friends</h3>
+          {friends.length === 0 ? (
+            <p className="friends-empty">No friends yet.</p>
+          ) : (
+            <ul className="friends-list">
+              {friends.map(friend => {
+                const waitingThisFriend = outgoingInvite?.friendId === friend.id
+                const inviteDisabled = Boolean(outgoingInvite)
+                const onlineStatus = presenceMap[friend.id] ?? friend.status
+
+                return (
+                  <li key={friend.id} className="friends-list-item friends-friend-item">
+                    <div className="friends-user-info">
+                      <img
+                        src={friend.avatar_url || DEFAULT_AVATAR}
+                        alt={friend.username}
+                        className={`friends-avatar friends-avatar-${onlineStatus}`}
+                      />
+                      <span className={`friends-status-dot friends-status-${onlineStatus}`} />
+                      {onViewProfile ? (
+                        <button
+                          className="friends-username friends-username-btn"
+                          onClick={() => onViewProfile(friend.username, friend.id)}
+                        >
+                          {friend.username}
+                        </button>
+                      ) : (
+                        <span className="friends-username">{friend.username}</span>
+                      )}
+                      {(() => {
+                        const slug = dmSlug(selfId, friend.id)
+                        const count = unreadCounts[slug] ?? 0
+                        return count > 0 ? (
+                          <span className="friends-unread-badge">{count}</span>
+                        ) : null
+                      })()}
+                    </div>
+                    <div className="friends-actions friends-actions-stack">
+                      <button
+                        className="arcade-btn arcade-btn-primary friends-btn"
+                        onClick={() => handleChat(friend.id, friend.username)}
+                      >
+                        Chat
+                      </button>
+                      <button
+                        className="arcade-btn arcade-btn-secondary friends-btn"
+                        onClick={() => handleInviteToGame(friend)}
+                        disabled={inviteDisabled}
+                      >
+                        {waitingThisFriend ? 'Waiting...' : 'Invite'}
+                      </button>
+                      <button
+                        className="arcade-btn friends-btn friends-btn-decline"
+                        onClick={() => handleRemoveFriend(friend.id)}
+                      >
+                        ✗
+                      </button>
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </div>
+      </aside>
 
       {dmOfflineTarget && (
         <div
