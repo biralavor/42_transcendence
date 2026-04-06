@@ -65,7 +65,7 @@ class GameManager:
         if client_ts is not None:
             if not isinstance(client_ts, (int, float)):
                 return
-            if (server_now - client_ts) > 300:
+            if abs(server_now - client_ts) > 300:
                 return
         if player_id == session.player1_id:
             session.p1_direction = direction
