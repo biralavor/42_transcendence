@@ -342,7 +342,7 @@
 5. Git history: meaningful commits from all team members
 
 ### Evaluation dry run
-> Simulate an evalluation
+> Simulate an evaluation
 
 1. `make` from a clean clone — verify single command starts everything
 2. Register + login as a new user
