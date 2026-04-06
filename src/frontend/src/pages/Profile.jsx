@@ -26,6 +26,32 @@ function getSafeAvatarUrl(avatarUrl) {
   return ''
 }
 
+function sanitizeAvatarUrl(rawUrl) {
+  const placeholder = '/avatar_placeholder.jpg'
+
+  if (typeof rawUrl !== 'string' || rawUrl.trim() === '') {
+    return placeholder
+  }
+
+  const url = rawUrl.trim()
+
+  // Allow relative URLs (served from this origin)
+  if (url.startsWith('/')) {
+    return url
+  }
+
+  try {
+    const parsed = new URL(url, window.location.origin)
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+      return parsed.toString()
+    }
+  } catch {
+    // Fall through to placeholder on parse errors
+  }
+
+  return placeholder
+}
+
 export default function Profile() {
   const { auth } = useAuth()
   const [userId, setUserId] = useState(null)
@@ -95,7 +121,12 @@ export default function Profile() {
     const { name, value, type, checked } = e.target
     setProfile(prev => ({
       ...prev,
-      [name]: type === 'checkbox' ? checked : value,
+      [name]:
+        type === 'checkbox'
+          ? checked
+          : name === 'avatarUrl'
+            ? sanitizeAvatarUrl(value)
+            : value,
     }))
   }
 
