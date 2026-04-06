@@ -1,9 +1,8 @@
 import { useRef, useEffect, useState } from 'react'
 import './PongCanvas.css'
 import { GameState } from '../game/pongEngine.js'
-import { Callbacks } from '../game/pongExternal.js';
 import { CanvasGameContext, render } from '../game/pongRenderer.js';
-import { Player, Position } from '../game/pongEntities.js';
+import { useAuth } from '../context/authContext'
 
 /**
  * PongCanvasMultiplayer - Server-Authoritative Multiplayer Pong
@@ -22,6 +21,7 @@ function PongCanvasMultiplayer(props) {
   const player1Id = props?.player1Id
   const player2Id = props?.player2Id
   const onGameEnd = props?.onGameEnd || (() => { })
+  const { auth } = useAuth()
 
   const canvasRef = useRef(null)
   const keyStateRef = useRef({
@@ -43,12 +43,6 @@ function PongCanvasMultiplayer(props) {
 
   // Track which player(s) this client represents
   const playerTypeRef = useRef(null)
-
-  function getLocalInput(keyState, keyUp, keyDown) {
-    let velY = keyState[keyDown] ? 1 : 0
-    velY -= keyState[keyUp] ? 1 : 0
-    return { velY, velX: 0 }
-  }
 
   function onKeyup(event) {
     if (['KeyJ', 'KeyK', 'KeyW', 'KeyS', 'ArrowUp', 'ArrowDown'].includes(event.code)) {
@@ -90,7 +84,11 @@ function PongCanvasMultiplayer(props) {
     // Determine WebSocket URL
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const host = window.location.host
-    const wsUrl = `${protocol}//${host}/api/game/ws/game/${gameId}`
+    let wsUrl = `${protocol}//${host}/api/game/ws/game/${gameId}`
+
+    if (auth?.access_token) {
+      wsUrl += `?token=${auth.access_token}`
+    }
 
     const ws = new WebSocket(wsUrl)
 
