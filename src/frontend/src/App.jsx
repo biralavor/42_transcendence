@@ -13,6 +13,7 @@ import Chat from './pages/Chat'
 import PongCanvas from './Components/PongCanvas'
 import PrivateRoute from './Components/PrivateRoute'
 import GameWaitingRoom from './pages/GameWaitingRoom'
+import GamePage from './pages/GamePage'
 
 export default function App() {
   useEffect(() => {
@@ -82,6 +83,15 @@ export default function App() {
           element={(
             <PrivateRoute>
               <GameWaitingRoom />
+            </PrivateRoute>
+          )}
+        />
+
+        <Route
+          path="/game/:roomId"
+          element={(
+            <PrivateRoute>
+              <GamePage />
             </PrivateRoute>
           )}
         />
