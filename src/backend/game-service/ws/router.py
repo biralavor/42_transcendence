@@ -144,6 +144,10 @@ async def game_websocket(websocket: WebSocket, game_id: str) -> None:
                         # Clean up game session
                         await game_manager.delete_session(game_id)
                         _setup_sessions.pop(game_id, None)
+            
+            # Pass-through other events (e.g., player_ready, player_unready, cancel_waiting_room)
+            else:
+                await manager.broadcast(game_id, data)
     
     except WebSocketDisconnect:
         # Client disconnected
