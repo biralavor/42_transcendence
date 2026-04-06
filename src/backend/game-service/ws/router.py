@@ -122,31 +122,31 @@ async def game_websocket(websocket: WebSocket, game_id: str) -> None:
             
             # Handle game_end: finish the match and clean up
             elif event_type == "game_end":
-                winner_id = data.get("winner_id")
-                score_p1 = data.get("score_p1", 0)
-                score_p2 = data.get("score_p2", 0)
-                
                 session = game_manager.get_session(game_id)
-                if session and isinstance(winner_id, int):
-                    # Update database
-                    try:
-                        async with AsyncSessionLocal() as db:
-                            match_id = _match_ids.get(game_id)
-                            if match_id is not None:
-                                await finish_match(
-                                    db,
-                                    match_id,
-                                    winner_id,
-                                    score_p1,
-                                    score_p2
-                                )
-                    except SQLAlchemyError:
-                        pass  # best-effort
-                    finally:
-                        # Clean up game session
-                        await game_manager.delete_session(game_id)
-                        _setup_sessions.pop(game_id, None)
-                        _match_ids.pop(game_id, None)
+                if session:
+                    # Validate game end strictly against server state
+                    has_winner, true_winner_id = session.check_victory()
+                    
+                    if has_winner and true_winner_id is not None:
+                        # Update database using server-authoritative scores
+                        try:
+                            async with AsyncSessionLocal() as db:
+                                match_id = _match_ids.get(game_id)
+                                if match_id is not None:
+                                    await finish_match(
+                                        db,
+                                        match_id,
+                                        true_winner_id,
+                                        session.score.p1,
+                                        session.score.p2
+                                    )
+                        except SQLAlchemyError:
+                            pass  # best-effort
+                        finally:
+                            # Clean up game session
+                            await game_manager.delete_session(game_id)
+                            _setup_sessions.pop(game_id, None)
+                            _match_ids.pop(game_id, None)
             
             # Pass-through other events (e.g., player_ready, player_unready, cancel_waiting_room)
             else:
