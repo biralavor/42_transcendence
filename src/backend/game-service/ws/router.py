@@ -100,7 +100,7 @@ async def game_websocket(websocket: WebSocket, game_id: str) -> None:
                 
                 # Store which player this connection is
                 if player_id is None:
-                    player_id = player1_id if len(manager.active_connections(game_id)) == 1 else player2_id
+                    player_id = player1_id if manager.active_connections(game_id) == 1 else player2_id
             
             # Handle player input (with latency filtering)
             elif event_type == "input":
