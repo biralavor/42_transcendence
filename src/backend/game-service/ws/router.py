@@ -15,6 +15,8 @@ manager = ConnectionManager()
 
 # Maps game_id (str) → (player1_id, player2_id) for sessions being set up
 _setup_sessions: dict[str, tuple[int, int]] = {}
+# Maps game_id (str) → match_id (int) for database updates
+_match_ids: dict[str, int] = {}
 
 
 async def _broadcast_state(game_id: str, state_snapshot: dict) -> None:
@@ -90,8 +92,7 @@ async def game_websocket(websocket: WebSocket, game_id: str) -> None:
                             async with AsyncSessionLocal() as db:
                                 match = await create_match(db, p1, p2)
                                 # Store for later reference when game ends
-                                if not hasattr(websocket, "_match_id"):
-                                    websocket._match_id = match.id
+                                _match_ids[game_id] = match.id
                         except SQLAlchemyError:
                             pass  # best-effort
                     except ValueError:
@@ -130,10 +131,11 @@ async def game_websocket(websocket: WebSocket, game_id: str) -> None:
                     # Update database
                     try:
                         async with AsyncSessionLocal() as db:
-                            if hasattr(websocket, "_match_id"):
+                            match_id = _match_ids.get(game_id)
+                            if match_id is not None:
                                 await finish_match(
                                     db,
-                                    websocket._match_id,
+                                    match_id,
                                     winner_id,
                                     score_p1,
                                     score_p2
@@ -144,6 +146,7 @@ async def game_websocket(websocket: WebSocket, game_id: str) -> None:
                         # Clean up game session
                         await game_manager.delete_session(game_id)
                         _setup_sessions.pop(game_id, None)
+                        _match_ids.pop(game_id, None)
             
             # Pass-through other events (e.g., player_ready, player_unready, cancel_waiting_room)
             else:
@@ -161,3 +164,4 @@ async def game_websocket(websocket: WebSocket, game_id: str) -> None:
         if manager.active_connections(game_id) == 0:
             await game_manager.delete_session(game_id)
             _setup_sessions.pop(game_id, None)
+            _match_ids.pop(game_id, None)
