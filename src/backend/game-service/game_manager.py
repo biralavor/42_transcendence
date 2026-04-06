@@ -62,8 +62,11 @@ class GameManager:
         if direction not in ("up", "down", "stop"):
             return
         server_now = int(time.time() * 1000)  # Current server time in ms
-        if client_ts is not None and (server_now - client_ts) > 300:
-            return 
+        if client_ts is not None:
+            if not isinstance(client_ts, (int, float)):
+                return
+            if (server_now - client_ts) > 300:
+                return
         if player_id == session.player1_id:
             session.p1_direction = direction
         elif player_id == session.player2_id:
