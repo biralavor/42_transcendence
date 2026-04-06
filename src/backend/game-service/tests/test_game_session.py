@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 
 # Setup path for imports (same as conftest pattern)
-_service_dir = Path(__file__).resolve().parents[1] / "src" / "backend" / "game-service"
+_service_dir = Path(__file__).resolve().parents[1]
 _backend_dir = _service_dir.parent
 
 sys.path.insert(0, str(_backend_dir))

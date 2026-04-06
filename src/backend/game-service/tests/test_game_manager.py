@@ -4,10 +4,11 @@ Integration tests for GameManager with async game loop.
 
 import sys
 import asyncio
+import pytest
 from pathlib import Path
 
 # Setup path for imports
-_service_dir = Path(__file__).resolve().parents[1] / "src" / "backend" / "game-service"
+_service_dir = Path(__file__).resolve().parents[1]
 _backend_dir = _service_dir.parent
 
 sys.path.insert(0, str(_backend_dir))
@@ -21,6 +22,7 @@ if "service" not in sys.modules:
     sys.modules["service"] = _mod
 
 
+@pytest.mark.asyncio
 async def test_game_manager_creation():
     """Test that GameManager can create and manage sessions."""
     from service.game_manager import GameManager
@@ -64,6 +66,7 @@ async def test_game_manager_creation():
     print(f"✓ test_game_manager_creation passed (received {len(states_received)} broadcasts)")
 
 
+@pytest.mark.asyncio
 async def test_latency_filter():
     """Test that inputs with high latency are filtered out."""
     from service.game_manager import GameManager
@@ -106,12 +109,25 @@ async def test_latency_filter():
     )
     assert session.p1_direction == "up", "Stale input should be ignored"
     
+    # Send an invalid timestamp (string - should be rejected)
+    await manager.handle_player_input(
+        game_id="test-latency",
+        player_id=1,
+        message={
+            "type": "input",
+            "direction": "down",
+            "client_ts": "not-a-number",
+        }
+    )
+    assert session.p1_direction == "up", "Invalid timestamp type should be ignored"
+
     # Clean up
     await manager.delete_session("test-latency")
     
     print("✓ test_latency_filter passed")
 
 
+@pytest.mark.asyncio
 async def test_player_input_routing():
     """Test that inputs are routed to correct players."""
     from service.game_manager import GameManager
