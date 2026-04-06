@@ -11,6 +11,7 @@ class GameManager:
         self._sessions: dict[str, GameSession] = {}
         self._game_loops: dict[str, asyncio.Task] = {}
         self._broadcast_callbacks: dict[str, Callable] = {}
+        self._game_over_callbacks: dict[str, Callable] = {}
         self._session_lock = asyncio.Lock()
     
     async def create_session(
@@ -19,6 +20,7 @@ class GameManager:
         player1_id: int,
         player2_id: int,
         broadcast_callback: Callable,
+        on_game_over_callback: Optional[Callable] = None,
     ) -> GameSession:
         
         async with self._session_lock:
@@ -27,6 +29,7 @@ class GameManager:
             session = GameSession(player1_id, player2_id)
             self._sessions[game_id] = session
             self._broadcast_callbacks[game_id] = broadcast_callback
+            self._game_over_callbacks[game_id] = on_game_over_callback
             task = asyncio.create_task(self._run_game_loop(game_id))
             self._game_loops[game_id] = task
             return session
@@ -44,6 +47,7 @@ class GameManager:
                 except asyncio.CancelledError:
                     pass
             self._broadcast_callbacks.pop(game_id, None)
+            self._game_over_callbacks.pop(game_id, None)
     
     def get_session(self, game_id: str) -> Optional[GameSession]:
         return self._sessions.get(game_id)
@@ -90,9 +94,15 @@ class GameManager:
                 
                 has_winner, winner_id = session.check_victory()
                 if has_winner:
-                    # Game over — mark session as inactive
-                    # The WebSocket router will handle cleanup
+                    # Game over - mark session as inactive
                     session.is_active = False
+                    
+                    # Trigger the server-driven game over callback
+                    game_over_cb = self._game_over_callbacks.get(game_id)
+                    if game_over_cb:
+                        asyncio.create_task(
+                            game_over_cb(game_id, winner_id, session.score.p1, session.score.p2)
+                        )
                     break
                 
                 now = loop.time()

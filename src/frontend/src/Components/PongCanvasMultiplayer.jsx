@@ -129,15 +129,10 @@ function PongCanvasMultiplayer(props) {
             if (message.score) {
               gameStateRef.current.score.player1 = message.score.p1
               gameStateRef.current.score.player2 = message.score.p2
-
-              // Check if someone won
-              if (message.score.p1 >= 10) {
-                handleGameEnd(player1Id, message.score.p1, message.score.p2)
-              } else if (message.score.p2 >= 10) {
-                handleGameEnd(player2Id, message.score.p1, message.score.p2)
-              }
             }
           }
+        } else if (message.type === 'game_over') {
+          handleGameEnd(message.winner_id, message.score_p1, message.score_p2)
         }
       } catch (err) {
         console.error('[WS] Message parse error:', err)
@@ -159,14 +154,6 @@ function PongCanvasMultiplayer(props) {
   }
 
   function handleGameEnd(winnerId, scoreP1, scoreP2) {
-    if (webSocketRef.current && webSocketRef.current.readyState === WebSocket.OPEN) {
-      webSocketRef.current.send(JSON.stringify({
-        type: 'game_end',
-        winner_id: winnerId,
-        score_p1: scoreP1,
-        score_p2: scoreP2,
-      }))
-    }
     onGameEnd({ winner_id: winnerId, score_p1: scoreP1, score_p2: scoreP2 })
   }
 
