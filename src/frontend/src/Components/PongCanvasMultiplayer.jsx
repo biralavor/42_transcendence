@@ -29,6 +29,8 @@ function PongCanvasMultiplayer(props) {
     'KeyK': false,
     'KeyW': false,
     'KeyS': false,
+    'ArrowUp': false,
+    'ArrowDown': false,
   })
   const webSocketRef = useRef(null)
   const gameStateRef = useRef(null)
@@ -49,29 +51,26 @@ function PongCanvasMultiplayer(props) {
   }
 
   function onKeyup(event) {
-    if (['KeyJ', 'KeyK', 'KeyW', 'KeyS'].includes(event.code)) {
+    if (['KeyJ', 'KeyK', 'KeyW', 'KeyS', 'ArrowUp', 'ArrowDown'].includes(event.code)) {
       keyStateRef.current[event.code] = false
     }
   }
 
   function onKeydown(event) {
-    if (['KeyJ', 'KeyK', 'KeyW', 'KeyS'].includes(event.code)) {
+    if (['KeyJ', 'KeyK', 'KeyW', 'KeyS', 'ArrowUp', 'ArrowDown'].includes(event.code)) {
       keyStateRef.current[event.code] = true
     }
   }
 
   /**
    * Determine which direction to send based on key state
-   * Player 1 uses W (up) and S (down)
-   * Player 2 uses Up Arrow (not set here yet, needs update)
    */
   function getInput() {
     let direction = 'stop'
 
-    // Player 1 controls (W/S)
-    if (keyStateRef.current['KeyW']) {
+    if (keyStateRef.current['KeyW'] || keyStateRef.current['ArrowUp'] || keyStateRef.current['KeyK']) {
       direction = 'up'
-    } else if (keyStateRef.current['KeyS']) {
+    } else if (keyStateRef.current['KeyS'] || keyStateRef.current['ArrowDown'] || keyStateRef.current['KeyJ']) {
       direction = 'down'
     }
 
