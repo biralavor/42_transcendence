@@ -33,6 +33,7 @@ function PongCanvasMultiplayer(props) {
   const webSocketRef = useRef(null)
   const gameStateRef = useRef(null)
   const loopRef = useRef(null)
+  const lastDirectionRef = useRef('stop')
   const goalTimerRef = useRef(null)
   const [showGoal, setShowGoal] = useState(false)
   const [connStatus, setConnStatus] = useState('connecting')
@@ -211,8 +212,11 @@ function PongCanvasMultiplayer(props) {
       // Get current input
       const direction = getInput()
 
-      // Send input to server
-      sendInput(direction)
+      // Send input to server only if it changed to avoid WS spam
+      if (direction !== lastDirectionRef.current) {
+        sendInput(direction)
+        lastDirectionRef.current = direction
+      }
 
       // Render the server state using the existing renderer
       render(canvasContext, gameStateRef.current, () => false)
