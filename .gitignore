@@ -19,6 +19,7 @@ __pycache__/
 
 # Frontend Vite files
 .vite/
+package-lock.json
 
 # Alembic backups
 *.bak
