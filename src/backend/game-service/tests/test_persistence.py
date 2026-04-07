@@ -5,18 +5,47 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sess
 from sqlalchemy.pool import NullPool
 
 from shared.config.settings import settings
-from persistence import create_match, finish_match, get_leaderboard, get_match, get_user_stats, get_user_matches
+from persistence import (
+    InvalidWinner,
+    TournamentMatchAlreadyFinished,
+    TournamentMatchNotFound,
+    TournamentNotFound,
+    create_match,
+    create_tournament,
+    finish_match,
+    get_leaderboard,
+    get_match,
+    get_tournament_with_participants,
+    get_user_matches,
+    get_user_stats,
+    join_tournament,
+    record_tournament_match_result,
+    start_tournament,
+)
 
 
 @pytest_asyncio.fixture
 async def db():
     engine = create_async_engine(settings.SQLALCHEMY_DATABASE_URI, poolclass=NullPool)
     async with engine.begin() as conn:
-        await conn.execute(text("TRUNCATE TABLE matches RESTART IDENTITY CASCADE"))
+        await conn.execute(
+            text(
+                "TRUNCATE TABLE tournament_matches, tournament_participants, "
+                "tournaments, matches RESTART IDENTITY CASCADE"
+            )
+        )
     Session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     async with Session() as session:
         yield session
     await engine.dispose()
+
+
+async def _setup_tournament(db, max_participants: int):
+    tournament = await create_tournament(db, name="t", creator_id=1, max_participants=max_participants)
+    for uid in range(1, max_participants + 1):
+        await join_tournament(db, tournament.id, uid)
+    _, matches = await start_tournament(db, tournament.id, user_id=1)
+    return tournament, matches
 
 
 @pytest.mark.asyncio
@@ -148,6 +177,115 @@ async def test_get_leaderboard_orders_by_points_then_goal_difference(db):
     assert leaderboard[2]["user_id"] == 3
     assert leaderboard[2]["points"] == 0
     assert leaderboard[2]["rank"] == 3
+
+
+@pytest.mark.asyncio
+async def test_record_match_result_marks_finished_and_no_advance_when_round_incomplete(db):
+    tournament, r1 = await _setup_tournament(db, 4)
+    first = r1[0]
+    _, complete = await record_tournament_match_result(
+        db, tournament.id, first.match_id, winner_id=first.player1_id
+    )
+    assert complete is False
+    _, _, all_matches = await get_tournament_with_participants(db, tournament.id)
+    finished = [m for m in all_matches if m.status == "finished"]
+    assert len(finished) == 1
+    assert finished[0].winner_id == first.player1_id
+    # No new round yet
+    assert all(m.round == 1 for m in all_matches)
+
+
+@pytest.mark.asyncio
+async def test_record_match_result_persists_scores_on_match_row(db):
+    tournament, r1 = await _setup_tournament(db, 4)
+    first = r1[0]
+    await record_tournament_match_result(
+        db, tournament.id, first.match_id, winner_id=first.player1_id, score_p1=7, score_p2=3
+    )
+    match = await get_match(db, first.match_id)
+    assert match.status == "finished"
+    assert match.winner_id == first.player1_id
+    assert match.score_p1 == 7
+    assert match.score_p2 == 3
+
+
+@pytest.mark.asyncio
+async def test_record_match_result_advances_to_next_round_when_round_complete(db):
+    tournament, r1 = await _setup_tournament(db, 4)
+    winners = [m.player1_id for m in r1]
+    for m in r1:
+        await record_tournament_match_result(db, tournament.id, m.match_id, m.player1_id)
+
+    _, _, all_matches = await get_tournament_with_participants(db, tournament.id)
+    round2 = [m for m in all_matches if m.round == 2]
+    assert len(round2) == 1
+    assert {round2[0].player1_id, round2[0].player2_id} == set(winners)
+    assert round2[0].status == "pending"
+
+
+@pytest.mark.asyncio
+async def test_record_match_result_completes_tournament_on_final(db):
+    tournament, r1 = await _setup_tournament(db, 4)
+    for m in r1:
+        await record_tournament_match_result(db, tournament.id, m.match_id, m.player1_id)
+    _, _, all_matches = await get_tournament_with_participants(db, tournament.id)
+    final = next(m for m in all_matches if m.round == 2)
+    _, complete = await record_tournament_match_result(
+        db, tournament.id, final.match_id, winner_id=final.player1_id
+    )
+    assert complete is True
+    t, _, _ = await get_tournament_with_participants(db, tournament.id)
+    assert t.status == "complete"
+
+
+@pytest.mark.asyncio
+async def test_record_match_result_8_player_full_bracket(db):
+    tournament, r1 = await _setup_tournament(db, 8)
+    for m in r1:
+        await record_tournament_match_result(db, tournament.id, m.match_id, m.player1_id)
+    _, _, all_matches = await get_tournament_with_participants(db, tournament.id)
+    r2 = [m for m in all_matches if m.round == 2]
+    assert len(r2) == 2
+    for m in r2:
+        await record_tournament_match_result(db, tournament.id, m.match_id, m.player1_id)
+    _, _, all_matches = await get_tournament_with_participants(db, tournament.id)
+    r3 = [m for m in all_matches if m.round == 3]
+    assert len(r3) == 1
+    _, complete = await record_tournament_match_result(
+        db, tournament.id, r3[0].match_id, winner_id=r3[0].player1_id
+    )
+    assert complete is True
+    t, _, _ = await get_tournament_with_participants(db, tournament.id)
+    assert t.status == "complete"
+
+
+@pytest.mark.asyncio
+async def test_record_match_result_invalid_winner(db):
+    tournament, r1 = await _setup_tournament(db, 4)
+    with pytest.raises(InvalidWinner):
+        await record_tournament_match_result(db, tournament.id, r1[0].match_id, winner_id=99999)
+
+
+@pytest.mark.asyncio
+async def test_record_match_result_already_finished(db):
+    tournament, r1 = await _setup_tournament(db, 4)
+    await record_tournament_match_result(db, tournament.id, r1[0].match_id, r1[0].player1_id)
+    with pytest.raises(TournamentMatchAlreadyFinished):
+        await record_tournament_match_result(db, tournament.id, r1[0].match_id, r1[0].player1_id)
+
+
+@pytest.mark.asyncio
+async def test_record_match_result_unknown_tournament(db):
+    with pytest.raises(TournamentNotFound):
+        await record_tournament_match_result(db, 99999, 1, winner_id=1)
+
+
+@pytest.mark.asyncio
+async def test_record_match_result_match_not_in_tournament(db):
+    tournament, _ = await _setup_tournament(db, 4)
+    other = await create_match(db, player1_id=50, player2_id=51)
+    with pytest.raises(TournamentMatchNotFound):
+        await record_tournament_match_result(db, tournament.id, other.id, winner_id=50)
 
 
 @pytest.mark.asyncio
