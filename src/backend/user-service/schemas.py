@@ -97,3 +97,15 @@ class NotificationResponse(BaseModel):
     message:    str
     read:       bool
     created_at: datetime
+
+
+class GameNotificationRequest(BaseModel):
+    type: Literal["game_invite", "game_invite_response", "game_invite_timeout"]
+    to_user_id: int
+    room_id: str
+    # game_invite
+    to_username:     Optional[str] = None
+    from_avatar_url: Optional[str] = None
+    expires_at:      Optional[int] = None
+    # game_invite_response
+    status: Optional[Literal["accepted", "declined", "timeout"]] = None

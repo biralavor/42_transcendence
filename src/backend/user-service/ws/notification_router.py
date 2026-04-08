@@ -25,39 +25,38 @@ async def notification_endpoint(
     token: str = "",
 ) -> None:
     """
-    Per-user notification channel.
+    Per-user notification channel (listen-only).
 
-    Protocol:
-    - Any authenticated user may connect to /ws/notifications/{user_id}.
-    - Messages received on the socket are broadcast to ALL sockets currently
-      connected to the same user_id channel (relay pattern).
-    - Persistent listeners connect and keep the socket open.
-    - Senders open a transient connection, write a JSON payload, then close.
+    Only the authenticated user may connect to their own channel:
+    the token must decode to a user whose id matches the {user_id} path param.
 
-    Supported event types (by convention, not enforced server-side):
-      game_invite          – {type, from_user_id, from_username, from_avatar_url,
-                               to_user_id, to_username, room_id, expires_at}
-      game_invite_response – {type, status: accepted|declined, room_id,
-                               from_user_id, from_username, from_avatar_url, to_user_id}
-      game_invite_timeout  – {type, room_id, from_user_id, to_user_id}
+    Server is the sole writer — clients cannot inject messages.
+    Delivery is via POST /game-invites which calls notification_manager.broadcast().
+
+    Close codes:
+      4001 – missing/invalid token or get_me() failure
+      4003 – authenticated user does not own this channel (me.id != user_id)
     """
     if not token:
         await websocket.close(code=4001)
         return
 
     try:
-        await get_me(token, session)
+        me = await get_me(token, session)
     except Exception as exc:
         logger.warning("WS /notifications auth failed: %s", exc)
         await websocket.close(code=4001)
+        return
+
+    if me.id != user_id:
+        await websocket.close(code=4003)
         return
 
     room = str(user_id)
     await notification_manager.connect(room, websocket)
     try:
         while True:
-            data = await websocket.receive_json()
-            await notification_manager.broadcast(room, data)
+            await websocket.receive()   # discard all client frames; blocks until disconnect
     except WebSocketDisconnect:
         pass
     except Exception:
