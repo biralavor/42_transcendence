@@ -9,7 +9,7 @@ from service.schemas import (
     Login, LoginResponse, RefreshRequest, RegisterRequest, RegisterResponse,
     ProfileResponse, UpdateProfileRequest, MeResponse,
     FriendResponse, FriendRequestResponse, FriendRequestAction,
-    NotificationResponse,
+    NotificationResponse, GameNotificationRequest,
 )
 from service.models.user import User
 from service.service import authenticate, refresh_access_token, register_credentials, get_profile, update_profile, get_me
@@ -20,6 +20,7 @@ from service.friends import (
 import service.notifications as _notifications
 from shared.database import get_db
 from service.ws.presence_router import router as presence_router
+from service.ws.notification_router import router as notification_router, notification_manager
 
 SessionDependency = Annotated[AsyncSession, Depends(get_db)]
 bearer_scheme = HTTPBearer()
@@ -188,4 +189,26 @@ async def remove_notification(
     return Response(status_code=204)
 
 
+@app.post("/game-invites", status_code=204)
+async def deliver_game_notification(
+    body: GameNotificationRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """Deliver a game invite event to the target user's notification channel.
+
+    from_user_id and from_username are always taken from the authenticated
+    caller's JWT — client-supplied values in the body are ignored, preventing
+    impersonation.
+    """
+    payload = {
+        **body.model_dump(exclude_none=True, exclude={"from_user_id", "from_username"}),
+        "from_user_id": current_user.id,
+        "from_username": current_user.username,
+    }
+    await notification_manager.broadcast(str(body.to_user_id), payload)
+    from fastapi.responses import Response
+    return Response(status_code=204)
+
+
 app.include_router(presence_router)
+app.include_router(notification_router)

@@ -4,11 +4,11 @@ const DEFAULT_AVATAR = '/avatar_placeholder.jpg'
 
 function getWsBaseUrl() {
   const scheme = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  return `${scheme}//${window.location.host}/api/game/ws/game`
+  return `${scheme}//${window.location.host}/api/users/ws/notifications`
 }
 
 export function getGameChannelIdForUser(userId) {
-  return `user-${userId}`
+  return userId
 }
 
 export function buildInviteRoomId(userAId, userBId) {
@@ -22,52 +22,17 @@ export function createGameChannelClient(channelId, token, handlers = {}) {
   return createWsClient(url, handlers)
 }
 
-export function sendGameChannelMessage(channelId, payload, token, { closeDelay = 120 } = {}) {
-  return new Promise((resolve, reject) => {
-    if (typeof window === 'undefined' || typeof window.WebSocket === 'undefined') {
-      reject(new Error('WebSocket is not available in this environment.'))
-      return
-    }
-
-    let url = `${getWsBaseUrl()}/${channelId}`
-    if (token) url += `?token=${token}`
-
-    const ws = new WebSocket(url)
-    let settled = false
-    let closeTimer = null
-
-    const finish = (callback) => {
-      if (settled)
-        return
-
-      settled = true
-      clearTimeout(closeTimer)
-      callback()
-    }
-
-    ws.onopen = () => {
-      try {
-        ws.send(JSON.stringify(payload))
-        closeTimer = window.setTimeout(() => {
-          finish(resolve)
-          ws.close()
-        }, closeDelay)
-      } catch {
-        finish(() => reject(new Error('Failed to serialize game invite payload.')))
-        ws.close()
-      }
-    }
-
-    ws.onerror = () => {
-      finish(() => reject(new Error('Unable to send the game invite event.')))
-      ws.close()
-    }
-
-    ws.onclose = () => {
-      if (!settled)
-        finish(resolve)
-    }
+export async function sendGameChannelMessage(_channelId, payload, token, options = {}) {
+  const resp = await fetch('/api/users/game-invites', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
   })
+  if (!resp.ok)
+    throw new Error('Unable to send the game invite event.')
 }
 
 export function normalizeInviteUser(user) {
