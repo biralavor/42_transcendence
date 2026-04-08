@@ -1,0 +1,62 @@
+from fastapi import HTTPException
+from sqlalchemy import select, update
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from service.models.notification import Notification
+
+
+async def get_notifications(db: AsyncSession, user_id: int) -> list[Notification]:
+    """Return the last 20 notifications for user_id, newest first."""
+    result = await db.execute(
+        select(Notification)
+        .where(Notification.user_id == user_id)
+        .order_by(Notification.created_at.desc(), Notification.id.desc())
+        .limit(20)
+    )
+    return list(result.scalars().all())
+
+
+async def mark_notification_read(
+    db: AsyncSession, notification_id: int, user_id: int
+) -> Notification:
+    """Mark a single notification as read. Raises 404 if not found or not owned by user_id."""
+    result = await db.execute(
+        select(Notification).where(
+            Notification.id == notification_id,
+            Notification.user_id == user_id,
+        )
+    )
+    notif = result.scalars().first()
+    if notif is None:
+        raise HTTPException(status_code=404, detail="Notification not found")
+    notif.read = True
+    await db.commit()
+    await db.refresh(notif)
+    return notif
+
+
+async def mark_all_notifications_read(db: AsyncSession, user_id: int) -> None:
+    """Mark all notifications for user_id as read."""
+    await db.execute(
+        update(Notification)
+        .where(Notification.user_id == user_id, Notification.read.is_(False))
+        .values(read=True)
+    )
+    await db.commit()
+
+
+async def delete_notification(
+    db: AsyncSession, notification_id: int, user_id: int
+) -> None:
+    """Delete a single notification. Raises 404 if not found or not owned by user_id."""
+    result = await db.execute(
+        select(Notification).where(
+            Notification.id == notification_id,
+            Notification.user_id == user_id,
+        )
+    )
+    notif = result.scalars().first()
+    if notif is None:
+        raise HTTPException(status_code=404, detail="Notification not found")
+    await db.delete(notif)
+    await db.commit()

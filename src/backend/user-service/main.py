@@ -9,6 +9,7 @@ from service.schemas import (
     Login, LoginResponse, RefreshRequest, RegisterRequest, RegisterResponse,
     ProfileResponse, UpdateProfileRequest, MeResponse,
     FriendResponse, FriendRequestResponse, FriendRequestAction,
+    NotificationResponse,
 )
 from service.models.user import User
 from service.service import authenticate, refresh_access_token, register_credentials, get_profile, update_profile, get_me
@@ -16,6 +17,7 @@ from service.friends import (
     get_friends, get_pending_requests, get_sent_requests, send_friend_request,
     respond_to_friend_request, delete_friendship, search_users,
 )
+import service.notifications as _notifications
 from shared.database import get_db
 from service.ws.presence_router import router as presence_router
 
@@ -142,6 +144,48 @@ async def search_users_endpoint(session: SessionDependency, q: str = ""):
     if len(q) < 2:
         return []
     return await search_users(q, session)
+
+
+@app.get("/notifications", response_model=list[NotificationResponse])
+async def list_notifications(
+    session: SessionDependency,
+    current_user: User = Depends(get_current_user),
+):
+    """Return last 20 notifications for the authenticated caller, newest first."""
+    return await _notifications.get_notifications(session, current_user.id)
+
+
+@app.put("/notifications/read-all", status_code=204)
+async def read_all_notifications(
+    session: SessionDependency,
+    current_user: User = Depends(get_current_user),
+):
+    """Mark all caller's notifications as read."""
+    await _notifications.mark_all_notifications_read(session, current_user.id)
+    from fastapi.responses import Response
+    return Response(status_code=204)
+
+
+@app.put("/notifications/{notification_id}/read", response_model=NotificationResponse)
+async def read_notification(
+    notification_id: int,
+    session: SessionDependency,
+    current_user: User = Depends(get_current_user),
+):
+    """Mark a single notification as read. Returns 404 if not owned by caller."""
+    return await _notifications.mark_notification_read(session, notification_id, current_user.id)
+
+
+@app.delete("/notifications/{notification_id}", status_code=204)
+async def remove_notification(
+    notification_id: int,
+    session: SessionDependency,
+    current_user: User = Depends(get_current_user),
+):
+    """Delete a single notification. Returns 404 if not owned by caller."""
+    await _notifications.delete_notification(session, notification_id, current_user.id)
+    from fastapi.responses import Response
+    return Response(status_code=204)
 
 
 app.include_router(presence_router)
