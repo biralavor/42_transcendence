@@ -4,11 +4,11 @@ const DEFAULT_AVATAR = '/avatar_placeholder.jpg'
 
 function getWsBaseUrl() {
   const scheme = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  return `${scheme}//${window.location.host}/api/game/ws/game`
+  return `${scheme}//${window.location.host}/api/users/ws/notifications`
 }
 
 export function getGameChannelIdForUser(userId) {
-  return `user-${userId}`
+  return userId
 }
 
 export function buildInviteRoomId(userAId, userBId) {

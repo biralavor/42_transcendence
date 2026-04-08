@@ -20,6 +20,7 @@ from service.friends import (
 import service.notifications as _notifications
 from shared.database import get_db
 from service.ws.presence_router import router as presence_router
+from service.ws.notification_router import router as notification_router
 
 SessionDependency = Annotated[AsyncSession, Depends(get_db)]
 bearer_scheme = HTTPBearer()
@@ -189,3 +190,4 @@ async def remove_notification(
 
 
 app.include_router(presence_router)
+app.include_router(notification_router)
