@@ -47,15 +47,6 @@ http {
         # NOTE: trailing slash on proxy_pass strips the location prefix.
         # /api/users/profile → /profile at user-service
         # FastAPI routes must NOT include the /api/<service> prefix.
-        location /api/notifications {
-            proxy_pass             http://user-service/notifications;
-            proxy_http_version     1.1;
-            proxy_set_header       Host $host;
-            proxy_set_header       X-Real-IP $remote_addr;
-            proxy_set_header       Upgrade $http_upgrade;
-            proxy_set_header       Connection $connection_upgrade;
-        }
-
         location /api/users/ {
             proxy_pass             http://user-service/;
             proxy_http_version     1.1;
