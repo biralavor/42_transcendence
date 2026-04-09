@@ -110,16 +110,7 @@ export default function NavbarComponent() {
                   to={link.to}
                   className={`pong-nav__link ${link.isActive(location.pathname) ? 'is-active' : ''}`}
                 >
-                  {link.label === 'Chat' && dmUnreadTotal > 0 ? (
-                    <>
-                      {link.label}
-                      <span className="pong-nav__dm-badge" data-testid="dm-badge">
-                        {dmUnreadTotal}
-                      </span>
-                    </>
-                  ) : (
-                    link.label
-                  )}
+                  {link.label}
                 </Link>
               ))}
             </div>

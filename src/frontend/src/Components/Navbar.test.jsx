@@ -84,13 +84,8 @@ describe('Navbar — bell and DM badge', () => {
         expect(screen.queryByTestId('notif-panel')).toBeNull()
     })
 
-    it('shows DM badge on Chat link when total unread DMs > 0', () => {
+    it('does not show DM badge on Chat link (bell handles DM count)', () => {
         useUnread.mockReturnValue({ unreadCounts: { 'DM-1-2': 2, 'DM-1-3': 1 } })
-        renderNavbar()
-        expect(screen.getByTestId('dm-badge')).toHaveTextContent('3')
-    })
-
-    it('hides DM badge when unreadCounts is empty', () => {
         renderNavbar()
         expect(screen.queryByTestId('dm-badge')).toBeNull()
     })
