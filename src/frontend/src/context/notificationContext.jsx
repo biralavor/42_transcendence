@@ -85,12 +85,11 @@ export function NotificationProvider({ children }) {
         return merged.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
     }, [notifications, unreadCounts, userId])
 
-    // Calculate unread count including both real notifications and DM pseudo-notifications
-    const totalUnreadCount = useMemo(() => {
-        const realNotifUnread = notifications.filter(n => !n.read).length
-        const dmUnreadTotal = Object.values(unreadCounts).reduce((a, b) => a + b, 0)
-        return realNotifUnread + dmUnreadTotal
-    }, [notifications, unreadCounts])
+    // System notifications only — DM unreads are surfaced via useUnread() on the Chat link
+    const totalUnreadCount = useMemo(
+        () => notifications.filter(n => !n.read).length,
+        [notifications]
+    )
 
     const fetchNotifications = useCallback(async () => {
         const r = await apiCall('/api/users/notifications')
