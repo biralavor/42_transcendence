@@ -61,6 +61,7 @@ export default function FriendsSidebar({ userId, username, currentUser, onViewPr
 
   useEffect(() => {
     setInviteVisible(!!incomingInvite)
+    return () => setInviteVisible(false)
   }, [incomingInvite, setInviteVisible])
 
   const showInviteToast = useCallback((message, tone = 'info', duration = 4200) => {

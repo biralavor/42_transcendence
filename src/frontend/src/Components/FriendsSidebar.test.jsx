@@ -579,3 +579,25 @@ describe('FriendsSidebar — unread badge', () => {
     })
   })
 })
+
+describe('FriendsSidebar — setInviteVisible cleanup', () => {
+  it('calls setInviteVisible(false) on unmount so suppression does not persist', () => {
+    const setInviteVisible = vi.fn()
+    useNotifications.mockReturnValue({
+      setInviteVisible,
+      notifications: [],
+      unreadCount: 0,
+      fetchNotifications: vi.fn(),
+      markRead: vi.fn(),
+      markAllRead: vi.fn(),
+      removeNotification: vi.fn(),
+    })
+    const { unmount } = render(
+      <MemoryRouter>
+        <FriendsSidebar userId={1} username="me" />
+      </MemoryRouter>
+    )
+    unmount()
+    expect(setInviteVisible).toHaveBeenCalledWith(false)
+  })
+})
