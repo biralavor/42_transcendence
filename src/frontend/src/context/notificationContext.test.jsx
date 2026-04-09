@@ -86,7 +86,7 @@ describe('NotificationContext', () => {
         expect(result.current.notifications.some(n => n.id === 1)).toBe(true)
     })
 
-    it('does NOT increment unreadCount for game_invite when invite UI is visible', async () => {
+    it('marks suppressed game_invite as read=true so totalUnreadCount is not incremented', async () => {
         useAuth.mockReturnValue({ auth: { access_token: 'tok' } })
         const { result } = renderHook(useNotifications, { wrapper })
         await waitFor(() => expect(mockWsInstance).not.toBeNull())
@@ -99,12 +99,13 @@ describe('NotificationContext', () => {
                 }),
             })
         })
-        // With DMs, unreadCount might be more than 0 if there are unread DMs
-        const notifCount = result.current.notifications.filter(n => n.type === 'game_invite').length
-        expect(notifCount).toBe(1)
+        const notif = result.current.notifications.find(n => n.id === 2)
+        expect(notif).toBeDefined()
+        expect(notif.read).toBe(true)       // suppressed → inserted as read
+        expect(result.current.unreadCount).toBe(0)  // badge does not increment
     })
 
-    it('increments unreadCount for game_invite when invite UI is NOT visible', async () => {
+    it('inserts game_invite as read=false and increments badge when invite UI is NOT visible', async () => {
         useAuth.mockReturnValue({ auth: { access_token: 'tok' } })
         const { result } = renderHook(useNotifications, { wrapper })
         await waitFor(() => expect(mockWsInstance).not.toBeNull())
@@ -117,7 +118,43 @@ describe('NotificationContext', () => {
                 }),
             })
         })
+        const notif = result.current.notifications.find(n => n.id === 3)
+        expect(notif.read).toBe(false)      // not suppressed → inserted as unread
         expect(result.current.unreadCount).toBeGreaterThanOrEqual(1)
+    })
+
+    it('caps notification list at 20 entries on WS insert', async () => {
+        useAuth.mockReturnValue({ auth: { access_token: 'tok' } })
+        const { result } = renderHook(useNotifications, { wrapper })
+        await waitFor(() => expect(mockWsInstance).not.toBeNull())
+        act(() => {
+            for (let i = 1; i <= 25; i++) {
+                mockWsInstance.onmessage({
+                    data: JSON.stringify({
+                        type: 'notification',
+                        notification: { id: i, type: 'friend_request', message: `msg ${i}`, read: false, created_at: new Date().toISOString() },
+                    }),
+                })
+            }
+        })
+        const realNotifs = result.current.notifications.filter(n => n.type !== 'unread_chat')
+        expect(realNotifs.length).toBeLessThanOrEqual(20)
+    })
+
+    it('dedupes by id: re-inserting the same id does not create duplicates', async () => {
+        useAuth.mockReturnValue({ auth: { access_token: 'tok' } })
+        const { result } = renderHook(useNotifications, { wrapper })
+        await waitFor(() => expect(mockWsInstance).not.toBeNull())
+        const frame = {
+            data: JSON.stringify({
+                type: 'notification',
+                notification: { id: 99, type: 'friend_request', message: 'hi', read: false, created_at: new Date().toISOString() },
+            }),
+        }
+        act(() => { mockWsInstance.onmessage(frame) })
+        act(() => { mockWsInstance.onmessage(frame) })
+        const matches = result.current.notifications.filter(n => n.id === 99)
+        expect(matches.length).toBe(1)
     })
 
     it('ignores frames with type !== notification', async () => {
@@ -131,6 +168,26 @@ describe('NotificationContext', () => {
             })
         })
         expect(result.current.notifications.length).toBe(initialNotifCount)
+    })
+
+    it('clears notifications when access_token becomes null (logout)', async () => {
+        useAuth.mockReturnValue({ auth: { access_token: 'tok' } })
+        const { result, rerender } = renderHook(useNotifications, { wrapper })
+        await waitFor(() => expect(mockWsInstance).not.toBeNull())
+        // Simulate a notification arriving
+        act(() => {
+            mockWsInstance.onmessage({
+                data: JSON.stringify({
+                    type: 'notification',
+                    notification: { id: 5, type: 'friend_request', message: 'hi', read: false, created_at: new Date().toISOString() },
+                }),
+            })
+        })
+        expect(result.current.notifications.some(n => n.id === 5)).toBe(true)
+        // Simulate logout
+        useAuth.mockReturnValue({ auth: { access_token: null } })
+        rerender()
+        expect(result.current.notifications.filter(n => n.id === 5)).toHaveLength(0)
     })
 
     it('closes WS on unmount', async () => {
@@ -153,6 +210,28 @@ describe('NotificationContext', () => {
             const dmNotifs = result.current.notifications.filter(n => n.type === 'unread_chat')
             expect(dmNotifs.length).toBeGreaterThan(0)
         })
+    })
+
+    it('DM pseudo-notification created_at is stable across recomputes', async () => {
+        useAuth.mockReturnValue({ auth: { access_token: 'tok' } })
+        useUnread.mockReturnValue({
+            unreadCounts: { 'DM-1-7': 1 },
+            clearUnread: vi.fn(),
+        })
+        const { result, rerender } = renderHook(useNotifications, { wrapper })
+        await waitFor(() => {
+            const dm = result.current.notifications.find(n => n.type === 'unread_chat')
+            expect(dm).toBeDefined()
+        })
+        const firstTs = result.current.notifications.find(n => n.type === 'unread_chat').created_at
+        // Trigger a recompute by changing count
+        useUnread.mockReturnValue({
+            unreadCounts: { 'DM-1-7': 2 },
+            clearUnread: vi.fn(),
+        })
+        rerender()
+        const secondTs = result.current.notifications.find(n => n.type === 'unread_chat').created_at
+        expect(secondTs).toBe(firstTs)   // timestamp must not change on recompute
     })
 
     it('clears DM unread counts when markAllRead is called', async () => {

@@ -10,19 +10,25 @@ export function NotificationProvider({ children }) {
     const { unreadCounts, clearUnread } = useUnread()
     const [userId, setUserId] = useState(null)
     const [notifications, setNotifications] = useState([])
-    const [unreadCount, setUnreadCount] = useState(0)
     const inviteVisibleRef = useRef(false)
+    // Stable first-seen timestamp per DM room slug — set once, never updated, so sort order is stable
+    const dmFirstSeenRef = useRef({})
 
     // Step 1: resolve integer user ID via /auth/me whenever token changes
     useEffect(() => {
         if (!auth.access_token) {
             setUserId(null)
+            setNotifications([])
+            dmFirstSeenRef.current = {}
             return
         }
         apiCall('/api/users/auth/me')
             .then(r => r.json())
             .then(me => setUserId(me.id))
-            .catch(() => setUserId(null))
+            .catch(() => {
+                setUserId(null)
+                setNotifications([])
+            })
     }, [auth.access_token])
 
     // Step 2: open WS once userId is known
@@ -37,12 +43,13 @@ export function NotificationProvider({ children }) {
                 const frame = JSON.parse(event.data)
                 if (frame.type !== 'notification') return
                 const notif = frame.notification
-                setNotifications(prev => [notif, ...prev])
-                if (!notif.read) {
-                    // Suppress badge increment for game_invite when FriendsSidebar is showing the invite UI
-                    if (notif.type === 'game_invite' && inviteVisibleRef.current) return
-                    setUnreadCount(prev => prev + 1)
-                }
+                // Suppress badge for game_invite when FriendsSidebar is already showing the invite.
+                // Mark as read so totalUnreadCount (derived from list) doesn't count it.
+                const suppressed = notif.type === 'game_invite' && inviteVisibleRef.current
+                const entry = { ...notif, read: notif.read || suppressed }
+                setNotifications(prev =>
+                    [entry, ...prev.filter(n => n.id !== notif.id)].slice(0, 20)
+                )
             } catch {
                 // ignore non-JSON frames
             }
@@ -54,15 +61,19 @@ export function NotificationProvider({ children }) {
     // Convert DM unreadCounts to pseudo-notifications and merge with real notifications
     const combinedNotifications = useMemo(() => {
         const dmNotifs = Object.entries(unreadCounts).map(([slug, count]) => {
+            // Record first-seen time once per slug so sort order is stable across re-renders
+            if (!dmFirstSeenRef.current[slug]) {
+                dmFirstSeenRef.current[slug] = new Date().toISOString()
+            }
             // slug format: "DM-{lower_id}-{higher_id}"
             const parts = slug.split('-')
             const otherId = parts.length === 3 ? (parseInt(parts[1]) === userId ? parseInt(parts[2]) : parseInt(parts[1])) : null
             return {
-                id: `dm-${slug}`, // Pseudo ID for DM notifications
+                id: `dm-${slug}`,
                 type: 'unread_chat',
                 message: `${count} unread message${count !== 1 ? 's' : ''}`,
                 read: false,
-                created_at: new Date().toISOString(),
+                created_at: dmFirstSeenRef.current[slug],
                 room_slug: slug,
                 other_user_id: otherId,
                 unread_count: count,
@@ -85,7 +96,6 @@ export function NotificationProvider({ children }) {
         const r = await apiCall('/api/users/notifications')
         const data = await r.json()
         setNotifications(data)
-        setUnreadCount(data.filter(n => !n.read).length)
     }, [])
 
     const markRead = useCallback(async (id) => {
@@ -98,13 +108,11 @@ export function NotificationProvider({ children }) {
 
         await apiCall(`/api/users/notifications/${id}/read`, { method: 'PUT' })
         setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n))
-        setUnreadCount(prev => Math.max(0, prev - 1))
     }, [clearUnread])
 
     const markAllRead = useCallback(async () => {
         await apiCall('/api/users/notifications/read-all', { method: 'PUT' })
         setNotifications(prev => prev.map(n => ({ ...n, read: true })))
-        setUnreadCount(0)
 
         // Clear all DM unread counts
         Object.keys(unreadCounts).forEach(slug => {
@@ -114,11 +122,7 @@ export function NotificationProvider({ children }) {
 
     const removeNotification = useCallback(async (id) => {
         await apiCall(`/api/users/notifications/${id}`, { method: 'DELETE' })
-        setNotifications(prev => {
-            const wasUnread = prev.some(n => n.id === id && !n.read)
-            if (wasUnread) setUnreadCount(c => Math.max(0, c - 1))
-            return prev.filter(n => n.id !== id)
-        })
+        setNotifications(prev => prev.filter(n => n.id !== id))
     }, [])
 
     const setInviteVisible = useCallback((visible) => {
