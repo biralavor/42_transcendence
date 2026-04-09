@@ -207,6 +207,7 @@
 }
 
 @media (max-width: 1200px) {
+
   .pong-nav__link,
   .pong-nav__button {
     font-size: 0.52rem;

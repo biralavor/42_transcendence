@@ -1,90 +1,90 @@
 /* src/frontend/src/Components/NotificationPanel.css */
 .notif-panel {
-  position: absolute;
-  top: calc(100% + 0.5rem);
-  right: 0;
-  z-index: 20000;
-  width: 320px;
-  max-height: 420px;
-  overflow-y: auto;
-  background: #1a0f0b;
-  border: 3px solid #f6db58;
-  border-radius: 12px;
-  box-shadow: 0 8px 0 rgba(59, 36, 29, 0.85);
+    position: absolute;
+    top: calc(100% + 0.5rem);
+    right: 0;
+    z-index: 20000;
+    width: 320px;
+    max-height: 420px;
+    overflow-y: auto;
+    background: #1a0f0b;
+    border: 3px solid #f6db58;
+    border-radius: 12px;
+    box-shadow: 0 8px 0 rgba(59, 36, 29, 0.85);
 }
 
 .notif-panel__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0.75rem 1rem;
-  border-bottom: 2px solid rgba(246, 217, 88, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+    border-bottom: 2px solid rgba(246, 217, 88, 0.3);
 }
 
 .notif-panel__title {
-  font-family: 'Press Start 2P', monospace;
-  font-size: 0.55rem;
-  color: #f6db58;
-  margin: 0;
-  letter-spacing: 0.1rem;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 0.55rem;
+    color: #f6db58;
+    margin: 0;
+    letter-spacing: 0.1rem;
 }
 
 .notif-panel__mark-all {
-  font-family: 'Press Start 2P', monospace;
-  font-size: 0.4rem;
-  color: rgba(246, 217, 88, 0.7);
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 0.25rem 0.5rem;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 0.4rem;
+    color: rgba(246, 217, 88, 0.7);
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0.25rem 0.5rem;
 }
 
 .notif-panel__mark-all:hover {
-  color: #f6db58;
+    color: #f6db58;
 }
 
 .notif-panel__list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
+    list-style: none;
+    margin: 0;
+    padding: 0;
 }
 
 .notif-panel__empty {
-  padding: 1.25rem 1rem;
-  font-family: 'Press Start 2P', monospace;
-  font-size: 0.45rem;
-  color: rgba(246, 217, 88, 0.5);
-  text-align: center;
+    padding: 1.25rem 1rem;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 0.45rem;
+    color: rgba(246, 217, 88, 0.5);
+    text-align: center;
 }
 
 .notif-panel__item {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  padding: 0.75rem 1rem;
-  border-bottom: 1px solid rgba(246, 217, 88, 0.1);
-  cursor: default;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid rgba(246, 217, 88, 0.1);
+    cursor: default;
 }
 
 .notif-panel__item--unread {
-  background: rgba(246, 217, 88, 0.08);
-  cursor: pointer;
+    background: rgba(246, 217, 88, 0.08);
+    cursor: pointer;
 }
 
 .notif-panel__item--unread:hover {
-  background: rgba(246, 217, 88, 0.14);
+    background: rgba(246, 217, 88, 0.14);
 }
 
 .notif-panel__type {
-  font-family: 'Press Start 2P', monospace;
-  font-size: 0.4rem;
-  color: #f6db58;
-  text-transform: uppercase;
-  letter-spacing: 0.08rem;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 0.4rem;
+    color: #f6db58;
+    text-transform: uppercase;
+    letter-spacing: 0.08rem;
 }
 
 .notif-panel__msg {
-  font-size: 0.78rem;
-  color: rgba(255, 255, 255, 0.85);
-  line-height: 1.4;
+    font-size: 0.78rem;
+    color: rgba(255, 255, 255, 0.85);
+    line-height: 1.4;
 }

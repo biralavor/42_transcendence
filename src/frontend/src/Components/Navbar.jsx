@@ -134,9 +134,9 @@ export default function NavbarComponent() {
                     onClick={() => setIsPanelOpen((prev) => !prev)}
                   >
                     🔔
-                    {unreadCount > 0 && (
+                    {(unreadCount + dmUnreadTotal) > 0 && (
                       <span className="pong-nav__bell-badge" data-testid="bell-badge">
-                        {unreadCount}
+                        {unreadCount + dmUnreadTotal}
                       </span>
                     )}
                   </button>
