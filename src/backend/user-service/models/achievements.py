@@ -14,7 +14,7 @@ from shared.database import Base
 
 
 class Achievement(Base):
-    __tablename__ = 'achievements'
+    __tablename__ = "achievements"
 
     id = Column(Integer, primary_key=True)
     key = Column(String(50), unique=True, nullable=False)
@@ -27,21 +27,22 @@ class Achievement(Base):
 
 
 class UserAchievement(Base):
-    __tablename__ = 'user_achievements'
+    __tablename__ = "user_achievements"
 
     user_id = Column(Integer,
-                     ForeignKey('users.id', ondelete='CASCADE'),
+                     ForeignKey("users.id", ondelete="CASCADE"),
                      nullable=False)
 
     achievement_id = Column(Integer,
-                            ForeignKey('achievements.id'),
+                            ForeignKey("achievements.id"),
                             nullable=False)
 
     earned_at = Column(TIMESTAMP(timezone=True),
+                       nullable=False,
                        server_default=func.now())
 
     __table_args__ = (
-        PrimaryKeyConstraint('user_id', 'achievement_id'),
+        PrimaryKeyConstraint("user_id", "achievement_id"),
     )
 
     def __repr__(self):
@@ -50,10 +51,10 @@ class UserAchievement(Base):
 
 
 class UserXP(Base):
-    __tablename__ = 'user_xp'
+    __tablename__ = "user_xp"
 
     user_id = Column(Integer,
-                     ForeignKey('users.id', ondelete='CASCADE'),
+                     ForeignKey("users.id", ondelete="CASCADE"),
                      primary_key=True)
     xp = Column(Integer, default=0)
     level = Column(Integer, Computed('xp / 100 + 1'))

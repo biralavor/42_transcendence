@@ -2,4 +2,4 @@
 
 python-lsp-server[all]        # LSP server with all optional features
 pylsp-mypy                    # lsp-server plugin for type checking
-#python-lsp-black              # lsp-server plugin for formatting assistence
+#python-lsp-black              # lsp-server plugin for formatting assistance
