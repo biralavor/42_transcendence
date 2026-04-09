@@ -35,6 +35,7 @@ def _fake_notif(notif_type="friend_request", user_id=2):
     n.message = "test message"
     n.read = False
     n.user_id = user_id
+    n.created_at = datetime(2026, 4, 9, 12, 0, 0, tzinfo=timezone.utc)
     return n
 
 
@@ -76,6 +77,7 @@ async def test_send_friend_request_broadcasts_notification():
     assert payload["notification"]["type"] == "friend_request"
     assert payload["notification"]["id"] == 55
     assert payload["notification"]["read"] is False
+    assert payload["notification"]["created_at"] == "2026-04-09T12:00:00+00:00"
 
 
 @pytest.mark.asyncio

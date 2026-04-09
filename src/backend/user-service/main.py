@@ -120,6 +120,7 @@ def _notif_payload(notif) -> dict:
             "type": notif.type,
             "message": notif.message,
             "read": notif.read,
+            "created_at": notif.created_at.isoformat(),
         },
     }
 
