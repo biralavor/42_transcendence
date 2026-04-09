@@ -53,16 +53,20 @@ describe('Navbar — bell and DM badge', () => {
         expect(screen.getByTestId('bell-badge')).toHaveTextContent('5')
     })
 
-    it('bell badge reflects system notifications only — DMs do not contribute', () => {
+    it('bell badge sums system notifications and DM unreads', () => {
         useNotifications.mockReturnValue({ unreadCount: 2 })
         useUnread.mockReturnValue({ unreadCounts: { 'DM-1-2': 3 } })
         renderNavbar()
-        // badge must show 2, not 5 (DMs must not be double-counted in bell)
-        expect(screen.getByTestId('bell-badge')).toHaveTextContent('2')
+        expect(screen.getByTestId('bell-badge')).toHaveTextContent('5')
     })
 
-    it('hides bell badge when system unreadCount is 0 even if DMs exist', () => {
-        useUnread.mockReturnValue({ unreadCounts: { 'DM-1-2': 5 } })
+    it('bell badge shows DM count alone when no system notifications', () => {
+        useUnread.mockReturnValue({ unreadCounts: { 'DM-1-2': 1, 'DM-1-3': 2 } })
+        renderNavbar()
+        expect(screen.getByTestId('bell-badge')).toHaveTextContent('3')
+    })
+
+    it('hides bell badge when both system and DM unreads are 0', () => {
         renderNavbar()
         expect(screen.queryByTestId('bell-badge')).toBeNull()
     })
@@ -80,13 +84,8 @@ describe('Navbar — bell and DM badge', () => {
         expect(screen.queryByTestId('notif-panel')).toBeNull()
     })
 
-    it('shows DM badge on Chat link when there are unread DMs', () => {
+    it('does not show DM badge on Chat link (bell is the sole unread indicator)', () => {
         useUnread.mockReturnValue({ unreadCounts: { 'DM-1-2': 2, 'DM-1-3': 1 } })
-        renderNavbar()
-        expect(screen.getByTestId('dm-badge')).toHaveTextContent('3')
-    })
-
-    it('hides DM badge on Chat link when no unread DMs', () => {
         renderNavbar()
         expect(screen.queryByTestId('dm-badge')).toBeNull()
     })
