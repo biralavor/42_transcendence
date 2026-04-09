@@ -1,6 +1,7 @@
 from typing import Annotated
 
 from fastapi import FastAPI, status, Depends, HTTPException
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -13,9 +14,10 @@ from service.schemas import (
 )
 from service.models.user import User
 from service.service import authenticate, refresh_access_token, register_credentials, get_profile, update_profile, get_me
+import service.friends as _friends
 from service.friends import (
-    get_friends, get_pending_requests, get_sent_requests, send_friend_request,
-    respond_to_friend_request, delete_friendship, search_users,
+    get_friends, get_pending_requests, get_sent_requests,
+    delete_friendship, search_users,
 )
 import service.notifications as _notifications
 from shared.database import get_db
@@ -109,10 +111,35 @@ async def list_sent_requests(user_id: int, session: SessionDependency):
     return await get_sent_requests(user_id, session)
 
 
+def _notif_payload(notif) -> dict:
+    """Wrap a Notification object in the WS notification envelope."""
+    return {
+        "type": "notification",
+        "notification": {
+            "id": notif.id,
+            "type": notif.type,
+            "message": notif.message,
+            "read": notif.read,
+        },
+    }
+
+
 @app.post("/friends/{user_id}/request/{addressee_id}",
           response_model=FriendRequestResponse, status_code=201)
-async def add_friend(user_id: int, addressee_id: int, session: SessionDependency):
-    return await send_friend_request(user_id, addressee_id, session)
+async def add_friend(
+    user_id: int, addressee_id: int,
+    session: SessionDependency,
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.id != user_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    friendship = await _friends.send_friend_request(user_id, addressee_id, session)
+    notif = await _notifications.create_notification(
+        session, addressee_id, "friend_request",
+        f"{current_user.username} sent you a friend request",
+    )
+    await notification_manager.broadcast(str(addressee_id), _notif_payload(notif))
+    return friendship
 
 
 @app.put("/friends/{user_id}/requests/{request_id}",
@@ -126,10 +153,14 @@ async def respond_to_request(
 ):
     if current_user.id != user_id:
         raise HTTPException(status_code=403, detail="Forbidden")
-    result = await respond_to_friend_request(user_id, request_id, body.action, session)
+    result = await _friends.respond_to_friend_request(user_id, request_id, body.action, session)
     if body.action == "decline":
-        from fastapi.responses import Response
         return Response(status_code=204)
+    notif = await _notifications.create_notification(
+        session, result.requester_id, "friend_request_accepted",
+        f"{current_user.username} accepted your friend request",
+    )
+    await notification_manager.broadcast(str(result.requester_id), _notif_payload(notif))
     return result
 
 
@@ -163,7 +194,6 @@ async def read_all_notifications(
 ):
     """Mark all caller's notifications as read."""
     await _notifications.mark_all_notifications_read(session, current_user.id)
-    from fastapi.responses import Response
     return Response(status_code=204)
 
 
@@ -185,13 +215,13 @@ async def remove_notification(
 ):
     """Delete a single notification. Returns 404 if not owned by caller."""
     await _notifications.delete_notification(session, notification_id, current_user.id)
-    from fastapi.responses import Response
     return Response(status_code=204)
 
 
 @app.post("/game-invites", status_code=204)
 async def deliver_game_notification(
     body: GameNotificationRequest,
+    session: SessionDependency,
     current_user: User = Depends(get_current_user),
 ):
     """Deliver a game invite event to the target user's notification channel.
@@ -205,8 +235,11 @@ async def deliver_game_notification(
         "from_user_id": current_user.id,
         "from_username": current_user.username,
     }
+    await _notifications.create_notification(
+        session, body.to_user_id, "game_invite",
+        f"{current_user.username} invited you to play Pong",
+    )
     await notification_manager.broadcast(str(body.to_user_id), payload)
-    from fastapi.responses import Response
     return Response(status_code=204)
 
 
