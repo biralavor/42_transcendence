@@ -55,7 +55,7 @@ wait:
 	echo ""; echo "Timeout: services not ready after 60s."; exit 1
 
 .PHONY: seed
-seed:
+seed: wait
 	@docker compose cp tests/seed_dev.py user-service:/app/seed_dev.py
 	@docker compose exec user-service python3 /app/seed_dev.py
 

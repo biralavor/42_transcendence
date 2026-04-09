@@ -23,6 +23,19 @@ vi.mock('../context/unreadContext', () => ({
 }))
 import { useUnread } from '../context/unreadContext'
 
+vi.mock('../context/notificationContext', () => ({
+  useNotifications: vi.fn(() => ({
+    setInviteVisible: vi.fn(),
+    notifications: [],
+    unreadCount: 0,
+    fetchNotifications: vi.fn(),
+    markRead: vi.fn(),
+    markAllRead: vi.fn(),
+    removeNotification: vi.fn(),
+  })),
+}))
+import { useNotifications } from '../context/notificationContext'
+
 function renderSidebar(userId = 1) {
   return render(
     <MemoryRouter>
