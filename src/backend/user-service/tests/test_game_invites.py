@@ -51,8 +51,9 @@ async def test_game_invite_injects_from_user_id_from_jwt():
                 headers={"Authorization": "Bearer fake-token"},
             )
 
-    mock_mgr.broadcast.assert_awaited_once()
-    _room, payload = mock_mgr.broadcast.call_args[0]
+    # Two broadcasts: raw payload first, notification envelope second
+    assert mock_mgr.broadcast.await_count == 2
+    _room, payload = mock_mgr.broadcast.call_args_list[0][0]
     # Server must override any client-supplied from_user_id
     assert payload["from_user_id"] == 9999   # conftest default_user.id
 
@@ -69,7 +70,8 @@ async def test_game_invite_broadcasts_to_recipient_room():
                 headers={"Authorization": "Bearer fake-token"},
             )
 
-    room, _payload = mock_mgr.broadcast.call_args[0]
+    # Both broadcasts go to the same room
+    room, _payload = mock_mgr.broadcast.call_args_list[0][0]
     assert room == "42"
 
 

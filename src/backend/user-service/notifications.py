@@ -60,3 +60,14 @@ async def delete_notification(
         raise HTTPException(status_code=404, detail="Notification not found")
     await db.delete(notif)
     await db.commit()
+
+
+async def create_notification(
+    db: AsyncSession, user_id: int, notif_type: str, message: str
+) -> Notification:
+    """Persist a new notification row and return it with its generated id."""
+    notif = Notification(user_id=user_id, type=notif_type, message=message, read=False)
+    db.add(notif)
+    await db.commit()
+    await db.refresh(notif)
+    return notif

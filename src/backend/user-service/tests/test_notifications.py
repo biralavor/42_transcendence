@@ -137,3 +137,30 @@ async def test_delete_notification_not_owned_returns_404():
                 headers={"Authorization": "Bearer fake-token"},
             )
     assert resp.status_code == 404
+
+
+# --- create_notification ---
+
+@pytest.mark.asyncio
+async def test_create_notification_adds_row_and_returns_it(mock_db_session):
+    """create_notification persists a row and returns the populated object."""
+    from unittest.mock import AsyncMock
+    from service.notifications import create_notification
+
+    async def fake_refresh(obj):
+        obj.id = 42
+
+    mock_db_session.refresh = AsyncMock(side_effect=fake_refresh)
+
+    result = await create_notification(
+        mock_db_session, user_id=7, notif_type="friend_request", message="alice sent you a friend request"
+    )
+
+    mock_db_session.add.assert_called_once()
+    mock_db_session.commit.assert_awaited_once()
+    mock_db_session.refresh.assert_awaited_once()
+    assert result.user_id == 7
+    assert result.type == "friend_request"
+    assert result.message == "alice sent you a friend request"
+    assert result.read is False
+    assert result.id == 42
