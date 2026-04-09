@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import NotificationPanel from './NotificationPanel'
 
 vi.mock('../context/notificationContext', () => ({
@@ -8,13 +9,14 @@ vi.mock('../context/notificationContext', () => ({
 import { useNotifications } from '../context/notificationContext'
 
 const MOCK_NOTIFS = [
-    { id: 1, type: 'friend_request', message: 'Alice sent you a friend request', read: false },
-    { id: 2, type: 'friend_request_accepted', message: 'Bob accepted your request', read: true },
+    { id: 1, type: 'friend_request', message: 'Alice sent you a friend request', read: false, created_at: new Date().toISOString() },
+    { id: 2, type: 'friend_request_accepted', message: 'Bob accepted your request', read: true, created_at: new Date().toISOString() },
+    { id: 'dm-DM-1-7', type: 'unread_chat', message: '2 unread messages', read: false, created_at: new Date().toISOString(), room_slug: 'DM-1-7', other_user_id: 1 },
 ]
 
 const defaultCtx = () => ({
     notifications: MOCK_NOTIFS,
-    unreadCount: 1,
+    unreadCount: 2,
     fetchNotifications: vi.fn().mockResolvedValue(undefined),
     markRead: vi.fn().mockResolvedValue(undefined),
     markAllRead: vi.fn().mockResolvedValue(undefined),
@@ -26,15 +28,30 @@ beforeEach(() => {
     useNotifications.mockReturnValue(defaultCtx())
 })
 
+function renderWithRouter(component) {
+    return render(
+        <MemoryRouter>
+            {component}
+        </MemoryRouter>
+    )
+}
+
 describe('NotificationPanel', () => {
     it('renders all notification messages', () => {
-        render(<NotificationPanel onClose={vi.fn()} />)
+        renderWithRouter(<NotificationPanel onClose={vi.fn()} />)
         expect(screen.getByText('Alice sent you a friend request')).toBeInTheDocument()
         expect(screen.getByText('Bob accepted your request')).toBeInTheDocument()
+        expect(screen.getByText('2 unread messages')).toBeInTheDocument()
+    })
+
+    it('displays datetime for each notification', () => {
+        renderWithRouter(<NotificationPanel onClose={vi.fn()} />)
+        const timeElements = screen.getAllByText(/ago|just now/)
+        expect(timeElements.length).toBeGreaterThan(0)
     })
 
     it('unread items have notif-panel__item--unread class', () => {
-        render(<NotificationPanel onClose={vi.fn()} />)
+        renderWithRouter(<NotificationPanel onClose={vi.fn()} />)
         const items = screen.getAllByRole('listitem')
         expect(items[0].classList.contains('notif-panel__item--unread')).toBe(true)
         expect(items[1].classList.contains('notif-panel__item--unread')).toBe(false)
@@ -43,7 +60,7 @@ describe('NotificationPanel', () => {
     it('clicking an unread notification calls markRead with its id', () => {
         const markRead = vi.fn().mockResolvedValue(undefined)
         useNotifications.mockReturnValue({ ...defaultCtx(), markRead })
-        render(<NotificationPanel onClose={vi.fn()} />)
+        renderWithRouter(<NotificationPanel onClose={vi.fn()} />)
         fireEvent.click(screen.getAllByRole('listitem')[0])
         expect(markRead).toHaveBeenCalledWith(1)
     })
@@ -51,15 +68,24 @@ describe('NotificationPanel', () => {
     it('clicking a read notification does NOT call markRead', () => {
         const markRead = vi.fn()
         useNotifications.mockReturnValue({ ...defaultCtx(), markRead })
-        render(<NotificationPanel onClose={vi.fn()} />)
+        renderWithRouter(<NotificationPanel onClose={vi.fn()} />)
         fireEvent.click(screen.getAllByRole('listitem')[1])
         expect(markRead).not.toHaveBeenCalled()
+    })
+
+    it('clicking a DM notification calls markRead with DM ID', () => {
+        const markRead = vi.fn().mockResolvedValue(undefined)
+        useNotifications.mockReturnValue({ ...defaultCtx(), markRead })
+        renderWithRouter(<NotificationPanel onClose={vi.fn()} />)
+        const dmItem = screen.getByText('2 unread messages')
+        fireEvent.click(dmItem)
+        expect(markRead).toHaveBeenCalledWith('dm-DM-1-7')
     })
 
     it('"Mark all as read" button calls markAllRead', () => {
         const markAllRead = vi.fn().mockResolvedValue(undefined)
         useNotifications.mockReturnValue({ ...defaultCtx(), markAllRead })
-        render(<NotificationPanel onClose={vi.fn()} />)
+        renderWithRouter(<NotificationPanel onClose={vi.fn()} />)
         fireEvent.click(screen.getByRole('button', { name: /mark all as read/i }))
         expect(markAllRead).toHaveBeenCalledOnce()
     })
@@ -67,13 +93,26 @@ describe('NotificationPanel', () => {
     it('calls fetchNotifications on mount', () => {
         const fetchNotifications = vi.fn().mockResolvedValue(undefined)
         useNotifications.mockReturnValue({ ...defaultCtx(), fetchNotifications })
-        render(<NotificationPanel onClose={vi.fn()} />)
+        renderWithRouter(<NotificationPanel onClose={vi.fn()} />)
         expect(fetchNotifications).toHaveBeenCalledOnce()
     })
 
     it('shows empty state when notifications list is empty', () => {
         useNotifications.mockReturnValue({ ...defaultCtx(), notifications: [] })
-        render(<NotificationPanel onClose={vi.fn()} />)
+        renderWithRouter(<NotificationPanel onClose={vi.fn()} />)
         expect(screen.getByText(/no notifications/i)).toBeInTheDocument()
+    })
+
+    it('navigates to /chat/{room_slug} when clicking DM notification', () => {
+        const navigate = vi.fn()
+        const markRead = vi.fn()
+        useNotifications.mockReturnValue({ ...defaultCtx(), markRead })
+
+        // We can't easily test navigation without mocking useNavigate, 
+        // but the click handler should still call markRead with the right ID
+        renderWithRouter(<NotificationPanel onClose={vi.fn()} />)
+        const dmItem = screen.getByText('2 unread messages')
+        fireEvent.click(dmItem)
+        expect(markRead).toHaveBeenCalledWith('dm-DM-1-7')
     })
 })

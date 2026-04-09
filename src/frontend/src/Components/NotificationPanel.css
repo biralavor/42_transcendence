@@ -64,6 +64,7 @@
     padding: 0.75rem 1rem;
     border-bottom: 1px solid rgba(246, 217, 88, 0.1);
     cursor: default;
+    transition: background-color 0.2s ease;
 }
 
 .notif-panel__item--unread {
@@ -75,16 +76,26 @@
     background: rgba(246, 217, 88, 0.14);
 }
 
+.notif-panel__item-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+
 .notif-panel__type {
     font-family: 'Press Start 2P', monospace;
     font-size: 0.4rem;
     color: #f6db58;
     text-transform: uppercase;
     letter-spacing: 0.08rem;
+    flex-shrink: 0;
 }
 
-.notif-panel__msg {
-    font-size: 0.78rem;
-    color: rgba(255, 255, 255, 0.85);
-    line-height: 1.4;
+.notif-panel__time {
+    font-family: monospace;
+    font-size: 0.65rem;
+    color: rgba(246, 217, 88, 0.5);
+    flex-shrink: 0;
+    white-space: nowrap;
 }
