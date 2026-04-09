@@ -305,3 +305,61 @@
     gap: 0.6rem;
   }
 }
+
+/* ── Bell icon + notification badge ─────────────────────────────── */
+.pong-nav__bell-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.pong-nav__bell {
+  position: relative;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1.3rem;
+  line-height: 1;
+  padding: 0.25rem;
+  color: #3b241d;
+}
+
+.pong-nav__bell:hover {
+  opacity: 0.8;
+}
+
+.pong-nav__bell-badge {
+  position: absolute;
+  top: -4px;
+  right: -6px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  background: #e53535;
+  color: #fff;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 0.4rem;
+  line-height: 18px;
+  text-align: center;
+  border-radius: 9px;
+  border: 2px solid #3b241d;
+}
+
+/* ── Chat DM unread badge ────────────────────────────────────────── */
+.pong-nav__dm-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 0.35rem;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  background: #e53535;
+  color: #fff;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 0.38rem;
+  border-radius: 8px;
+  border: 2px solid #3b241d;
+  vertical-align: middle;
+}
+}
