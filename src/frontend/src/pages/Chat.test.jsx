@@ -25,7 +25,15 @@ vi.mock('../context/presenceContext', () => ({
 }))
 
 vi.mock('../context/unreadContext', () => ({
-  useUnread: vi.fn(() => ({ clearUnread: vi.fn(), setActiveRoom: vi.fn() })),
+  useUnread: vi.fn(() => ({ unreadCounts: {}, clearUnread: vi.fn(), setActiveRoom: vi.fn() })),
+}))
+
+vi.mock('../context/notificationContext', () => ({
+  useNotifications: vi.fn(() => ({
+    setInviteVisible: vi.fn(),
+    notifications: [],
+    unreadCount: 0,
+  })),
 }))
 
 vi.mock('../Components/FriendsSidebar', () => ({

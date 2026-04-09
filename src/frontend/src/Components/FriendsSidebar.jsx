@@ -10,6 +10,7 @@ import {
 import { usePresence } from '../context/presenceContext'
 import { useAuth } from '../context/authContext'
 import { useUnread } from '../context/unreadContext'
+import { useNotifications } from '../context/notificationContext'
 import './FriendsSidebar.css'
 
 const INVITE_TIMEOUT_MS = 60_000
@@ -47,6 +48,7 @@ export default function FriendsSidebar({ userId, username, currentUser, onViewPr
   const outgoingInviteRef = useRef(null)
   const presenceMap = usePresence()
   const { unreadCounts, clearUnread } = useUnread()
+  const { setInviteVisible } = useNotifications()
 
   const { auth } = useAuth()
   const selfId = currentUser?.id ?? userId
@@ -56,6 +58,10 @@ export default function FriendsSidebar({ userId, username, currentUser, onViewPr
   useEffect(() => {
     outgoingInviteRef.current = outgoingInvite
   }, [outgoingInvite])
+
+  useEffect(() => {
+    setInviteVisible(!!incomingInvite)
+  }, [incomingInvite, setInviteVisible])
 
   const showInviteToast = useCallback((message, tone = 'info', duration = 4200) => {
     clearTimeout(toastTimer.current)
