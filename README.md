@@ -56,7 +56,7 @@
 | Spectator Mode | Gaming & UX |
 | Data Export and Import | Data & Analytics |
 
-> **7 Major × 2 pts + 15 Minor × 1 pt = 28 pts total**
+> **7 Major × 2 pts + 14 Minor × 1 pt = 28 pts total**
 > Subject minimum: 14 pts — this build provides a comfortable evaluation buffer.
 
 ---
