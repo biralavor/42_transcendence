@@ -91,6 +91,8 @@ describe('NotificationContext', () => {
         const { result } = renderHook(useNotifications, { wrapper })
         await waitFor(() => expect(mockWsInstance).not.toBeNull())
         act(() => { result.current.setInviteVisible(true) })
+        // Assert before: no unread system notifications yet
+        expect(result.current.unreadCount).toBe(0)
         act(() => {
             mockWsInstance.onmessage({
                 data: JSON.stringify({
@@ -99,10 +101,11 @@ describe('NotificationContext', () => {
                 }),
             })
         })
+        // Assert after: suppressed → inserted as read, badge unchanged
         const notif = result.current.notifications.find(n => n.id === 2)
         expect(notif).toBeDefined()
-        expect(notif.read).toBe(true)       // suppressed → inserted as read
-        expect(result.current.unreadCount).toBe(0)  // badge does not increment
+        expect(notif.read).toBe(true)
+        expect(result.current.unreadCount).toBe(0)
     })
 
     it('inserts game_invite as read=false and increments badge when invite UI is NOT visible', async () => {

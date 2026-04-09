@@ -97,6 +97,36 @@ describe('NotificationPanel', () => {
         expect(fetchNotifications).toHaveBeenCalledOnce()
     })
 
+    it('unread items are focusable (tabIndex=0)', () => {
+        renderWithRouter(<NotificationPanel onClose={vi.fn()} />)
+        const items = screen.getAllByRole('listitem')
+        expect(items[0]).toHaveAttribute('tabindex', '0')
+    })
+
+    it('pressing Enter on an unread item calls markRead', () => {
+        const markRead = vi.fn().mockResolvedValue(undefined)
+        useNotifications.mockReturnValue({ ...defaultCtx(), markRead })
+        renderWithRouter(<NotificationPanel onClose={vi.fn()} />)
+        fireEvent.keyDown(screen.getAllByRole('listitem')[0], { key: 'Enter' })
+        expect(markRead).toHaveBeenCalledWith(1)
+    })
+
+    it('pressing Space on an unread item calls markRead', () => {
+        const markRead = vi.fn().mockResolvedValue(undefined)
+        useNotifications.mockReturnValue({ ...defaultCtx(), markRead })
+        renderWithRouter(<NotificationPanel onClose={vi.fn()} />)
+        fireEvent.keyDown(screen.getAllByRole('listitem')[0], { key: ' ' })
+        expect(markRead).toHaveBeenCalledWith(1)
+    })
+
+    it('pressing other keys does not call markRead', () => {
+        const markRead = vi.fn()
+        useNotifications.mockReturnValue({ ...defaultCtx(), markRead })
+        renderWithRouter(<NotificationPanel onClose={vi.fn()} />)
+        fireEvent.keyDown(screen.getAllByRole('listitem')[0], { key: 'Tab' })
+        expect(markRead).not.toHaveBeenCalled()
+    })
+
     it('shows empty state when notifications list is empty', () => {
         useNotifications.mockReturnValue({ ...defaultCtx(), notifications: [] })
         renderWithRouter(<NotificationPanel onClose={vi.fn()} />)

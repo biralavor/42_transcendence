@@ -57,7 +57,7 @@ export default function NotificationPanel({ onClose }) {
 
     useEffect(() => {
         fetchNotifications()
-    }, []) // eslint-disable-line react-hooks/exhaustive-deps
+    }, [fetchNotifications])
 
     useEffect(() => {
         function handleClickOutside(e) {
@@ -105,6 +105,13 @@ export default function NotificationPanel({ onClose }) {
                         role="listitem"
                         className={`notif-panel__item${notif.read ? '' : ' notif-panel__item--unread'}`}
                         onClick={() => handleNotificationClick(notif)}
+                        tabIndex={0}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault()
+                                handleNotificationClick(notif)
+                            }
+                        }}
                     >
                         <div className="notif-panel__item-header">
                             <span className="notif-panel__type">
