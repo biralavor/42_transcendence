@@ -37,7 +37,7 @@ beforeEach(() => {
         new Response(JSON.stringify({ id: 7, username: 'alice' }), { status: 200 })
     )
     // Default: useUnread returns empty unreadCounts
-    useUnread.mockReturnValue({ unreadCounts: {}, clearUnread: vi.fn() })
+    useUnread.mockReturnValue({ unreadCounts: {}, clearUnread: vi.fn(), dmSenders: {} })
 })
 
 afterEach(() => {
@@ -206,7 +206,8 @@ describe('NotificationContext', () => {
         const mockClearUnread = vi.fn()
         useUnread.mockReturnValue({
             unreadCounts: { 'DM-1-7': 2 },
-            clearUnread: mockClearUnread
+            clearUnread: mockClearUnread,
+            dmSenders: {},
         })
         const { result } = renderHook(useNotifications, { wrapper })
         await waitFor(() => {
@@ -220,6 +221,7 @@ describe('NotificationContext', () => {
         useUnread.mockReturnValue({
             unreadCounts: { 'DM-1-7': 1 },
             clearUnread: vi.fn(),
+            dmSenders: {},
         })
         const { result, rerender } = renderHook(useNotifications, { wrapper })
         await waitFor(() => {
@@ -231,10 +233,41 @@ describe('NotificationContext', () => {
         useUnread.mockReturnValue({
             unreadCounts: { 'DM-1-7': 2 },
             clearUnread: vi.fn(),
+            dmSenders: {},
         })
         rerender()
         const secondTs = result.current.notifications.find(n => n.type === 'unread_chat').created_at
         expect(secondTs).toBe(firstTs)   // timestamp must not change on recompute
+    })
+
+    it('DM message includes sender name when dmSenders has an entry for the slug', async () => {
+        useAuth.mockReturnValue({ auth: { access_token: 'tok' } })
+        useUnread.mockReturnValue({
+            unreadCounts: { 'DM-1-7': 3 },
+            clearUnread: vi.fn(),
+            dmSenders: { 'DM-1-7': 'alice' },
+        })
+        const { result } = renderHook(useNotifications, { wrapper })
+        await waitFor(() => {
+            const dm = result.current.notifications.find(n => n.type === 'unread_chat')
+            expect(dm).toBeDefined()
+            expect(dm.message).toBe('3 unread messages from alice')
+        })
+    })
+
+    it('DM message omits sender name when dmSenders has no entry for the slug', async () => {
+        useAuth.mockReturnValue({ auth: { access_token: 'tok' } })
+        useUnread.mockReturnValue({
+            unreadCounts: { 'DM-1-7': 1 },
+            clearUnread: vi.fn(),
+            dmSenders: {},
+        })
+        const { result } = renderHook(useNotifications, { wrapper })
+        await waitFor(() => {
+            const dm = result.current.notifications.find(n => n.type === 'unread_chat')
+            expect(dm).toBeDefined()
+            expect(dm.message).toBe('1 unread message')
+        })
     })
 
     it('clears DM unread counts when markAllRead is called', async () => {
@@ -242,7 +275,8 @@ describe('NotificationContext', () => {
         const mockClearUnread = vi.fn()
         useUnread.mockReturnValue({
             unreadCounts: { 'DM-1-7': 2 },
-            clearUnread: mockClearUnread
+            clearUnread: mockClearUnread,
+            dmSenders: {},
         })
         const { result } = renderHook(useNotifications, { wrapper })
         await waitFor(() => expect(apiCall).toHaveBeenCalled())

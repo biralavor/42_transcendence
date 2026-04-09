@@ -6,6 +6,7 @@ const UnreadContext = createContext(null)
 export function UnreadProvider({ children }) {
   const { auth } = useAuth()
   const [unreadCounts, setUnreadCounts] = useState({})
+  const [dmSenders, setDmSenders] = useState({})  // { [slug]: latestSenderUsername }
   // useRef so the WS onmessage handler always sees the latest value without being recreated
   const activeRoomRef = useRef(null)
 
@@ -26,6 +27,9 @@ export function UnreadProvider({ children }) {
             ...prev,
             [data.room_slug]: (prev[data.room_slug] ?? 0) + 1,
           }))
+          if (data.from_username) {
+            setDmSenders(prev => ({ ...prev, [data.room_slug]: data.from_username }))
+          }
         }
       } catch {
         // ignore non-JSON
@@ -44,6 +48,12 @@ export function UnreadProvider({ children }) {
       delete next[slug]
       return next
     })
+    setDmSenders(prev => {
+      if (!(slug in prev)) return prev
+      const next = { ...prev }
+      delete next[slug]
+      return next
+    })
   }, [])
 
   const setActiveRoom = useCallback((slug) => {
@@ -51,8 +61,8 @@ export function UnreadProvider({ children }) {
   }, [])
 
   const value = useMemo(
-    () => ({ unreadCounts, clearUnread, setActiveRoom }),
-    [unreadCounts, clearUnread, setActiveRoom]
+    () => ({ unreadCounts, clearUnread, setActiveRoom, dmSenders }),
+    [unreadCounts, clearUnread, setActiveRoom, dmSenders]
   )
 
   return (

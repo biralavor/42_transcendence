@@ -7,7 +7,7 @@ const NotificationContext = createContext(null)
 
 export function NotificationProvider({ children }) {
     const { auth } = useAuth()
-    const { unreadCounts, clearUnread } = useUnread()
+    const { unreadCounts, clearUnread, dmSenders } = useUnread()
     const [userId, setUserId] = useState(null)
     const [notifications, setNotifications] = useState([])
     const inviteVisibleRef = useRef(false)
@@ -68,10 +68,14 @@ export function NotificationProvider({ children }) {
             // slug format: "DM-{lower_id}-{higher_id}"
             const parts = slug.split('-')
             const otherId = parts.length === 3 ? (parseInt(parts[1]) === userId ? parseInt(parts[2]) : parseInt(parts[1])) : null
+            const senderName = dmSenders[slug]
+            const message = senderName
+                ? `${count} unread message${count !== 1 ? 's' : ''} from ${senderName}`
+                : `${count} unread message${count !== 1 ? 's' : ''}`
             return {
                 id: `dm-${slug}`,
                 type: 'unread_chat',
-                message: `${count} unread message${count !== 1 ? 's' : ''}`,
+                message,
                 read: false,
                 created_at: dmFirstSeenRef.current[slug],
                 room_slug: slug,
@@ -83,7 +87,7 @@ export function NotificationProvider({ children }) {
         // Merge and sort by created_at (DMs are synthetic, so put them at the top)
         const merged = [...dmNotifs, ...notifications]
         return merged.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-    }, [notifications, unreadCounts, userId])
+    }, [notifications, unreadCounts, userId, dmSenders])
 
     // System notifications only — DM unreads are surfaced via useUnread() on the Chat link
     const totalUnreadCount = useMemo(

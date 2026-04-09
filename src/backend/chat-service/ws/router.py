@@ -163,6 +163,7 @@ async def chat_websocket(websocket: WebSocket, room_slug: str, token: str = "") 
                     await notifications_manager.broadcast(str(recipient_uid), {
                         "type": "new_dm",
                         "from_user_id": sender_uid,
+                        "from_username": message_sender,
                         "room_slug": room_slug,
                         "preview": data["content"][:80],
                     })
