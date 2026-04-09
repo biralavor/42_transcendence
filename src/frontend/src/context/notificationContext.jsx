@@ -22,13 +22,17 @@ export function NotificationProvider({ children }) {
             dmFirstSeenRef.current = {}
             return
         }
+        let cancelled = false
         apiCall('/api/users/auth/me')
             .then(r => r.json())
-            .then(me => setUserId(me.id))
+            .then(me => { if (!cancelled) setUserId(me.id) })
             .catch(() => {
-                setUserId(null)
-                setNotifications([])
+                if (!cancelled) {
+                    setUserId(null)
+                    setNotifications([])
+                }
             })
+        return () => { cancelled = true }
     }, [auth.access_token])
 
     // Step 2: open WS once userId is known

@@ -62,6 +62,40 @@ describe('NotificationContext', () => {
         await waitFor(() => expect(apiCall).toHaveBeenCalledWith('/api/users/auth/me'))
     })
 
+    it('ignores stale /auth/me response when token changes before it resolves', async () => {
+        // First token triggers a slow /auth/me that returns id=99 (stale)
+        // Second token triggers a fast /auth/me that returns id=7 (current)
+        // Only id=7 should be used — the stale callback must be cancelled
+        let resolveFirst
+        const stalePromise = new Promise(res => { resolveFirst = res })
+
+        apiCall
+            .mockImplementationOnce(() => stalePromise)   // first token: held
+            .mockResolvedValue(                            // second token: resolves immediately
+                new Response(JSON.stringify({ id: 7, username: 'alice' }), { status: 200 })
+            )
+
+        useAuth.mockReturnValue({ auth: { access_token: 'tok1' } })
+        const { rerender, result } = renderHook(useNotifications, { wrapper })
+
+        // Switch token before stale promise resolves — triggers cleanup of first effect
+        useAuth.mockReturnValue({ auth: { access_token: 'tok2' } })
+        rerender()
+
+        // Wait for second /auth/me to land and WS to open
+        await waitFor(() => expect(mockWsInstance).not.toBeNull())
+
+        // Now resolve the stale promise with a different id
+        resolveFirst(new Response(JSON.stringify({ id: 99, username: 'stale' }), { status: 200 }))
+
+        // Give React a tick to process any spurious state updates
+        await new Promise(r => setTimeout(r, 10))
+
+        // WS must be for the current user (id=7), not the stale one (id=99)
+        expect(mockWsInstance.url).toContain('/api/users/ws/notifications/7')
+        expect(mockWsInstance.url).not.toContain('99')
+    })
+
     it('opens WS to correct URL containing user_id and token after /auth/me resolves', async () => {
         useAuth.mockReturnValue({ auth: { access_token: 'tok' } })
         renderHook(useNotifications, { wrapper })
