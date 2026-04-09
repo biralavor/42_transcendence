@@ -116,3 +116,14 @@ Authorization: Bearer <access_token>
 ### Start tournament (creator only — replace 1 with tournament id, replace <access_token>)
 POST https://localhost:8443/api/game/tournaments/1/start HTTP/1.1
 Authorization: Bearer <access_token>
+
+### Record tournament match result (replace 1 with tournament id, 1 with match id, replace <access_token>)
+POST https://localhost:8443/api/game/tournaments/1/matches/1/result HTTP/1.1
+content-type: application/json
+Authorization: Bearer <access_token>
+
+{
+    "winner_id": 1,
+    "score_p1": 3,
+    "score_p2": 5
+}
