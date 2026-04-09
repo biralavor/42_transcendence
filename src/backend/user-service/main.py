@@ -124,6 +124,20 @@ def _notif_payload(notif) -> dict:
     }
 
 
+def _game_notif_message(sender: str, body) -> str:
+    """Return a human-readable notification message for each game event type."""
+    if body.type == "game_invite":
+        return f"{sender} invited you to play Pong"
+    if body.type == "game_invite_response":
+        if body.status == "accepted":
+            return f"{sender} accepted your game invite"
+        if body.status == "declined":
+            return f"{sender} declined your game invite"
+        return f"{sender} responded to your game invite"
+    # game_invite_timeout
+    return f"Your game invite with {sender} has expired"
+
+
 @app.post("/friends/{user_id}/request/{addressee_id}",
           response_model=FriendRequestResponse, status_code=201)
 async def add_friend(
@@ -235,11 +249,12 @@ async def deliver_game_notification(
         "from_user_id": current_user.id,
         "from_username": current_user.username,
     }
-    await _notifications.create_notification(
-        session, body.to_user_id, "game_invite",
-        f"{current_user.username} invited you to play Pong",
+    notif = await _notifications.create_notification(
+        session, body.to_user_id, body.type,
+        _game_notif_message(current_user.username, body),
     )
     await notification_manager.broadcast(str(body.to_user_id), payload)
+    await notification_manager.broadcast(str(body.to_user_id), _notif_payload(notif))
     return Response(status_code=204)
 
 

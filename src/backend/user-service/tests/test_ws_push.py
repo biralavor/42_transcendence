@@ -172,7 +172,7 @@ async def test_decline_friend_request_does_not_broadcast():
 
 @pytest.mark.asyncio
 async def test_game_invite_persists_notification_row():
-    """POST /game-invites → create_notification called for to_user_id with type='game_invite'."""
+    """POST /game-invites type=game_invite → persists with correct type, broadcasts twice."""
     mock_create = AsyncMock(return_value=_fake_notif("game_invite", user_id=7))
 
     with patch("service.main._notifications.create_notification", new=mock_create), \
@@ -194,7 +194,36 @@ async def test_game_invite_persists_notification_row():
     assert resp.status_code == 204
     mock_create.assert_awaited_once()
     args = mock_create.call_args[0]
-    assert args[1] == 7               # user_id = to_user_id
-    assert args[2] == "game_invite"
-    # Broadcast still fired (existing behaviour preserved)
-    mock_mgr.broadcast.assert_awaited_once()
+    assert args[1] == 7                   # user_id = to_user_id
+    assert args[2] == "game_invite"       # type taken from body.type, not hardcoded
+    assert "invited" in args[3]           # correct message for game_invite
+    # Two broadcasts: raw payload (for invite UI) + notification envelope (for bell)
+    assert mock_mgr.broadcast.await_count == 2
+    envelope_call = mock_mgr.broadcast.call_args_list[1]
+    assert envelope_call[0][1]["type"] == "notification"
+
+
+@pytest.mark.asyncio
+async def test_game_invite_response_persists_with_correct_type():
+    """POST /game-invites type=game_invite_response → persists with type='game_invite_response'."""
+    mock_create = AsyncMock(return_value=_fake_notif("game_invite_response", user_id=3))
+
+    with patch("service.main._notifications.create_notification", new=mock_create), \
+         patch("service.main.notification_manager") as mock_mgr:
+        mock_mgr.broadcast = AsyncMock()
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post(
+                "/game-invites",
+                json={
+                    "type": "game_invite_response",
+                    "to_user_id": 3,
+                    "room_id": "invite-9999-3-000",
+                    "status": "accepted",
+                },
+                headers={"Authorization": "Bearer fake-token"},
+            )
+
+    assert resp.status_code == 204
+    args = mock_create.call_args[0]
+    assert args[2] == "game_invite_response"
+    assert "accepted" in args[3]
