@@ -51,6 +51,12 @@ class MatchFinishRequest(BaseModel):
     score_p2: int
 
 
+class TournamentMatchResultRequest(BaseModel):
+    winner_id: int
+    score_p1: int = 0
+    score_p2: int = 0
+
+
 class MatchHistoryItem(BaseModel):
     id: int
     opponent_id: int

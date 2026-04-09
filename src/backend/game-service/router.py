@@ -6,8 +6,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from service.auth import get_current_user_id
 from service.history import get_match_history
 from service.persistence import (
+    InvalidWinner,
     NotTournamentCreator,
     TournamentFull,
+    TournamentMatchAlreadyFinished,
+    TournamentMatchNotFound,
     TournamentNotEnoughParticipants,
     TournamentNotFound,
     TournamentNotOpen,
@@ -21,6 +24,7 @@ from service.persistence import (
     get_user_matches,
     get_user_stats,
     join_tournament,
+    record_tournament_match_result,
     start_tournament,
 )
 from service.schemas import (
@@ -29,6 +33,7 @@ from service.schemas import (
     MatchFinishRequest,
     MatchHistoryItem,
     MatchResponse,
+    TournamentMatchResultRequest,
     StatsResponse,
     TournamentCreateRequest,
     TournamentCreateResponse,
@@ -162,6 +167,54 @@ async def start_tournament_endpoint(
     )
 
     return response
+
+
+@router.post(
+    "/tournaments/{tournament_id}/matches/{match_id}/result",
+    response_model=TournamentDetailResponse,
+)
+async def record_tournament_match_result_endpoint(
+    tournament_id: int,
+    match_id: int,
+    body: TournamentMatchResultRequest,
+    session: SessionDependency,
+    user_id: int = Depends(get_current_user_id),
+):
+    try:
+        _, tournament_complete = await record_tournament_match_result(
+            session, tournament_id, match_id, body.winner_id, body.score_p1, body.score_p2
+        )
+    except TournamentNotFound:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tournament not found")
+    except TournamentMatchNotFound:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Match not found in this tournament")
+    except TournamentMatchAlreadyFinished:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Match already finished")
+    except InvalidWinner:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="winner_id must be one of the match players")
+
+    await ws_manager.broadcast(
+        f"tournament_{tournament_id}",
+        {"type": "tournament_updated", "tournament_id": tournament_id},
+    )
+    if tournament_complete:
+        await ws_manager.broadcast(
+            f"tournament_{tournament_id}",
+            {"type": "tournament_complete", "tournament_id": tournament_id},
+        )
+
+    result = await get_tournament_with_participants(session, tournament_id)
+    tournament, participants, matches = result
+    return TournamentDetailResponse(
+        id=tournament.id,
+        name=tournament.name,
+        creator_id=tournament.creator_id,
+        max_participants=tournament.max_participants,
+        status=tournament.status,
+        created_at=tournament.created_at,
+        participants=[TournamentParticipantResponse(user_id=p.user_id, joined_at=p.joined_at) for p in participants],
+        matches=[TournamentMatchResponse.model_validate(m) for m in matches],
+    )
 
 
 @router.post("/matches/{match_id}/finish", response_model=MatchResponse)
