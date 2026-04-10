@@ -14,6 +14,8 @@ import PongCanvas from './Components/PongCanvas'
 import PrivateRoute from './Components/PrivateRoute'
 import GameWaitingRoom from './pages/GameWaitingRoom'
 import GamePage from './pages/GamePage'
+import Tournament from './pages/Tournament'
+import Tournaments from './pages/Tournaments'
 
 export default function App() {
   useEffect(() => {
@@ -96,8 +98,22 @@ export default function App() {
           )}
         />
 
+        {}
+        <Route path="/tournaments/:id" element={<Tournament />} />
+
+        {/* Tournaments list and creation - authenticated users only */}
+        <Route
+          path="/tournaments"
+          element={(
+            <PrivateRoute>
+              <Tournaments />
+            </PrivateRoute>
+          )}
+        />
+
         <Route path="/forgot-password" element={<ForgotPassword />} />
       </Routes>
     </BrowserRouter>
   )
 }
+

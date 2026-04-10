@@ -27,11 +27,17 @@ const publicLinks = [
   },
 ]
 
+// Links visible only to authenticated users.  Ordering matters for the layout.
 const privateLinks = [
   {
     to: '/chat',
     label: 'Chat',
     isActive: (pathname) => pathname.startsWith('/chat'),
+  },
+  {
+    to: '/tournaments',
+    label: 'Tournaments',
+    isActive: (pathname) => pathname.startsWith('/tournaments'),
   },
   {
     to: '/profile',
@@ -45,14 +51,16 @@ export default function NavbarComponent() {
   const { logout, isAuthenticated } = useAuth()
   const [isMenuOpen, setIsMenuOpen] = useState(false)
 
+  // Build nav links: for authenticated users, interleave public and private links.
   const links = isAuthenticated
     ? [
-      publicLinks[0],
-      publicLinks[1],
-      privateLinks[0],
-      publicLinks[2],
-      publicLinks[3],
-      privateLinks[1],
+      publicLinks[0], // Home
+      publicLinks[1], // Arena
+      privateLinks[0], // Chat
+      privateLinks[1], // Tournaments
+      publicLinks[2], // Ranking
+      publicLinks[3], // About
+      privateLinks[2], // Profile
     ]
     : publicLinks
 
