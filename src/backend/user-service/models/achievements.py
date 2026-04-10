@@ -56,8 +56,8 @@ class UserXP(Base):
     user_id = Column(Integer,
                      ForeignKey("users.id", ondelete="CASCADE"),
                      primary_key=True)
-    xp = Column(Integer, default=0)
-    level = Column(Integer, Computed('xp / 100 + 1'))
+    xp = Column(Integer, default=0, nullable=False)
+    level = Column(Integer, Computed('xp / 100 + 1'), nullable=False)
 
     def __repr__(self):
         return f"<UserXP(user_id={self.user_id},\
