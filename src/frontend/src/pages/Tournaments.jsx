@@ -25,7 +25,7 @@ export default function Tournaments() {
   const [loadingUser, setLoadingUser] = useState(true)
   const [tournaments, setTournaments] = useState([])
   const [name, setName] = useState('')
-  const [maxParticipants, setMaxParticipants] = useState(4)
+  const [maxParticipants, setMaxParticipants] = useState('4')
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState('')
 
@@ -111,7 +111,11 @@ export default function Tournaments() {
     try {
       // Send create tournament request.  The backend uses the authenticated
       // user as creator_id implicitly via dependency injection.
-      const body = { name, max_participants: Number(maxParticipants) }
+      const slots = Number(maxParticipants)
+      if (![4, 8].includes(slots)) {
+        throw new Error('Tournament size must be 4 or 8 players')
+      }
+      const body = { name, max_participants: slots }
       const data = await apiJson('/api/game/tournaments', {
         method: 'POST',
         body: JSON.stringify(body),
@@ -122,7 +126,7 @@ export default function Tournaments() {
       }
       // Reset the form
       setName('')
-      setMaxParticipants(4)
+      setMaxParticipants('4')
     } catch (err) {
       setError(err.message || 'Failed to create tournament')
     } finally {
@@ -350,13 +354,16 @@ export default function Tournaments() {
                     id="tournament-size"
                     type="number"
                     className="form-control"
-                    min="2"
-                    max="8"
-                    step="1"
+                    list="tournament-size-options"
                     value={maxParticipants}
                     onChange={(e) => setMaxParticipants(e.target.value)}
                     required
                   />
+                  <datalist id="tournament-size-options">
+                    <option value="4" />
+                    <option value="8" />
+                  </datalist>
+                  <small className="form-text text-muted">Only 4 or 8 players are supported.</small>
                 </div>
                 <div className="col-6 col-sm-3 col-md-2">
                   <button
@@ -400,7 +407,7 @@ export default function Tournaments() {
 
             {/* List tournaments */}
             <div className="arcade-card soft p-4">
-              <h2 className="arcade-section-title mb-3">Your tournaments</h2>
+              <h2 className="arcade-section-title mb-3">Tournaments</h2>
               {loadingUser && <p className="arcade-copy mb-0">Loading...</p>}
               {!loadingUser && tournaments.length === 0 && (
                 <p className="arcade-copy mb-0">No tournaments yet. Create one above.</p>

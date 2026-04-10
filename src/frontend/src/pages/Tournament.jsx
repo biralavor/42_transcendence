@@ -39,6 +39,15 @@ export default function Tournament() {
     return currentUser && tournament && tournament.participants?.some((p) => Number(p.user_id) === Number(currentUser.id))
   }, [currentUser, tournament])
 
+  const activeUserMatch = useMemo(() => {
+    if (!tournament?.matches || !currentUser) return null
+    return tournament.matches.find((match) => {
+      if (match.status === 'finished') return false
+      const involvesCurrentUser = Number(match.player1_id) === Number(currentUser.id) || Number(match.player2_id) === Number(currentUser.id)
+      return involvesCurrentUser && match.player1_id != null && match.player2_id != null
+    }) || null
+  }, [tournament, currentUser])
+
   // Compute a simple leaderboard based on finished matches.  Each win is worth one
   // point.  The number of matches played is counted for context.  Entries are
   // sorted descending by points.
@@ -114,6 +123,47 @@ export default function Tournament() {
     } catch (err) {
       setError(err.message || 'Failed to leave tournament')
     }
+  }
+
+  async function handleForfeitMatch() {
+    if (!tournamentId || !activeUserMatch) return
+
+    const opponentId = Number(activeUserMatch.player1_id) === Number(currentUser?.id)
+      ? activeUserMatch.player2_id
+      : activeUserMatch.player1_id
+
+    if (!opponentId) {
+      setError('Could not determine the opponent for this match')
+      return
+    }
+
+    try {
+      const scoreP1 = Number(activeUserMatch.player1_id) === Number(opponentId) ? 7 : 0
+      const scoreP2 = Number(activeUserMatch.player2_id) === Number(opponentId) ? 7 : 0
+      const data = await apiJson(`/api/game/tournaments/${tournamentId}/matches/${activeUserMatch.match_id}/result`, {
+        method: 'POST',
+        body: JSON.stringify({
+          winner_id: opponentId,
+          score_p1: scoreP1,
+          score_p2: scoreP2,
+        }),
+      })
+      setTournament(data)
+    } catch (err) {
+      setError(err.message || 'Failed to forfeit match')
+    }
+  }
+
+  function handlePlayMatch() {
+    if (!tournamentId || !activeUserMatch) return
+    navigate(`/game/tournament-${tournamentId}-match-${activeUserMatch.match_id}`, {
+      state: {
+        player1_id: activeUserMatch.player1_id,
+        player2_id: activeUserMatch.player2_id,
+        tournamentId,
+        tournamentMatchId: activeUserMatch.match_id,
+      },
+    })
   }
 
   // Fetch current user details (id and username) so we can gate actions.
@@ -381,6 +431,24 @@ export default function Tournament() {
                   >
                     Start Tournament
                   </button>
+                )}
+                {tournament?.status === 'in_progress' && activeUserMatch && (
+                  <>
+                    <button
+                      type="button"
+                      className="arcade-btn arcade-btn-primary"
+                      onClick={handlePlayMatch}
+                    >
+                      Play Match
+                    </button>
+                    <button
+                      type="button"
+                      className="arcade-btn arcade-btn-danger"
+                      onClick={handleForfeitMatch}
+                    >
+                      Desist / Forfeit
+                    </button>
+                  </>
                 )}
                 <button
                   type="button"
