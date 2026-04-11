@@ -8,15 +8,8 @@ import { apiCall, apiJson } from '../utils/apiClient'
  * Tournaments hub
  *
  * This page allows authenticated users to create new tournaments and join
- * existing ones. Because the backend currently exposes no endpoint to
- * list all tournaments, this component maintains a local list of
- * tournaments the current user creates or joins. After creating a
- * tournament, details are fetched from the server so participant counts
- * and status remain accurate. Users can join open tournaments that have
- * not yet reached their participant capacity and view the tournament by
- * navigating to the tournament detail page. Once a proper tournaments
- * listing endpoint is available, this page can be extended to fetch
- * tournaments from the backend instead of relying on local state.
+ * existing ones. Because the backend now exposes a listing endpoint,
+ * this component loads tournaments directly from the game service.
  */
 export default function Tournaments() {
   const navigate = useNavigate()
@@ -29,15 +22,10 @@ export default function Tournaments() {
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState('')
 
-  // Track whether the current user is already registered in an active tournament (open or in progress).
   const [hasActiveTournament, setHasActiveTournament] = useState(false)
-
-  // Track an id to manually add/join a tournament by id. This allows other
-  // users to join tournaments created elsewhere when they know the id.
   const [manualId, setManualId] = useState('')
   const [joiningById, setJoiningById] = useState(false)
 
-  // Fetch the authenticated user's info once to know their id.
   useEffect(() => {
     let cancelled = false
 
@@ -64,7 +52,6 @@ export default function Tournaments() {
     return () => { cancelled = true }
   }, [auth?.access_token])
 
-  // Helper to fetch a tournament's full details and merge into local state
   async function fetchAndStoreTournament(id) {
     try {
       const resp = await apiCall(`/api/game/tournaments/${id}`)
@@ -89,18 +76,17 @@ export default function Tournaments() {
   }
 
   async function loadTournaments() {
-  try {
-    setError('')
-    const resp = await apiCall('/api/game/tournaments')
-    if (!resp.ok) throw new Error('Failed to load tournaments')
-    const data = await resp.json()
-    setTournaments(Array.isArray(data) ? data : [])
-  } catch (err) {
-    setError(err.message || 'Failed to load tournaments')
+    try {
+      setError('')
+      const resp = await apiCall('/api/game/tournaments')
+      if (!resp.ok) throw new Error('Failed to load tournaments')
+      const data = await resp.json()
+      setTournaments(Array.isArray(data) ? data : [])
+    } catch (err) {
+      setError(err.message || 'Failed to load tournaments')
+    }
   }
-}
 
-  // Create a new tournament via the backend and fetch its details
   async function handleCreate(e) {
     e.preventDefault()
     if (!name || creating) return
@@ -115,8 +101,8 @@ export default function Tournaments() {
 
     try {
       const slots = Number(maxParticipants)
-        if (slots < 4 || slots > 8) {
-          throw new Error('Tournament size must be between 4 and 8 players')
+      if (![4, 8].includes(slots)) {
+        throw new Error('Tournament size must be 4 or 8 players')
       }
 
       const body = { name, max_participants: slots }
@@ -139,16 +125,25 @@ export default function Tournaments() {
   }
 
   async function handleLeave(id) {
-  setError('')
-  try {
-    await apiJson(`/api/game/tournaments/${id}/leave`, { method: 'POST' })
-    await loadTournaments()
-  } catch (err) {
-    setError(err.message || 'Failed to leave tournament')
+    setError('')
+    try {
+      await apiJson(`/api/game/tournaments/${id}/leave`, { method: 'POST' })
+      await loadTournaments()
+    } catch (err) {
+      setError(err.message || 'Failed to leave tournament')
+    }
   }
-}
 
-  // Join a tournament and refresh its details
+  async function handleCancel(id) {
+    setError('')
+    try {
+      await apiJson(`/api/game/tournaments/${id}`, { method: 'DELETE' })
+      await loadTournaments()
+    } catch (err) {
+      setError(err.message || 'Failed to cancel tournament')
+    }
+  }
+
   async function handleJoin(id) {
     setError('')
 
@@ -171,6 +166,7 @@ export default function Tournaments() {
 
       const data = await fetchAndStoreTournament(id)
       await loadTournaments()
+
       if (data && data.participants && data.participants.length === data.max_participants) {
         navigate(`/tournaments/${id}`)
       }
@@ -179,7 +175,6 @@ export default function Tournaments() {
     }
   }
 
-  // Manually join a tournament by entering its id.
   async function handleJoinById(e) {
     e.preventDefault()
     const idNum = Number(manualId)
@@ -226,11 +221,10 @@ export default function Tournaments() {
     }
   }
 
-    useEffect(() => {
-      loadTournaments()
-    }, [])
+  useEffect(() => {
+    loadTournaments()
+  }, [])
 
-  // Determine if the user already participates in any active tournament.
   useEffect(() => {
     if (!currentUser) {
       setHasActiveTournament(false)
@@ -245,8 +239,6 @@ export default function Tournaments() {
     setHasActiveTournament(active)
   }, [tournaments, currentUser])
 
-  // When a tournament in which the current user participates reaches its maximum
-  // number of participants and is still open, automatically redirect to its page.
   useEffect(() => {
     if (!currentUser) return
 
@@ -416,7 +408,15 @@ export default function Tournaments() {
                               {joined && (
                                 <>
                                   <span className="badge bg-success">Joined</span>
-                                  {t.status === 'open' && (
+                                  {t.status === 'open' && Number(currentUser?.id) === Number(t.creator_id) ? (
+                                    <button
+                                      type="button"
+                                      className="arcade-btn arcade-btn-danger"
+                                      onClick={() => handleCancel(t.id)}
+                                    >
+                                      Cancel
+                                    </button>
+                                  ) : t.status === 'open' ? (
                                     <button
                                       type="button"
                                       className="arcade-btn arcade-btn-secondary"
@@ -424,7 +424,7 @@ export default function Tournaments() {
                                     >
                                       Leave
                                     </button>
-                                  )}
+                                  ) : null}
                                 </>
                               )}
 
@@ -435,8 +435,8 @@ export default function Tournaments() {
                               >
                                 View
                               </button>
-                          </td>
-                      </tr>
+                            </td>
+                          </tr>
                         )
                       })}
                     </tbody>
