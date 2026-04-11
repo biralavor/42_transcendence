@@ -26,10 +26,10 @@ WITH requested AS
   GROUP BY addressee_id
 )
 SELECT
-  (COALESCE(requests_accepted, 0) + COALESCE(accepted_requests, 0))
+  (requests_accepted + accepted_requests)
   AS friends
 FROM requested
-  FULL JOIN accepted ON requester_id = addressee_id
+  INNER JOIN accepted ON requester_id = addressee_id
 LIMIT 1
     """)
     result = await session.execute(
@@ -37,26 +37,3 @@ LIMIT 1
     )
     result_scalar: int | None = result.scalar_one_or_none()
     return result_scalar
-
-
-async def insert_user_achievement(
-        user_id: int, achievement_id: int, session: AsyncSession):
-    statement = text("""
-WITH insertion_user_achievement AS
-(
-INSERT INTO user_achievements (user_id, achievement_id)
-    VALUES (:user_id, :achievement_id)
-ON CONFLICT (user_id, achievement_id) DO NOTHING
-RETURNING achievement_id
-)
-SELECT
-    :user_id as user_id
-    ,*
-FROM achievements
-    JOIN insertion_user_achievement on achievement_id = achievements.id
-    """)
-    result = await session.execute(
-        statement, {'user_id': user_id, 'achievement_id': achievement_id}
-    )
-    # await session.commit() maybe better let caller commit session
-    return result.mappings().one_or_none()
