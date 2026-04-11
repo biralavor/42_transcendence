@@ -1,5 +1,5 @@
 from typing import Annotated
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import FastAPI, status, Depends, HTTPException
 from fastapi.responses import Response
@@ -125,7 +125,7 @@ def _notif_payload(notif) -> dict:
     """Wrap a Notification object in the WS notification envelope."""
     created_at = notif.created_at
     if created_at is None:
-        created_at = datetime.now()
+        created_at = datetime.now(timezone.utc)
     return {
         "type": "notification",
         "notification": {
