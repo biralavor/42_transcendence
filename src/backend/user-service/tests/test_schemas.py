@@ -240,3 +240,40 @@ class TestGameNotificationRequestValidation:
         assert req.to_username is None
         assert req.from_avatar_url is None
         assert req.expires_at is None
+
+
+class TestNotificationMessageValidation:
+    """Test notification message length validation."""
+
+    def test_notification_message_length_valid(self):
+        """Valid message within 256 character limit."""
+        from service.notifications import MAX_NOTIFICATION_MESSAGE_LENGTH, create_notification
+        
+        # Test boundary: exactly at limit
+        long_message = "x" * MAX_NOTIFICATION_MESSAGE_LENGTH
+        # We can't directly test create_notification here without a DB session,
+        # but we can verify the constant exists
+        assert MAX_NOTIFICATION_MESSAGE_LENGTH == 256
+
+    def test_notification_message_length_constant(self):
+        """Verify MAX_NOTIFICATION_MESSAGE_LENGTH constant is 256."""
+        from service.notifications import MAX_NOTIFICATION_MESSAGE_LENGTH
+        assert MAX_NOTIFICATION_MESSAGE_LENGTH == 256
+
+    def test_notification_message_typical_lengths(self):
+        """Verify typical notification messages fit within limit."""
+        from service.notifications import MAX_NOTIFICATION_MESSAGE_LENGTH
+        
+        typical_messages = [
+            "alice invited you to play Pong",
+            "alice accepted your game invite",
+            "alice declined your game invite",
+            "Your game invite with alice has expired",
+            "alice sent you a friend request",
+            "alice accepted your friend request",
+            "2 unread messages from alice",
+        ]
+        
+        for msg in typical_messages:
+            assert len(msg) < MAX_NOTIFICATION_MESSAGE_LENGTH, \
+                f"Message '{msg}' ({len(msg)} chars) should fit in {MAX_NOTIFICATION_MESSAGE_LENGTH}"

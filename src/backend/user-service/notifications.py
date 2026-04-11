@@ -4,6 +4,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from service.models.notification import Notification
 
+# Validation constants
+MAX_NOTIFICATION_MESSAGE_LENGTH = 256
+
 
 async def get_notifications(db: AsyncSession, user_id: int) -> list[Notification]:
     """Return the last 20 notifications for user_id, newest first."""
@@ -77,8 +80,25 @@ async def create_notification(
 ) -> Notification:
     """Persist a new notification row and return it with its generated id.
     
+    Validates message length before persisting to prevent abuse or database bloat.
     Uses async context manager for atomic transaction handling with automatic rollback on error.
+    
+    Args:
+        db: Async database session
+        user_id: Target user ID for the notification
+        notif_type: Type of notification (validated by NotificationResponse schema)
+        message: Human-readable notification message (max 256 characters)
+        
+    Raises:
+        ValueError: If message exceeds MAX_NOTIFICATION_MESSAGE_LENGTH
     """
+    # Validate message length
+    if not message or len(message) > MAX_NOTIFICATION_MESSAGE_LENGTH:
+        raise ValueError(
+            f"Notification message must be 1-{MAX_NOTIFICATION_MESSAGE_LENGTH} characters "
+            f"(got {len(message)} characters)"
+        )
+    
     notif = Notification(user_id=user_id, type=notif_type, message=message, read=False)
     async with db.begin():
         db.add(notif)

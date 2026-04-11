@@ -160,11 +160,17 @@ async def add_friend(
     current_user: User = Depends(get_current_user),
 ):
     friendship = await _friends.send_friend_request(current_user.id, addressee_id, session)
-    notif = await _notifications.create_notification(
-        session, addressee_id, "friend_request",
-        f"{current_user.username} sent you a friend request",
-    )
-    await notification_manager.broadcast(str(addressee_id), _notif_payload(notif))
+    try:
+        notif = await _notifications.create_notification(
+            session, addressee_id, "friend_request",
+            f"{current_user.username} sent you a friend request",
+        )
+        await notification_manager.broadcast(str(addressee_id), _notif_payload(notif))
+    except ValueError as e:
+        # Message length validation failed — log but don't fail the request
+        # (friendship was already created)
+        import sys
+        print(f"[WARNING] Failed to create notification: {e}", file=sys.stderr)
     return friendship
 
 
@@ -180,11 +186,19 @@ async def respond_to_request(
     result = await _friends.respond_to_friend_request(current_user.id, request_id, body.action, session)
     if body.action == "decline":
         return Response(status_code=204)
-    notif = await _notifications.create_notification(
-        session, result.requester_id, "friend_request_accepted",
-        f"{current_user.username} accepted your friend request",
-    )
-    await notification_manager.broadcast(str(result.requester_id), _notif_payload(notif))
+    
+    try:
+        notif = await _notifications.create_notification(
+            session, result.requester_id, "friend_request_accepted",
+            f"{current_user.username} accepted your friend request",
+        )
+        await notification_manager.broadcast(str(result.requester_id), _notif_payload(notif))
+    except ValueError as e:
+        # Message length validation failed — log but don't fail the request
+        # (friendship acceptance was already processed)
+        import sys
+        print(f"[WARNING] Failed to create notification: {e}", file=sys.stderr)
+    
     return result
 
 
@@ -265,10 +279,15 @@ async def deliver_game_notification(
         "from_user_id": current_user.id,
         "from_username": current_user.username,
     }
-    notif = await _notifications.create_notification(
-        session, body.to_user_id, body.type,
-        _game_notif_message(current_user.username, body),
-    )
+    try:
+        notif = await _notifications.create_notification(
+            session, body.to_user_id, body.type,
+            _game_notif_message(current_user.username, body),
+        )
+    except ValueError as e:
+        # Message length validation failed
+        raise HTTPException(status_code=400, detail=str(e))
+    
     await notification_manager.broadcast(str(body.to_user_id), payload)
     await notification_manager.broadcast(str(body.to_user_id), _notif_payload(notif))
     return Response(status_code=204)
