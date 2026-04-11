@@ -39,14 +39,10 @@ export default function Tournament() {
     return currentUser && tournament && tournament.participants?.some((p) => Number(p.user_id) === Number(currentUser.id))
   }, [currentUser, tournament])
 
-  const activeUserMatch = useMemo(() => {
-    if (!tournament?.matches || !currentUser) return null
-    return tournament.matches.find((match) => {
-      if (match.status === 'finished') return false
-      const involvesCurrentUser = Number(match.player1_id) === Number(currentUser.id) || Number(match.player2_id) === Number(currentUser.id)
-      return involvesCurrentUser && match.player1_id != null && match.player2_id != null
-    }) || null
-  }, [tournament, currentUser])
+  // In this implementation the backend is responsible for managing active matches and advancing
+  // players through a tournament. The frontend does not attempt to infer the current user's match
+  // from the list of matches. Once backend support for a "ready" flow and explicit match assignment
+  // exists, this page can listen for updates via websocket and react accordingly.
 
   // Compute a simple leaderboard based on finished matches.  Each win is worth one
   // point.  The number of matches played is counted for context.  Entries are
@@ -83,88 +79,12 @@ export default function Tournament() {
     return entries
   }, [tournament, profiles])
 
-  // Allow the creator to cancel the tournament (delete) and participants to leave
-  async function handleCancel() {
-    if (!tournamentId) return
-    try {
-      await apiJson(`/api/game/tournaments/${tournamentId}`, { method: 'DELETE' })
-      // Remove from localStorage
-      try {
-        const stored = JSON.parse(localStorage.getItem('myTournaments') || '[]')
-        const idx = stored.indexOf(Number(tournamentId))
-        if (idx >= 0) {
-          stored.splice(idx, 1)
-          localStorage.setItem('myTournaments', JSON.stringify(stored))
-        }
-      } catch {
-        /* ignore */
-      }
-      navigate('/tournaments')
-    } catch (err) {
-      setError(err.message || 'Failed to cancel tournament')
-    }
-  }
 
-  async function handleLeave() {
-    if (!tournamentId) return
-    try {
-      await apiJson(`/api/game/tournaments/${tournamentId}/leave`, { method: 'POST' })
-      try {
-        const stored = JSON.parse(localStorage.getItem('myTournaments') || '[]')
-        const idx = stored.indexOf(Number(tournamentId))
-        if (idx >= 0) {
-          stored.splice(idx, 1)
-          localStorage.setItem('myTournaments', JSON.stringify(stored))
-        }
-      } catch {
-        /* ignore */
-      }
-      navigate('/tournaments')
-    } catch (err) {
-      setError(err.message || 'Failed to leave tournament')
-    }
-  }
 
-  async function handleForfeitMatch() {
-    if (!tournamentId || !activeUserMatch) return
-
-    const opponentId = Number(activeUserMatch.player1_id) === Number(currentUser?.id)
-      ? activeUserMatch.player2_id
-      : activeUserMatch.player1_id
-
-    if (!opponentId) {
-      setError('Could not determine the opponent for this match')
-      return
-    }
-
-    try {
-      const scoreP1 = Number(activeUserMatch.player1_id) === Number(opponentId) ? 7 : 0
-      const scoreP2 = Number(activeUserMatch.player2_id) === Number(opponentId) ? 7 : 0
-      const data = await apiJson(`/api/game/tournaments/${tournamentId}/matches/${activeUserMatch.match_id}/result`, {
-        method: 'POST',
-        body: JSON.stringify({
-          winner_id: opponentId,
-          score_p1: scoreP1,
-          score_p2: scoreP2,
-        }),
-      })
-      setTournament(data)
-    } catch (err) {
-      setError(err.message || 'Failed to forfeit match')
-    }
-  }
-
-  function handlePlayMatch() {
-    if (!tournamentId || !activeUserMatch) return
-    navigate(`/game/tournament-${tournamentId}-match-${activeUserMatch.match_id}`, {
-      state: {
-        player1_id: activeUserMatch.player1_id,
-        player2_id: activeUserMatch.player2_id,
-        tournamentId,
-        tournamentMatchId: activeUserMatch.match_id,
-      },
-    })
-  }
+  // The tournament page currently does not expose client-side controls for forfeiting or
+  // directly starting matches. Once the backend provides explicit match assignment and
+  // forfeit endpoints (e.g. POST /tournaments/{id}/forfeit), appropriate handlers can be
+  // added here.
 
   // Fetch current user details (id and username) so we can gate actions.
   useEffect(() => {
@@ -405,24 +325,6 @@ export default function Tournament() {
                 </p>
               </div>
               <div className="d-flex flex-column align-items-start align-items-lg-end gap-2">
-                {tournament?.status === 'open' && isJoined && !isCreator && (
-                  <button
-                    type="button"
-                    className="arcade-btn arcade-btn-secondary"
-                    onClick={handleLeave}
-                  >
-                    Leave Tournament
-                  </button>
-                )}
-                {tournament?.status === 'open' && isCreator && (
-                  <button
-                    type="button"
-                    className="arcade-btn arcade-btn-danger"
-                    onClick={handleCancel}
-                  >
-                    Cancel Tournament
-                  </button>
-                )}
                 {canStart && (
                   <button
                     type="button"
@@ -432,30 +334,15 @@ export default function Tournament() {
                     Start Tournament
                   </button>
                 )}
-                {tournament?.status === 'in_progress' && activeUserMatch && (
-                  <>
-                    <button
-                      type="button"
-                      className="arcade-btn arcade-btn-primary"
-                      onClick={handlePlayMatch}
-                    >
-                      Play Match
-                    </button>
-                    <button
-                      type="button"
-                      className="arcade-btn arcade-btn-danger"
-                      onClick={handleForfeitMatch}
-                    >
-                      Desist / Forfeit
-                    </button>
-                  </>
-                )}
+                {/* During an in‑progress tournament the backend will assign matches and notify
+                    participants via websocket. The frontend does not render Play or Forfeit buttons
+                    because those flows are governed by the backend. */}
                 <button
                   type="button"
                   className="arcade-btn arcade-btn-secondary"
-                  onClick={() => navigate('/play')}
+                  onClick={() => navigate('/tournaments')}
                 >
-                  Back to lobby
+                  Back to Tournaments
                 </button>
               </div>
             </div>

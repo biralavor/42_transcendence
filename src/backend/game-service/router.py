@@ -24,6 +24,8 @@ from service.persistence import (
     get_user_matches,
     get_user_stats,
     join_tournament,
+    list_tournaments,
+    UserAlreadyInActiveTournament,
     record_tournament_match_result,
     start_tournament,
 )
@@ -79,19 +81,53 @@ async def user_matches(user_id: int, session: SessionDependency):
 async def start_match(body: MatchCreateRequest, session: SessionDependency):
     return await create_match(session, body.player1_id, body.player2_id)
 
-
 @router.post("/tournaments", status_code=status.HTTP_201_CREATED, response_model=TournamentCreateResponse)
 async def create_tournament_endpoint(
     body: TournamentCreateRequest,
     session: SessionDependency,
     creator_id: int = Depends(get_current_user_id),
 ):
-    tournament = await create_tournament(session, body.name, creator_id, body.max_participants)
+    try:
+        tournament = await create_tournament(session, body.name, creator_id, body.max_participants)
+    except UserAlreadyInActiveTournament:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="User already participates in an active tournament",
+        )
+
     return TournamentCreateResponse(
         id=tournament.id,
         join_link=f"/api/game/tournaments/{tournament.id}/join",
     )
 
+@router.get("/tournaments", response_model=list[TournamentDetailResponse])
+async def get_tournaments(session: SessionDependency):
+    tournaments = await list_tournaments(session)
+    response = []
+
+    for tournament in tournaments:
+        result = await get_tournament_with_participants(session, tournament.id)
+        if result is None:
+            continue
+
+        tournament, participants, matches = result
+        response.append(
+            TournamentDetailResponse(
+                id=tournament.id,
+                name=tournament.name,
+                creator_id=tournament.creator_id,
+                max_participants=tournament.max_participants,
+                status=tournament.status,
+                created_at=tournament.created_at,
+                participants=[
+                    TournamentParticipantResponse(user_id=p.user_id, joined_at=p.joined_at)
+                    for p in participants
+                ],
+                matches=[TournamentMatchResponse.model_validate(m) for m in matches],
+            )
+        )
+
+    return response
 
 @router.get("/tournaments/{tournament_id}", response_model=TournamentDetailResponse)
 async def get_tournament(tournament_id: int, session: SessionDependency):
@@ -127,6 +163,11 @@ async def join_tournament_endpoint(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="User already registered")
     except TournamentFull:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Tournament is full")
+    except UserAlreadyInActiveTournament:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="User already participates in another active tournament",
+    )
     return {"detail": "Joined successfully"}
 
 
