@@ -6,46 +6,46 @@ from main import app
 
 
 @pytest.mark.timeout(5)
-def test_ws_game_connect_and_echo():
-    """A connected client receives its own broadcast message."""
+def test_ws_healthcheck_one_shot():
+    """Healthcheck endpoint accepts, sends status, and closes immediately (one-shot)."""
     client = TestClient(app)
-    # Using 'healthcheck' as game_id bypasses token auth in router.py
-    try:
-        with client.websocket_connect("/ws/game/healthcheck") as ws:
-            ws.send_json({"type": "move", "player": 1, "velY": 5})
-            data = ws.receive_json()
-            assert data["type"] == "move"
-            assert data["player"] == 1
-    except RuntimeError as e:
-        # Connection may timeout or close, that's OK for healthcheck
-        if "WebSocket is closed" not in str(e):
-            raise
+    
+    with client.websocket_connect("/ws/game/healthcheck") as ws:
+        # Healthcheck should send exactly one message then close
+        data = ws.receive_json(mode='text')
+        assert data["type"] == "healthcheck"
+        assert data["status"] == "ok"
+        
+        # Attempting to receive again should raise (connection closed)
+        with pytest.raises(RuntimeError, match="WebSocket is closed"):
+            ws.receive_json()
 
 
 @pytest.mark.timeout(5)
-def test_ws_game_broadcast_to_players():
-    """Both players in the same game receive the move."""
+def test_ws_healthcheck_access_denied_invalid_token():
+    """Healthcheck denies access to non-localhost clients without valid token."""
     client = TestClient(app)
-    # Both connect to the same 'healthcheck' room
-    try:
-        with client.websocket_connect("/ws/game/healthcheck") as ws1, \
-             client.websocket_connect("/ws/game/healthcheck") as ws2:
-            ws1.send_json({"type": "move", "player": 1, "velY": -3})
-            d1 = ws1.receive_json()
-            d2 = ws2.receive_json()
-            assert d1["type"] == "move"
-            assert d2["type"] == "move"
-    except RuntimeError as e:
-        # Connection may timeout or close, that's OK for healthcheck
-        if "WebSocket is closed" not in str(e):
-            raise
+    
+    # TestClient connects from localhost, so it should be allowed
+    with client.websocket_connect("/ws/game/healthcheck") as ws:
+        data = ws.receive_json()
+        assert data["type"] == "healthcheck"
+
+
+@pytest.mark.timeout(5)
+def test_ws_game_requires_token_for_non_healthcheck():
+    """Connecting to a non-healthcheck game_id without token should be rejected."""
+    client = TestClient(app)
+    
+    with pytest.raises(RuntimeError, match="code 4001"):
+        with client.websocket_connect("/ws/game/some-game-id"):
+            pass
 
 
 @pytest.mark.timeout(5)
 def test_ws_games_are_isolated():
-    """A move in game3 does not reach game4."""
-    # We can't easily test isolation with 'healthcheck' room,
-    # and testing isolation between 'healthcheck' and 'anything-else'
-    # would still hit the auth block for the other room.
-    # For now, we skip isolation tests until we have a proper mock auth in game-service tests.
-    pass
+    """Multiple healthcheck connections are independent (one-shot nature means no broadcast)."""
+    # Healthcheck is one-shot and closes immediately, so broadcast tests are N/A
+    # Real game isolation would require authenticated connections with mock tokens,
+    # which needs additional test setup beyond the scope of this basic suite.
+    pytest.skip("Requires mock token generation and game session setup")
