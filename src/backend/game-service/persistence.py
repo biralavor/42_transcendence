@@ -527,6 +527,131 @@ async def get_user_matches(db: AsyncSession, user_id: int) -> list[Match]:
     return list(result.scalars().all())
 
 
+async def get_leaderboard_pagginated(
+        db: AsyncSession, limit: int = 20, page: int = 0
+) -> dict | None:
+
+    offset = page * limit
+    default_sort_string = """
+points DESC,
+goal_difference DESC,
+goals_scored DESC,
+user_id ASC"""
+    sort_string = default_sort_string
+    statement = text(f"""
+WITH all_matches AS
+(
+    SELECT
+        player1_id
+        , player2_id
+        , winner_id
+        , score_p1
+        , score_p2
+        , status
+    FROM matches
+    WHERE status IS NOT NULL AND status = 'finished'
+)
+, stats_away AS
+(
+    SELECT
+        player2_id
+        AS user_id
+        , count(winner_id) FILTER(WHERE player2_id = winner_id)
+        AS wins
+        , count(winner_id) FILTER(WHERE player1_id = winner_id)
+        AS losses
+        , sum(score_p2)
+        AS goals_scored
+        , sum(score_p1)
+        AS goals_conceded
+    FROM all_matches
+    GROUP BY player2_id
+)
+, stats_home AS
+(
+    SELECT
+        player1_id
+        AS user_id
+        , count(winner_id) FILTER(WHERE player1_id = winner_id)
+        AS wins
+        , count(winner_id) FILTER(WHERE player2_id = winner_id)
+        AS losses
+        , sum(score_p1)
+        AS goals_scored
+        , sum(score_p2)
+        AS goals_conceded
+    FROM all_matches
+    GROUP BY player1_id
+)
+, stats_all AS
+(
+    SELECT * FROM stats_away
+    UNION ALL
+    SELECT * FROM stats_home
+)
+, user_count AS
+(
+    SELECT
+        count(DISTINCT user_id)
+        AS ranked_users
+    FROM stats_all
+)
+, ranked_stats AS
+(
+    SELECT
+        user_id
+        , users.display_name
+        , sum(wins)
+        AS wins
+        , sum(losses)
+        AS losses
+        , sum(goals_scored)
+        AS goals_scored
+        , sum(goals_conceded)
+        AS goals_conceded
+        , (sum(goals_scored) - sum(goals_conceded))
+        AS goal_difference
+        , (3 * SUM(wins))
+        AS points
+    FROM stats_all
+    INNER JOIN users ON users.id = stats_all.user_id
+    GROUP BY user_id, users.display_name
+)
+, ranking_results AS
+(
+    SELECT
+        ROW_NUMBER() OVER (ORDER BY {default_sort_string})
+        AS rank
+        , display_name
+        , points
+        , wins
+        , losses
+        , goals_scored
+        , goals_conceded
+        , goal_difference
+    FROM ranked_stats
+    ORDER BY {sort_string}
+    LIMIT :limit
+    OFFSET (SELECT LEAST(:offset, GREATEST(0, ranked_users - :limit)) FROM user_count)
+)
+SELECT
+    LEAST(:page, ((table user_count) / :limit))
+    AS page
+    , ((table user_count) / :limit)
+    AS last_page
+    , :limit as per_page
+    , (table user_count) as total
+    , COALESCE(jsonb_agg(to_jsonb(ranking_results)), '[]'::jsonb)
+    AS results
+FROM ranking_results
+    """)
+
+    result = await db.execute(
+        statement, {'offset': offset, 'limit': limit, 'page': page}
+    )
+    return result.mappings().one_or_none()
+
+
 async def get_leaderboard(db: AsyncSession, limit: int = 20) -> list[dict]:
     """
     Aggregate finished matches directly in the database to produce a ranked leaderboard.
