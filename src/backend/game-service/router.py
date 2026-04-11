@@ -30,6 +30,8 @@ from service.persistence import (
     start_tournament,
     TournamentCannotBeCancelled,
     delete_tournament,
+    TournamentNotParticipant,
+    leave_tournament,
 )
 from service.schemas import (
     LeaderboardEntryResponse,
@@ -147,6 +149,30 @@ async def get_tournament(tournament_id: int, session: SessionDependency):
         participants=[TournamentParticipantResponse(user_id=p.user_id, joined_at=p.joined_at) for p in participants],
         matches=[TournamentMatchResponse.model_validate(m) for m in matches],
     )
+
+@router.post("/tournaments/{tournament_id}/leave", status_code=status.HTTP_204_NO_CONTENT)
+async def leave_tournament_endpoint(
+    tournament_id: int,
+    session: SessionDependency,
+    user_id: int = Depends(get_current_user_id),
+):
+    try:
+        await leave_tournament(session, tournament_id, user_id)
+    except TournamentNotFound:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Tournament not found",
+        )
+    except TournamentNotOpen:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Only open tournaments can be left",
+        )
+    except TournamentNotParticipant:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User is not a participant in this tournament",
+        )
 
 @router.delete("/tournaments/{tournament_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_tournament_endpoint(

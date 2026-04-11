@@ -138,6 +138,16 @@ export default function Tournaments() {
     }
   }
 
+  async function handleLeave(id) {
+  setError('')
+  try {
+    await apiJson(`/api/game/tournaments/${id}/leave`, { method: 'POST' })
+    await loadTournaments()
+  } catch (err) {
+    setError(err.message || 'Failed to leave tournament')
+  }
+}
+
   // Join a tournament and refresh its details
   async function handleJoin(id) {
     setError('')
@@ -403,7 +413,20 @@ export default function Tournaments() {
                                 </button>
                               )}
 
-                              {joined && <span className="badge bg-success">Joined</span>}
+                              {joined && (
+                                <>
+                                  <span className="badge bg-success">Joined</span>
+                                  {t.status === 'open' && (
+                                    <button
+                                      type="button"
+                                      className="arcade-btn arcade-btn-secondary"
+                                      onClick={() => handleLeave(t.id)}
+                                    >
+                                      Leave
+                                    </button>
+                                  )}
+                                </>
+                              )}
 
                               <button
                                 type="button"
@@ -412,8 +435,8 @@ export default function Tournaments() {
                               >
                                 View
                               </button>
-                            </td>
-                          </tr>
+                          </td>
+                      </tr>
                         )
                       })}
                     </tbody>

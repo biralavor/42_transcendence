@@ -236,6 +236,17 @@ export default function Tournament() {
     }
   }
 
+  async function handleLeave() {
+  if (!tournamentId) return
+
+  try {
+    await apiJson(`/api/game/tournaments/${tournamentId}/leave`, { method: 'POST' })
+    navigate('/tournaments')
+  } catch (err) {
+    setError(err.message || 'Failed to leave tournament')
+  }
+}
+
   // Group matches by round for easier rendering
   const matchesByRound = useMemo(() => {
     const map = {}
@@ -325,6 +336,16 @@ export default function Tournament() {
                 </p>
               </div>
               <div className="d-flex flex-column align-items-start align-items-lg-end gap-2">
+                {tournament?.status === 'open' && isJoined && (
+                  <button
+                    type="button"
+                    className="arcade-btn arcade-btn-secondary"
+                    onClick={handleLeave}
+                  >
+                    Leave Tournament
+                  </button>
+                )}
+              
                 {canStart && (
                   <button
                     type="button"
@@ -334,9 +355,7 @@ export default function Tournament() {
                     Start Tournament
                   </button>
                 )}
-                {/* During an in‑progress tournament the backend will assign matches and notify
-                    participants via websocket. The frontend does not render Play or Forfeit buttons
-                    because those flows are governed by the backend. */}
+              
                 <button
                   type="button"
                   className="arcade-btn arcade-btn-secondary"
