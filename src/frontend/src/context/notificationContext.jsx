@@ -42,7 +42,15 @@ export function NotificationProvider({ children }) {
         return () => { cancelled = true }
     }, [auth.access_token])
 
-    // Step 2: open WS once userId is known
+    // Step 2: fetch initial notifications once userId is known
+    useEffect(() => {
+        if (!userId) return
+        void fetchNotifications().catch(err => {
+            console.error('[notificationContext] Failed to fetch initial notifications:', err.message)
+        })
+    }, [userId, fetchNotifications])
+
+    // Step 3: open WS once userId is known
     useEffect(() => {
         if (!userId || !auth.access_token) return
         const scheme = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
