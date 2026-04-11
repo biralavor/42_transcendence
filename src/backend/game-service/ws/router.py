@@ -79,6 +79,15 @@ async def game_websocket(websocket: WebSocket, game_id: str, token: str | None =
     # Allow healthcheck script to connect without auth
     if game_id == "healthcheck":
         await manager.connect(game_id, websocket)
+        try:
+            # Echo back any messages sent during healthcheck
+            while True:
+                data = await websocket.receive_json()
+                await manager.broadcast(game_id, data)
+        except WebSocketDisconnect:
+            pass
+        finally:
+            manager.disconnect(game_id, websocket)
         return
 
     if not token:

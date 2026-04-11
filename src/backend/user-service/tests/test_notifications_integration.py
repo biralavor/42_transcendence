@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import patch, AsyncMock, MagicMock
 from httpx import AsyncClient, ASGITransport
-from main import app, get_current_user
+from service.main import app, get_current_user
 from service.models.user import User
 
 @pytest.mark.asyncio
@@ -32,11 +32,12 @@ async def test_add_friend_broadcasts_notification():
     app.dependency_overrides[get_current_user] = lambda: mock_user
     
     try:
+        # Patch where it was DEFINED, not where it was IMPORTED if simple import was used.
+        # However, main.py does: from service.ws.notification_router import ..., notification_manager
+        # So we must patch it in service.ws.notification_router.
         with patch("service.main._friends.send_friend_request", return_value=mock_friendship), \
              patch("service.main._notifications.create_notification", return_value=mock_notif), \
-             patch("service.main.notification_manager") as mock_mgr:
-            
-            mock_mgr.broadcast = AsyncMock()
+             patch("service.ws.notification_router.notification_manager.broadcast", new_callable=AsyncMock) as mock_broadcast:
             
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 resp = await client.post(
@@ -47,8 +48,8 @@ async def test_add_friend_broadcasts_notification():
                 assert resp.status_code == 201
                 
                 # Check if broadcast was called
-                mock_mgr.broadcast.assert_called_once()
-                args, kwargs = mock_mgr.broadcast.call_args
+                mock_broadcast.assert_called_once()
+                args, kwargs = mock_broadcast.call_args
                 assert args[0] == str(addressee_id)
                 assert args[1]["type"] == "notification"
     finally:
@@ -73,9 +74,7 @@ async def test_game_invite_broadcasts_and_notifies():
     
     try:
         with patch("service.main._notifications.create_notification", return_value=mock_notif), \
-             patch("service.main.notification_manager") as mock_mgr:
-            
-            mock_mgr.broadcast = AsyncMock()
+             patch("service.ws.notification_router.notification_manager.broadcast", new_callable=AsyncMock) as mock_broadcast:
             
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 resp = await client.post(
@@ -89,6 +88,6 @@ async def test_game_invite_broadcasts_and_notifies():
                 )
                 
                 assert resp.status_code == 204
-                assert mock_mgr.broadcast.call_count == 2
+                assert mock_broadcast.call_count == 2
     finally:
         app.dependency_overrides.clear()

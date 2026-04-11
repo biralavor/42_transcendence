@@ -132,11 +132,15 @@ export default function FriendsSidebar({ userId, username, currentUser, onViewPr
 
   // Watch for friend-related notifications to refresh lists
   useEffect(() => {
-    const latest = notifications[0]
-    if (!latest || latest.id === lastProcessedNotifId.current) return
+    if (!notifications.length) return
 
-    if (latest.type === 'friend_request' || latest.type === 'friend_request_accepted') {
-      lastProcessedNotifId.current = latest.id
+    // Find the newest "real" (non-DM) notification of interest
+    const latestRelevant = notifications.find(n => 
+      n.type === 'friend_request' || n.type === 'friend_request_accepted'
+    )
+
+    if (latestRelevant && latestRelevant.id !== lastProcessedNotifId.current) {
+      lastProcessedNotifId.current = latestRelevant.id
       fetchFriendsData()
     }
   }, [notifications, fetchFriendsData])

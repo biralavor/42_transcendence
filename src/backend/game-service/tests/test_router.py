@@ -1,10 +1,9 @@
-import asyncio
-
 import pytest
+import pytest_asyncio
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.pool import NullPool
 from sqlalchemy import text
-from starlette.testclient import TestClient
+from httpx import AsyncClient, ASGITransport
 
 from shared.config.settings import settings
 from shared.database import get_db
@@ -23,28 +22,44 @@ async def _override_get_db():
         yield session
 
 
-def teardown_module(_):
-    asyncio.run(_engine.dispose())
+@pytest_asyncio.fixture
+async def client():
+    async with _engine.begin() as conn:
+        await conn.execute(text("TRUNCATE TABLE matches RESTART IDENTITY CASCADE"))
+        # Populate users table for cross-service join in leaderboard.
+        # We must also populate credentials because of the FK constraint in users.
+        await conn.execute(text("TRUNCATE TABLE users RESTART IDENTITY CASCADE"))
+        await conn.execute(text("TRUNCATE TABLE credentials RESTART IDENTITY CASCADE"))
+        
+        test_users = [
+            (1, "alice"), (2, "bob"), (3, "charlie"),
+            (10, "user10"), (20, "user20"), (30, "user30"),
+            (99, "user99"), (999, "user999")
+        ]
+        for uid, name in test_users:
+            cid = uid + 10000
+            await conn.execute(
+                text("INSERT INTO credentials (id, username, password) VALUES (:id, :u, 'fake')"),
+                {"id": cid, "u": f"cred_{name}"}
+            )
+            await conn.execute(
+                text("INSERT INTO users (id, username, credential_id) VALUES (:id, :u, :cid)"),
+                {"id": uid, "u": name, "cid": cid}
+            )
 
-
-@pytest.fixture
-def client():
-    async def _truncate():
-        async with _engine.begin() as conn:
-            await conn.execute(text("TRUNCATE TABLE matches RESTART IDENTITY CASCADE"))
-    asyncio.run(_truncate())
     app.dependency_overrides[get_db] = _override_get_db
-    yield TestClient(app)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        yield ac
     app.dependency_overrides.clear()
-    asyncio.run(_truncate())
 
 
 # --------------------------------------------------------------------------- #
 # POST /matches
 # --------------------------------------------------------------------------- #
 
-def test_start_match_returns_201(client):
-    resp = client.post("/matches", json={"player1_id": 1, "player2_id": 2})
+@pytest.mark.asyncio
+async def test_start_match_returns_201(client):
+    resp = await client.post("/matches", json={"player1_id": 1, "player2_id": 2})
     assert resp.status_code == 201
     data = resp.json()
     assert data["id"] is not None
@@ -58,9 +73,11 @@ def test_start_match_returns_201(client):
 # POST /matches/{match_id}/finish
 # --------------------------------------------------------------------------- #
 
-def test_finish_match_returns_updated(client):
-    match_id = client.post("/matches", json={"player1_id": 1, "player2_id": 2}).json()["id"]
-    resp = client.post(f"/matches/{match_id}/finish", json={"winner_id": 1, "score_p1": 7, "score_p2": 3})
+@pytest.mark.asyncio
+async def test_finish_match_returns_updated(client):
+    resp_create = await client.post("/matches", json={"player1_id": 1, "player2_id": 2})
+    match_id = resp_create.json()["id"]
+    resp = await client.post(f"/matches/{match_id}/finish", json={"winner_id": 1, "score_p1": 7, "score_p2": 3})
     assert resp.status_code == 200
     data = resp.json()
     assert data["status"] == "finished"
@@ -69,15 +86,18 @@ def test_finish_match_returns_updated(client):
     assert data["score_p2"] == 3
 
 
-def test_finish_match_404_for_unknown_id(client):
-    resp = client.post("/matches/99999/finish", json={"winner_id": 1, "score_p1": 7, "score_p2": 3})
+@pytest.mark.asyncio
+async def test_finish_match_404_for_unknown_id(client):
+    resp = await client.post("/matches/99999/finish", json={"winner_id": 1, "score_p1": 7, "score_p2": 3})
     assert resp.status_code == 404
 
 
-def test_finish_match_409_if_already_finished(client):
-    match_id = client.post("/matches", json={"player1_id": 1, "player2_id": 2}).json()["id"]
-    client.post(f"/matches/{match_id}/finish", json={"winner_id": 1, "score_p1": 7, "score_p2": 3})
-    resp = client.post(f"/matches/{match_id}/finish", json={"winner_id": 1, "score_p1": 7, "score_p2": 3})
+@pytest.mark.asyncio
+async def test_finish_match_409_if_already_finished(client):
+    resp_create = await client.post("/matches", json={"player1_id": 1, "player2_id": 2})
+    match_id = resp_create.json()["id"]
+    await client.post(f"/matches/{match_id}/finish", json={"winner_id": 1, "score_p1": 7, "score_p2": 3})
+    resp = await client.post(f"/matches/{match_id}/finish", json={"winner_id": 1, "score_p1": 7, "score_p2": 3})
     assert resp.status_code == 409
 
 
@@ -85,8 +105,9 @@ def test_finish_match_409_if_already_finished(client):
 # GET /stats/{user_id}
 # --------------------------------------------------------------------------- #
 
-def test_get_stats_empty_for_new_user(client):
-    resp = client.get("/stats/999")
+@pytest.mark.asyncio
+async def test_get_stats_empty_for_new_user(client):
+    resp = await client.get("/stats/999")
     assert resp.status_code == 200
     data = resp.json()
     assert data["user_id"] == 999
@@ -95,11 +116,13 @@ def test_get_stats_empty_for_new_user(client):
     assert data["total_games"] == 0
 
 
-def test_get_stats_reflects_finished_matches(client):
-    match_id = client.post("/matches", json={"player1_id": 10, "player2_id": 20}).json()["id"]
-    client.post(f"/matches/{match_id}/finish", json={"winner_id": 10, "score_p1": 7, "score_p2": 2})
+@pytest.mark.asyncio
+async def test_get_stats_reflects_finished_matches(client):
+    resp_create = await client.post("/matches", json={"player1_id": 10, "player2_id": 20})
+    match_id = resp_create.json()["id"]
+    await client.post(f"/matches/{match_id}/finish", json={"winner_id": 10, "score_p1": 7, "score_p2": 2})
 
-    resp = client.get("/stats/10")
+    resp = await client.get("/stats/10")
     assert resp.status_code == 200
     data = resp.json()
     assert data["wins"] == 1
@@ -113,18 +136,20 @@ def test_get_stats_reflects_finished_matches(client):
 # GET /matches/{user_id}
 # --------------------------------------------------------------------------- #
 
-def test_get_matches_empty_for_new_user(client):
-    resp = client.get("/matches/888")
+@pytest.mark.asyncio
+async def test_get_matches_empty_for_new_user(client):
+    resp = await client.get("/matches/888")
     assert resp.status_code == 200
     assert resp.json() == []
 
 
-def test_get_matches_returns_both_sides(client):
+@pytest.mark.asyncio
+async def test_get_matches_returns_both_sides(client):
     # user 30 plays as player1 and as player2
-    client.post("/matches", json={"player1_id": 30, "player2_id": 99})
-    client.post("/matches", json={"player1_id": 99, "player2_id": 30})
+    await client.post("/matches", json={"player1_id": 30, "player2_id": 99})
+    await client.post("/matches", json={"player1_id": 99, "player2_id": 30})
 
-    resp = client.get("/matches/30")
+    resp = await client.get("/matches/30")
     assert resp.status_code == 200
     assert len(resp.json()) == 2
 
@@ -133,14 +158,17 @@ def test_get_matches_returns_both_sides(client):
 # GET /leaderboard
 # --------------------------------------------------------------------------- #
 
-def test_get_leaderboard_returns_ranked_rows(client):
-    m1 = client.post("/matches", json={"player1_id": 1, "player2_id": 2}).json()["id"]
-    client.post(f"/matches/{m1}/finish", json={"winner_id": 1, "score_p1": 7, "score_p2": 2})
+@pytest.mark.asyncio
+async def test_get_leaderboard_returns_ranked_rows(client):
+    resp1 = await client.post("/matches", json={"player1_id": 1, "player2_id": 2})
+    m1 = resp1.json()["id"]
+    await client.post(f"/matches/{m1}/finish", json={"winner_id": 1, "score_p1": 7, "score_p2": 2})
 
-    m2 = client.post("/matches", json={"player1_id": 2, "player2_id": 3}).json()["id"]
-    client.post(f"/matches/{m2}/finish", json={"winner_id": 2, "score_p1": 4, "score_p2": 1})
+    resp2 = await client.post("/matches", json={"player1_id": 2, "player2_id": 3})
+    m2 = resp2.json()["id"]
+    await client.post(f"/matches/{m2}/finish", json={"winner_id": 2, "score_p1": 4, "score_p2": 1})
 
-    resp = client.get("/leaderboard")
+    resp = await client.get("/leaderboard")
     assert resp.status_code == 200
     data = resp.json()
     assert len(data) == 3
@@ -149,11 +177,13 @@ def test_get_leaderboard_returns_ranked_rows(client):
     assert data[0]["points"] == 3
 
 
-def test_get_leaderboard_honors_limit_query_param(client):
+@pytest.mark.asyncio
+async def test_get_leaderboard_honors_limit_query_param(client):
     for user_id in [10, 20, 30]:
-        match_id = client.post("/matches", json={"player1_id": user_id, "player2_id": 999}).json()["id"]
-        client.post(f"/matches/{match_id}/finish", json={"winner_id": user_id, "score_p1": 3, "score_p2": 0})
+        resp_create = await client.post("/matches", json={"player1_id": user_id, "player2_id": 999})
+        match_id = resp_create.json()["id"]
+        await client.post(f"/matches/{match_id}/finish", json={"winner_id": user_id, "score_p1": 3, "score_p2": 0})
 
-    resp = client.get("/leaderboard?limit=2")
+    resp = await client.get("/leaderboard?limit=2")
     assert resp.status_code == 200
     assert len(resp.json()) == 2

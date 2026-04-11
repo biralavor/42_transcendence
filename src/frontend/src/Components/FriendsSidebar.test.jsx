@@ -48,6 +48,12 @@ describe('FriendsSidebar', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
     useNavigate.mockReturnValue(vi.fn())
+    // Set up auth tokens in sessionStorage for apiClient to use
+    sessionStorage.clear()
+    localStorage.clear()
+    sessionStorage.setItem('access_token', 'fake-token')
+    sessionStorage.setItem('refresh_token', 'fake-refresh-token')
+    sessionStorage.setItem('token_type', 'bearer')
   })
 
   it('renders search input', () => {
