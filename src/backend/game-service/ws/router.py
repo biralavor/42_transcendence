@@ -76,18 +76,29 @@ async def game_websocket(websocket: WebSocket, game_id: str, token: str | None =
     The game loop runs independently in game_manager and broadcasts state
     to all connected clients each tick. This handler only processes inputs.
     """
-    # Allow healthcheck script to connect without auth
+    # Healthcheck endpoint: restricted, one-shot, no relay
     if game_id == "healthcheck":
-        await manager.connect(game_id, websocket)
+        # Restrict to localhost or healthcheck_token query parameter for security
+        client_host = websocket.client.host if websocket.client else ""
+        healthcheck_token = token  # Reuse token param for healthcheck auth
+        is_local = client_host in ("127.0.0.1", "localhost", "::1")
+        is_authorized = is_local or (healthcheck_token == settings.HEALTHCHECK_TOKEN if hasattr(settings, 'HEALTHCHECK_TOKEN') else False)
+        
+        if not is_authorized:
+            await websocket.close(code=4003, reason="Healthcheck access denied")
+            return
+        
         try:
-            # Echo back any messages sent during healthcheck
-            while True:
-                data = await websocket.receive_json()
-                await manager.broadcast(game_id, data)
-        except WebSocketDisconnect:
+            await websocket.accept()
+            # Send one "ok" response and close — don't relay or broadcast
+            await websocket.send_json({"type": "healthcheck", "status": "ok"})
+        except Exception:
             pass
         finally:
-            manager.disconnect(game_id, websocket)
+            try:
+                await websocket.close()
+            except Exception:
+                pass
         return
 
     if not token:
