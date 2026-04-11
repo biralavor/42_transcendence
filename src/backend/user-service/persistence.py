@@ -37,3 +37,28 @@ LIMIT 1
     )
     result_scalar: int | None = result.scalar_one_or_none()
     return result_scalar
+
+
+async def insert_user_achievement(
+        user_id: int, achievement_id: int, session: AsyncSession):
+    statement = text("""
+WITH insertion_user_achievement AS
+(
+INSERT INTO user_achievements (user_id, achievement_id)
+    VALUES (:user_id, :achievement_id)
+RETURNING achievement_id
+)
+SELECT
+    :user_id as user_id
+    ,*
+FROM achievements
+    JOIN insertion_user_achievement on achievement_id = achievements.id
+    """)
+    result = await session.execute(
+        statement, {'user_id': user_id, 'achievement_id': achievement_id}
+    )
+    await session.commit()
+    rows = result.mappings().all()
+    if rows:
+        return rows
+    return None
