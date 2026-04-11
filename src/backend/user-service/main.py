@@ -212,7 +212,8 @@ async def list_notifications(
     current_user: User = Depends(get_current_user),
 ):
     """Return last 20 notifications for the authenticated caller, newest first."""
-    return await _notifications.get_notifications(session, current_user.id)
+    notifications = await _notifications.get_notifications(session, current_user.id)
+    return [NotificationResponse.model_validate(n) for n in notifications]
 
 
 @app.put("/notifications/read-all", status_code=204)
@@ -232,7 +233,8 @@ async def read_notification(
     current_user: User = Depends(get_current_user),
 ):
     """Mark a single notification as read. Returns 404 if not owned by caller."""
-    return await _notifications.mark_notification_read(session, notification_id, current_user.id)
+    notif = await _notifications.mark_notification_read(session, notification_id, current_user.id)
+    return NotificationResponse.model_validate(notif)
 
 
 @app.delete("/notifications/{notification_id}", status_code=204)
