@@ -102,8 +102,8 @@ export default function FriendsSidebar({ userId, username, currentUser, onViewPr
   }, [navigate, selfId, selfUsername, selfAvatarUrl])
 
   const sendInviteEvent = useCallback(async (targetUserId, payload) => {
-    await sendGameChannelMessage(getGameChannelIdForUser(targetUserId), payload, auth.access_token)
-  }, [auth.access_token])
+    await sendGameChannelMessage(getGameChannelIdForUser(targetUserId), payload)
+  }, [])
 
   const fetchFriendsData = useCallback(async (signal) => {
     if (!selfId) return
@@ -135,7 +135,7 @@ export default function FriendsSidebar({ userId, username, currentUser, onViewPr
     if (!notifications.length) return
 
     // Find the newest "real" (non-DM) notification of interest
-    const latestRelevant = notifications.find(n => 
+    const latestRelevant = notifications.find(n =>
       n.type === 'friend_request' || n.type === 'friend_request_accepted'
     )
 

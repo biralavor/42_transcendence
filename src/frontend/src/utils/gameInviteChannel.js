@@ -1,4 +1,5 @@
 import { createWsClient } from './wsClient'
+import { apiCall } from './apiClient'
 
 const DEFAULT_AVATAR = '/avatar_placeholder.jpg'
 
@@ -22,14 +23,14 @@ export function createGameChannelClient(channelId, token, handlers = {}) {
   return createWsClient(url, handlers)
 }
 
-export async function sendGameChannelMessage(_channelId, payload, token, options = {}) {
-  const resp = await fetch('/api/users/game-invites', {
+export async function sendGameChannelMessage(_channelId, payload, options = {}) {
+  const resp = await apiCall('/api/users/game-invites', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
     },
     body: JSON.stringify(payload),
+    ...options,
   })
   if (!resp.ok)
     throw new Error('Unable to send the game invite event.')

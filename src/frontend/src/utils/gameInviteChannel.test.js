@@ -14,6 +14,12 @@ vi.mock('./wsClient', () => ({
 }))
 import { createWsClient } from './wsClient'
 
+// ── apiCall mock ───────────────────────────────────────────────────────────────
+vi.mock('./apiClient', () => ({
+  apiCall: vi.fn(),
+}))
+import { apiCall } from './apiClient'
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 function stubLocation(protocol, host) {
@@ -76,38 +82,37 @@ describe('getGameChannelIdForUser', () => {
   })
 })
 
-// ── sendGameChannelMessage — fetch POST ───────────────────────────────────────
+// ── sendGameChannelMessage — apiCall POST ─────────────────────────────────────
 
 describe('sendGameChannelMessage', () => {
   beforeEach(() => {
-    vi.stubGlobal('fetch', vi.fn())
+    apiCall.mockClear()
   })
 
-  it('POSTs to /api/users/game-invites with Authorization header', async () => {
-    fetch.mockResolvedValue({ ok: true })
+  it('calls apiCall with POST to /api/users/game-invites', async () => {
+    apiCall.mockResolvedValue({ ok: true })
     const payload = { type: 'game_invite', to_user_id: 2 }
-    await sendGameChannelMessage('ignored', payload, 'mytoken')
-    expect(fetch).toHaveBeenCalledWith('/api/users/game-invites', {
+    await sendGameChannelMessage('ignored', payload)
+    expect(apiCall).toHaveBeenCalledWith('/api/users/game-invites', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: 'Bearer mytoken',
       },
       body: JSON.stringify(payload),
     })
   })
 
   it('throws when the server returns a non-OK status', async () => {
-    fetch.mockResolvedValue({ ok: false, status: 403 })
+    apiCall.mockResolvedValue({ ok: false, status: 403 })
     await expect(
-      sendGameChannelMessage('ignored', {}, 'tok'),
+      sendGameChannelMessage('ignored', {}),
     ).rejects.toThrow('Unable to send the game invite event.')
   })
 
-  it('ignores the _channelId and options params (kept for call-site compat)', async () => {
-    fetch.mockResolvedValue({ ok: true })
+  it('ignores the _channelId param and applies options (kept for call-site compat)', async () => {
+    apiCall.mockResolvedValue({ ok: true })
     await expect(
-      sendGameChannelMessage('any-channel', { type: 'game_invite' }, 'tok', { closeDelay: 999 }),
+      sendGameChannelMessage('any-channel', { type: 'game_invite' }, { closeDelay: 999 }),
     ).resolves.toBeUndefined()
   })
 })
