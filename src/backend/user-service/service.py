@@ -150,8 +150,21 @@ async def get_me(token: str, session: AsyncSession) -> MeResponse:
     if user is None:
         user = User(username=credential.username, credential_id=credential.id)
         session.add(user)
-        await session.commit()
-        await session.refresh(user)
+        try:
+            await session.commit()
+            await session.refresh(user)
+        except IntegrityError:
+            # Handle race condition: another request may have created the user
+            # or ID collision from deleted users. Refresh to get existing user.
+            await session.rollback()
+            user_row = await session.execute(select(User).where(User.credential_id == credential.id))
+            user = user_row.scalars().first()
+            if user is None:
+                # If still not found, re-raise the original error
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to create user"
+                )
     return user
 
 
