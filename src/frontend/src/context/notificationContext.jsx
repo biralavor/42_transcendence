@@ -14,6 +14,83 @@ export function NotificationProvider({ children }) {
     // Stable first-seen timestamp per DM room slug — set once, never updated, so sort order is stable
     const dmFirstSeenRef = useRef({})
 
+    // Define all useCallback hooks before useEffect hooks to avoid temporal dead zone
+    const fetchNotifications = useCallback(async () => {
+        try {
+            const r = await apiCall('/api/users/notifications')
+            if (!r.ok) {
+                console.error('[notificationContext] Failed to fetch notifications:', r.status)
+                setNotifications([])
+                return
+            }
+            const data = await r.json()
+            if (Array.isArray(data)) {
+                setNotifications(data)
+            } else {
+                console.warn('[notificationContext] Invalid notifications response format')
+                setNotifications([])
+            }
+        } catch (err) {
+            console.error('[notificationContext] Error fetching notifications:', err.message)
+            setNotifications([])
+        }
+    }, [])
+
+    const markRead = useCallback(async (id) => {
+        // Handle DM pseudo-notifications differently
+        if (typeof id === 'string' && id.startsWith('dm-')) {
+            const slug = id.replace('dm-', '')
+            clearUnread(slug)
+            return
+        }
+
+        try {
+            const r = await apiCall(`/api/users/notifications/${id}/read`, { method: 'PUT' })
+            if (!r.ok) {
+                console.error(`[notificationContext] Failed to mark notification ${id} as read:`, r.status)
+                return
+            }
+            setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n))
+        } catch (err) {
+            console.error(`[notificationContext] Error marking notification ${id} as read:`, err.message)
+        }
+    }, [clearUnread])
+
+    const markAllRead = useCallback(async () => {
+        try {
+            const r = await apiCall('/api/users/notifications/read-all', { method: 'PUT' })
+            if (!r.ok) {
+                console.error('[notificationContext] Failed to mark all notifications as read:', r.status)
+                return
+            }
+            setNotifications(prev => prev.map(n => ({ ...n, read: true })))
+
+            // Clear all DM unread counts
+            Object.keys(unreadCounts).forEach(slug => {
+                clearUnread(slug)
+            })
+        } catch (err) {
+            console.error('[notificationContext] Error marking all notifications as read:', err.message)
+        }
+    }, [unreadCounts, clearUnread])
+
+    const removeNotification = useCallback(async (id) => {
+        try {
+            const r = await apiCall(`/api/users/notifications/${id}`, { method: 'DELETE' })
+            if (!r.ok) {
+                console.error(`[notificationContext] Failed to remove notification ${id}:`, r.status)
+                return
+            }
+            setNotifications(prev => prev.filter(n => n.id !== id))
+        } catch (err) {
+            console.error(`[notificationContext] Error removing notification ${id}:`, err.message)
+        }
+    }, [])
+
+    const setInviteVisible = useCallback((visible) => {
+        inviteVisibleRef.current = !!visible
+    }, [])
+
     // Step 1: resolve integer user ID via /auth/me whenever token changes
     useEffect(() => {
         if (!auth.access_token) {
@@ -113,82 +190,6 @@ export function NotificationProvider({ children }) {
         () => notifications.filter(n => !n.read).length,
         [notifications]
     )
-
-    const fetchNotifications = useCallback(async () => {
-        try {
-            const r = await apiCall('/api/users/notifications')
-            if (!r.ok) {
-                console.error('[notificationContext] Failed to fetch notifications:', r.status)
-                setNotifications([])
-                return
-            }
-            const data = await r.json()
-            if (Array.isArray(data)) {
-                setNotifications(data)
-            } else {
-                console.warn('[notificationContext] Invalid notifications response format')
-                setNotifications([])
-            }
-        } catch (err) {
-            console.error('[notificationContext] Error fetching notifications:', err.message)
-            setNotifications([])
-        }
-    }, [])
-
-    const markRead = useCallback(async (id) => {
-        // Handle DM pseudo-notifications differently
-        if (typeof id === 'string' && id.startsWith('dm-')) {
-            const slug = id.replace('dm-', '')
-            clearUnread(slug)
-            return
-        }
-
-        try {
-            const r = await apiCall(`/api/users/notifications/${id}/read`, { method: 'PUT' })
-            if (!r.ok) {
-                console.error(`[notificationContext] Failed to mark notification ${id} as read:`, r.status)
-                return
-            }
-            setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n))
-        } catch (err) {
-            console.error(`[notificationContext] Error marking notification ${id} as read:`, err.message)
-        }
-    }, [clearUnread])
-
-    const markAllRead = useCallback(async () => {
-        try {
-            const r = await apiCall('/api/users/notifications/read-all', { method: 'PUT' })
-            if (!r.ok) {
-                console.error('[notificationContext] Failed to mark all notifications as read:', r.status)
-                return
-            }
-            setNotifications(prev => prev.map(n => ({ ...n, read: true })))
-
-            // Clear all DM unread counts
-            Object.keys(unreadCounts).forEach(slug => {
-                clearUnread(slug)
-            })
-        } catch (err) {
-            console.error('[notificationContext] Error marking all notifications as read:', err.message)
-        }
-    }, [unreadCounts, clearUnread])
-
-    const removeNotification = useCallback(async (id) => {
-        try {
-            const r = await apiCall(`/api/users/notifications/${id}`, { method: 'DELETE' })
-            if (!r.ok) {
-                console.error(`[notificationContext] Failed to remove notification ${id}:`, r.status)
-                return
-            }
-            setNotifications(prev => prev.filter(n => n.id !== id))
-        } catch (err) {
-            console.error(`[notificationContext] Error removing notification ${id}:`, err.message)
-        }
-    }, [])
-
-    const setInviteVisible = useCallback((visible) => {
-        inviteVisibleRef.current = !!visible
-    }, [])
 
     const value = useMemo(() => ({
         notifications: combinedNotifications,
