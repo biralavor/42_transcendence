@@ -26,10 +26,10 @@ WITH requested AS
   GROUP BY addressee_id
 )
 SELECT
-  (requests_accepted + accepted_requests)
+  (COALESCE(requests_accepted, 0) + COALESCE(accepted_requests, 0))
   AS friends
 FROM requested
-  INNER JOIN accepted ON requester_id = addressee_id
+  FULL JOIN accepted ON requester_id = addressee_id
 LIMIT 1
     """)
     result = await session.execute(
@@ -46,6 +46,7 @@ WITH insertion_user_achievement AS
 (
 INSERT INTO user_achievements (user_id, achievement_id)
     VALUES (:user_id, :achievement_id)
+ON CONFLICT (user_id, achievement_id) DO NOTHING
 RETURNING achievement_id
 )
 SELECT
@@ -57,8 +58,5 @@ FROM achievements
     result = await session.execute(
         statement, {'user_id': user_id, 'achievement_id': achievement_id}
     )
-    await session.commit()
-    rows = result.mappings().all()
-    if rows:
-        return rows
-    return None
+    # await session.commit() maybe better let caller commit session
+    return result.mappings().one_or_none()

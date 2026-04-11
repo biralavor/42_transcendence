@@ -473,10 +473,10 @@ WITH matches_results AS
   GROUP BY winner_id
 )
 SELECT
-  (wins + twins)
+  (COALESCE(wins, 0) + COALESCE(twins, 0))
   AS wins_total
 FROM matches_results
-  INNER JOIN tournament_matches_results ON winner_id = twinner_id
+  FULL JOIN tournament_matches_results ON winner_id = twinner_id
 LIMIT 1
     """)
     result = await session.execute(
