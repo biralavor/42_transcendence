@@ -921,7 +921,6 @@ async def get_leaderboard(db: AsyncSession, limit: int = 20) -> list[dict]:
         for rank, row in enumerate(result.mappings().all(), start=1)
     ]
 
-
 async def award_xp(user_id: int, amount: int, session: AsyncSession):
     """ caller should commit session"""
     statement = text("""
