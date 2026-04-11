@@ -1,7 +1,7 @@
 import random
 from datetime import datetime, timezone
 
-from sqlalchemy import or_, select, case, func, union_all, table, column, String, Integer
+from sqlalchemy import or_, select, case, func, union_all, table, column, String, Integer, delete
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -48,6 +48,42 @@ class InvalidWinner(Exception):
 
 class UserAlreadyInActiveTournament(Exception):
     pass
+
+class TournamentCannotBeCancelled(Exception):
+    pass
+
+
+class TournamentNotParticipant(Exception):
+    pass
+
+async def delete_tournament(
+    db: AsyncSession,
+    tournament_id: int,
+    user_id: int,
+) -> None:
+    result = await db.execute(
+        select(Tournament).where(Tournament.id == tournament_id).with_for_update()
+    )
+    tournament = result.scalars().first()
+
+    if tournament is None:
+        raise TournamentNotFound()
+
+    if tournament.creator_id != user_id:
+        raise NotTournamentCreator()
+
+    if tournament.status != "open":
+        raise TournamentCannotBeCancelled()
+
+    await db.execute(
+        delete(TournamentParticipant).where(
+            TournamentParticipant.tournament_id == tournament_id
+        )
+    )
+    await db.flush()
+
+    await db.delete(tournament)
+    await db.commit()
 
 async def create_match(db: AsyncSession, player1_id: int, player2_id: int) -> Match:
     match = Match(

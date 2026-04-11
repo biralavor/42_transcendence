@@ -28,6 +28,8 @@ from service.persistence import (
     UserAlreadyInActiveTournament,
     record_tournament_match_result,
     start_tournament,
+    TournamentCannotBeCancelled,
+    delete_tournament,
 )
 from service.schemas import (
     LeaderboardEntryResponse,
@@ -146,6 +148,29 @@ async def get_tournament(tournament_id: int, session: SessionDependency):
         matches=[TournamentMatchResponse.model_validate(m) for m in matches],
     )
 
+@router.delete("/tournaments/{tournament_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_tournament_endpoint(
+    tournament_id: int,
+    session: SessionDependency,
+    user_id: int = Depends(get_current_user_id),
+):
+    try:
+        await delete_tournament(session, tournament_id, user_id)
+    except TournamentNotFound:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Tournament not found",
+        )
+    except NotTournamentCreator:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the creator can cancel the tournament",
+        )
+    except TournamentCannotBeCancelled:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Only open tournaments can be cancelled",
+        )
 
 @router.post("/tournaments/{tournament_id}/join", status_code=status.HTTP_201_CREATED)
 async def join_tournament_endpoint(
