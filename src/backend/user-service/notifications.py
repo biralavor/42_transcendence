@@ -19,55 +19,69 @@ async def get_notifications(db: AsyncSession, user_id: int) -> list[Notification
 async def mark_notification_read(
     db: AsyncSession, notification_id: int, user_id: int
 ) -> Notification:
-    """Mark a single notification as read. Raises 404 if not found or not owned by user_id."""
-    result = await db.execute(
-        select(Notification).where(
-            Notification.id == notification_id,
-            Notification.user_id == user_id,
+    """Mark a single notification as read. Raises 404 if not found or not owned by user_id.
+    
+    Uses async context manager for atomic transaction handling with automatic rollback on error.
+    """
+    async with db.begin():
+        result = await db.execute(
+            select(Notification).where(
+                Notification.id == notification_id,
+                Notification.user_id == user_id,
+            )
         )
-    )
-    notif = result.scalars().first()
-    if notif is None:
-        raise HTTPException(status_code=404, detail="Notification not found")
-    notif.read = True
-    await db.commit()
-    await db.refresh(notif)
+        notif = result.scalars().first()
+        if notif is None:
+            raise HTTPException(status_code=404, detail="Notification not found")
+        notif.read = True
+        await db.flush()  # Ensure changes are ready before refresh
+    await db.refresh(notif)  # Refresh outside transaction to get latest state
     return notif
 
 
 async def mark_all_notifications_read(db: AsyncSession, user_id: int) -> None:
-    """Mark all notifications for user_id as read."""
-    await db.execute(
-        update(Notification)
-        .where(Notification.user_id == user_id, Notification.read.is_(False))
-        .values(read=True)
-    )
-    await db.commit()
+    """Mark all notifications for user_id as read.
+    
+    Uses async context manager for atomic transaction handling with automatic rollback on error.
+    """
+    async with db.begin():
+        await db.execute(
+            update(Notification)
+            .where(Notification.user_id == user_id, Notification.read.is_(False))
+            .values(read=True)
+        )
 
 
 async def delete_notification(
     db: AsyncSession, notification_id: int, user_id: int
 ) -> None:
-    """Delete a single notification. Raises 404 if not found or not owned by user_id."""
-    result = await db.execute(
-        select(Notification).where(
-            Notification.id == notification_id,
-            Notification.user_id == user_id,
+    """Delete a single notification. Raises 404 if not found or not owned by user_id.
+    
+    Uses async context manager for atomic transaction handling with automatic rollback on error.
+    """
+    async with db.begin():
+        result = await db.execute(
+            select(Notification).where(
+                Notification.id == notification_id,
+                Notification.user_id == user_id,
+            )
         )
-    )
-    notif = result.scalars().first()
-    if notif is None:
-        raise HTTPException(status_code=404, detail="Notification not found")
-    await db.delete(notif)
-    await db.commit()
+        notif = result.scalars().first()
+        if notif is None:
+            raise HTTPException(status_code=404, detail="Notification not found")
+        await db.delete(notif)
 
 
 async def create_notification(
     db: AsyncSession, user_id: int, notif_type: str, message: str
 ) -> Notification:
-    """Persist a new notification row and return it with its generated id."""
+    """Persist a new notification row and return it with its generated id.
+    
+    Uses async context manager for atomic transaction handling with automatic rollback on error.
+    """
     notif = Notification(user_id=user_id, type=notif_type, message=message, read=False)
-    db.add(notif)
-    await db.commit()
-    await db.refresh(notif)
+    async with db.begin():
+        db.add(notif)
+        await db.flush()  # Ensure ID is generated before refresh
+    await db.refresh(notif)  # Refresh outside transaction to get complete state
     return notif
