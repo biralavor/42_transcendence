@@ -165,6 +165,7 @@ async def add_friend(
             session, addressee_id, "friend_request",
             f"{current_user.username} sent you a friend request",
         )
+        await session.commit()  # Commit notification to DB before broadcasting
         await notification_manager.broadcast(str(addressee_id), _notif_payload(notif))
     except ValueError as e:
         # Message length validation failed — log but don't fail the request
@@ -192,6 +193,7 @@ async def respond_to_request(
             session, result.requester_id, "friend_request_accepted",
             f"{current_user.username} accepted your friend request",
         )
+        await session.commit()  # Commit notification to DB before broadcasting
         await notification_manager.broadcast(str(result.requester_id), _notif_payload(notif))
     except ValueError as e:
         # Message length validation failed — log but don't fail the request

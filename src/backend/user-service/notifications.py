@@ -24,9 +24,9 @@ async def mark_notification_read(
 ) -> Notification:
     """Mark a single notification as read. Raises 404 if not found or not owned by user_id.
     
-    Uses async context manager for atomic transaction handling with automatic rollback on error.
+    Uses savepoint (nested transaction) for atomicity within the existing session transaction.
     """
-    async with db.begin():
+    async with db.begin_nested():
         result = await db.execute(
             select(Notification).where(
                 Notification.id == notification_id,
@@ -37,17 +37,16 @@ async def mark_notification_read(
         if notif is None:
             raise HTTPException(status_code=404, detail="Notification not found")
         notif.read = True
-        await db.flush()  # Ensure changes are ready before refresh
-    await db.refresh(notif)  # Refresh outside transaction to get latest state
+        await db.flush()
     return notif
 
 
 async def mark_all_notifications_read(db: AsyncSession, user_id: int) -> None:
     """Mark all notifications for user_id as read.
     
-    Uses async context manager for atomic transaction handling with automatic rollback on error.
+    Uses savepoint (nested transaction) for atomicity within the existing session transaction.
     """
-    async with db.begin():
+    async with db.begin_nested():
         await db.execute(
             update(Notification)
             .where(Notification.user_id == user_id, Notification.read.is_(False))
@@ -60,9 +59,9 @@ async def delete_notification(
 ) -> None:
     """Delete a single notification. Raises 404 if not found or not owned by user_id.
     
-    Uses async context manager for atomic transaction handling with automatic rollback on error.
+    Uses savepoint (nested transaction) for atomicity within the existing session transaction.
     """
-    async with db.begin():
+    async with db.begin_nested():
         result = await db.execute(
             select(Notification).where(
                 Notification.id == notification_id,
@@ -81,7 +80,7 @@ async def create_notification(
     """Persist a new notification row and return it with its generated id.
     
     Validates message length before persisting to prevent abuse or database bloat.
-    Uses async context manager for atomic transaction handling with automatic rollback on error.
+    Uses savepoint (nested transaction) for atomicity within the existing session transaction.
     
     Args:
         db: Async database session
@@ -100,8 +99,7 @@ async def create_notification(
         )
     
     notif = Notification(user_id=user_id, type=notif_type, message=message, read=False)
-    async with db.begin():
+    async with db.begin_nested():
         db.add(notif)
         await db.flush()  # Ensure ID is generated before refresh
-    await db.refresh(notif)  # Refresh outside transaction to get complete state
     return notif

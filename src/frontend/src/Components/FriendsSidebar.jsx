@@ -230,7 +230,9 @@ export default function FriendsSidebar({ userId, username, currentUser, onViewPr
       }
       const user = searchResults.find(u => u.id === friendId)
       setSearchResults(prev => prev.filter(u => u.id !== friendId))
-      if (user) setPendingSent(prev => [...prev, user])
+
+      // Refresh sent requests to ensure UI stays in sync with server state
+      await fetchFriendsData()
       showInviteToast('Friend request sent!', 'success', 3000)
     } catch (error) {
       console.error('Failed to add friend:', error)
