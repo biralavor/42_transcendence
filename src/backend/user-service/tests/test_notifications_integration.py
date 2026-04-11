@@ -32,11 +32,13 @@ async def test_add_friend_broadcasts_notification():
     app.dependency_overrides[get_current_user] = lambda: mock_user
     
     try:
+        # IMPORTANT: send_friend_request and create_notification are awaited in the handler,
+        # so they must be AsyncMock (not plain return_value=...).
         # Patch where it was DEFINED, not where it was IMPORTED if simple import was used.
         # However, main.py does: from service.ws.notification_router import ..., notification_manager
         # So we must patch it in service.ws.notification_router.
-        with patch("service.main._friends.send_friend_request", return_value=mock_friendship), \
-             patch("service.main._notifications.create_notification", return_value=mock_notif), \
+        with patch("service.main._friends.send_friend_request", new=AsyncMock(return_value=mock_friendship)), \
+             patch("service.main._notifications.create_notification", new=AsyncMock(return_value=mock_notif)), \
              patch("service.ws.notification_router.notification_manager.broadcast", new_callable=AsyncMock) as mock_broadcast:
             
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -73,7 +75,8 @@ async def test_game_invite_broadcasts_and_notifies():
     app.dependency_overrides[get_current_user] = lambda: mock_user
     
     try:
-        with patch("service.main._notifications.create_notification", return_value=mock_notif), \
+        # create_notification is awaited, so must be AsyncMock
+        with patch("service.main._notifications.create_notification", new=AsyncMock(return_value=mock_notif)), \
              patch("service.ws.notification_router.notification_manager.broadcast", new_callable=AsyncMock) as mock_broadcast:
             
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
