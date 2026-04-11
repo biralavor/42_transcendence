@@ -218,7 +218,7 @@ async def join_tournament_endpoint(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="User already participates in another active tournament",
-    )
+        )
     return {"detail": "Joined successfully"}
 
 
