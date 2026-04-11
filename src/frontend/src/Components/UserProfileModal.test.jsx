@@ -127,7 +127,7 @@ describe('UserProfileModal — with data', () => {
     const btn = await screen.findByRole('button', { name: /add friend/i })
     btn.click()
     expect(global.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/users/friends/99/request/7'),
+      expect.stringContaining('/api/users/friends/request/7'),
       expect.objectContaining({ method: 'POST' })
     )
   })

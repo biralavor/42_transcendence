@@ -1,4 +1,5 @@
 from typing import Annotated
+from datetime import datetime
 
 from fastapi import FastAPI, status, Depends, HTTPException
 from fastapi.responses import Response
@@ -96,23 +97,35 @@ async def update_user_profile(
 # TODO(auth): friend endpoints must check JWT identity before modifying
 # relationship data. user_id in path should equal JWT subject.
 
-@app.get("/friends/{user_id}", response_model=list[FriendResponse])
-async def list_friends(user_id: int, session: SessionDependency):
-    return await get_friends(user_id, session)
+@app.get("/friends/me", response_model=list[FriendResponse])
+async def list_friends(
+    session: SessionDependency,
+    current_user: User = Depends(get_current_user),
+):
+    return await get_friends(current_user.id, session)
 
 
-@app.get("/friends/{user_id}/requests", response_model=list[FriendRequestResponse])
-async def list_friend_requests(user_id: int, session: SessionDependency):
-    return await get_pending_requests(user_id, session)
+@app.get("/friends/me/requests", response_model=list[FriendRequestResponse])
+async def list_friend_requests(
+    session: SessionDependency,
+    current_user: User = Depends(get_current_user),
+):
+    return await get_pending_requests(current_user.id, session)
 
 
-@app.get("/friends/{user_id}/sent", response_model=list[FriendRequestResponse])
-async def list_sent_requests(user_id: int, session: SessionDependency):
-    return await get_sent_requests(user_id, session)
+@app.get("/friends/me/sent", response_model=list[FriendRequestResponse])
+async def list_sent_requests(
+    session: SessionDependency,
+    current_user: User = Depends(get_current_user),
+):
+    return await get_sent_requests(current_user.id, session)
 
 
 def _notif_payload(notif) -> dict:
     """Wrap a Notification object in the WS notification envelope."""
+    created_at = notif.created_at
+    if created_at is None:
+        created_at = datetime.now()
     return {
         "type": "notification",
         "notification": {
@@ -120,7 +133,7 @@ def _notif_payload(notif) -> dict:
             "type": notif.type,
             "message": notif.message,
             "read": notif.read,
-            "created_at": notif.created_at.isoformat(),
+            "created_at": created_at.isoformat(),
         },
     }
 
@@ -139,16 +152,14 @@ def _game_notif_message(sender: str, body) -> str:
     return f"Your game invite with {sender} has expired"
 
 
-@app.post("/friends/{user_id}/request/{addressee_id}",
+@app.post("/friends/request/{addressee_id}",
           response_model=FriendRequestResponse, status_code=201)
 async def add_friend(
-    user_id: int, addressee_id: int,
+    addressee_id: int,
     session: SessionDependency,
     current_user: User = Depends(get_current_user),
 ):
-    if current_user.id != user_id:
-        raise HTTPException(status_code=403, detail="Forbidden")
-    friendship = await _friends.send_friend_request(user_id, addressee_id, session)
+    friendship = await _friends.send_friend_request(current_user.id, addressee_id, session)
     notif = await _notifications.create_notification(
         session, addressee_id, "friend_request",
         f"{current_user.username} sent you a friend request",
@@ -157,18 +168,16 @@ async def add_friend(
     return friendship
 
 
-@app.put("/friends/{user_id}/requests/{request_id}",
+@app.put("/friends/requests/{request_id}",
          response_model=FriendRequestResponse,
          responses={204: {"description": "Friend request declined"}})
 async def respond_to_request(
-    user_id: int, request_id: int,
+    request_id: int,
     body: FriendRequestAction,
     session: SessionDependency,
     current_user: User = Depends(get_current_user),
 ):
-    if current_user.id != user_id:
-        raise HTTPException(status_code=403, detail="Forbidden")
-    result = await _friends.respond_to_friend_request(user_id, request_id, body.action, session)
+    result = await _friends.respond_to_friend_request(current_user.id, request_id, body.action, session)
     if body.action == "decline":
         return Response(status_code=204)
     notif = await _notifications.create_notification(
@@ -179,9 +188,13 @@ async def respond_to_request(
     return result
 
 
-@app.delete("/friends/{user_id}/{other_id}", status_code=204)
-async def remove_friend(user_id: int, other_id: int, session: SessionDependency):
-    deleted = await delete_friendship(user_id, other_id, session)
+@app.delete("/friends/{other_id}", status_code=204)
+async def remove_friend(
+    other_id: int,
+    session: SessionDependency,
+    current_user: User = Depends(get_current_user),
+):
+    deleted = await delete_friendship(current_user.id, other_id, session)
     if not deleted:
         raise HTTPException(status_code=404, detail="Friendship not found")
 

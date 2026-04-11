@@ -43,7 +43,7 @@ def _fake_notif(notif_type="friend_request", user_id=2):
 
 @pytest.mark.asyncio
 async def test_send_friend_request_broadcasts_notification():
-    """POST /friends/9999/request/2 → broadcast to room '2' with notification envelope."""
+    """POST /friends/request/2 → broadcast to room '2' with notification envelope."""
     fake_fs = _fake_friendship(requester_id=9999, addressee_id=2)
     fake_notif = _fake_notif("friend_request", user_id=2)
 
@@ -60,7 +60,7 @@ async def test_send_friend_request_broadcasts_notification():
         try:
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 resp = await client.post(
-                    "/friends/9999/request/2",
+                    "/friends/request/2",
                     headers={"Authorization": "Bearer fake-token"},
                 )
         finally:
@@ -99,7 +99,7 @@ async def test_send_friend_request_creates_notification_for_addressee():
         try:
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 await client.post(
-                    "/friends/9999/request/2",
+                    "/friends/request/2",
                     headers={"Authorization": "Bearer fake-token"},
                 )
         finally:
@@ -118,7 +118,7 @@ async def test_send_friend_request_creates_notification_for_addressee():
 
 @pytest.mark.asyncio
 async def test_accept_friend_request_broadcasts_notification():
-    """PUT /friends/9999/requests/10 accept → broadcast to room '3' (requester's id)."""
+    """PUT /friends/requests/10 accept → broadcast to room '3' (requester's id)."""
     fake_fs = _fake_friendship(requester_id=3, addressee_id=9999, status="accepted")
     fake_notif = _fake_notif("friend_request_accepted", user_id=3)
 
@@ -135,7 +135,7 @@ async def test_accept_friend_request_broadcasts_notification():
         try:
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 resp = await client.put(
-                    "/friends/9999/requests/10",
+                    "/friends/requests/10",
                     json={"action": "accept"},
                     headers={"Authorization": "Bearer fake-token"},
                 )
@@ -155,13 +155,13 @@ async def test_accept_friend_request_broadcasts_notification():
 
 @pytest.mark.asyncio
 async def test_decline_friend_request_does_not_broadcast():
-    """PUT /friends/9999/requests/10 decline → no broadcast (204, not a notification)."""
+    """PUT /friends/requests/10 decline → no broadcast (204, not a notification)."""
     with patch("service.friends.respond_to_friend_request", new=AsyncMock(return_value=None)), \
          patch("service.main.notification_manager") as mock_mgr:
         mock_mgr.broadcast = AsyncMock()
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.put(
-                "/friends/9999/requests/10",
+                "/friends/requests/10",
                 json={"action": "decline"},
                 headers={"Authorization": "Bearer fake-token"},
             )

@@ -176,7 +176,7 @@ describe('FriendsSidebar', () => {
     fireEvent.click(await screen.findByRole('button', { name: /✓/ }))
     await waitFor(() => {
       const respondCall = global.fetch.mock.calls.find(([url, opts]) =>
-        url.includes('/requests/7') && opts?.method === 'PUT'
+        url.includes('/friends/requests/7') && opts?.method === 'PUT'
       )
       expect(respondCall[1].headers?.Authorization).toBe('Bearer fake-token')
     })
@@ -196,7 +196,7 @@ describe('FriendsSidebar', () => {
     await waitFor(() => {
       const calls = global.fetch.mock.calls
       const respondCall = calls.find(([url, opts]) =>
-        url.includes('/requests/7') && opts?.method === 'PUT'
+        url.includes('/friends/requests/7') && opts?.method === 'PUT'
       )
       expect(respondCall).toBeDefined()
       expect(JSON.parse(respondCall[1].body)).toEqual({ action: 'accept' })
@@ -216,7 +216,7 @@ describe('FriendsSidebar', () => {
     await waitFor(() => {
       const calls = global.fetch.mock.calls
       const respondCall = calls.find(([url, opts]) =>
-        url.includes('/requests/7') && opts?.method === 'PUT'
+        url.includes('/friends/requests/7') && opts?.method === 'PUT'
       )
       expect(respondCall).toBeDefined()
       expect(JSON.parse(respondCall[1].body)).toEqual({ action: 'decline' })
