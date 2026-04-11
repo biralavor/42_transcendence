@@ -24,12 +24,19 @@ export function NotificationProvider({ children }) {
         }
         let cancelled = false
         apiCall('/api/users/auth/me')
-            .then(r => r.json())
-            .then(me => { if (!cancelled) setUserId(me.id) })
-            .catch(() => {
+            .then(r => {
+                if (!r.ok) throw new Error(`Failed to fetch /auth/me: ${r.status}`)
+                return r.json()
+            })
+            .then(me => {
+                if (!cancelled && me?.id) setUserId(me.id)
+            })
+            .catch(err => {
                 if (!cancelled) {
+                    console.error('[notificationContext] Failed to get user ID:', err.message)
                     setUserId(null)
                     setNotifications([])
+                    dmFirstSeenRef.current = {}
                 }
             })
         return () => { cancelled = true }
@@ -100,9 +107,24 @@ export function NotificationProvider({ children }) {
     )
 
     const fetchNotifications = useCallback(async () => {
-        const r = await apiCall('/api/users/notifications')
-        const data = await r.json()
-        setNotifications(data)
+        try {
+            const r = await apiCall('/api/users/notifications')
+            if (!r.ok) {
+                console.error('[notificationContext] Failed to fetch notifications:', r.status)
+                setNotifications([])
+                return
+            }
+            const data = await r.json()
+            if (Array.isArray(data)) {
+                setNotifications(data)
+            } else {
+                console.warn('[notificationContext] Invalid notifications response format')
+                setNotifications([])
+            }
+        } catch (err) {
+            console.error('[notificationContext] Error fetching notifications:', err.message)
+            setNotifications([])
+        }
     }, [])
 
     const markRead = useCallback(async (id) => {
@@ -113,23 +135,47 @@ export function NotificationProvider({ children }) {
             return
         }
 
-        await apiCall(`/api/users/notifications/${id}/read`, { method: 'PUT' })
-        setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n))
+        try {
+            const r = await apiCall(`/api/users/notifications/${id}/read`, { method: 'PUT' })
+            if (!r.ok) {
+                console.error(`[notificationContext] Failed to mark notification ${id} as read:`, r.status)
+                return
+            }
+            setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n))
+        } catch (err) {
+            console.error(`[notificationContext] Error marking notification ${id} as read:`, err.message)
+        }
     }, [clearUnread])
 
     const markAllRead = useCallback(async () => {
-        await apiCall('/api/users/notifications/read-all', { method: 'PUT' })
-        setNotifications(prev => prev.map(n => ({ ...n, read: true })))
+        try {
+            const r = await apiCall('/api/users/notifications/read-all', { method: 'PUT' })
+            if (!r.ok) {
+                console.error('[notificationContext] Failed to mark all notifications as read:', r.status)
+                return
+            }
+            setNotifications(prev => prev.map(n => ({ ...n, read: true })))
 
-        // Clear all DM unread counts
-        Object.keys(unreadCounts).forEach(slug => {
-            clearUnread(slug)
-        })
+            // Clear all DM unread counts
+            Object.keys(unreadCounts).forEach(slug => {
+                clearUnread(slug)
+            })
+        } catch (err) {
+            console.error('[notificationContext] Error marking all notifications as read:', err.message)
+        }
     }, [unreadCounts, clearUnread])
 
     const removeNotification = useCallback(async (id) => {
-        await apiCall(`/api/users/notifications/${id}`, { method: 'DELETE' })
-        setNotifications(prev => prev.filter(n => n.id !== id))
+        try {
+            const r = await apiCall(`/api/users/notifications/${id}`, { method: 'DELETE' })
+            if (!r.ok) {
+                console.error(`[notificationContext] Failed to remove notification ${id}:`, r.status)
+                return
+            }
+            setNotifications(prev => prev.filter(n => n.id !== id))
+        } catch (err) {
+            console.error(`[notificationContext] Error removing notification ${id}:`, err.message)
+        }
     }, [])
 
     const setInviteVisible = useCallback((visible) => {
