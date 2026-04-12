@@ -1,5 +1,6 @@
 from typing import Annotated
 from datetime import datetime, timezone
+import logging
 
 from fastapi import FastAPI, status, Depends, HTTPException
 from fastapi.responses import Response
@@ -29,6 +30,7 @@ SessionDependency = Annotated[AsyncSession, Depends(get_db)]
 bearer_scheme = HTTPBearer()
 
 app = FastAPI(title="User Service")
+logger = logging.getLogger(__name__)
 
 
 async def get_current_user(
@@ -236,6 +238,7 @@ async def deliver_game_invite_response(
     
     Called when user declines/accepts a game invite.
     Validates that to_user_id is not the current user (prevents self-targeting).
+    Broadcasts the notification to the recipient via WS if they are online.
     """
     # Prevent self-targeting: cannot send response to yourself
     if body.to_user_id == current_user.id:
@@ -244,8 +247,6 @@ async def deliver_game_invite_response(
             detail="Cannot send game invite response to yourself"
         )
     
-    print(f"[DEBUG /game-invite/response] Received body: {body}")
-    print(f"[DEBUG /game-invite/response] to_user_id={body.to_user_id}, status={body.status}, room_id={body.room_id}")
     try:
         # Create message based on response status
         if body.status == 'declined':
@@ -255,9 +256,6 @@ async def deliver_game_invite_response(
             # Include room_id in message for navigation (only on acceptance)
             if body.room_id:
                 message += f" [ROOM_ID:{body.room_id}]"
-                print(f"[DEBUG] Backend encoding room_id: {body.room_id}, message: {message}")
-            else:
-                print(f"[DEBUG] Backend NO room_id received for acceptance")
         elif body.status == 'timeout':
             message = f"{current_user.username}'s invite expired"
         else:
@@ -268,6 +266,9 @@ async def deliver_game_invite_response(
             message, from_user_id=current_user.id,
         )
         await session.commit()
+        
+        # Broadcast the notification to the recipient via WS (if online)
+        await notification_manager.broadcast(str(body.to_user_id), _notif_payload(notif))
         
         return {"status": "ok", "notification_id": notif.id}
     except ValueError as e:
@@ -282,8 +283,6 @@ async def list_notifications(
     """Return last 20 notifications for the authenticated caller, newest first."""
     notifications = await _notifications.get_notifications(session, current_user.id)
     response_list = [NotificationResponse.model_validate(n) for n in notifications]
-    if response_list:
-        print(f"[DEBUG list_notifications] First notification: id={response_list[0].id}, user_id={response_list[0].user_id}, from_user_id={response_list[0].from_user_id}, type={response_list[0].type}")
     return response_list
 
 
