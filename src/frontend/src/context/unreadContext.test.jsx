@@ -26,11 +26,12 @@ afterEach(() => {
 })
 
 function TestConsumer() {
-  const { unreadCounts, clearUnread, setActiveRoom } = useUnread()
+  const { unreadCounts, clearUnread, setActiveRoom, dmSenders } = useUnread()
   const count = unreadCounts['DM-1-2'] ?? 0
   return (
     <div>
       <span data-testid="count">{count}</span>
+      <span data-testid="sender">{dmSenders['DM-1-2'] ?? ''}</span>
       <button onClick={() => clearUnread('DM-1-2')}>clear</button>
       <button onClick={() => setActiveRoom('DM-1-2')}>set active</button>
       <button onClick={() => setActiveRoom(null)}>clear active</button>
@@ -87,6 +88,29 @@ describe('UnreadContext', () => {
       })
     })
     expect(screen.getByTestId('count').textContent).toBe('0')
+  })
+
+  it('records sender name from from_username field', async () => {
+    render(<UnreadProvider><TestConsumer /></UnreadProvider>)
+    await act(async () => {
+      mockWsInstance.onmessage({
+        data: JSON.stringify({ type: 'new_dm', room_slug: 'DM-1-2', from_user_id: 1, from_username: 'alice', preview: 'hi' }),
+      })
+    })
+    expect(screen.getByTestId('sender').textContent).toBe('alice')
+  })
+
+  it('clearUnread also removes the sender name', async () => {
+    render(<UnreadProvider><TestConsumer /></UnreadProvider>)
+    await act(async () => {
+      mockWsInstance.onmessage({
+        data: JSON.stringify({ type: 'new_dm', room_slug: 'DM-1-2', from_user_id: 1, from_username: 'alice', preview: 'hi' }),
+      })
+    })
+    await act(async () => {
+      screen.getByRole('button', { name: /^clear$/i }).click()
+    })
+    expect(screen.getByTestId('sender').textContent).toBe('')
   })
 
   it('clearUnread is a no-op when slug is not present', () => {

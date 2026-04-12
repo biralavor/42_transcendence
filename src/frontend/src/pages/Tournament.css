@@ -1,0 +1,116 @@
+/* Tournament page specific styles */
+
+/* Layout the participant grid with flexible sizing */
+.tournament-page .participant-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+}
+
+/* Generic participant card styling */
+.participant-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem;
+  border: 2px dashed var(--metal-silver);
+  border-radius: 8px;
+  min-height: 100px;
+  text-align: center;
+}
+
+.participant-card.placeholder {
+  opacity: 0.5;
+}
+
+.participant-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  object-fit: cover;
+  margin-bottom: 0.5rem;
+}
+
+.placeholder-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background-color: var(--metal-silver);
+  margin-bottom: 0.5rem;
+}
+
+.participant-name {
+  font-size: 0.9rem;
+  color: var(--metal-silver);
+  text-align: center;
+}
+
+/* Bracket container */
+.tournament-bracket {
+  overflow-x: auto;
+  padding-bottom: 1rem;
+}
+
+/* Rounds laid out horizontally */
+.bracket-rounds {
+  display: flex;
+  gap: 2rem;
+}
+
+/* Each round has a minimum width */
+.bracket-round {
+  min-width: 220px;
+}
+
+/* Matches within a round stack vertically */
+.bracket-matches {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+/* Individual match cells */
+.tournament-match-cell {
+  border: 2px solid var(--metal-silver);
+  border-radius: 6px;
+  padding: 0.5rem;
+  background-color: var(--night-blue);
+}
+
+/* Highlight finished matches with accent color */
+.tournament-match-cell.finished {
+  border-color: var(--accent-primary, #4caf50);
+}
+
+/* Player row inside a match cell */
+.tournament-player {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.tournament-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.tournament-player-name {
+  font-size: 0.8rem;
+  color: var(--metal-silver);
+}
+
+.tournament-vs {
+  text-align: center;
+  margin: 0.5rem 0;
+  color: var(--metal-silver);
+  font-weight: bold;
+}
+
+.tournament-winner {
+  margin-top: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--metal-silver);
+}

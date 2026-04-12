@@ -4,6 +4,18 @@ import { MemoryRouter } from 'react-router-dom'
 import { AuthContext } from '../context/authContext'
 import PrivateRoute from './PrivateRoute'
 
+vi.mock('../context/unreadContext', () => ({
+  useUnread: vi.fn(() => ({ unreadCounts: {}, clearUnread: vi.fn() })),
+}))
+
+vi.mock('../context/notificationContext', () => ({
+  useNotifications: vi.fn(() => ({
+    setInviteVisible: vi.fn(),
+    notifications: [],
+    unreadCount: 0,
+  })),
+}))
+
 function renderWithAuth(authValue) {
   return render(
     <MemoryRouter>
