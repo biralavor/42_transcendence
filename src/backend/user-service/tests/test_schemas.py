@@ -141,20 +141,18 @@ class TestGameNotificationRequestValidation:
         assert req.to_user_id == 5
 
     def test_game_invite_response_accepted(self):
-        """Valid game_invite_response with accepted status."""
-        req = GameNotificationRequest(
-            type="game_invite_response",
+        """Valid game_invite_response with accepted status uses GameInviteResponseRequest."""
+        req = GameInviteResponseRequest(
             to_user_id=10,
             room_id="invite-1-10-1234567890",
             status="accepted",
         )
-        assert req.type == "game_invite_response"
         assert req.status == "accepted"
 
     def test_game_invite_response_declined(self):
         """Valid game_invite_response with declined status."""
-        req = GameNotificationRequest(
-            type="game_invite_response",
+        
+        req = GameInviteResponseRequest(
             to_user_id=10,
             room_id="invite-1-10-1234567890",
             status="declined",
@@ -210,10 +208,9 @@ class TestGameNotificationRequestValidation:
             assert req.to_user_id == user_id
 
     def test_game_notification_status_accepts_valid_values(self):
-        """status field accepts only valid values when provided."""
+        """status field accepts only valid values when provided via GameInviteResponseRequest."""
         for status in ["accepted", "declined", "timeout"]:
-            req = GameNotificationRequest(
-                type="game_invite_response",
+            req = GameInviteResponseRequest(
                 to_user_id=5,
                 room_id="invite-1-5-1234567890",
                 status=status,
