@@ -75,9 +75,10 @@ async def _sender_is_blocked(
 async def chat_websocket(websocket: WebSocket, room_slug: str, token: str = "") -> None:
     # Healthcheck endpoint: restricted, one-shot, no relay
     if room_slug == "healthcheck":
-        # Restrict to localhost or healthcheck_token query parameter for security
+        # Restrict to localhost or internal Docker network for health checks
+        # Accept connections from localhost, Docker internal network (172.x.x.x), and healthcheck_token
         client_host = websocket.client.host if websocket.client else ""
-        is_local = client_host in ("127.0.0.1", "localhost", "::1")
+        is_local = client_host in ("127.0.0.1", "localhost", "::1") or client_host.startswith("172.")
         is_authorized = is_local or (token == settings.HEALTHCHECK_TOKEN if hasattr(settings, 'HEALTHCHECK_TOKEN') else False)
         
         if not is_authorized:
