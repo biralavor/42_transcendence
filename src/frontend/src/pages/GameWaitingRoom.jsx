@@ -4,6 +4,7 @@ import NavbarComponent from '../Components/Navbar'
 import { createWsClient } from '../utils/wsClient'
 import './GameWaitingRoom.css'
 import { useAuth } from '../context/authContext'
+import wsLogger from '../utils/wsLogger'
 
 const DEFAULT_AVATAR = '/avatar_placeholder.jpg'
 
@@ -23,7 +24,7 @@ export default function GameWaitingRoom() {
   const wsRef = useRef(null)
 
   const hasInviteContext = Boolean(
-    location.state?.currentUser || location.state?.opponent || location.state?.friendUsername,
+    location.state?.currentUser || location.state?.opponent || location.state?.friendUsername
   )
 
   const currentUser = useMemo(() => (
@@ -41,29 +42,6 @@ export default function GameWaitingRoom() {
       avatarUrl: DEFAULT_AVATAR,
     })
   ), [location.state])
-
-  const [canonicalPlayer1Id, canonicalPlayer2Id] = useMemo(() => {
-    const stateP1 = Number(location.state?.player1_id)
-    const stateP2 = Number(location.state?.player2_id)
-
-    if (Number.isInteger(stateP1) && Number.isInteger(stateP2)) {
-      return [stateP1, stateP2]
-    }
-
-    const a = Number(currentUser.id)
-    const b = Number(opponent.id)
-
-    if (Number.isInteger(a) && Number.isInteger(b)) {
-      return a <= b ? [a, b] : [b, a]
-    }
-
-    return [null, null]
-  }, [location.state, currentUser.id, opponent.id])
-
-  const existingMatchId = useMemo(() => {
-    const matchId = Number(location.state?.matchId ?? location.state?.match_id)
-    return Number.isInteger(matchId) ? matchId : null
-  }, [location.state])
 
   const [connected, setConnected] = useState(false)
   const [currentReady, setCurrentReady] = useState(false)
@@ -83,23 +61,36 @@ export default function GameWaitingRoom() {
       onOpen: () => {
         setConnected(true)
         setSystemMessage('Connected to waiting room. Ready up when you are set.')
+        wsLogger.connection(roomId, 'open', {
+          currentUser: currentUser.id,
+          opponent: opponent.id,
+        })
       },
       onClose: () => {
         setConnected(false)
         setSystemMessage('Connection lost. Trying to reconnect...')
+        wsLogger.connection(roomId, 'close')
       },
       onMessage: (data) => {
-        if (!data || typeof data !== 'object') {
+        if (!data || typeof data !== 'object')
           return
-        }
+
+        // Log incoming payload
+        wsLogger.receive(roomId, data)
 
         const incomingUserId = String(data.user_id ?? data.player_id ?? '')
         const isCurrentUser = incomingUserId && incomingUserId === String(currentUser.id)
         const isOpponent = incomingUserId && incomingUserId === String(opponent.id)
 
         if (data.type === 'player_ready') {
-          if (isCurrentUser) setCurrentReady(true)
-          if (isOpponent) setOpponentReady(true)
+          if (isCurrentUser) {
+            setCurrentReady(true)
+            wsLogger.uiUpdate(roomId, { currentReady: true })
+          }
+          if (isOpponent) {
+            setOpponentReady(true)
+            wsLogger.uiUpdate(roomId, { opponentReady: true })
+          }
         }
 
         if (data.type === 'player_unready') {
@@ -113,17 +104,8 @@ export default function GameWaitingRoom() {
 
         if (data.type === 'game_start') {
           setGameStartReceived(true)
-          setSystemMessage('Both players are ready. Starting match...')
-
-          navigate(`/game/${roomId}`, {
-            replace: true,
-            state: {
-              ...location.state,
-              player1_id: data.player1_id ?? canonicalPlayer1Id,
-              player2_id: data.player2_id ?? canonicalPlayer2Id,
-              matchId: data.match_id ?? existingMatchId,
-            },
-          })
+          setSystemMessage('Both players are ready. Game start event received.')
+          wsLogger.uiUpdate(roomId, { gameStart: true })
         }
       },
     })
@@ -131,58 +113,62 @@ export default function GameWaitingRoom() {
     wsRef.current = ws
 
     return () => ws.close()
-  }, [
-    roomId,
-    currentUser.id,
-    opponent.id,
-    navigate,
-    auth?.access_token,
-    location.state,
-    canonicalPlayer1Id,
-    canonicalPlayer2Id,
-    existingMatchId,
-  ])
+  }, [roomId, currentUser.id, opponent.id, navigate, auth?.access_token])
 
   useEffect(() => {
     if (currentReady && opponentReady && !gameStartReceived) {
       setSystemMessage('Both players are ready. Waiting for backend game_start event...')
+      // End the flow once both players are ready
+      if (window._wsFlowStart) {
+        wsLogger.flowEnd(roomId, 'ready_to_both_ready', window._wsFlowStart)
+        delete window._wsFlowStart
+      }
     }
   }, [currentReady, opponentReady, gameStartReceived])
 
   function handleReady() {
-    if (currentReady || !wsRef.current) {
+    if (currentReady || !wsRef.current)
       return
+
+    // Start flow timing for ready click → broadcast
+    const flowStartTime = wsLogger.flowStart(roomId, 'ready_click')
+
+    const payload = {
+      type: 'player_ready',
+      room_id: roomId,
+      user_id: currentUser.id,
+      username: currentUser.username,
     }
 
-    if (!Number.isInteger(canonicalPlayer1Id) || !Number.isInteger(canonicalPlayer2Id)) {
-      setSystemMessage('Missing player ids for this room.')
-      return
-    }
+    // Log the ready click with payload
+    wsLogger.ready(roomId, payload)
 
     setCurrentReady(true)
     setSystemMessage('You are ready. Waiting for the other player...')
 
-    wsRef.current.send({
-      type: 'player_ready',
-      room_id: roomId,
-      user_id: Number(currentUser.id),
-      username: currentUser.username,
-      player1_id: canonicalPlayer1Id,
-      player2_id: canonicalPlayer2Id,
-      match_id: existingMatchId,
-    })
+    // Send through WebSocket
+    wsRef.current.send(payload)
+
+    // Log the send event
+    wsLogger.send(roomId, payload)
+
+    // Measure latency from ready click to send
+    wsLogger.latency('ready_click_to_send', flowStartTime)
+
+    // Store flow start for later measurement in onMessage
+    window._wsFlowStart = flowStartTime
   }
 
   function handleCancel() {
-    wsRef.current?.send({
+    const cancelPayload = {
       type: 'cancel_waiting_room',
       room_id: roomId,
-      user_id: Number(currentUser.id),
+      user_id: currentUser.id,
       username: currentUser.username,
-      player1_id: canonicalPlayer1Id,
-      player2_id: canonicalPlayer2Id,
-      match_id: existingMatchId,
-    })
+    }
+
+    wsLogger.send(roomId, cancelPayload)
+    wsRef.current?.send(cancelPayload)
 
     navigate('/play')
   }

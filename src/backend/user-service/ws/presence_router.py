@@ -1,4 +1,5 @@
 # src/backend/user-service/ws/presence_router.py
+import asyncio
 import logging
 from typing import Annotated
 
@@ -55,7 +56,9 @@ async def presence_endpoint(websocket: WebSocket, session: SessionDep, token: st
             await set_user_status(user_id, "online", session)
 
         while True:
-            await websocket.receive_text()
+            # Keep connection open indefinitely (server-push only)
+            # Use an Event that never gets set to block without polling
+            await asyncio.Event().wait()
     except WebSocketDisconnect:
         pass
     except Exception:

@@ -1,4 +1,5 @@
 # src/backend/user-service/ws/notification_router.py
+import asyncio
 import logging
 from typing import Annotated
 
@@ -55,8 +56,9 @@ async def notification_endpoint(
     room = str(user_id)
     await notification_manager.connect(room, websocket)
     try:
-        while True:
-            await websocket.receive()   # discard all client frames; blocks until disconnect
+        # Keep connection open indefinitely (server-push only, no client frames expected)
+        # Use an Event that never gets set to keep the connection alive
+        await asyncio.Event().wait()
     except WebSocketDisconnect:
         pass
     except Exception:
