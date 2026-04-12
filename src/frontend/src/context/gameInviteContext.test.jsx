@@ -2,13 +2,15 @@ import { renderHook, act, waitFor } from '@testing-library/react'
 import { vi } from 'vitest'
 import { GameInviteProvider, useGameInvite } from './gameInviteContext'
 import * as notificationContext from './notificationContext'
-import * as apiClient from '../utils/apiClient'
+import { apiCall } from '../utils/apiClient'
 
 // Mock notificationContext
 vi.mock('./notificationContext')
 
-// Mock apiClient
-vi.mock('../utils/apiClient')
+// Mock apiClient module
+vi.mock('../utils/apiClient', () => ({
+    apiCall: vi.fn(),
+}))
 
 const mockMarkRead = vi.fn()
 
@@ -25,9 +27,10 @@ describe('gameInviteContext', () => {
         vi.clearAllMocks()
 
         // Mock apiCall for successful response by default
-        apiClient.apiCall = vi.fn().mockResolvedValue({
+        apiCall.mockResolvedValue({
             ok: true,
             json: async () => ({ status: 'ok', notification_id: 1 }),
+            text: async () => '',
         })
 
         notificationContext.useNotifications.mockReturnValue({
@@ -89,7 +92,7 @@ describe('gameInviteContext', () => {
 
     describe('respondToInvite', () => {
         it('should send POST request to /api/users/game-invite/response with accepted status', async () => {
-            apiClient.apiCall = vi.fn().mockResolvedValue({
+            apiCall.mockResolvedValue({
                 ok: true,
                 json: async () => ({ status: 'ok', notification_id: 1 }),
             })
@@ -105,7 +108,7 @@ describe('gameInviteContext', () => {
                 await result.current.respondToInvite('accepted')
             })
 
-            expect(apiClient.apiCall).toHaveBeenCalledWith(
+            expect(apiCall).toHaveBeenCalledWith(
                 '/api/users/game-invite/response',
                 expect.objectContaining({
                     method: 'POST',
@@ -113,13 +116,14 @@ describe('gameInviteContext', () => {
                     body: JSON.stringify({
                         to_user_id: 123,
                         status: 'accepted',
+                        room_id: 'room-123',
                     }),
                 })
             )
         })
 
         it('should send POST request with declined status', async () => {
-            apiClient.apiCall = vi.fn().mockResolvedValue({
+            apiCall.mockResolvedValue({
                 ok: true,
                 json: async () => ({ status: 'ok', notification_id: 1 }),
             })
@@ -135,7 +139,7 @@ describe('gameInviteContext', () => {
                 await result.current.respondToInvite('declined')
             })
 
-            expect(apiClient.apiCall).toHaveBeenCalledWith(
+            expect(apiCall).toHaveBeenCalledWith(
                 '/api/users/game-invite/response',
                 expect.objectContaining({
                     method: 'POST',
@@ -149,7 +153,7 @@ describe('gameInviteContext', () => {
 
         it('should call onNavigate callback when accepting', async () => {
             const mockOnNavigate = vi.fn()
-            apiClient.apiCall = vi.fn().mockResolvedValue({
+            apiCall.mockResolvedValue({
                 ok: true,
                 json: async () => ({ status: 'ok', notification_id: 1 }),
             })
@@ -172,7 +176,7 @@ describe('gameInviteContext', () => {
 
         it('should not call onNavigate when declining', async () => {
             const mockOnNavigate = vi.fn()
-            apiClient.apiCall = vi.fn().mockResolvedValue({
+            apiCall.mockResolvedValue({
                 ok: true,
                 json: async () => ({ status: 'ok', notification_id: 1 }),
             })
@@ -192,7 +196,7 @@ describe('gameInviteContext', () => {
         })
 
         it('should mark notification as read if notificationId is present', async () => {
-            apiClient.apiCall = vi.fn().mockResolvedValue({
+            apiCall.mockResolvedValue({
                 ok: true,
                 json: async () => ({ status: 'ok', notification_id: 1 }),
             })
@@ -214,7 +218,7 @@ describe('gameInviteContext', () => {
         })
 
         it('should clear activeInvite after responding', async () => {
-            apiClient.apiCall = vi.fn().mockResolvedValue({
+            apiCall.mockResolvedValue({
                 ok: true,
                 json: async () => ({ status: 'ok', notification_id: 1 }),
             })
@@ -238,7 +242,11 @@ describe('gameInviteContext', () => {
         })
 
         it('should do nothing if activeInvite is null', async () => {
-            apiClient.apiCall = vi.fn()
+            apiCall.mockResolvedValue({
+                ok: true,
+                json: async () => ({ status: 'ok', notification_id: 1 }),
+                text: async () => '',
+            })
             const wrapper = ({ children }) => <GameInviteProvider>{children}</GameInviteProvider>
             const { result } = renderHook(() => useGameInvite(), { wrapper })
 
@@ -248,16 +256,17 @@ describe('gameInviteContext', () => {
                 await result.current.respondToInvite('accepted')
             })
 
-            expect(apiClient.apiCall).not.toHaveBeenCalled()
+            expect(apiCall).not.toHaveBeenCalled()
         })
 
         it('should log error and not call onNavigate on failed response', async () => {
             const mockOnNavigate = vi.fn()
             const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => { })
 
-            apiClient.apiCall = vi.fn().mockResolvedValue({
+            apiCall.mockResolvedValue({
                 ok: false,
                 status: 403,
+                text: async () => 'Forbidden',
             })
 
             const wrapper = ({ children }) => <GameInviteProvider>{children}</GameInviteProvider>
@@ -272,7 +281,8 @@ describe('gameInviteContext', () => {
             })
 
             expect(consoleErrorSpy).toHaveBeenCalledWith(
-                expect.stringContaining('Failed to respond to invite')
+                expect.stringContaining('Failed to respond to invite'),
+                'Forbidden'
             )
             expect(mockOnNavigate).not.toHaveBeenCalled()
 
@@ -282,7 +292,7 @@ describe('gameInviteContext', () => {
         it('should handle network errors gracefully', async () => {
             const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => { })
 
-            apiClient.apiCall = vi.fn().mockRejectedValue(new Error('Network error'))
+            apiCall.mockRejectedValue(new Error('Network error'))
 
             const wrapper = ({ children }) => <GameInviteProvider>{children}</GameInviteProvider>
             const { result } = renderHook(() => useGameInvite(), { wrapper })
@@ -306,7 +316,7 @@ describe('gameInviteContext', () => {
 
     describe('Authentication', () => {
         it('should use apiCall which includes authentication headers', async () => {
-            apiClient.apiCall = vi.fn().mockResolvedValue({
+            apiCall.mockResolvedValue({
                 ok: true,
                 json: async () => ({ status: 'ok', notification_id: 1 }),
             })
@@ -323,7 +333,7 @@ describe('gameInviteContext', () => {
             })
 
             // Verify apiCall is used (which automatically adds Authorization header)
-            expect(apiClient.apiCall).toHaveBeenCalledWith(
+            expect(apiCall).toHaveBeenCalledWith(
                 '/api/users/game-invite/response',
                 expect.any(Object)
             )
