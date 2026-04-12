@@ -551,7 +551,10 @@ def leaderboard_order_by_str(sort_assoc: list[tuple[str, str]] | None) -> str | 
 
 
 async def get_leaderboard_paginated(
-        db: AsyncSession, limit: int = 20, page: int = 0, sort_assoc: [(str, str)] = None
+        db: AsyncSession,
+        limit: int = 20,
+        page: int = 0,
+        sort_assoc: list[tuple[str, str]] = None
 ) -> dict | None:
     offset = page * limit
     default_sort_string = """
@@ -682,7 +685,8 @@ WITH all_matches AS
     SELECT
         users.id
         AS user_id
-        , users.display_name
+        , COALESCE(users.display_name, users.username)
+        AS display_name
         , sum(wins)
         AS wins
         , sum(losses)
@@ -727,32 +731,50 @@ WITH all_matches AS
 , summary AS
 (
     SELECT
-        (SELECT
+        COALESCE(
+            (SELECT
+                jsonb_build_object(
+                    'display_name', display_name,
+                    'value', max_streak
+                )
+             FROM ranking_results
+             ORDER BY max_streak DESC, {default_sort_string}
+             LIMIT 1),
             jsonb_build_object(
-                'display_name', display_name,
-                'value', max_streak
+                'display_name', 'No Data',
+                'value', 0
             )
-         FROM ranking_results
-         ORDER BY max_streak DESC, {default_sort_string}
-         LIMIT 1)
+        )
         AS max_max_streak
-        , (SELECT
+        , COALESCE(
+            (SELECT
+                jsonb_build_object(
+                    'display_name', display_name,
+                    'value', points
+                )
+             FROM ranking_results
+             ORDER BY {default_sort_string}
+             LIMIT 1),
             jsonb_build_object(
-                'display_name', display_name,
-                'value', points
+                'display_name', 'No Data',
+                'value', 0
             )
-         FROM ranking_results
-         ORDER BY {default_sort_string}
-         LIMIT 1)
+        )
         AS max_points
-        , (SELECT
+        , COALESCE(
+            (SELECT
+                jsonb_build_object(
+                    'display_name', display_name,
+                    'value', current_streak
+                )
+             FROM ranking_results
+             ORDER BY current_streak DESC, {default_sort_string}
+             LIMIT 1),
             jsonb_build_object(
-                'display_name', display_name,
-                'value', current_streak
+                'display_name', 'No Data',
+                'value', 0
             )
-         FROM ranking_results
-         ORDER BY current_streak DESC, {default_sort_string}
-         LIMIT 1)
+        )
         AS max_current_streak
 )
 , page_ranking_results AS (
@@ -765,9 +787,9 @@ WITH all_matches AS
             FROM user_count)
 )
 SELECT
-    LEAST(:page, ((table user_count) / :limit))
+    LEAST(:page, (((table user_count) - 1) / :limit))
     AS page
-    , ((table user_count) / :limit)
+    , (((table user_count) - 1) / :limit)
     AS last_page
     , :limit as per_page
     , (table user_count) as total
