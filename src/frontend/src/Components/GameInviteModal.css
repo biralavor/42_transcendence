@@ -1,0 +1,93 @@
+/* GameInviteModal - Global game invite notification modal */
+
+.game-invite-modal-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+}
+
+.game-invite-modal {
+    background: linear-gradient(135deg, #1a0033 0%, #330066 100%);
+    border: 3px solid #00ffff;
+    border-radius: 8px;
+    box-shadow: 0 0 20px rgba(0, 255, 255, 0.5), inset 0 0 10px rgba(0, 255, 255, 0.2);
+    padding: 30px;
+    max-width: 500px;
+    width: 90%;
+    animation: modalSlideIn 0.3s ease-out;
+}
+
+@keyframes modalSlideIn {
+    from {
+        transform: scale(0.9);
+        opacity: 0;
+    }
+
+    to {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+.game-invite-modal__content {
+    text-align: center;
+    margin-bottom: 25px;
+}
+
+.game-invite-modal__title {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 1.5rem;
+    color: #00ffff;
+    text-shadow: 0 0 10px rgba(0, 255, 255, 0.8);
+    margin: 0 0 15px 0;
+    letter-spacing: 2px;
+}
+
+.game-invite-modal__message {
+    font-family: 'VT323', monospace;
+    font-size: 1.1rem;
+    color: #ffff00;
+    margin: 0;
+    line-height: 1.6;
+}
+
+.game-invite-modal__actions {
+    display: flex;
+    gap: 15px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.game-invite-btn {
+    flex: 1;
+    min-width: 150px;
+}
+
+@media (max-width: 600px) {
+    .game-invite-modal {
+        padding: 20px;
+    }
+
+    .game-invite-modal__title {
+        font-size: 1.2rem;
+    }
+
+    .game-invite-modal__message {
+        font-size: 1rem;
+    }
+
+    .game-invite-modal__actions {
+        flex-direction: column;
+    }
+
+    .game-invite-btn {
+        width: 100%;
+    }
+}

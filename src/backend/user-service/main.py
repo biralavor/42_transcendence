@@ -11,7 +11,7 @@ from service.schemas import (
     Login, LoginResponse, RefreshRequest, RegisterRequest, RegisterResponse,
     ProfileResponse, UpdateProfileRequest, MeResponse,
     FriendResponse, FriendRequestResponse, FriendRequestAction,
-    NotificationResponse, GameNotificationRequest,
+    NotificationResponse, GameNotificationRequest, GameInviteResponseRequest,
 )
 from service.models.user import User
 from service.service import authenticate, refresh_access_token, register_credentials, get_profile, update_profile, get_me
@@ -139,15 +139,13 @@ def _notif_payload(notif) -> dict:
 
 
 def _game_notif_message(sender: str, body) -> str:
-    """Return a human-readable notification message for each game event type."""
+    """Return a human-readable notification message for each game event type.
+    
+    Note: game_invite_response messages are generated directly in deliver_game_invite_response()
+    and should NOT be sent through the /game-invites endpoint.
+    """
     if body.type == "game_invite":
         return f"{sender} invited you to play Pong"
-    if body.type == "game_invite_response":
-        if body.status == "accepted":
-            return f"{sender} accepted your game invite"
-        if body.status == "declined":
-            return f"{sender} declined your game invite"
-        return f"{sender} responded to your game invite"
     # game_invite_timeout
     return f"Your game invite with {sender} has expired"
 
@@ -222,6 +220,38 @@ async def search_users_endpoint(session: SessionDependency, q: str = ""):
     return await search_users(q, session)
 
 
+@app.post("/game-invite/response", status_code=201)
+async def deliver_game_invite_response(
+    body: GameInviteResponseRequest,
+    session: SessionDependency,
+    current_user: User = Depends(get_current_user),
+):
+    """Create a game invite response notification for the original inviter.
+    
+    Called when user declines/accepts a game invite.
+    """
+    try:
+        # Create message based on response status
+        if body.status == 'declined':
+            message = f"{current_user.username} declined your match invite"
+        elif body.status == 'accepted':
+            message = f"{current_user.username} accepted your match invite"
+        elif body.status == 'timeout':
+            message = f"{current_user.username}'s invite expired"
+        else:
+            message = f"{current_user.username} responded to your match invite"
+        
+        notif = await _notifications.create_notification(
+            session, body.to_user_id, "game_invite_response",
+            message,
+        )
+        await session.commit()
+        
+        return {"status": "ok", "notification_id": notif.id}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @app.get("/notifications", response_model=list[NotificationResponse])
 async def list_notifications(
     session: SessionDependency,
@@ -239,6 +269,7 @@ async def read_all_notifications(
 ):
     """Mark all caller's notifications as read."""
     await _notifications.mark_all_notifications_read(session, current_user.id)
+    await session.commit()  # Persist changes to database
     return Response(status_code=204)
 
 
@@ -250,6 +281,7 @@ async def read_notification(
 ):
     """Mark a single notification as read. Returns 404 if not owned by caller."""
     notif = await _notifications.mark_notification_read(session, notification_id, current_user.id)
+    await session.commit()  # Persist changes to database
     return NotificationResponse.model_validate(notif)
 
 
@@ -261,6 +293,7 @@ async def remove_notification(
 ):
     """Delete a single notification. Returns 404 if not owned by caller."""
     await _notifications.delete_notification(session, notification_id, current_user.id)
+    await session.commit()  # Persist changes to database
     return Response(status_code=204)
 
 
@@ -290,7 +323,15 @@ async def deliver_game_notification(
         # Message length validation failed
         raise HTTPException(status_code=400, detail=str(e))
     
-    await notification_manager.broadcast(str(body.to_user_id), payload)
+    await session.commit()  # Persist notification to database before broadcasting
+    
+    # Include the notification ID in the payload so frontend can mark it as read when user responds
+    payload_with_notif_id = {
+        **payload,
+        "notification_id": notif.id,  # Add DB notification ID for incoming invites
+    }
+    
+    await notification_manager.broadcast(str(body.to_user_id), payload_with_notif_id)
     await notification_manager.broadcast(str(body.to_user_id), _notif_payload(notif))
     return Response(status_code=204)
 

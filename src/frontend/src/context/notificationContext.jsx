@@ -48,6 +48,11 @@ export function NotificationProvider({ children }) {
             const r = await apiCall(`/api/users/notifications/${id}/read`, { method: 'PUT' })
             if (!r.ok) {
                 console.error(`[notificationContext] Failed to mark notification ${id} as read:`, r.status)
+                // If 404, the notification doesn't exist in the backend, remove it from state
+                if (r.status === 404) {
+                    console.debug(`[notificationContext] Removing non-existent notification ${id} from state`)
+                    setNotifications(prev => prev.filter(n => n.id !== id))
+                }
                 return
             }
             setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n))
@@ -153,6 +158,21 @@ export function NotificationProvider({ children }) {
 
         return () => ws.close()
     }, [userId, auth.access_token])
+
+    // Step 4: periodically poll for notifications (fallback for game_invite_response and other notifications)
+    // WebSocket may not send all notification types, so polling ensures we catch responses
+    useEffect(() => {
+        if (!userId) return
+
+        // Poll every 3 seconds
+        const pollInterval = setInterval(() => {
+            void fetchNotifications().catch(err => {
+                console.debug('[notificationContext] Polling error (non-critical):', err.message)
+            })
+        }, 3000)
+
+        return () => clearInterval(pollInterval)
+    }, [userId, fetchNotifications])
 
     // Convert DM unreadCounts to pseudo-notifications and merge with real notifications
     const combinedNotifications = useMemo(() => {

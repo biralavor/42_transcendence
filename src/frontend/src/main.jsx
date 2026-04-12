@@ -13,6 +13,7 @@ import { AuthProvider } from './context/authContext'
 import { PresenceProvider } from './context/presenceContext'
 import { UnreadProvider } from './context/unreadContext'
 import { NotificationProvider } from './context/notificationContext'
+import { GameInviteProvider } from './context/gameInviteContext'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
@@ -20,7 +21,9 @@ createRoot(document.getElementById('root')).render(
       <PresenceProvider>
         <UnreadProvider>
           <NotificationProvider>
-            <App />
+            <GameInviteProvider>
+              <App />
+            </GameInviteProvider>
           </NotificationProvider>
         </UnreadProvider>
       </PresenceProvider>

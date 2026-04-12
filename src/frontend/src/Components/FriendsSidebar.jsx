@@ -145,6 +145,35 @@ export default function FriendsSidebar({ userId, username, currentUser, onViewPr
     }
   }, [notifications, fetchFriendsData])
 
+  // Watch for game invite responses (accept/decline notifications from recipients)
+  useEffect(() => {
+    if (!notifications.length || !outgoingInviteRef.current) return
+
+    const activeInvite = outgoingInviteRef.current
+
+    // Find game_invite_response notification for this invite
+    const response = notifications.find(n => n.type === 'game_invite_response' && !n.read)
+
+    if (response) {
+      // Check if this response is about our active invite (e.g., "User B accepted" would indicate they accepted)
+      if (response.message.includes('accepted')) {
+        resetOutgoingInvite()
+        showInviteToast(`${activeInvite.friendUsername} accepted your invite.`, 'success', 2200)
+        navigateToWaitingRoom(activeInvite.roomId, {
+          id: activeInvite.friendId,
+          username: activeInvite.friendUsername,
+          avatarUrl: activeInvite.friendAvatarUrl,
+        })
+        return
+      }
+      if (response.message.includes('declined')) {
+        resetOutgoingInvite()
+        showInviteToast(`${activeInvite.friendUsername} declined the match invite.`, 'warning')
+        return
+      }
+    }
+  }, [notifications, showInviteToast, resetOutgoingInvite, navigateToWaitingRoom])
+
   useEffect(() => () => {
     clearOutgoingInviteTimer()
     clearTimeout(toastTimer.current)
@@ -380,15 +409,18 @@ export default function FriendsSidebar({ userId, username, currentUser, onViewPr
     const senderAvatarUrl = incomingInvite.fromAvatarUrl
     const roomId = incomingInvite.roomId
     try {
-      await sendInviteEvent(senderId, {
-        type: 'game_invite_response',
-        status: 'accepted',
-        room_id: roomId,
-        from_user_id: selfId,
-        from_username: selfUsername,
-        from_avatar_url: selfAvatarUrl,
-        to_user_id: senderId,
+      // Create notification for the inviter so they see accept in GameInviteModal
+      // (The backend will handle WebSocket broadcasting via the dedicated endpoint)
+      await apiCall('/api/users/game-invite/response', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to_user_id: senderId,
+          status: 'accepted',
+          room_id: roomId,  // Include room_id so inviter can navigate
+        }),
       })
+
       setIncomingInvite(null)
       navigateToWaitingRoom(roomId, {
         id: senderId,
@@ -407,14 +439,15 @@ export default function FriendsSidebar({ userId, username, currentUser, onViewPr
     const senderId = incomingInvite.fromUserId
     const roomId = incomingInvite.roomId
     try {
-      await sendInviteEvent(senderId, {
-        type: 'game_invite_response',
-        status: 'declined',
-        room_id: roomId,
-        from_user_id: selfId,
-        from_username: selfUsername,
-        from_avatar_url: selfAvatarUrl,
-        to_user_id: senderId,
+      // Create notification for the inviter so they see decline in GameInviteModal
+      // (The backend will handle WebSocket broadcasting via the dedicated endpoint)
+      await apiCall('/api/users/game-invite/response', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to_user_id: senderId,
+          status: 'declined',
+        }),
       })
     } catch (error) {
       console.error(error)
