@@ -2,8 +2,6 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Dict, Set
 
-from service.ws.event_registry import notification_event_registry
-
 if TYPE_CHECKING:
     from fastapi import WebSocket
 
@@ -33,6 +31,25 @@ class ConnectionManager:
             except Exception as e:
                 logger.warning(f"Failed to send to client in room {room_id}: {e}")
                 self.disconnect(room_id, ws)
+        
+        # Signal handlers that data is ready (event-driven delivery)
+        # Try both user-service and chat-service registries (safe for any service)
+        try:
+            # Try user-service registry first (most common)
+            try:
+                from service.ws.event_registry import notification_event_registry
+                await notification_event_registry.signal_event(room_id)
+            except (ImportError, AttributeError):
+                # Fall back to chat-service registry if available
+                try:
+                    from service.ws.event_registry import chat_notification_event_registry
+                    await chat_notification_event_registry.signal_event(room_id)
+                except (ImportError, AttributeError):
+                    # No registry available, skip signaling (graceful fallback)
+                    pass
+        except Exception as e:
+            # Non-blocking: signaling is best-effort, don't fail broadcast
+            logger.debug(f"Failed to signal notification event for room {room_id}: {e}")
         
         # Signal handlers that data is ready (event-driven delivery)
         # Handlers waiting on event.wait() are now woken immediately

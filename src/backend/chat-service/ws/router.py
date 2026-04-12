@@ -1,5 +1,7 @@
 # Note: sys.path is set by main.py (Docker) or test file (host) — not repeated here.
 import re
+import asyncio
+import logging
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from jose import jwt
 from sqlalchemy import text
@@ -204,6 +206,13 @@ async def chat_websocket(websocket: WebSocket, room_slug: str, token: str = "") 
                         "room_slug": room_slug,
                         "preview": data["content"][:80],
                     })
+                    
+                    # Signal handlers that data is ready (event-driven delivery)
+                    try:
+                        from ws.event_registry import chat_notification_event_registry
+                        await chat_notification_event_registry.signal_event(str(recipient_uid))
+                    except Exception as e:
+                        pass  # Non-blocking: signaling is best-effort
     except WebSocketDisconnect:
         pass
     finally:
@@ -212,6 +221,9 @@ async def chat_websocket(websocket: WebSocket, room_slug: str, token: str = "") 
 
 @router.websocket("/ws/notifications")
 async def notifications_websocket(websocket: WebSocket, token: str = "") -> None:
+    from ws.event_registry import chat_notification_event_registry
+    logger = logging.getLogger(__name__)
+    
     credential_id = _uid_from_token(token)
     if credential_id is None:
         await websocket.accept()
@@ -235,12 +247,30 @@ async def notifications_websocket(websocket: WebSocket, token: str = "") -> None
     user_key = str(uid)
     await notifications_manager.connect(user_key, websocket)
     try:
+        # Event-driven notification delivery instead of polling
         while True:
-            # Keep-alive: discard any client messages; server only pushes
-            msg = await websocket.receive()
-            if msg.get("type") == "websocket.disconnect":
-                break
-    except (WebSocketDisconnect, RuntimeError):
+            # Get event for this user (creates if doesn't exist)
+            event = await chat_notification_event_registry.get_or_create_event(user_key)
+            
+            # Wait for event or timeout (both are cancellable via asyncio.wait_for!)
+            try:
+                await asyncio.wait_for(event.wait(), timeout=10.0)
+            except asyncio.TimeoutError:
+                # Timeout is expected—just means no notifications for 10s
+                # Loop continues and re-checks for disconnection
+                continue
+            
+            # Event fired! Data was broadcasted to this handler
+            # Clear event and loop to get ready for next notification
+            await chat_notification_event_registry.clear_event(user_key)
+            
+    except asyncio.CancelledError:
+        logger.debug(f"WS /ws/notifications cancelled for user {uid}")
+        await chat_notification_event_registry.cleanup_event(user_key)
+        raise
+    except WebSocketDisconnect:
         pass
+    except Exception as e:
+        logger.exception(f"WS /ws/notifications unexpected error for user {uid}: {e}")
     finally:
         notifications_manager.disconnect(user_key, websocket)
