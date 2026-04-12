@@ -12,13 +12,16 @@ import App from './App'
 import { AuthProvider } from './context/authContext'
 import { PresenceProvider } from './context/presenceContext'
 import { UnreadProvider } from './context/unreadContext'
+import { NotificationProvider } from './context/notificationContext'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <AuthProvider>
       <PresenceProvider>
         <UnreadProvider>
-          <App />
+          <NotificationProvider>
+            <App />
+          </NotificationProvider>
         </UnreadProvider>
       </PresenceProvider>
     </AuthProvider>

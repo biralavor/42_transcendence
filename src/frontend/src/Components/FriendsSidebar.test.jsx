@@ -23,6 +23,19 @@ vi.mock('../context/unreadContext', () => ({
 }))
 import { useUnread } from '../context/unreadContext'
 
+vi.mock('../context/notificationContext', () => ({
+  useNotifications: vi.fn(() => ({
+    setInviteVisible: vi.fn(),
+    notifications: [],
+    unreadCount: 0,
+    fetchNotifications: vi.fn(),
+    markRead: vi.fn(),
+    markAllRead: vi.fn(),
+    removeNotification: vi.fn(),
+  })),
+}))
+import { useNotifications } from '../context/notificationContext'
+
 function renderSidebar(userId = 1) {
   return render(
     <MemoryRouter>
@@ -35,6 +48,12 @@ describe('FriendsSidebar', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
     useNavigate.mockReturnValue(vi.fn())
+    // Set up auth tokens in sessionStorage for apiClient to use
+    sessionStorage.clear()
+    localStorage.clear()
+    sessionStorage.setItem('access_token', 'fake-token')
+    sessionStorage.setItem('refresh_token', 'fake-refresh-token')
+    sessionStorage.setItem('token_type', 'bearer')
   })
 
   it('renders search input', () => {
@@ -163,7 +182,7 @@ describe('FriendsSidebar', () => {
     fireEvent.click(await screen.findByRole('button', { name: /✓/ }))
     await waitFor(() => {
       const respondCall = global.fetch.mock.calls.find(([url, opts]) =>
-        url.includes('/requests/7') && opts?.method === 'PUT'
+        url.includes('/friends/requests/7') && opts?.method === 'PUT'
       )
       expect(respondCall[1].headers?.Authorization).toBe('Bearer fake-token')
     })
@@ -183,7 +202,7 @@ describe('FriendsSidebar', () => {
     await waitFor(() => {
       const calls = global.fetch.mock.calls
       const respondCall = calls.find(([url, opts]) =>
-        url.includes('/requests/7') && opts?.method === 'PUT'
+        url.includes('/friends/requests/7') && opts?.method === 'PUT'
       )
       expect(respondCall).toBeDefined()
       expect(JSON.parse(respondCall[1].body)).toEqual({ action: 'accept' })
@@ -203,7 +222,7 @@ describe('FriendsSidebar', () => {
     await waitFor(() => {
       const calls = global.fetch.mock.calls
       const respondCall = calls.find(([url, opts]) =>
-        url.includes('/requests/7') && opts?.method === 'PUT'
+        url.includes('/friends/requests/7') && opts?.method === 'PUT'
       )
       expect(respondCall).toBeDefined()
       expect(JSON.parse(respondCall[1].body)).toEqual({ action: 'decline' })
@@ -564,5 +583,27 @@ describe('FriendsSidebar — unread badge', () => {
     await waitFor(() => {
       expect(clearUnread).toHaveBeenCalledWith('DM-1-99')
     })
+  })
+})
+
+describe('FriendsSidebar — setInviteVisible cleanup', () => {
+  it('calls setInviteVisible(false) on unmount so suppression does not persist', () => {
+    const setInviteVisible = vi.fn()
+    useNotifications.mockReturnValue({
+      setInviteVisible,
+      notifications: [],
+      unreadCount: 0,
+      fetchNotifications: vi.fn(),
+      markRead: vi.fn(),
+      markAllRead: vi.fn(),
+      removeNotification: vi.fn(),
+    })
+    const { unmount } = render(
+      <MemoryRouter>
+        <FriendsSidebar userId={1} username="me" />
+      </MemoryRouter>
+    )
+    unmount()
+    expect(setInviteVisible).toHaveBeenCalledWith(false)
   })
 })

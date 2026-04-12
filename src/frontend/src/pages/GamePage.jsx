@@ -1,8 +1,9 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import NavbarComponent from '../Components/Navbar'
 import PongCanvasMultiplayer from '../Components/PongCanvasMultiplayer'
 import './GamePage.css'
+import { apiJson } from '../utils/apiClient'
 
 /**
  * GamePage - Multiplayer Pong Game with Server-Authoritative Logic
@@ -17,6 +18,9 @@ export default function GamePage() {
 
   const player1Id = location.state?.player1_id || location.state?.currentUser?.id
   const player2Id = location.state?.player2_id || location.state?.opponent?.id
+  const tournamentId = location.state?.tournamentId
+  const tournamentMatchId = location.state?.tournamentMatchId
+  const [submittingResult, setSubmittingResult] = useState(false)
 
   useEffect(() => {
     // Redirect to play if no room context or missing player IDs
@@ -29,13 +33,29 @@ export default function GamePage() {
     return null // Prevent rendering the canvas with missing IDs while navigating away
   }
 
-  function handleGameEnd(result) {
+  async function handleGameEnd(result) {
     console.log('Game ended:', result)
-    // Navigate back to play or show result screen
+
+    if (tournamentId && tournamentMatchId && !submittingResult) {
+      setSubmittingResult(true)
+      try {
+        await apiJson(`/api/game/tournaments/${tournamentId}/matches/${tournamentMatchId}/result`, {
+          method: 'POST',
+          body: JSON.stringify(result),
+        })
+        navigate(`/tournaments/${tournamentId}`)
+        return
+      } catch (error) {
+        console.error('Failed to submit tournament result:', error)
+      } finally {
+        setSubmittingResult(false)
+      }
+    }
+
     navigate('/play', {
       state: {
-        gameResult: result
-      }
+        gameResult: result,
+      },
     })
   }
 

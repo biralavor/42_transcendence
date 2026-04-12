@@ -1,12 +1,11 @@
 // src/frontend/src/Components/UserProfileModal.jsx
 import { useState, useEffect } from 'react'
-import { useAuth } from '../context/authContext'
+import { apiCall } from '../utils/apiClient'
 import './UserProfileModal.css'
 
 const DEFAULT_AVATAR = '/avatar_placeholder.jpg'
 
 export default function UserProfileModal({ username, userId, currentUserId, onClose, onChat }) {
-  const { auth } = useAuth()
   const [profile, setProfile] = useState(null)
   const [wins, setWins] = useState(0)
   const [matches, setMatches] = useState(0)
@@ -25,7 +24,7 @@ export default function UserProfileModal({ username, userId, currentUserId, onCl
         let targetId = userId ?? null
 
         if (!targetId) {
-          const res = await fetch(`/api/users/search?q=${encodeURIComponent(username)}`)
+          const res = await apiCall(`/api/users/search?q=${encodeURIComponent(username)}`)
           if (!res.ok) throw new Error('User not found')
           const results = await res.json()
           const match = results.find(u => u.username.toLowerCase() === username.toLowerCase())
@@ -37,8 +36,8 @@ export default function UserProfileModal({ username, userId, currentUserId, onCl
         setResolvedId(targetId)
 
         const [profileRes, historyRes] = await Promise.all([
-          fetch(`/api/users/profile/${targetId}`),
-          fetch(`/api/game/matches/history/${targetId}`),
+          apiCall(`/api/users/profile/${targetId}`),
+          apiCall(`/api/game/matches/history/${targetId}`),
         ])
 
         if (!profileRes.ok) throw new Error('Failed to load profile')
@@ -65,13 +64,17 @@ export default function UserProfileModal({ username, userId, currentUserId, onCl
   }, [username, userId])
 
   async function handleAddFriend() {
-    if (!currentUserId || !resolvedId) return
+    if (!resolvedId) return
     try {
-      const res = await fetch(`/api/users/friends/${currentUserId}/request/${resolvedId}`, {
+      const res = await apiCall(`/api/users/friends/request/${resolvedId}`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${auth.access_token}` },
       })
-      setActionMsg(res.ok ? 'Friend request sent!' : 'Could not send request.')
+      if (res.ok) {
+        setActionMsg('Friend request sent!')
+      } else {
+        const data = await res.json().catch(() => ({}))
+        setActionMsg(data.detail || 'Could not send request.')
+      }
     } catch {
       setActionMsg('Could not send request.')
     }
@@ -80,11 +83,15 @@ export default function UserProfileModal({ username, userId, currentUserId, onCl
   async function handleBlock() {
     if (!resolvedId) return
     try {
-      const res = await fetch(`/api/chat/block/${resolvedId}`, {
+      const res = await apiCall(`/api/chat/block/${resolvedId}`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${auth.access_token}` },
       })
-      setActionMsg(res.ok ? 'User blocked.' : 'Could not block user.')
+      if (res.ok) {
+        setActionMsg('User blocked.')
+      } else {
+        const data = await res.json().catch(() => ({}))
+        setActionMsg(data.detail || 'Could not block user.')
+      }
     } catch {
       setActionMsg('Could not block user.')
     }

@@ -77,23 +77,28 @@ async def get_sent_requests(user_id: int, session: AsyncSession) -> list[dict]:
 async def send_friend_request(
     requester_id: int, addressee_id: int, session: AsyncSession
 ) -> Friendship:
-    """Creates a pending friendship. Raises 409 if any relationship already exists."""
+    """Creates a pending friendship. Raises 409 if any relationship already exists.
+    
+    Uses savepoint (nested transaction) for atomicity within the existing session transaction.
+    """
     if requester_id == addressee_id:
         raise HTTPException(status_code=400, detail="Cannot add yourself as a friend")
-    existing = await session.execute(
-        select(Friendship).where(
-            or_(
-                and_(Friendship.requester_id == requester_id, Friendship.addressee_id == addressee_id),
-                and_(Friendship.requester_id == addressee_id, Friendship.addressee_id == requester_id),
+    
+    async with session.begin_nested():
+        existing = await session.execute(
+            select(Friendship).where(
+                or_(
+                    and_(Friendship.requester_id == requester_id, Friendship.addressee_id == addressee_id),
+                    and_(Friendship.requester_id == addressee_id, Friendship.addressee_id == requester_id),
+                )
             )
         )
-    )
-    if existing.scalars().first() is not None:
-        raise HTTPException(status_code=409, detail="Friend request already exists")
-    friendship = Friendship(requester_id=requester_id, addressee_id=addressee_id, status="pending")
-    session.add(friendship)
-    await session.commit()
-    await session.refresh(friendship)
+        if existing.scalars().first() is not None:
+            raise HTTPException(status_code=409, detail="Friend request already exists")
+        friendship = Friendship(requester_id=requester_id, addressee_id=addressee_id, status="pending")
+        session.add(friendship)
+        await session.flush()
+    
     return friendship
 
 
@@ -104,47 +109,55 @@ async def respond_to_friend_request(
 
     Returns the updated Friendship for 'accept', None for 'decline'.
     Raises 404 if the request does not exist or does not belong to addressee_id.
+    
+    Uses savepoint (nested transaction) for atomicity within the existing session transaction.
     """
-    result = await session.execute(
-        select(Friendship).where(
-            Friendship.id == request_id,
-            Friendship.addressee_id == addressee_id,
-            Friendship.status == "pending",
-        )
-    )
-    friendship = result.scalars().first()
-    if friendship is None:
-        raise HTTPException(status_code=404, detail="Friend request not found")
     if action not in ("accept", "decline"):
         raise HTTPException(status_code=400, detail=f"Invalid action: {action!r}")
+    
+    async with session.begin_nested():
+        result = await session.execute(
+            select(Friendship).where(
+                Friendship.id == request_id,
+                Friendship.addressee_id == addressee_id,
+                Friendship.status == "pending",
+            )
+        )
+        friendship = result.scalars().first()
+        if friendship is None:
+            raise HTTPException(status_code=404, detail="Friend request not found")
+        
+        if action == "accept":
+            friendship.status = "accepted"
+            await session.flush()
+        else:
+            await session.delete(friendship)
+    
     if action == "accept":
-        friendship.status = "accepted"
-        await session.commit()
-        await session.refresh(friendship)
         return friendship
-    else:
-        await session.delete(friendship)
-        await session.commit()
-        return None
+    return None
 
 
 async def delete_friendship(
     user_id: int, other_id: int, session: AsyncSession
 ) -> bool:
-    """Removes a friendship in either direction. Returns False if not found."""
-    result = await session.execute(
-        select(Friendship).where(
-            or_(
-                and_(Friendship.requester_id == user_id, Friendship.addressee_id == other_id),
-                and_(Friendship.requester_id == other_id, Friendship.addressee_id == user_id),
+    """Removes a friendship in either direction. Returns False if not found.
+    
+    Uses savepoint (nested transaction) for atomicity within the existing session transaction.
+    """
+    async with session.begin_nested():
+        result = await session.execute(
+            select(Friendship).where(
+                or_(
+                    and_(Friendship.requester_id == user_id, Friendship.addressee_id == other_id),
+                    and_(Friendship.requester_id == other_id, Friendship.addressee_id == user_id),
+                )
             )
         )
-    )
-    friendship = result.scalars().first()
-    if friendship is None:
-        return False
-    await session.delete(friendship)
-    await session.commit()
+        friendship = result.scalars().first()
+        if friendship is None:
+            return False
+        await session.delete(friendship)
     return True
 
 

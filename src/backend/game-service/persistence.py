@@ -50,6 +50,44 @@ class TournamentMatchAlreadyFinished(Exception):
 class InvalidWinner(Exception):
     pass
 
+class UserAlreadyInActiveTournament(Exception):
+    pass
+
+class TournamentCannotBeCancelled(Exception):
+    pass
+
+
+class TournamentNotParticipant(Exception):
+    pass
+
+async def delete_tournament(
+    db: AsyncSession,
+    tournament_id: int,
+    user_id: int,
+) -> None:
+    result = await db.execute(
+        select(Tournament).where(Tournament.id == tournament_id).with_for_update()
+    )
+    tournament = result.scalars().first()
+
+    if tournament is None:
+        raise TournamentNotFound()
+
+    if tournament.creator_id != user_id:
+        raise NotTournamentCreator()
+
+    if tournament.status != "open":
+        raise TournamentCannotBeCancelled()
+
+    await db.execute(
+        delete(TournamentParticipant).where(
+            TournamentParticipant.tournament_id == tournament_id
+        )
+    )
+    await db.flush()
+
+    await db.delete(tournament)
+    await db.commit()
 
 async def create_match(db: AsyncSession, player1_id: int, player2_id: int) -> Match:
     match = Match(
@@ -63,10 +101,60 @@ async def create_match(db: AsyncSession, player1_id: int, player2_id: int) -> Ma
     await db.refresh(match)
     return match
 
+async def leave_tournament(
+    db: AsyncSession,
+    tournament_id: int,
+    user_id: int,
+) -> None:
+    result = await db.execute(
+        select(Tournament).where(Tournament.id == tournament_id).with_for_update()
+    )
+    tournament = result.scalars().first()
+
+    if tournament is None:
+        raise TournamentNotFound()
+
+    if tournament.status != "open":
+        raise TournamentNotOpen()
+
+    participant_result = await db.execute(
+        select(TournamentParticipant).where(
+            TournamentParticipant.tournament_id == tournament_id,
+            TournamentParticipant.user_id == user_id,
+        )
+    )
+    participant = participant_result.scalars().first()
+
+    if participant is None:
+        raise TournamentNotParticipant()
+
+    other_participants_result = await db.execute(
+        select(TournamentParticipant)
+        .where(
+            TournamentParticipant.tournament_id == tournament_id,
+            TournamentParticipant.user_id != user_id,
+        )
+        .order_by(TournamentParticipant.joined_at.asc())
+    )
+    other_participants = list(other_participants_result.scalars().all())
+
+    await db.delete(participant)
+    await db.flush()
+
+    if tournament.creator_id == user_id:
+        if other_participants:
+            tournament.creator_id = other_participants[0].user_id
+        else:
+            await db.delete(tournament)
+
+    await db.commit()
 
 async def create_tournament(
     db: AsyncSession, name: str, creator_id: int, max_participants: int
 ) -> Tournament:
+    if await user_has_active_tournament(db, creator_id):
+        raise UserAlreadyInActiveTournament()
+
     tournament = Tournament(
         name=name,
         creator_id=creator_id,
@@ -74,6 +162,14 @@ async def create_tournament(
         status="open",
     )
     db.add(tournament)
+    await db.flush()
+
+    participant = TournamentParticipant(
+        tournament_id=tournament.id,
+        user_id=creator_id,
+    )
+    db.add(participant)
+
     await db.commit()
     await db.refresh(tournament)
     return tournament
@@ -96,12 +192,41 @@ async def get_tournament_with_participants(
     matches = list(matches_result.scalars().all())
     return tournament, participants, matches
 
+async def list_tournaments(db: AsyncSession) -> list[Tournament]:
+    result = await db.execute(
+        select(Tournament).order_by(Tournament.created_at.desc())
+    )
+    return list(result.scalars().all())
+
+async def user_has_active_tournament(
+    db: AsyncSession,
+    user_id: int,
+    exclude_tournament_id: int | None = None,
+) -> bool:
+    stmt = (
+        select(Tournament)
+        .outerjoin(
+            TournamentParticipant,
+            TournamentParticipant.tournament_id == Tournament.id,
+        )
+        .where(
+            Tournament.status.in_(["open", "in_progress"]),
+            or_(
+                Tournament.creator_id == user_id,
+                TournamentParticipant.user_id == user_id,
+            ),
+        )
+    )
+
+    if exclude_tournament_id is not None:
+        stmt = stmt.where(Tournament.id != exclude_tournament_id)
+
+    result = await db.execute(stmt)
+    return result.scalars().first() is not None
 
 async def join_tournament(
     db: AsyncSession, tournament_id: int, user_id: int
 ) -> TournamentParticipant:
-    # Lock the tournament row so concurrent requests cannot both pass the
-    # capacity check before either one commits.
     result = await db.execute(
         select(Tournament).where(Tournament.id == tournament_id).with_for_update()
     )
@@ -110,6 +235,19 @@ async def join_tournament(
         raise TournamentNotFound()
     if tournament.status != "open":
         raise TournamentNotOpen()
+
+    existing_result = await db.execute(
+        select(TournamentParticipant).where(
+            TournamentParticipant.tournament_id == tournament_id,
+            TournamentParticipant.user_id == user_id,
+        )
+    )
+    existing_participant = existing_result.scalars().first()
+    if existing_participant is not None:
+        raise UserAlreadyRegistered()
+
+    if await user_has_active_tournament(db, user_id, exclude_tournament_id=tournament_id):
+        raise UserAlreadyInActiveTournament()
 
     count_result = await db.execute(
         select(func.count())

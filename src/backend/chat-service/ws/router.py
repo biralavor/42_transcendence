@@ -73,6 +73,30 @@ async def _sender_is_blocked(
 
 @router.websocket("/ws/chat/{room_slug}")
 async def chat_websocket(websocket: WebSocket, room_slug: str, token: str = "") -> None:
+    # Healthcheck endpoint: restricted, one-shot, no relay
+    if room_slug == "healthcheck":
+        # Restrict to localhost or healthcheck_token query parameter for security
+        client_host = websocket.client.host if websocket.client else ""
+        is_local = client_host in ("127.0.0.1", "localhost", "::1")
+        is_authorized = is_local or (token == settings.HEALTHCHECK_TOKEN if hasattr(settings, 'HEALTHCHECK_TOKEN') else False)
+        
+        if not is_authorized:
+            await websocket.close(code=4003, reason="Healthcheck access denied")
+            return
+        
+        try:
+            await websocket.accept()
+            # Send one "ok" response and close — don't accept client messages
+            await websocket.send_json({"type": "healthcheck", "status": "ok"})
+        except Exception:
+            pass
+        finally:
+            try:
+                await websocket.close()
+            except Exception:
+                pass
+        return
+
     dm_participants = _parse_dm_participants(room_slug)
 
     # DM rooms require a verified identity — decode once at connect, bind for the session
@@ -163,6 +187,7 @@ async def chat_websocket(websocket: WebSocket, room_slug: str, token: str = "") 
                     await notifications_manager.broadcast(str(recipient_uid), {
                         "type": "new_dm",
                         "from_user_id": sender_uid,
+                        "from_username": message_sender,
                         "room_slug": room_slug,
                         "preview": data["content"][:80],
                     })
