@@ -25,27 +25,31 @@ async def _override_get_db():
 @pytest_asyncio.fixture
 async def client():
     async with _engine.begin() as conn:
+        # Only truncate match-specific tables, NOT users/credentials (seeded data)
         await conn.execute(text("TRUNCATE TABLE matches RESTART IDENTITY CASCADE"))
-        # Populate users table for cross-service join in leaderboard.
-        # We must also populate credentials because of the FK constraint in users.
-        await conn.execute(text("TRUNCATE TABLE users RESTART IDENTITY CASCADE"))
-        await conn.execute(text("TRUNCATE TABLE credentials RESTART IDENTITY CASCADE"))
         
+        # Create isolated test credentials with high IDs to avoid conflicts with seeded users
         test_users = [
-            (1, "alice"), (2, "bob"), (3, "charlie"),
-            (10, "user10"), (20, "user20"), (30, "user30"),
-            (99, "user99"), (999, "user999")
+            (5001, "test_alice"), (5002, "test_bob"), (5003, "test_charlie"),
+            (5010, "test_user10"), (5020, "test_user20"), (5030, "test_user30"),
+            (5099, "test_user99"), (5999, "test_user999")
         ]
         for uid, name in test_users:
-            cid = uid + 10000
-            await conn.execute(
-                text("INSERT INTO credentials (id, username, password) VALUES (:id, :u, 'fake')"),
-                {"id": cid, "u": f"cred_{name}"}
+            # Check if test user already exists (idempotent)
+            existing = await conn.execute(
+                text("SELECT id FROM credentials WHERE username = :u"),
+                {"u": name}
             )
-            await conn.execute(
-                text("INSERT INTO users (id, username, credential_id) VALUES (:id, :u, :cid)"),
-                {"id": uid, "u": name, "cid": cid}
-            )
+            if not existing.fetchone():
+                cid = uid + 10000
+                await conn.execute(
+                    text("INSERT INTO credentials (id, username, password) VALUES (:id, :u, 'fake')"),
+                    {"id": cid, "u": name}
+                )
+                await conn.execute(
+                    text("INSERT INTO users (id, username, credential_id) VALUES (:id, :u, :cid)"),
+                    {"id": uid, "u": name, "cid": cid}
+                )
 
     app.dependency_overrides[get_db] = _override_get_db
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
