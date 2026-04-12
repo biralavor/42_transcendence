@@ -93,8 +93,8 @@ export default function Tournaments() {
 
     try {
       const slots = Number(maxParticipants)
-      if (![4, 8].includes(slots)) {
-        throw new Error('Tournament size must be 4 or 8 players')
+      if (slots < 4 || slots > 8) {
+        throw new Error('Tournament size must be between 4 and 8 players')
       }
 
       const body = { name, max_participants: slots }
@@ -299,16 +299,14 @@ export default function Tournaments() {
                     id="tournament-size"
                     type="number"
                     className="form-control"
-                    list="tournament-size-options"
+                    min="4"
+                    max="8"
+                    step="1"
                     value={maxParticipants}
                     onChange={(e) => setMaxParticipants(e.target.value)}
                     required
                   />
-                  <datalist id="tournament-size-options">
-                    <option value="4" />
-                    <option value="8" />
-                  </datalist>
-                  <small className="form-text text-muted">Only 4 or 8 players are supported.</small>
+                  <small className="form-text text-muted">Choose between 4 and 8 players.</small>
                 </div>
 
                 <div className="col-6 col-sm-3 col-md-2">

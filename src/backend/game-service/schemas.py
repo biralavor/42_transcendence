@@ -67,7 +67,7 @@ class MatchHistoryItem(BaseModel):
 
 class TournamentCreateRequest(BaseModel):
     name: str
-    max_participants: int = Field(ge=3, le=8)
+    max_participants: int = Field(ge=4, le=8)
 
 
 class TournamentCreateResponse(BaseModel):
