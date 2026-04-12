@@ -235,7 +235,15 @@ async def deliver_game_invite_response(
     """Create a game invite response notification for the original inviter.
     
     Called when user declines/accepts a game invite.
+    Validates that to_user_id is not the current user (prevents self-targeting).
     """
+    # Prevent self-targeting: cannot send response to yourself
+    if body.to_user_id == current_user.id:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot send game invite response to yourself"
+        )
+    
     print(f"[DEBUG /game-invite/response] Received body: {body}")
     print(f"[DEBUG /game-invite/response] to_user_id={body.to_user_id}, status={body.status}, room_id={body.room_id}")
     try:
