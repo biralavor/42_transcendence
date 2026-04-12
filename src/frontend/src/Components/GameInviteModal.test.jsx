@@ -2,13 +2,11 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { vi } from 'vitest'
 import GameInviteModal from './GameInviteModal'
 import * as notificationContext from '../context/notificationContext'
-import * as gameInviteContext from '../context/gameInviteContext'
 import * as authContext from '../context/authContext'
 import * as router from 'react-router-dom'
 
 // Mock dependencies
 vi.mock('../context/notificationContext')
-vi.mock('../context/gameInviteContext')
 vi.mock('../context/authContext')
 vi.mock('react-router-dom', { spy: true })
 vi.mock('../utils/gameInviteChannel', () => ({
@@ -42,13 +40,6 @@ describe('GameInviteModal - Incoming Invites (Global)', () => {
         notificationContext.useNotifications.mockReturnValue({
             notifications: [],
             markRead: mockMarkRead,
-        })
-
-        gameInviteContext.useGameInvite.mockReturnValue({
-            activeInvite: null,
-            setGameInvite: vi.fn(),
-            clearGameInvite: vi.fn(),
-            respondToInvite: vi.fn(),
         })
 
         router.useNavigate.mockReturnValue(mockNavigate)
@@ -412,13 +403,6 @@ describe('GameInviteModal - Response Notifications', () => {
         notificationContext.useNotifications.mockReturnValue({
             notifications: [],
             markRead: mockMarkRead,
-        })
-
-        gameInviteContext.useGameInvite.mockReturnValue({
-            activeInvite: null,
-            setGameInvite: vi.fn(),
-            clearGameInvite: vi.fn(),
-            respondToInvite: vi.fn(),
         })
 
         router.useNavigate.mockReturnValue(vi.fn())
