@@ -10,11 +10,15 @@ export default function Tournament() {
   const { id: tournamentId } = useParams()
   const navigate = useNavigate()
   const { auth } = useAuth()
+
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [startError, setStartError] = useState('')
+  const [startLoading, setStartLoading] = useState(false)
   const [tournament, setTournament] = useState(null)
   const [profiles, setProfiles] = useState({})
   const [currentUser, setCurrentUser] = useState(null)
+
   const wsRef = useRef(null)
 
   const isCreator = useMemo(() => {
@@ -26,6 +30,18 @@ export default function Tournament() {
       (p) => Number(p.user_id) === Number(currentUser.id),
     )
   }, [currentUser, tournament])
+
+  const participantCount = tournament?.participants?.length ?? 0
+  const maxParticipants = tournament?.max_participants ?? 0
+
+  const showStartButton = useMemo(() => {
+    return Boolean(tournament && tournament.status === 'open' && isCreator)
+  }, [tournament, isCreator])
+
+  const canStart = useMemo(() => {
+    if (!showStartButton) return false
+    return participantCount === maxParticipants && !startLoading
+  }, [showStartButton, participantCount, maxParticipants, startLoading])
 
   const leaderboard = useMemo(() => {
     if (!tournament || !tournament.participants) return []
@@ -82,7 +98,9 @@ export default function Tournament() {
     }
 
     loadMe()
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+    }
   }, [auth?.access_token])
 
   useEffect(() => {
@@ -135,95 +153,92 @@ export default function Tournament() {
     }
 
     fetchTournament()
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+    }
   }, [tournamentId])
 
   useEffect(() => {
-  if (!tournamentId || !auth?.access_token) return
+    if (!tournamentId || !auth?.access_token) return
 
-  const scheme = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  const url = `${scheme}//${window.location.host}/api/game/ws/tournament/${tournamentId}?token=${auth.access_token}`
+    const scheme = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const url = `${scheme}//${window.location.host}/api/game/ws/tournament/${tournamentId}?token=${auth.access_token}`
 
-  const ws = createWsClient(url, {
-    onOpen: () => {
-      console.log(`[Tournament WS] connected: ${tournamentId}`)
-    },
+    const ws = createWsClient(url, {
+      onOpen: () => {
+        console.log(`[Tournament WS] connected: ${tournamentId}`)
+      },
 
-    onClose: () => {
-      console.log(`[Tournament WS] disconnected: ${tournamentId}`)
-    },
+      onClose: () => {
+        console.log(`[Tournament WS] disconnected: ${tournamentId}`)
+      },
 
-    onMessage: async (data) => {
-      if (!data || typeof data !== 'object') return
+      onMessage: async (data) => {
+        if (!data || typeof data !== 'object') return
 
-      const { type, tournament_id } = data
+        const { type, tournament_id } = data
 
-      if (String(tournament_id) !== String(tournamentId)) return
+        if (String(tournament_id) !== String(tournamentId)) return
 
-      if (type === 'match_player_ready' || type === 'match_player_unready') {
-        console.log('[Tournament WS] readiness update:', data)
-        return
-      }
+        if (type === 'match_player_ready' || type === 'match_player_unready') {
+          console.log('[Tournament WS] readiness update:', data)
+          return
+        }
 
-      if (type !== 'tournament_updated' && type !== 'tournament_complete') {
-        return
-      }
+        if (type !== 'tournament_updated' && type !== 'tournament_complete') {
+          return
+        }
 
-      try {
-        const resp = await apiCall(`/api/game/tournaments/${tournamentId}`)
-        if (!resp.ok) return
+        try {
+          const resp = await apiCall(`/api/game/tournaments/${tournamentId}`)
+          if (!resp.ok) return
 
-        const freshData = await resp.json()
-        setTournament(freshData)
+          const freshData = await resp.json()
+          setTournament(freshData)
+          setStartError('')
 
-        const ids = [...new Set(freshData.participants.map((p) => p.user_id))]
-        const newEntries = {}
+          const ids = [...new Set(freshData.participants.map((p) => p.user_id))]
+          const newEntries = {}
 
-        await Promise.all(
-          ids.map(async (uid) => {
-            try {
-              const res = await apiCall(`/api/users/profile/${uid}`)
-              if (!res.ok) throw new Error('Profile fetch failed')
-              const p = await res.json()
+          await Promise.all(
+            ids.map(async (uid) => {
+              try {
+                const res = await apiCall(`/api/users/profile/${uid}`)
+                if (!res.ok) throw new Error('Profile fetch failed')
+                const p = await res.json()
 
-              newEntries[uid] = {
-                username: p.display_name || p.username || `User ${uid}`,
-                avatarUrl: p.avatar_url || '/avatar_placeholder.jpg',
+                newEntries[uid] = {
+                  username: p.display_name || p.username || `User ${uid}`,
+                  avatarUrl: p.avatar_url || '/avatar_placeholder.jpg',
+                }
+              } catch {
+                newEntries[uid] = {
+                  username: `User ${uid}`,
+                  avatarUrl: '/avatar_placeholder.jpg',
+                }
               }
-            } catch {
-              newEntries[uid] = {
-                username: `User ${uid}`,
-                avatarUrl: '/avatar_placeholder.jpg',
-              }
-            }
-          }),
-        )
+            }),
+          )
 
-        setProfiles((prev) => ({ ...prev, ...newEntries }))
-      } catch {
-        // ignore websocket refresh errors
-      }
-    },
-  })
+          setProfiles((prev) => ({ ...prev, ...newEntries }))
+        } catch {
+          // ignore websocket refresh errors
+        }
+      },
+    })
 
-  wsRef.current = ws
+    wsRef.current = ws
 
-  return () => {
-    ws.close()
-  }
-}, [tournamentId, auth?.access_token])
-
-  const canStart = useMemo(() => {
-    if (!tournament || !currentUser) return false
-    return (
-      tournament.status === 'open' &&
-      tournament.participants?.length === tournament.max_participants &&
-      Number(currentUser.id) === Number(tournament.creator_id)
-    )
-  }, [tournament, currentUser])
+    return () => {
+      ws.close()
+    }
+  }, [tournamentId, auth?.access_token])
 
   async function handleStartTournament() {
-    if (!tournamentId) return
+    if (!tournamentId || !canStart) return
+
+    setStartLoading(true)
+    setStartError('')
 
     try {
       const resp = await apiJson(`/api/game/tournaments/${tournamentId}/start`, {
@@ -231,7 +246,9 @@ export default function Tournament() {
       })
       setTournament(resp)
     } catch (err) {
-      setError(err.message || 'Failed to start tournament')
+      setStartError(err.message || 'Failed to start tournament')
+    } finally {
+      setStartLoading(false)
     }
   }
 
@@ -239,6 +256,7 @@ export default function Tournament() {
     if (!tournamentId) return
 
     try {
+      setError('')
       await apiJson(`/api/game/tournaments/${tournamentId}/leave`, { method: 'POST' })
       navigate('/tournaments', { replace: true })
     } catch (err) {
@@ -246,10 +264,25 @@ export default function Tournament() {
     }
   }
 
+  async function handleWithdraw() {
+    if (!tournamentId) return
+
+    try {
+      setError('')
+      await apiJson(`/api/game/tournaments/${tournamentId}/withdraw`, {
+        method: 'POST',
+      })
+      navigate('/tournaments', { replace: true })
+    } catch (err) {
+      setError(err.message || 'Failed to withdraw from tournament')
+    }
+  }
+
   async function handleCancel() {
     if (!tournamentId) return
 
     try {
+      setError('')
       await apiJson(`/api/game/tournaments/${tournamentId}`, { method: 'DELETE' })
       navigate('/tournaments', { replace: true })
     } catch (err) {
@@ -357,7 +390,7 @@ export default function Tournament() {
                 <span className="arcade-display mb-3 d-inline-block">Tournament</span>
                 <h1 className="arcade-title mb-2">{tournament?.name || 'Tournament'}</h1>
                 <p className="arcade-copy mb-0">
-                  {tournament?.participants?.length || 0} / {tournament?.max_participants} participants&nbsp;•&nbsp;
+                  {participantCount} / {maxParticipants} participants&nbsp;•&nbsp;
                   Status: {tournament?.status}
                 </p>
               </div>
@@ -372,14 +405,29 @@ export default function Tournament() {
                     {isCreator ? 'Cancel Tournament' : 'Leave Tournament'}
                   </button>
                 )}
+                {tournament?.status === 'in_progress' && isJoined && (
+                  <button
+                    type="button"
+                    className="arcade-btn arcade-btn-danger"
+                    onClick={handleWithdraw}
+                  >
+                    Withdraw from Tournament
+                  </button>
+                )}
 
-                {canStart && (
+                {showStartButton && (
                   <button
                     type="button"
                     className="arcade-btn arcade-btn-primary"
                     onClick={handleStartTournament}
+                    disabled={!canStart}
+                    title={
+                      !canStart
+                        ? `Tournament must be full to start (${participantCount}/${maxParticipants})`
+                        : ''
+                    }
                   >
-                    Start Tournament
+                    {startLoading ? 'Starting...' : 'Start Tournament'}
                   </button>
                 )}
 
@@ -392,6 +440,12 @@ export default function Tournament() {
                 </button>
               </div>
             </div>
+
+            {startError && (
+              <div className="alert alert-danger mb-4" role="alert">
+                {startError}
+              </div>
+            )}
 
             <div className="tournament-participants mb-4">
               <h2 className="arcade-section-title mb-2">Participants</h2>
@@ -411,7 +465,7 @@ export default function Tournament() {
                 })}
 
                 {Array.from({
-                  length: (tournament.max_participants || 0) - (tournament.participants?.length || 0),
+                  length: Math.max(0, maxParticipants - participantCount),
                 }).map((_, idx) => (
                   <div className="participant-card placeholder" key={`placeholder-${idx}`}>
                     <div className="placeholder-avatar" />
