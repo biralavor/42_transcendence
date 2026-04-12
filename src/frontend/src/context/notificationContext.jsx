@@ -13,6 +13,9 @@ export function NotificationProvider({ children }) {
     const inviteVisibleRef = useRef(false)
     // Stable first-seen timestamp per DM room slug — set once, never updated, so sort order is stable
     const dmFirstSeenRef = useRef({})
+    // Track WS connection state for smart polling
+    const wsConnectedRef = useRef(false)
+    const wsRef = useRef(null)
 
     // Define all useCallback hooks before useEffect hooks to avoid temporal dead zone
     const fetchNotifications = useCallback(async () => {
@@ -138,6 +141,11 @@ export function NotificationProvider({ children }) {
         const scheme = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
         const url = `${scheme}//${window.location.host}/api/users/ws/notifications/${userId}?token=${auth.access_token}`
         const ws = new WebSocket(url)
+        wsRef.current = ws
+
+        ws.onopen = () => {
+            wsConnectedRef.current = true
+        }
 
         ws.onmessage = (event) => {
             try {
@@ -156,22 +164,78 @@ export function NotificationProvider({ children }) {
             }
         }
 
-        return () => ws.close()
+        ws.onclose = () => {
+            wsConnectedRef.current = false
+        }
+
+        ws.onerror = () => {
+            wsConnectedRef.current = false
+        }
+
+        return () => {
+            wsConnectedRef.current = false
+            ws.close()
+            wsRef.current = null
+        }
     }, [userId, auth.access_token])
 
-    // Step 4: periodically poll for notifications (fallback for game_invite_response and other notifications)
-    // WebSocket may not send all notification types, so polling ensures we catch responses
+    // Step 4: Smart polling - only when WS is disconnected or document is hidden
+    // This reduces backend load significantly by avoiding redundant polling when WS is healthy
     useEffect(() => {
         if (!userId) return
 
-        // Poll every 3 seconds
-        const pollInterval = setInterval(() => {
-            void fetchNotifications().catch(err => {
-                console.debug('[notificationContext] Polling error (non-critical):', err.message)
-            })
-        }, 3000)
+        let pollInterval = null
+        let pollTimeoutId = null
+        let failureCount = 0
 
-        return () => clearInterval(pollInterval)
+        const shouldPoll = () => {
+            // Don't poll if WS is connected and document is visible
+            return !wsConnectedRef.current || document.hidden
+        }
+
+        const poll = async () => {
+            try {
+                await fetchNotifications()
+                failureCount = 0
+            } catch (err) {
+                failureCount++
+                console.debug('[notificationContext] Smart polling error:', err.message)
+            }
+
+            if (shouldPoll()) {
+                // Apply exponential backoff on repeated failures (cap at 15s), otherwise use 5s
+                const backoffMultiplier = Math.min(failureCount * 2, 3) // Max 3x multiplier = 15s
+                const nextInterval = 5000 * backoffMultiplier
+                pollTimeoutId = setTimeout(poll, nextInterval)
+            }
+        }
+
+        // Listen to visibility changes
+        const handleVisibilityChange = () => {
+            if (document.hidden) {
+                // Pause polling when hidden
+                if (pollTimeoutId) clearTimeout(pollTimeoutId)
+                if (pollInterval) clearInterval(pollInterval)
+                pollInterval = null
+                pollTimeoutId = null
+            } else if (shouldPoll()) {
+                // Resume polling when visible and WS is disconnected
+                poll()
+            }
+        }
+
+        document.addEventListener('visibilitychange', handleVisibilityChange)
+
+        // Start polling if needed
+        if (shouldPoll()) {
+            poll()
+        }
+
+        return () => {
+            document.removeEventListener('visibilitychange', handleVisibilityChange)
+            if (pollInterval) clearInterval(pollInterval)
+            if (pollTimeoutId) clearTimeout(pollTimeoutId)
+        }
     }, [userId, fetchNotifications])
 
     // Convert DM unreadCounts to pseudo-notifications and merge with real notifications
