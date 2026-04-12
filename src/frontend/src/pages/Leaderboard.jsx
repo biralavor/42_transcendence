@@ -1,11 +1,42 @@
 import { useEffect, useMemo, useState } from 'react'
 import NavbarComponent from '../Components/Navbar'
 
-export default function Leaderboard() {
-  const [entries, setEntries] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
+/**
+ * @typedef {Object} LeaderboardEntry
+ * @property {number} rank - The rank position
+ * @property {number} total_games - Number of wins
+ * @property {number} wins - Number of wins
+ * @property {number} losses - Number of losses
+ * @property {number} points - Total points
+ * @property {number} user_id - User's unique identifier
+ * @property {string} display_name - User's display name
+ * @property {number} goals_scored - Total goals scored
+ * @property {number} goals_conceded - Total goals conceded
+ * @property {number} goal_difference - Goal difference (scored - conceded)
+ */
 
+/**
+ * @typedef {Object} LeaderboardResponse
+ * @property {number} page - Current page number
+ * @property {number} last_page - Last page number
+ * @property {number} per_page - Number of items per page
+ * @property {number} total - Total number of items across all pages
+ * @property {LeaderboardEntry[]} results - Array of leaderboard entries
+ */
+
+export default function Leaderboard() {
+  /** @type {[LeaderboardResponse, React.Dispatch<React.SetStateAction<LeaderboardResponse>>]} */
+  const [page, setPage] = useState({
+    page: 0,
+    last_page: 0,
+    per_page: 0,
+    total: 0,
+    results: []
+  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  const entries = page.results ?? [];
   useEffect(() => {
     const controller = new AbortController()
     // Flag to track whether the component has been unmounted.  We set this to
@@ -32,7 +63,7 @@ export default function Leaderboard() {
         const leaderboardData = await leaderboardResp.json()
         // Skip updates if the request was aborted or the effect was cancelled.
         if (controller.signal.aborted || cancelled) return
-        setEntries(leaderboardData)
+        setPage(leaderboardData)
       } catch (requestError) {
         // Ignore abort errors; otherwise report a generic failure.  Avoid
         // updating state if the component has unmounted or the request was aborted.
@@ -55,6 +86,7 @@ export default function Leaderboard() {
   }, [])
 
   const summary = useMemo(() => {
+
     if (entries.length === 0) {
       return {
         highestPoints: 0,
@@ -62,15 +94,15 @@ export default function Leaderboard() {
         risingPlayer: 'No data',
       }
     }
-
-    const highestPoints = entries[0]?.points ?? 0
+    // TODO send this info on page from backend
+    const highestPoints = Math.max(...entries.map((entry) => entry.points))
     const longestWins = Math.max(...entries.map((entry) => entry.wins))
-    const rising = entries.find((entry) => entry.rank > 1) ?? entries[0]
-
+    const minRank = Math.min(...entries.map((entry) => entry.rank))
+    const rising = entries.reduce((acc, cur) => acc.rank < cur.rank ? acc : cur, entries[0]);
     return {
       highestPoints,
       longestWins,
-      risingPlayer: rising.username || `Player ${rising.user_id}`,
+      risingPlayer: rising.display_name || `Player ${rising.user_id}`,
     }
   }, [entries])
 
@@ -131,14 +163,14 @@ export default function Leaderboard() {
                   <table className="leaderboard-table">
                     <thead>
                       <tr>
-                        <th>Rank</th>
-                        <th>Player</th>
-                        <th>W</th>
-                        <th>L</th>
-                        <th>GP</th>
-                        <th>GF</th>
-                        <th>GA</th>
-                        <th>GD</th>
+                        <th title='Player position in ranking'>Rank</th>
+                        <th title='Player display name'>Player</th>
+                        <th title='Wins'>W</th>
+                        <th title='Losses'>L</th>
+                        <th title='Games Played'>GP</th>
+                        <th title='Goals For, that is goals scored'>GF</th>
+                        <th title='Goals Against, that is goals conceded'>GA</th>
+                        <th title='Goals Difference, that is the diference between scored and conceded'>GD</th>
                         <th>Pts</th>
                       </tr>
                     </thead>
@@ -148,7 +180,7 @@ export default function Leaderboard() {
                         return (
                           <tr key={entry.user_id} className={rowClass}>
                             <td>#{entry.rank}</td>
-                            <td>{entry.username || `Player ${entry.user_id}`}</td>
+                            <td>{entry.display_name || `Player ${entry.user_id}`}</td>
                             <td>{entry.wins}</td>
                             <td>{entry.losses}</td>
                             <td>{entry.total_games}</td>

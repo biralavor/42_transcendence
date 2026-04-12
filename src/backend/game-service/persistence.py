@@ -533,6 +533,7 @@ def leaderboard_order_by_str(sort_assoc: [(str, str)]) -> str:
         'rank',
         'display_name',
         'points',
+        'total_games',
         'wins',
         'losses',
         'goals_scored',
@@ -629,6 +630,8 @@ WITH all_matches AS
         AS wins
         , sum(losses)
         AS losses
+        , sum(wins) + sum(losses)
+        AS total_games
         , sum(goals_scored)
         AS goals_scored
         , sum(goals_conceded)
@@ -647,7 +650,9 @@ WITH all_matches AS
         ROW_NUMBER() OVER (ORDER BY {default_sort_string})
         AS rank
         , display_name
+        , user_id
         , points
+        , total_games
         , wins
         , losses
         , goals_scored
