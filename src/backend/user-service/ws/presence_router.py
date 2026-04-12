@@ -63,18 +63,56 @@ async def presence_endpoint(websocket: WebSocket, session: SessionDep, token: st
                 await set_user_status(user_id, "online", db_session)
 
         while True:
-            # Event-driven presence delivery
-            # Handler waits for event signal when presence changes occur
+            # Event-driven presence delivery with instant disconnect detection.
+            # Race two tasks: (1) wait for presence event, (2) detect client disconnect
+            # Whichever completes first wins—presence updates are instant, disconnects are caught immediately.
             room_key = str(user_id)
             event = await presence_event_registry.get_or_create_event(room_key)
+            
+            # Create concurrent tasks for presence event and disconnect detection
+            event_task = asyncio.create_task(event.wait())
+            disconnect_task = asyncio.create_task(websocket.receive_text())
+            
             try:
-                # Wait for event or timeout (both are cancellable)
-                await asyncio.wait_for(event.wait(), timeout=10.0)
-            except asyncio.TimeoutError:
-                # Timeout is harmless—just means no presence changes for 10s
-                continue
-            # Event fired! Presence update was broadcasted
-            await presence_event_registry.clear_event(room_key)
+                # Race: first to complete wins
+                # - If presence event fires: event_task completes, we clear and loop
+                # - If client disconnects: disconnect_task raises WebSocketDisconnect
+                # - If neither: timeout after 10s (fail-safe for stuck clients)
+                done, pending = await asyncio.wait(
+                    [event_task, disconnect_task],
+                    timeout=10.0,
+                    return_when=asyncio.FIRST_COMPLETED
+                )
+                
+                # Cancel pending tasks to avoid resource leaks
+                for task in pending:
+                    task.cancel()
+                    try:
+                        await task
+                    except asyncio.CancelledError:
+                        pass
+                
+                # Check which task completed
+                if disconnect_task in done:
+                    # Client sent data or disconnected (listen-only, so this is unexpected)
+                    # If disconnect: receive_text() raised WebSocketDisconnect (caught below)
+                    # If data: log warning and break (client shouldn't send on listen-only channel)
+                    try:
+                        data = disconnect_task.result()
+                        logger.warning("Client sent data on listen-only channel: %s", data)
+                    except WebSocketDisconnect:
+                        # Expected disconnect path
+                        pass
+                    break
+                
+                # Presence event received! Clear event and loop for next update
+                if event_task in done:
+                    await presence_event_registry.clear_event(room_key)
+                # else: timeout (fail-safe), loop continues
+                    
+            except WebSocketDisconnect:
+                # Clean disconnect signal
+                break
     except WebSocketDisconnect:
         pass
     except asyncio.CancelledError:
