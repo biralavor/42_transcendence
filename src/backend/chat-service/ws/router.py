@@ -11,6 +11,7 @@ from shared.ws.manager import ConnectionManager
 from shared.database import AsyncSessionLocal
 from shared.config.settings import settings
 from service.persistence import get_or_create_room, save_message, get_room_history, is_blocked
+from service.ws.event_registry import chat_notification_event_registry
 
 router = APIRouter()
 manager = ConnectionManager()
@@ -209,7 +210,6 @@ async def chat_websocket(websocket: WebSocket, room_slug: str, token: str = "") 
                     
                     # Signal handlers that data is ready (event-driven delivery)
                     try:
-                        from ws.event_registry import chat_notification_event_registry
                         await chat_notification_event_registry.signal_event(str(recipient_uid))
                     except Exception as e:
                         pass  # Non-blocking: signaling is best-effort
@@ -221,7 +221,6 @@ async def chat_websocket(websocket: WebSocket, room_slug: str, token: str = "") 
 
 @router.websocket("/ws/notifications")
 async def notifications_websocket(websocket: WebSocket, token: str = "") -> None:
-    from ws.event_registry import chat_notification_event_registry
     logger = logging.getLogger(__name__)
     
     credential_id = _uid_from_token(token)

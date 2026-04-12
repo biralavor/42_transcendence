@@ -50,18 +50,6 @@ class ConnectionManager:
         except Exception as e:
             # Non-blocking: signaling is best-effort, don't fail broadcast
             logger.debug(f"Failed to signal notification event for room {room_id}: {e}")
-        
-        # Signal handlers that data is ready (event-driven delivery)
-        # Handlers waiting on event.wait() are now woken immediately
-        # Safe for test environments: swallows all exceptions
-        try:
-            await notification_event_registry.signal_event(room_id)
-        except ImportError:
-            # In test environment, service module may not be importable
-            pass
-        except Exception as e:
-            # Log but don't fail: signaling is best-effort, not required for message delivery
-            logger.debug(f"Failed to signal notification event for room {room_id}: {e}")
 
     def active_connections(self, room_id: str) -> int:
         return len(self._rooms.get(room_id, set()))
