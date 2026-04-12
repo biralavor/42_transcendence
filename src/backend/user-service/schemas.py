@@ -96,6 +96,7 @@ class GameInviteResponseRequest(BaseModel):
     """
     to_user_id: int
     status: Literal["declined", "accepted", "timeout"]
+    room_id: str | None = None  # Game room ID (only for accepted responses)
 
 
 # Allowed notification types — centralized here to enforce consistency
@@ -122,6 +123,7 @@ class NotificationResponse(BaseModel):
 
     id:         int
     user_id:    int
+    from_user_id: int | None = None  # Sender for game_invite notifications
     type:       NOTIFICATION_TYPES  # Now validated against known types
     message:    str
     read:       bool

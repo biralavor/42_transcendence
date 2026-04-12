@@ -130,6 +130,8 @@ def _notif_payload(notif) -> dict:
         "type": "notification",
         "notification": {
             "id": notif.id,
+            "user_id": notif.user_id,
+            "from_user_id": notif.from_user_id,
             "type": notif.type,
             "message": notif.message,
             "read": notif.read,
@@ -145,7 +147,11 @@ def _game_notif_message(sender: str, body) -> str:
     and should NOT be sent through the /game-invites endpoint.
     """
     if body.type == "game_invite":
-        return f"{sender} invited you to play Pong"
+        msg = f"{sender} invited you to play Pong"
+        # Encode room_id in message for Maria to extract and redirect
+        if body.room_id:
+            msg += f" [ROOM_ID:{body.room_id}]"
+        return msg
     # game_invite_timeout
     return f"Your game invite with {sender} has expired"
 
@@ -230,12 +236,20 @@ async def deliver_game_invite_response(
     
     Called when user declines/accepts a game invite.
     """
+    print(f"[DEBUG /game-invite/response] Received body: {body}")
+    print(f"[DEBUG /game-invite/response] to_user_id={body.to_user_id}, status={body.status}, room_id={body.room_id}")
     try:
         # Create message based on response status
         if body.status == 'declined':
             message = f"{current_user.username} declined your match invite"
         elif body.status == 'accepted':
             message = f"{current_user.username} accepted your match invite"
+            # Include room_id in message for navigation (only on acceptance)
+            if body.room_id:
+                message += f" [ROOM_ID:{body.room_id}]"
+                print(f"[DEBUG] Backend encoding room_id: {body.room_id}, message: {message}")
+            else:
+                print(f"[DEBUG] Backend NO room_id received for acceptance")
         elif body.status == 'timeout':
             message = f"{current_user.username}'s invite expired"
         else:
@@ -243,7 +257,7 @@ async def deliver_game_invite_response(
         
         notif = await _notifications.create_notification(
             session, body.to_user_id, "game_invite_response",
-            message,
+            message, from_user_id=current_user.id,
         )
         await session.commit()
         
@@ -259,7 +273,10 @@ async def list_notifications(
 ):
     """Return last 20 notifications for the authenticated caller, newest first."""
     notifications = await _notifications.get_notifications(session, current_user.id)
-    return [NotificationResponse.model_validate(n) for n in notifications]
+    response_list = [NotificationResponse.model_validate(n) for n in notifications]
+    if response_list:
+        print(f"[DEBUG list_notifications] First notification: id={response_list[0].id}, user_id={response_list[0].user_id}, from_user_id={response_list[0].from_user_id}, type={response_list[0].type}")
+    return response_list
 
 
 @app.put("/notifications/read-all", status_code=204)
@@ -318,6 +335,7 @@ async def deliver_game_notification(
         notif = await _notifications.create_notification(
             session, body.to_user_id, body.type,
             _game_notif_message(current_user.username, body),
+            from_user_id=current_user.id,  # Store sender ID for game_invite notifications
         )
     except ValueError as e:
         # Message length validation failed

@@ -411,6 +411,7 @@ export default function FriendsSidebar({ userId, username, currentUser, onViewPr
     try {
       // Create notification for the inviter so they see accept in GameInviteModal
       // (The backend will handle WebSocket broadcasting via the dedicated endpoint)
+      console.debug('[FriendsSidebar] Sending accept with room_id:', { senderId, roomId })
       await apiCall('/api/users/game-invite/response', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -420,6 +421,7 @@ export default function FriendsSidebar({ userId, username, currentUser, onViewPr
           room_id: roomId,  // Include room_id so inviter can navigate
         }),
       })
+      console.debug('[FriendsSidebar] Accept response sent successfully')
 
       setIncomingInvite(null)
       navigateToWaitingRoom(roomId, {

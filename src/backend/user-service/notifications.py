@@ -75,7 +75,7 @@ async def delete_notification(
 
 
 async def create_notification(
-    db: AsyncSession, user_id: int, notif_type: str, message: str
+    db: AsyncSession, user_id: int, notif_type: str, message: str, from_user_id: int | None = None
 ) -> Notification:
     """Persist a new notification row and return it with its generated id.
     
@@ -87,6 +87,7 @@ async def create_notification(
         user_id: Target user ID for the notification
         notif_type: Type of notification (validated by NotificationResponse schema)
         message: Human-readable notification message (max 256 characters)
+        from_user_id: (Optional) Sender user ID for game_invite notifications
         
     Raises:
         ValueError: If message exceeds MAX_NOTIFICATION_MESSAGE_LENGTH
@@ -98,7 +99,7 @@ async def create_notification(
             f"(got {len(message)} characters)"
         )
     
-    notif = Notification(user_id=user_id, type=notif_type, message=message, read=False)
+    notif = Notification(user_id=user_id, type=notif_type, message=message, read=False, from_user_id=from_user_id)
     async with db.begin_nested():
         db.add(notif)
         await db.flush()  # Ensure ID is generated before refresh

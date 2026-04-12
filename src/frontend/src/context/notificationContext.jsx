@@ -27,7 +27,7 @@ export function NotificationProvider({ children }) {
             if (Array.isArray(data)) {
                 setNotifications(data)
             } else {
-                console.warn('[notificationContext] Invalid notifications response format')
+                console.warn('[notificationContext] Invalid notifications response format, got:', typeof data, Object.keys(data))
                 setNotifications([])
             }
         } catch (err) {
@@ -202,7 +202,8 @@ export function NotificationProvider({ children }) {
 
         // Merge and sort by created_at (DMs are synthetic, so put them at the top)
         const merged = [...dmNotifs, ...notifications]
-        return merged.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+        const sorted = merged.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+        return sorted
     }, [notifications, unreadCounts, userId, dmSenders])
 
     // System notifications only — DM unreads are surfaced via useUnread() on the Chat link
@@ -220,6 +221,8 @@ export function NotificationProvider({ children }) {
         removeNotification,
         setInviteVisible,
     }), [combinedNotifications, totalUnreadCount, fetchNotifications, markRead, markAllRead, removeNotification, setInviteVisible])
+
+
 
     return (
         <NotificationContext.Provider value={value}>

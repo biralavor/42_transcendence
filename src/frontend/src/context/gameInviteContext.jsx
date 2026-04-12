@@ -22,13 +22,26 @@ export function GameInviteProvider({ children }) {
 
         try {
             // Call the API to notify the inviter with authenticated request
+            const body = {
+                to_user_id: activeInvite.fromUserId,
+                status,
+            }
+
+            // Include room_id for accepted responses so User A can navigate
+            if (status === 'accepted' && activeInvite.roomId) {
+                body.room_id = activeInvite.roomId
+                console.debug('[gameInviteContext] Sending room_id:', body.room_id)
+            } else {
+                console.debug('[gameInviteContext] No room_id for status:', { status, roomId: activeInvite?.roomId })
+            }
+
+            console.debug('[gameInviteContext] Full request body:', body)
+            console.debug('[gameInviteContext] Calling /api/users/game-invite/response with:', JSON.stringify(body))
+
             const response = await apiCall('/api/users/game-invite/response', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    to_user_id: activeInvite.fromUserId,
-                    status,
-                }),
+                body: JSON.stringify(body),
             })
 
             if (!response.ok) {
@@ -39,6 +52,8 @@ export function GameInviteProvider({ children }) {
                 )
                 return
             }
+
+            console.debug('[gameInviteContext] Response endpoint returned successfully')
 
             // For accepted invites, navigate to waiting room
             if (status === 'accepted' && onNavigate) {
