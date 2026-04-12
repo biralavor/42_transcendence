@@ -32,6 +32,14 @@ class ConnectionManager:
             except Exception as e:
                 logger.warning(f"Failed to send to client in room {room_id}: {e}")
                 self.disconnect(room_id, ws)
+        
+        # Signal handlers that data is ready (event-driven delivery)
+        # Handlers waiting on event.wait() are now woken immediately
+        try:
+            from service.ws.event_registry import notification_event_registry
+            await notification_event_registry.signal_event(room_id)
+        except Exception as e:
+            logger.warning(f"Failed to signal notification event for room {room_id}: {e}")
 
     def active_connections(self, room_id: str) -> int:
         return len(self._rooms.get(room_id, set()))

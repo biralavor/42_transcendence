@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from shared.database import get_db
 from shared.ws.manager import ConnectionManager
 from service.service import get_me
+from service.ws.event_registry import notification_event_registry
 
 logger = logging.getLogger(__name__)
 
@@ -52,18 +53,32 @@ async def notification_endpoint(
     if me.id != user_id:
         await websocket.close(code=4003)
         return
+    
+    # Close session after authentication (don't hold it for connection lifetime)
+    await session.close()
 
     room = str(user_id)
     await notification_manager.connect(room, websocket)
     try:
-        # Keep connection open indefinitely (server-push only, no client frames expected)
-        # Use sleep loop that can be cancelled when client disconnects
+        # Event-driven notification delivery
+        # Handler waits for event signal from broadcast(), allowing instant wakeup (not 1s polling)
         while True:
-            await asyncio.sleep(1)  # Check every second, but allow cancellation
+            event = await notification_event_registry.get_or_create_event(room)
+            try:
+                # Wait for event or timeout (both are cancellable via asyncio semantics)
+                # Timeout ensures we check for disconnection every N seconds
+                await asyncio.wait_for(event.wait(), timeout=10.0)
+            except asyncio.TimeoutError:
+                # Timeout is harmless—just means no notifications for 10s, loop continues
+                continue
+            # Event fired! Data was broadcasted, now clear event and re-register for next notification
+            await notification_event_registry.clear_event(room)
     except WebSocketDisconnect:
         pass
     except asyncio.CancelledError:
         logger.debug("WS /notifications cancelled for user %d", user_id)
+        await notification_event_registry.cleanup_event(room)
+        raise
     except Exception:
         logger.exception("WS /notifications unexpected error for user %d", user_id)
     finally:
