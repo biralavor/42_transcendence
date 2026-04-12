@@ -182,8 +182,11 @@ async def game_websocket(websocket: WebSocket, game_id: str, token: str | None =
             or client_host in ("127.0.0.1", "localhost", "::1", "testclient")
             or client_host.startswith("172.")
         )
-        is_authorized = is_local or (healthcheck_token == settings.HEALTHCHECK_TOKEN if hasattr(settings, 'HEALTHCHECK_TOKEN') else False)
-        
+        is_authorized = is_local or (
+            healthcheck_token == settings.HEALTHCHECK_TOKEN
+            if hasattr(settings, "HEALTHCHECK_TOKEN")
+            else False
+        )
         if not is_authorized:
             await websocket.close(code=4003, reason="Healthcheck access denied")
             return
