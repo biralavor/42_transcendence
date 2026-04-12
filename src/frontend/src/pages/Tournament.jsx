@@ -18,6 +18,7 @@ export default function Tournament() {
   const [tournament, setTournament] = useState(null)
   const [profiles, setProfiles] = useState({})
   const [currentUser, setCurrentUser] = useState(null)
+  const [readyByMatch, setReadyByMatch] = useState({})
 
   const wsRef = useRef(null)
 
@@ -180,8 +181,66 @@ export default function Tournament() {
 
         if (String(tournament_id) !== String(tournamentId)) return
 
-        if (type === 'match_player_ready' || type === 'match_player_unready') {
-          console.log('[Tournament WS] readiness update:', data)
+        if (type === 'match_player_ready') {
+          setReadyByMatch((prev) => ({
+            ...prev,
+            [data.match_id]: {
+              ...(prev[data.match_id] || {}),
+              [data.user_id]: true,
+            },
+          }))
+          return
+        }
+
+        if (type === 'match_player_unready') {
+          setReadyByMatch((prev) => {
+            const current = { ...(prev[data.match_id] || {}) }
+            delete current[data.user_id]
+
+            return {
+              ...prev,
+              [data.match_id]: current,
+            }
+          })
+          return
+        }
+
+        if (type === 'match_start') {
+          if (!currentUser) return
+
+          const isMyMatch =
+            Number(currentUser.id) === Number(data.player1_id) ||
+            Number(currentUser.id) === Number(data.player2_id)
+
+          if (!isMyMatch) return
+
+          const opponentId =
+            Number(currentUser.id) === Number(data.player1_id)
+              ? Number(data.player2_id)
+              : Number(data.player1_id)
+
+          const opponentProfile = profiles[opponentId] || {}
+
+          navigate(`/game/waiting/${data.game_room_id}`, {
+            replace: true,
+            state: {
+              currentUser: {
+                id: currentUser.id,
+                username: currentUser.username,
+                avatarUrl: profiles[currentUser.id]?.avatarUrl || '/avatar_placeholder.jpg',
+              },
+              opponent: {
+                id: opponentId,
+                username: opponentProfile.username || `User ${opponentId}`,
+                avatarUrl: opponentProfile.avatarUrl || '/avatar_placeholder.jpg',
+              },
+              player1_id: Number(data.player1_id),
+              player2_id: Number(data.player2_id),
+              matchId: Number(data.match_id),
+              tournamentId: Number(tournamentId),
+              tournamentMatchId: Number(data.tournament_match_id),
+            },
+          })
           return
         }
 
@@ -232,7 +291,7 @@ export default function Tournament() {
     return () => {
       ws.close()
     }
-  }, [tournamentId, auth?.access_token])
+  }, [tournamentId, auth?.access_token, currentUser, navigate, profiles])
 
   async function handleStartTournament() {
     if (!tournamentId || !canStart) return
@@ -290,6 +349,15 @@ export default function Tournament() {
     }
   }
 
+  function handleReadyForMatch(match) {
+    if (!wsRef.current || !match?.id) return
+
+    wsRef.current.send({
+      type: 'ready',
+      match_id: Number(match.id),
+    })
+  }
+
   const matchesByRound = useMemo(() => {
     const map = {}
 
@@ -315,6 +383,19 @@ export default function Tournament() {
     const p2 = player2_id != null ? profiles[player2_id] : null
     const winner = winner_id != null ? profiles[winner_id] : null
 
+    const isCurrentUsersMatch =
+      currentUser &&
+      status === 'in_progress' &&
+      (Number(player1_id) === Number(currentUser.id) ||
+        Number(player2_id) === Number(currentUser.id))
+
+    const currentUserReady = Boolean(readyByMatch[match.id]?.[currentUser?.id])
+
+    const opponentId =
+      Number(currentUser?.id) === Number(player1_id) ? player2_id : player1_id
+
+    const opponentIsReady = Boolean(readyByMatch[match.id]?.[opponentId])
+
     return (
       <div
         key={match.id || `${match.round}-${match.position}`}
@@ -339,6 +420,23 @@ export default function Tournament() {
           />
           <span className="tournament-player-name">{p2?.username || 'TBD'}</span>
         </div>
+
+        {isCurrentUsersMatch && (
+          <div className="mt-3 d-flex flex-column gap-2">
+            <button
+              type="button"
+              className="arcade-btn arcade-btn-primary"
+              onClick={() => handleReadyForMatch(match)}
+              disabled={currentUserReady}
+            >
+              {currentUserReady ? 'Ready locked' : 'Ready for Match'}
+            </button>
+
+            {opponentIsReady && (
+              <span className="arcade-copy">Opponent is ready.</span>
+            )}
+          </div>
+        )}
 
         {status === 'finished' && (
           <div className="tournament-winner">
@@ -405,6 +503,7 @@ export default function Tournament() {
                     {isCreator ? 'Cancel Tournament' : 'Leave Tournament'}
                   </button>
                 )}
+
                 {tournament?.status === 'in_progress' && isJoined && (
                   <button
                     type="button"
