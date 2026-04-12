@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Dict, Set
 
 if TYPE_CHECKING:
     from fastapi import WebSocket
+
+logger = logging.getLogger(__name__)
 
 
 class ConnectionManager:
@@ -26,7 +29,8 @@ class ConnectionManager:
         for ws in list(self._rooms.get(room_id, set())):
             try:
                 await ws.send_json(message)
-            except Exception:
+            except Exception as e:
+                logger.warning(f"Failed to send to client in room {room_id}: {e}")
                 self.disconnect(room_id, ws)
 
     def active_connections(self, room_id: str) -> int:
