@@ -526,18 +526,42 @@ async def get_user_matches(db: AsyncSession, user_id: int) -> list[Match]:
     )
     return list(result.scalars().all())
 
+def leaderboard_order_by_str(sort_assoc: [(str, str)]) -> str:
+    if sort_assoc is None:
+        return None
+    valid_columns = [
+        'rank',
+        'display_name',
+        'points',
+        'wins',
+        'losses',
+        'goals_scored',
+        'goals_conceded',
+        'goal_difference',
+    ]
+    order_columns = []
+    for (sort_key, order) in sort_assoc:
+        print(sort_key, order)
+        norm_order = 'DESC' if order.upper() == 'DESC' else 'ASC'
+        norm_key = sort_key.lower() if sort_key.lower() in valid_columns else None
+        if norm_key is not None:
+            order_columns.append(f"{norm_key} {norm_order}")
+    result = ', '.join(order_columns) if len(order_columns) > 0 else None
+    return result
+
 
 async def get_leaderboard_pagginated(
-        db: AsyncSession, limit: int = 20, page: int = 0
+        db: AsyncSession, limit: int = 20, page: int = 0, sort_assoc: [(str, str)] = None
 ) -> dict | None:
-
     offset = page * limit
     default_sort_string = """
 points DESC,
 goal_difference DESC,
 goals_scored DESC,
-user_id ASC"""
-    sort_string = default_sort_string
+user_id ASC
+    """
+    sort_string = leaderboard_order_by_str(sort_assoc)
+    sort_string = sort_string if sort_string is not None else default_sort_string
     statement = text(f"""
 WITH all_matches AS
 (

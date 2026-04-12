@@ -19,6 +19,7 @@ from service.persistence import (
     create_tournament,
     finish_match,
     get_leaderboard,
+    get_leaderboard_pagginated,
     get_match,
     get_tournament_with_participants,
     get_user_matches,
@@ -62,15 +63,23 @@ async def user_stats(user_id: int, session: SessionDependency):
     return await get_user_stats(session, user_id)
 
 
-@router.get("/leaderboard", response_model=list[LeaderboardEntryResponse])
+@router.get("/leaderboard")
 async def leaderboard(
     session: SessionDependency,
-    # Use FastAPI's Query parameters to enforce bounds and document them.  This
-    # replaces manual normalization and will return a 422 response if the
-    # provided limit is out of range.  Defaults to 20, minimum 1, maximum 100.
     limit: int = Query(20, ge=1, le=100),
-) -> list[LeaderboardEntryResponse]:
-    return await get_leaderboard(session, limit)
+    page: int = Query(0, ge=0),
+    order: str = Query('')
+):
+    sort_assoc = []
+    for sort_pair in order.split(','):
+        entry = sort_pair.split(':', maxsplit = 1)
+        if len(entry) == 1:
+            sort_assoc.append((entry[0], 'ASC'))
+        elif len(entry) == 2:
+            sort_assoc.append((entry[0], entry[1]))
+    pagginated_result = \
+        await get_leaderboard_pagginated(session, limit, page, sort_assoc)
+    return pagginated_result
 
 
 @router.get("/matches/history/{user_id}", response_model=list[MatchHistoryItem])
