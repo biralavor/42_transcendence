@@ -139,66 +139,79 @@ export default function Tournament() {
   }, [tournamentId])
 
   useEffect(() => {
-    if (!tournamentId || !auth?.access_token) return
+  if (!tournamentId || !auth?.access_token) return
 
-    const scheme = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const url = `${scheme}//${window.location.host}/api/game/ws/tournament/${tournamentId}?token=${auth.access_token}`
+  const scheme = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  const url = `${scheme}//${window.location.host}/api/game/ws/tournament/${tournamentId}?token=${auth.access_token}`
 
-    const ws = createWsClient(url, {
-      onMessage: async (data) => {
-        if (!data || typeof data !== 'object') return
+  const ws = createWsClient(url, {
+    onOpen: () => {
+      console.log(`[Tournament WS] connected: ${tournamentId}`)
+    },
 
-        const { type, tournament_id } = data
-        if (
-          (type === 'tournament_updated' || type === 'tournament_complete') &&
-          String(tournament_id) === String(tournamentId)
-        ) {
-          try {
-            const resp = await apiCall(`/api/game/tournaments/${tournamentId}`)
-            if (!resp.ok) return
+    onClose: () => {
+      console.log(`[Tournament WS] disconnected: ${tournamentId}`)
+    },
 
-            const freshData = await resp.json()
-            setTournament(freshData)
+    onMessage: async (data) => {
+      if (!data || typeof data !== 'object') return
 
-            const ids = freshData.participants.map((p) => p.user_id)
-            const missingIds = ids.filter((uid) => !profiles[uid])
+      const { type, tournament_id } = data
 
-            if (missingIds.length > 0) {
-              const newEntries = {}
+      if (String(tournament_id) !== String(tournamentId)) return
 
-              await Promise.all(
-                missingIds.map(async (uid) => {
-                  try {
-                    const res = await apiCall(`/api/users/profile/${uid}`)
-                    if (!res.ok) throw new Error('Profile fetch failed')
-                    const p = await res.json()
-                    newEntries[uid] = {
-                      username: p.display_name || p.username || `User ${uid}`,
-                      avatarUrl: p.avatar_url || '/avatar_placeholder.jpg',
-                    }
-                  } catch {
-                    newEntries[uid] = {
-                      username: `User ${uid}`,
-                      avatarUrl: '/avatar_placeholder.jpg',
-                    }
-                  }
-                }),
-              )
+      if (type === 'match_player_ready' || type === 'match_player_unready') {
+        console.log('[Tournament WS] readiness update:', data)
+        return
+      }
 
-              setProfiles((prev) => ({ ...prev, ...newEntries }))
+      if (type !== 'tournament_updated' && type !== 'tournament_complete') {
+        return
+      }
+
+      try {
+        const resp = await apiCall(`/api/game/tournaments/${tournamentId}`)
+        if (!resp.ok) return
+
+        const freshData = await resp.json()
+        setTournament(freshData)
+
+        const ids = [...new Set(freshData.participants.map((p) => p.user_id))]
+        const newEntries = {}
+
+        await Promise.all(
+          ids.map(async (uid) => {
+            try {
+              const res = await apiCall(`/api/users/profile/${uid}`)
+              if (!res.ok) throw new Error('Profile fetch failed')
+              const p = await res.json()
+
+              newEntries[uid] = {
+                username: p.display_name || p.username || `User ${uid}`,
+                avatarUrl: p.avatar_url || '/avatar_placeholder.jpg',
+              }
+            } catch {
+              newEntries[uid] = {
+                username: `User ${uid}`,
+                avatarUrl: '/avatar_placeholder.jpg',
+              }
             }
-          } catch {
-            // ignore websocket refresh errors
-          }
-        }
-      },
-    })
+          }),
+        )
 
-    wsRef.current = ws
-    return () => {
-      ws.close()
-    }
-  }, [tournamentId, auth?.access_token, profiles])
+        setProfiles((prev) => ({ ...prev, ...newEntries }))
+      } catch {
+        // ignore websocket refresh errors
+      }
+    },
+  })
+
+  wsRef.current = ws
+
+  return () => {
+    ws.close()
+  }
+}, [tournamentId, auth?.access_token])
 
   const canStart = useMemo(() => {
     if (!tournament || !currentUser) return false

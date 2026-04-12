@@ -6,7 +6,7 @@ from sqlalchemy import text
 from shared.config.settings import settings
 from shared.ws.manager import ConnectionManager
 from shared.database import AsyncSessionLocal
-from service.persistence import create_match, finish_match
+from service.persistence import create_match, finish_match, get_tournament_with_participants
 from service.game_manager import game_manager
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -207,3 +207,90 @@ async def game_websocket(websocket: WebSocket, game_id: str, token: str | None =
             await game_manager.delete_session(game_id)
             _setup_sessions.pop(game_id, None)
             _match_ids.pop(game_id, None)
+
+
+@router.websocket("/ws/tournament/{tournament_id}")
+async def tournament_websocket(
+    websocket: WebSocket,
+    tournament_id: int,
+    token: str | None = None,
+) -> None:
+    if not token:
+        await websocket.close(code=4001)
+        return
+
+    try:
+        payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=["HS256"])
+        credential_id = payload.get("credential_id")
+        if credential_id is None:
+            await websocket.close(code=4001)
+            return
+
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                text("SELECT id FROM users WHERE credential_id = :cid"),
+                {"cid": credential_id},
+            )
+            row = result.fetchone()
+            if not row:
+                await websocket.close(code=4001)
+                return
+
+            player_id = row[0]
+
+            tournament_data = await get_tournament_with_participants(db, tournament_id)
+            if tournament_data is None:
+                await websocket.close(code=4004)
+                return
+
+            _, participants, _ = tournament_data
+            participant_ids = {p.user_id for p in participants}
+
+            if player_id not in participant_ids:
+                await websocket.close(code=4003)
+                return
+
+    except Exception:
+        await websocket.close(code=4001)
+        return
+
+    room_id = f"tournament_{tournament_id}"
+    await manager.connect(room_id, websocket)
+
+    try:
+        await websocket.send_json({
+            "type": "tournament_connected",
+            "tournament_id": tournament_id,
+            "user_id": player_id,
+        })
+
+        while True:
+            data = await websocket.receive_json()
+
+            if not isinstance(data, dict):
+                continue
+
+            event_type = data.get("type")
+            match_id = data.get("match_id")
+
+            if event_type == "ready" and isinstance(match_id, int):
+                await manager.broadcast(room_id, {
+                    "type": "match_player_ready",
+                    "tournament_id": tournament_id,
+                    "match_id": match_id,
+                    "user_id": player_id,
+                })
+
+            elif event_type == "unready" and isinstance(match_id, int):
+                await manager.broadcast(room_id, {
+                    "type": "match_player_unready",
+                    "tournament_id": tournament_id,
+                    "match_id": match_id,
+                    "user_id": player_id,
+                })
+
+    except WebSocketDisconnect:
+        pass
+
+    finally:
+        manager.disconnect(room_id, websocket)
