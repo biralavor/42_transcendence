@@ -17,6 +17,7 @@ export default function GameInviteModal() {
 
     const [visibleNotification, setVisibleNotification] = useState(null)
     const [isResponding, setIsResponding] = useState(false)
+    const [errorMessage, setErrorMessage] = useState(null)
     const processedIdsRef = useRef(new Set())
     const debounceTimerRef = useRef(null)
 
@@ -50,10 +51,21 @@ export default function GameInviteModal() {
                     continue
                 }
 
-                processedIdsRef.current.add(notif.id)
+                // Validate from_user_id exists (sender must be identifiable)
+                if (!notif.from_user_id) {
+                    console.error(
+                        '[GameInviteModal] Notification missing from_user_id, will not process:',
+                        notif
+                    )
+                    // Mark as processed anyway to avoid re-showing broken notification
+                    processedIdsRef.current.add(notif.id)
+                    continue
+                }
+
                 const roomId = extractRoomId(notif.message)
                 const senderInfo = parseSenderInfo(notif.message, notif)
 
+                // Note: Do NOT add to processedIds yet—only after successful markRead
                 setVisibleNotification({
                     id: notif.id,
                     type: notif.type,
@@ -62,6 +74,7 @@ export default function GameInviteModal() {
                     senderUserId: senderInfo.fromUserId,
                     senderUsername: senderInfo.username,
                 })
+                setErrorMessage(null)
 
                 break
             }
@@ -77,10 +90,19 @@ export default function GameInviteModal() {
 
     const handleAccept = async () => {
         setIsResponding(true)
+        setErrorMessage(null)
         try {
             // Get the current notification from the live notifications array to ensure we have latest data
             const currentNotif = notifications.find(n => n.id === visibleNotification.id)
-            const senderUserId = currentNotif?.from_user_id || currentNotif?.user_id
+            const senderUserId = currentNotif?.from_user_id
+
+            // Guard: from_user_id is required (identifies the inviter)
+            if (!senderUserId) {
+                const msg = '[GameInviteModal] Cannot accept: missing from_user_id in notification'
+                console.error(msg, currentNotif)
+                setErrorMessage('Error: Invalid invite data. Please try again or dismiss.')
+                return
+            }
 
             const response = await apiCall('/api/users/game-invite/response', {
                 method: 'POST',
@@ -91,29 +113,47 @@ export default function GameInviteModal() {
                     room_id: visibleNotification.roomId,
                 }),
             })
+
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}))
                 console.error('[GameInviteModal] Accept API error:', { status: response.status, error: errorData })
-            } else {
-                markRead(visibleNotification.id)
+                setErrorMessage(`Failed to accept invite (${response.status}). Please try again.`)
+                return
             }
+
+            // Success: mark as read and process the notification
+            markRead(visibleNotification.id)
+            processedIdsRef.current.add(visibleNotification.id)
+
+            // Only navigate after successful API response
             if (visibleNotification.roomId) {
                 navigate(`/game/waiting/${visibleNotification.roomId}`)
             }
         } catch (error) {
             console.error('[GameInviteModal] Error accepting invite:', error)
+            setErrorMessage('Network error. Please try again.')
         } finally {
             setIsResponding(false)
             setVisibleNotification(null)
+            setErrorMessage(null)
         }
     }
 
     const handleDecline = async () => {
         setIsResponding(true)
+        setErrorMessage(null)
         try {
             // Get the current notification from the live notifications array to ensure we have latest data
             const currentNotif = notifications.find(n => n.id === visibleNotification.id)
-            const senderUserId = currentNotif?.from_user_id || currentNotif?.user_id
+            const senderUserId = currentNotif?.from_user_id
+
+            // Guard: from_user_id is required (identifies the inviter)
+            if (!senderUserId) {
+                const msg = '[GameInviteModal] Cannot decline: missing from_user_id in notification'
+                console.error(msg, currentNotif)
+                setErrorMessage('Error: Invalid invite data. Please try again or dismiss.')
+                return
+            }
 
             const response = await apiCall('/api/users/game-invite/response', {
                 method: 'POST',
@@ -123,31 +163,41 @@ export default function GameInviteModal() {
                     status: 'declined',
                 }),
             })
+
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}))
                 console.error('[GameInviteModal] Decline API error:', { status: response.status, error: errorData })
-            } else {
-                markRead(visibleNotification.id)
+                setErrorMessage(`Failed to decline invite (${response.status}). Please try again.`)
+                return
             }
+
+            // Success: mark as read and process the notification
+            markRead(visibleNotification.id)
+            processedIdsRef.current.add(visibleNotification.id)
         } catch (error) {
             console.error('[GameInviteModal] Error declining invite:', error)
+            setErrorMessage('Network error. Please try again.')
         } finally {
             setIsResponding(false)
             setVisibleNotification(null)
+            setErrorMessage(null)
         }
     }
 
     const handleDismiss = () => {
+        // Mark as read and process the notification
+        if (visibleNotification.id) {
+            markRead(visibleNotification.id)
+            processedIdsRef.current.add(visibleNotification.id)
+        }
+
         // Navigate to game if this is an accepted response with room_id
         if (isResponse && visibleNotification.roomId) {
             navigate(`/game/waiting/${visibleNotification.roomId}`)
         }
 
-        // Mark as read
-        if (visibleNotification.id) {
-            markRead(visibleNotification.id)
-        }
         setVisibleNotification(null)
+        setErrorMessage(null)
     }
 
     return (
@@ -164,6 +214,11 @@ export default function GameInviteModal() {
                         {isInvite ? 'Match Invite' : 'Invite Response'}
                     </h2>
                     <p className="game-invite-modal__message">{visibleNotification.message}</p>
+                    {errorMessage && (
+                        <p className="game-invite-modal__error" role="alert">
+                            {errorMessage}
+                        </p>
+                    )}
                 </div>
                 <div className="game-invite-modal__actions">
                     {isInvite ? (
@@ -172,7 +227,7 @@ export default function GameInviteModal() {
                                 type="button"
                                 className="arcade-btn arcade-btn-primary game-invite-btn"
                                 onClick={handleAccept}
-                                disabled={isResponding}
+                                disabled={isResponding || !!errorMessage}
                                 autoFocus
                             >
                                 {isResponding ? 'Accepting...' : 'Accept'}
@@ -181,7 +236,7 @@ export default function GameInviteModal() {
                                 type="button"
                                 className="arcade-btn arcade-btn-secondary game-invite-btn"
                                 onClick={handleDecline}
-                                disabled={isResponding}
+                                disabled={isResponding || !!errorMessage}
                             >
                                 {isResponding ? 'Declining...' : 'Decline'}
                             </button>

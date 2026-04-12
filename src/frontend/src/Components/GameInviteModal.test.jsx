@@ -396,6 +396,8 @@ describe('GameInviteModal - Response Notifications', () => {
         type: 'game_invite_response',
         message: 'Player1 declined your invite',
         read: false,
+        from_user_id: 4,
+        user_id: 999,
     }
 
     const mockMarkRead = vi.fn()
