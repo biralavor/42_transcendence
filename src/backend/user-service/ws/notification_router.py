@@ -57,10 +57,13 @@ async def notification_endpoint(
     await notification_manager.connect(room, websocket)
     try:
         # Keep connection open indefinitely (server-push only, no client frames expected)
-        # Use an Event that never gets set to keep the connection alive
-        await asyncio.Event().wait()
+        # Use sleep loop that can be cancelled when client disconnects
+        while True:
+            await asyncio.sleep(1)  # Check every second, but allow cancellation
     except WebSocketDisconnect:
         pass
+    except asyncio.CancelledError:
+        logger.debug("WS /notifications cancelled for user %d", user_id)
     except Exception:
         logger.exception("WS /notifications unexpected error for user %d", user_id)
     finally:

@@ -130,34 +130,46 @@ async def chat_websocket(websocket: WebSocket, room_slug: str, token: str = "") 
             return
 
     await manager.connect(room_slug, websocket)
+    
+    # Get room info and history once on connect (outside loop)
     try:
         async with AsyncSessionLocal() as db:
             room = await get_or_create_room(db, room_slug)
             history = await get_room_history(db, room.id)
-            for msg in history:
-                await websocket.send_json({"content": msg.content, "sender": msg.sender_name})
+            room_id = room.id
+    except Exception:
+        await websocket.close(code=4002)
+        return
+    
+    # Send history to client
+    for msg in history:
+        await websocket.send_json({"content": msg.content, "sender": msg.sender_name})
+    
+    # Main message loop - acquire DB connection only when needed
+    try:
+        while True:
+            data = await websocket.receive_json()
 
-            while True:
-                data = await websocket.receive_json()
-
-                # Typing event — broadcast only, never persisted
-                if isinstance(data, dict) and data.get("type") == "typing":
-                    sender = data.get("sender")
-                    # For DMs, use verified sender_username; for public rooms, trust client
-                    typing_sender = sender_username if dm_participants is not None else sender
-                    if isinstance(typing_sender, str) and 0 < len(typing_sender) <= SENDER_MAX_LEN:
+            # Typing event — broadcast only, never persisted
+            if isinstance(data, dict) and data.get("type") == "typing":
+                sender = data.get("sender")
+                # For DMs, use verified sender_username; for public rooms, trust client
+                typing_sender = sender_username if dm_participants is not None else sender
+                if isinstance(typing_sender, str) and 0 < len(typing_sender) <= SENDER_MAX_LEN:
+                    async with AsyncSessionLocal() as db:
                         if not await _sender_is_blocked(dm_participants, sender_uid, db):
                             await manager.broadcast(
                                 room_slug,
                                 {"type": "typing", "sender": typing_sender, "sender_uid": sender_uid},
                             )
-                    continue
+                continue
 
-                error = _validate(data)
-                if error:
-                    await websocket.send_json({"error": error})
-                    continue
+            error = _validate(data)
+            if error:
+                await websocket.send_json({"error": error})
+                continue
 
+            async with AsyncSessionLocal() as db:
                 if await _sender_is_blocked(dm_participants, sender_uid, db):
                     continue
 
@@ -165,7 +177,7 @@ async def chat_websocket(websocket: WebSocket, room_slug: str, token: str = "") 
                 message_sender = sender_username if dm_participants is not None else data["sender"]
                 
                 try:
-                    await save_message(db, room.id, message_sender, data["content"])
+                    await save_message(db, room_id, message_sender, data["content"])
                 except SQLAlchemyError:
                     await websocket.send_json({"error": "failed to save message"})
                     continue

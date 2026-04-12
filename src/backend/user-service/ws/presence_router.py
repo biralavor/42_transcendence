@@ -57,8 +57,8 @@ async def presence_endpoint(websocket: WebSocket, session: SessionDep, token: st
 
         while True:
             # Keep connection open indefinitely (server-push only)
-            # Use an Event that never gets set to block without polling
-            await asyncio.Event().wait()
+            # Use sleep loop that can be cancelled when client disconnects
+            await asyncio.sleep(1)  # Check every second, but allow cancellation
     except WebSocketDisconnect:
         pass
     except Exception:
