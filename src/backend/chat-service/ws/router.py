@@ -246,22 +246,56 @@ async def notifications_websocket(websocket: WebSocket, token: str = "") -> None
     user_key = str(uid)
     await notifications_manager.connect(user_key, websocket)
     try:
-        # Event-driven notification delivery instead of polling
+        # Event-driven notification delivery with instant disconnect detection.
+        # Race two tasks: (1) wait for notification event, (2) detect client disconnect
+        # Whichever completes first wins—notifications fire instantly, disconnects are caught immediately.
         while True:
-            # Get event for this user (creates if doesn't exist)
             event = await chat_notification_event_registry.get_or_create_event(user_key)
             
-            # Wait for event or timeout (both are cancellable via asyncio.wait_for!)
-            try:
-                await asyncio.wait_for(event.wait(), timeout=10.0)
-            except asyncio.TimeoutError:
-                # Timeout is expected—just means no notifications for 10s
-                # Loop continues and re-checks for disconnection
-                continue
+            # Create concurrent tasks for notification and disconnect detection
+            notify_task = asyncio.create_task(event.wait())
+            disconnect_task = asyncio.create_task(websocket.receive_text())
             
-            # Event fired! Data was broadcasted to this handler
-            # Clear event and loop to get ready for next notification
-            await chat_notification_event_registry.clear_event(user_key)
+            try:
+                # Race: first to complete wins
+                # - If notification fires: notify_task completes, we clear and loop
+                # - If client disconnects: disconnect_task raises WebSocketDisconnect
+                # - If neither: timeout after 10s (fail-safe for stuck clients)
+                done, pending = await asyncio.wait(
+                    [notify_task, disconnect_task],
+                    timeout=10.0,
+                    return_when=asyncio.FIRST_COMPLETED
+                )
+                
+                # Cancel pending tasks to avoid resource leaks
+                for task in pending:
+                    task.cancel()
+                    try:
+                        await task
+                    except asyncio.CancelledError:
+                        pass
+                
+                # Check which task completed
+                if disconnect_task in done:
+                    # Client sent data or disconnected (listen-only, so this is unexpected)
+                    # If disconnect: receive_text() raised WebSocketDisconnect (caught below)
+                    # If data: log warning and break (client shouldn't send on listen-only channel)
+                    try:
+                        data = disconnect_task.result()
+                        logger.warning("Client sent data on listen-only channel: %s", data)
+                    except WebSocketDisconnect:
+                        # Expected disconnect path
+                        pass
+                    break
+                
+                # Notification received! Clear event and loop for next notification
+                if notify_task in done:
+                    await chat_notification_event_registry.clear_event(user_key)
+                # else: timeout (fail-safe), loop continues
+                    
+            except WebSocketDisconnect:
+                # Clean disconnect signal
+                break
             
     except asyncio.CancelledError:
         logger.debug(f"WS /ws/notifications cancelled for user {uid}")
