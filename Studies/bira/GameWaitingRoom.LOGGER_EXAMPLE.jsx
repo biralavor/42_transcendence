@@ -13,7 +13,7 @@
  */
 
 // ADD TO TOP OF FILE:
-import wsLogger from '../utils/wsLogger'
+import wsLogger from '../../src/frontend/src/utils/wsLogger'
 
 // IN THE useEffect hook, REPLACE the onMessage handler:
 onMessage: (data) => {

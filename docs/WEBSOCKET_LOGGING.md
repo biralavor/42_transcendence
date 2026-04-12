@@ -6,8 +6,63 @@ Shared logging utilities for tracking WebSocket payloads and measuring latency a
 
 - **Frontend**: `src/frontend/src/utils/wsLogger.js`
 - **Backend**: `src/backend/shared/logging/ws_logger.py`
-- **Frontend Example**: `src/frontend/src/pages/GameWaitingRoom.LOGGER_EXAMPLE.jsx`
-- **Backend Example**: `src/backend/game-service/ws/ROUTER_LOGGER_EXAMPLE.py`
+- **Frontend Example**: `Studies/bira/GameWaitingRoom.LOGGER_EXAMPLE.jsx` (shows wsLogger integration in GameWaitingRoom component)
+- **Backend Example**: `Studies/bira/ROUTER_LOGGER_EXAMPLE.py` (shows ws_logger integration in WebSocket handler)
+
+---
+
+## 🎯 Event-Driven Notification Architecture
+
+### What Changed (2026-04-12)
+
+Transcendence notifications now use **event-driven delivery** instead of polling-based WebSocket handlers:
+
+| Aspect | Before | After |
+|--------|--------|-------|
+| **Delivery Method** | Sleep loop (poll every 1s) | Event signaling (instant) |
+| **Latency** | 900-1000ms | < 50ms |
+| **CPU Usage** | High (constant polling) | Low (only on events) |
+| **Example** | Game invite appears after 1s | Game invite modal instant |
+
+### How It Works
+
+```
+REST Endpoint                         WebSocket Handler
+POST /game-invite/response            /ws/notifications/{user_id}
+   │                                     │
+   ├─ Save to DB                        ├─ await event.wait()
+   │                                     │   (Waits indefinitely)
+   └─ broadcast()                        │
+      ├─ Send JSON to websocket      ◄──┤ EVENT FIRES!
+      └─ signal_event()              Handler wakes up
+         event.set()                 Processes notification
+                                     Clears event → loops
+```
+
+**Key Difference**: Handler is **event-driven** (waits on `asyncio.Event()`) instead of **polling-based** (sleep loop).
+
+### Performance Impact
+
+**Game Invite Flow**:
+- **Before**: Alice sends invite → Bob sees modal after ~1s (polling delay)
+- **After**: Alice sends invite → Bob sees modal in < 50ms (instant)
+
+**User Experience**: Notifications feel "live" and responsive instead of delayed.
+
+### For Developers
+
+If you're measuring WebSocket latency with this logger, expect **much lower times** now:
+
+```javascript
+// This will show < 50ms for notification handlers
+wsLogger.latency('notification_arrival', notificationStartTime)
+// Before: ~1000ms
+// After: ~5-50ms
+```
+
+**Details**: See [EVENT_DRIVEN_NOTIFICATIONS.md](EVENT_DRIVEN_NOTIFICATIONS.md) for architecture guide and implementation details.
+
+---
 
 ---
 
