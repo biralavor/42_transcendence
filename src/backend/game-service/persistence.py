@@ -567,7 +567,8 @@ user_id ASC
 WITH all_matches AS
 (
     SELECT
-        player1_id
+        id AS match_id
+        , player1_id
         , player2_id
         , winner_id
         , score_p1
@@ -575,6 +576,7 @@ WITH all_matches AS
         , status
     FROM matches
     WHERE status IS NOT NULL AND status = 'finished'
+    ORDER BY match_id ASC
 )
 , stats_away AS
 (
@@ -614,17 +616,73 @@ WITH all_matches AS
     UNION ALL
     SELECT * FROM stats_home
 )
+, user_distinct AS
+(
+    SELECT
+        DISTINCT user_id
+        AS user_id
+    FROM stats_all
+)
 , user_count AS
 (
     SELECT
-        count(DISTINCT user_id)
-        AS ranked_users
-    FROM stats_all
+        count(*) AS ranked_users
+    FROM user_distinct
+)
+, match_streaks AS
+(
+    SELECT
+        u.user_id
+        , m.match_id
+        , m.winner_id
+
+        , SUM(CASE WHEN m.winner_id = u.user_id
+                   THEN 0
+                   ELSE 1
+              END
+          ) OVER (
+            PARTITION BY u.user_id
+            ORDER BY m.match_id ASC
+            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+        )
+        AS streak_group
+    FROM user_distinct u
+    CROSS JOIN LATERAL (
+        SELECT match_id, winner_id
+        FROM all_matches
+        WHERE player1_id = u.user_id OR player2_id = u.user_id
+        ORDER BY match_id ASC
+    ) m
+)
+, user_win_streaks AS
+(
+    SELECT
+        user_id
+        , streak_group
+        , COUNT(*) FILTER(WHERE user_id = winner_id)
+        AS streak_length
+        , MAX(streak_group) OVER (PARTITION BY user_id)
+        AS last_group
+    FROM match_streaks
+    GROUP BY user_id, streak_group
+)
+, user_win_streak_stats AS
+(
+    SELECT
+        user_id
+        , MAX(streak_length)
+        AS max_streak
+        , MAX(streak_length)
+               FILTER (WHERE streak_group = last_group)
+        AS current_streak
+    FROM user_win_streaks
+    GROUP BY user_id
 )
 , ranked_stats AS
 (
     SELECT
-        user_id
+        users.id
+        AS user_id
         , users.display_name
         , sum(wins)
         AS wins
@@ -640,9 +698,14 @@ WITH all_matches AS
         AS goal_difference
         , (3 * SUM(wins))
         AS points
+        , current_streak
+        , max_streak
     FROM stats_all
-    INNER JOIN users ON users.id = stats_all.user_id
-    GROUP BY user_id, users.display_name
+        INNER JOIN users
+            ON users.id = stats_all.user_id
+        INNER JOIN user_win_streak_stats
+            ON user_win_streak_stats.user_id = users.id
+    GROUP BY users.id, users.display_name, current_streak, max_streak
 )
 , ranking_results AS
 (
@@ -658,10 +721,49 @@ WITH all_matches AS
         , goals_scored
         , goals_conceded
         , goal_difference
+        , current_streak
+        , max_streak
     FROM ranked_stats
+)
+, summary AS
+(
+    SELECT
+        (SELECT
+            jsonb_build_object(
+                'display_name', display_name,
+                'value', max_streak
+            )
+         FROM ranking_results
+         ORDER BY max_streak DESC, {default_sort_string}
+         LIMIT 1)
+        AS max_max_streak
+        , (SELECT
+            jsonb_build_object(
+                'display_name', display_name,
+                'value', points
+            )
+         FROM ranking_results
+         ORDER BY {default_sort_string}
+         LIMIT 1)
+        AS max_points
+        , (SELECT
+            jsonb_build_object(
+                'display_name', display_name,
+                'value', current_streak
+            )
+         FROM ranking_results
+         ORDER BY current_streak DESC, {default_sort_string}
+         LIMIT 1)
+        AS max_current_streak
+)
+, page_ranking_results AS (
+    SELECT * FROM ranking_results
     ORDER BY {sort_string}
     LIMIT :limit
-    OFFSET (SELECT LEAST(:offset, GREATEST(0, ranked_users - :limit)) FROM user_count)
+    OFFSET (SELECT
+               LEAST(:offset,
+                     GREATEST(0, ranked_users - :limit))
+            FROM user_count)
 )
 SELECT
     LEAST(:page, ((table user_count) / :limit))
@@ -670,9 +772,11 @@ SELECT
     AS last_page
     , :limit as per_page
     , (table user_count) as total
-    , COALESCE(jsonb_agg(to_jsonb(ranking_results)), '[]'::jsonb)
+    , COALESCE(jsonb_agg(to_jsonb(page_ranking_results)), '[]'::jsonb)
     AS results
-FROM ranking_results
+    , (SELECT to_jsonb(summary) FROM summary)
+    AS summary
+FROM page_ranking_results
     """)
 
     result = await db.execute(
