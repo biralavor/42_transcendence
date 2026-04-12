@@ -19,7 +19,7 @@ export default function GameInviteModal() {
     const processedIdsRef = useRef(new Set())
     const debounceTimerRef = useRef(null)
 
-    // Monitor database notifications for game_invite_response
+    // Monitor database notifications for game_invite and game_invite_response
     // Use debounce to prevent processing multiple at once
     useEffect(() => {
         // Clear previous debounce timer
@@ -27,12 +27,13 @@ export default function GameInviteModal() {
 
         // Debounce: wait 100ms to batch rapid notifications
         debounceTimerRef.current = setTimeout(() => {
-            // Find first unread response we haven't shown yet
-            const unreadResponses = notifications.filter(n =>
-                n.type === 'game_invite_response' && !n.read && n.id != null
+            // Find first unread notification (either invite or response) we haven't shown yet
+            // Prioritize responses over invites (invites come from WebSocket, responses from DB)
+            const unreadNotifs = notifications.filter(n =>
+                (n.type === 'game_invite_response' || n.type === 'game_invite') && !n.read && n.id != null
             )
 
-            for (const notif of unreadResponses) {
+            for (const notif of unreadNotifs) {
                 // Skip if we've already shown this one
                 if (processedIdsRef.current.has(notif.id)) {
                     continue
