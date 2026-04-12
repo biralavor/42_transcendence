@@ -78,9 +78,15 @@ export default function GameWaitingRoom() {
         // Log incoming payload
         wsLogger.receive(roomId, data)
 
-        const incomingUserId = String(data.user_id ?? data.player_id ?? '')
-        const isCurrentUser = incomingUserId && incomingUserId === String(currentUser.id)
-        const isOpponent = incomingUserId && incomingUserId === String(opponent.id)
+        // Use username as identifier since actual user_id might not always be available
+        // We compare: if the incoming username === our displayed currentUser.username, it's from us
+        const incomingUsername = data.username
+        const incomingUserId = data.user_id ?? data.player_id
+
+        // Identify sender: if username is "You", it's from current player (us)
+        // Any other username is from the opponent
+        const isCurrentUser = incomingUsername === currentUser.username || incomingUserId === currentUser.id
+        const isOpponent = incomingUsername && incomingUsername !== currentUser.username
 
         if (data.type === 'player_ready') {
           if (isCurrentUser) {
@@ -133,10 +139,14 @@ export default function GameWaitingRoom() {
     // Start flow timing for ready click → broadcast
     const flowStartTime = wsLogger.flowStart(roomId, 'ready_click')
 
+    // Use actual user ID from location.state or fallback to a unique identifier
+    // The server will identify us via JWT, but we need a unique ID for message routing
+    const actualUserId = location.state?.currentUser?.id || location.state?.userId || currentUser.id
+
     const payload = {
       type: 'player_ready',
       room_id: roomId,
-      user_id: currentUser.id,
+      user_id: actualUserId,
       username: currentUser.username,
     }
 
@@ -160,10 +170,11 @@ export default function GameWaitingRoom() {
   }
 
   function handleCancel() {
+    const actualUserId = location.state?.currentUser?.id || location.state?.userId || currentUser.id
     const cancelPayload = {
       type: 'cancel_waiting_room',
       room_id: roomId,
-      user_id: currentUser.id,
+      user_id: actualUserId,
       username: currentUser.username,
     }
 
