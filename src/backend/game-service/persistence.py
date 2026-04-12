@@ -526,7 +526,7 @@ async def get_user_matches(db: AsyncSession, user_id: int) -> list[Match]:
     )
     return list(result.scalars().all())
 
-def leaderboard_order_by_str(sort_assoc: [(str, str)]) -> str:
+def leaderboard_order_by_str(sort_assoc: list[tuple[str, str]] | None) -> str | None:
     if sort_assoc is None:
         return None
     valid_columns = [
@@ -542,7 +542,6 @@ def leaderboard_order_by_str(sort_assoc: [(str, str)]) -> str:
     ]
     order_columns = []
     for (sort_key, order) in sort_assoc:
-        print(sort_key, order)
         norm_order = 'DESC' if order.upper() == 'DESC' else 'ASC'
         norm_key = sort_key.lower() if sort_key.lower() in valid_columns else None
         if norm_key is not None:
@@ -551,7 +550,7 @@ def leaderboard_order_by_str(sort_assoc: [(str, str)]) -> str:
     return result
 
 
-async def get_leaderboard_pagginated(
+async def get_leaderboard_paginated(
         db: AsyncSession, limit: int = 20, page: int = 0, sort_assoc: [(str, str)] = None
 ) -> dict | None:
     offset = page * limit

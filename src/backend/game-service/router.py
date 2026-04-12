@@ -19,7 +19,7 @@ from service.persistence import (
     create_tournament,
     finish_match,
     get_leaderboard,
-    get_leaderboard_pagginated,
+    get_leaderboard_paginated,
     get_match,
     get_tournament_with_participants,
     get_user_matches,
@@ -49,6 +49,7 @@ from service.schemas import (
     TournamentDetailResponse,
     TournamentMatchResponse,
     TournamentParticipantResponse,
+    LeaderboardResponse
 )
 from service.ws.router import manager as ws_manager
 from shared.database import get_db
@@ -63,7 +64,7 @@ async def user_stats(user_id: int, session: SessionDependency):
     return await get_user_stats(session, user_id)
 
 
-@router.get("/leaderboard")
+@router.get("/leaderboard", response_model=LeaderboardResponse)
 async def leaderboard(
     session: SessionDependency,
     limit: int = Query(20, ge=1, le=100),
@@ -77,9 +78,9 @@ async def leaderboard(
             sort_assoc.append((entry[0], 'ASC'))
         elif len(entry) == 2:
             sort_assoc.append((entry[0], entry[1]))
-    pagginated_result = \
-        await get_leaderboard_pagginated(session, limit, page, sort_assoc)
-    return pagginated_result
+    paginated_result = \
+        await get_leaderboard_paginated(session, limit, page, sort_assoc)
+    return paginated_result
 
 
 @router.get("/matches/history/{user_id}", response_model=list[MatchHistoryItem])

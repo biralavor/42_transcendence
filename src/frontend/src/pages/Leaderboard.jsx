@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import NavbarComponent from '../Components/Navbar'
 
 /**
@@ -37,7 +37,7 @@ import NavbarComponent from '../Components/Navbar'
  * @property {number} per_page - Number of items per page
  * @property {number} total - Total number of items across all pages
  * @property {LeaderboardEntry[]} results - Array of leaderboard entries
- * @property {LeaderboardSummary | null } summary - Summary statistics for the leaderboard
+ * @property {LeaderboardSummary } summary - Summary statistics for the leaderboard
  */
 
 export default function Leaderboard() {
@@ -141,7 +141,7 @@ export default function Leaderboard() {
               </div>
               <div className="col-12 col-md-4">
                 <article className="arcade-card h-100 text-center">
-                  <p className="arcade-kicker mb-2">Largests all time win streak</p>
+                  <p className="arcade-kicker mb-2">Largest all-time win streak</p>
                   <div className="arcade-title mb-0" style={{ fontSize: '2.4rem' }}>
                     {summary.max_max_streak.display_name}: {summary.max_max_streak.value}
                   </div>
@@ -177,7 +177,7 @@ export default function Leaderboard() {
                         <th title='Games Played'>GP</th>
                         <th title='Goals For, that is goals scored'>GF</th>
                         <th title='Goals Against, that is goals conceded'>GA</th>
-                        <th title='Goals Difference, that is the diference between scored and conceded'>GD</th>
+                        <th title='Goals Difference, that is the difference between scored and conceded'>GD</th>
                         <th title='Points'>Pts</th>
                         <th title='Max Win Streak'>MWS</th>
                         <th title='Current Win Streak'>CWS</th>
