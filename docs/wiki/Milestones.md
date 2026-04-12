@@ -370,9 +370,9 @@
 | Minor Web | ORM | 1 | ✅ |
 | Minor Web | Search | 1 | ❌ |
 | Minor Web | Upload | 1 | ❌ |
-| Minor Web | Notifications | 1 | ❌ |
+| Minor Web | Notifications | 1 | ✅ |
 | Minor Accessibility | Browser Compat. | 1 | ❌ |
-| Major UserMgmt | Standard Auth | 2 | ❌ |
+| Major UserMgmt | Standard Auth | 2 | ✅ |
 | Minor UserMgmt | Stats | 1 | ❌ |
 | Minor UserMgmt | Activity Analytics | 1 | ❌ |
 | Major AI | AI Opponent | 2 | ❌ |

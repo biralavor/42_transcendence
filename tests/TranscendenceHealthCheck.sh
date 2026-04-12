@@ -748,9 +748,10 @@ if container_running user-service; then
         fail "User search endpoint failed for q=alice (got: '${search_body:0:120}')"
     fi
 
-    # Friends list — also extract a friend_id for later
+    # Friends list — uses /friends/me (needs token)
     friends_body=$(docker exec user-service wget -q -O - \
-        "http://127.0.0.1:${_UPORT}/friends/${alice_id}" 2>/dev/null || echo "")
+        --header="Authorization: Bearer ${alice_token}" \
+        "http://127.0.0.1:${_UPORT}/friends/me" 2>/dev/null || echo "")
     if echo "$friends_body" | grep -qE '^\['; then
         pass "Friends list endpoint returns a JSON array for alice"
     else
@@ -760,31 +761,34 @@ if container_running user-service; then
     friend_id=$(echo "$friends_body" | python3 -c \
         "import sys,json; d=json.load(sys.stdin); print(d[0]['id'] if d else '')" 2>/dev/null || echo "")
 
-    # Pending requests endpoint
+    # Pending requests endpoint — uses /friends/me/requests (needs token)
     requests_body=$(docker exec user-service wget -q -O - \
-        "http://127.0.0.1:${_UPORT}/friends/${alice_id}/requests" 2>/dev/null || echo "")
+        --header="Authorization: Bearer ${alice_token}" \
+        "http://127.0.0.1:${_UPORT}/friends/me/requests" 2>/dev/null || echo "")
     if echo "$requests_body" | grep -qE '^\['; then
         pass "Friend requests endpoint returns a JSON array for alice"
     else
         fail "Friend requests endpoint failed for alice (got: '${requests_body:0:120}')"
     fi
 
-    # Sent requests endpoint
+    # Sent requests endpoint — uses /friends/me/sent (needs token)
     sent_body=$(docker exec user-service wget -q -O - \
-        "http://127.0.0.1:${_UPORT}/friends/${alice_id}/sent" 2>/dev/null || echo "")
+        --header="Authorization: Bearer ${alice_token}" \
+        "http://127.0.0.1:${_UPORT}/friends/me/sent" 2>/dev/null || echo "")
     if echo "$sent_body" | grep -qE '^\['; then
         pass "Sent friend requests endpoint returns a JSON array for alice"
     else
         fail "Sent friend requests endpoint failed for alice (got: '${sent_body:0:120}')"
     fi
 
-    # Duplicate friend request returns 409 (uses parsed friend_id)
+    # Duplicate friend request returns 409 (needs token)
     if [[ -n "$friend_id" ]]; then
         dup_code=$(docker exec user-service sh -c \
             "wget -q -O /dev/null --server-response \
+             --header='Authorization: Bearer ${alice_token}' \
              --header='Content-Type: application/json' \
              --post-data='' \
-             'http://127.0.0.1:${_UPORT}/friends/${alice_id}/request/${friend_id}' 2>&1 | grep 'HTTP/' | tail -1 | awk '{print \$2}'" \
+             'http://127.0.0.1:${_UPORT}/friends/request/${friend_id}' 2>&1 | grep 'HTTP/' | tail -1 | awk '{print \$2}'" \
             2>/dev/null || echo "")
         if [[ "$dup_code" == "409" ]]; then
             pass "Duplicate friend request correctly returns 409"
@@ -867,7 +871,7 @@ fi
 # ── 23. Game Service Unit Tests ───────────────────────────────────────────────
 section "Game Service Unit Tests"
 if container_running game-service; then
-    out=$(docker exec game-service sh -c "pip install -q --root-user-action=ignore pytest==8.3.5 httpx==0.28.1 pytest-asyncio==0.24.0 && cd /app && pytest service/tests/ -v" 2>&1) && rc=0 || rc=$?
+    out=$(docker exec game-service sh -c "pip install -q --root-user-action=ignore pytest==8.3.5 httpx==0.28.1 pytest-asyncio==0.24.0 pytest-timeout==2.1.0 && cd /app && pytest service/tests/ -v --timeout=30" 2>&1) && rc=0 || rc=$?
     
     grep_out=$(printf "%s\n" "$out" | grep '::' | grep -E '(PASSED|FAILED)') || true
     if [[ -z "$grep_out" ]]; then

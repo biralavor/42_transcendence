@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/authContext'
+import { useNotifications } from '../context/notificationContext'
+import { useUnread } from '../context/unreadContext'
+import NotificationPanel from './NotificationPanel'
 import './Navbar.css'
 
 const publicLinks = [
@@ -49,7 +52,12 @@ const privateLinks = [
 export default function NavbarComponent() {
   const location = useLocation()
   const { logout, isAuthenticated } = useAuth()
+  const { unreadCount } = useNotifications()
+  const { unreadCounts } = useUnread()
   const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const [isPanelOpen, setIsPanelOpen] = useState(false)
+
+  const dmUnreadTotal = Object.values(unreadCounts).reduce((a, b) => a + b, 0)
 
   // Build nav links: for authenticated users, interleave public and private links.
   const links = isAuthenticated
@@ -108,8 +116,7 @@ export default function NavbarComponent() {
                 <Link
                   key={link.to}
                   to={link.to}
-                  className={`pong-nav__link ${link.isActive(location.pathname) ? 'is-active' : ''
-                    }`}
+                  className={`pong-nav__link ${link.isActive(location.pathname) ? 'is-active' : ''}`}
                 >
                   {link.label}
                 </Link>
@@ -118,6 +125,24 @@ export default function NavbarComponent() {
 
             {isAuthenticated ? (
               <div className="pong-nav__actions">
+                <div className="pong-nav__bell-wrap">
+                  <button
+                    type="button"
+                    className="pong-nav__bell"
+                    aria-label="Notifications"
+                    onClick={() => setIsPanelOpen((prev) => !prev)}
+                  >
+                    🔔
+                    {(unreadCount + dmUnreadTotal) > 0 && (
+                      <span className="pong-nav__bell-badge" data-testid="bell-badge">
+                        {unreadCount + dmUnreadTotal}
+                      </span>
+                    )}
+                  </button>
+                  {isPanelOpen && (
+                    <NotificationPanel onClose={() => setIsPanelOpen(false)} />
+                  )}
+                </div>
                 <button
                   type="button"
                   className="pong-nav__button pong-nav__button--primary"
