@@ -24,8 +24,14 @@ from service.persistence import (
     get_user_matches,
     get_user_stats,
     join_tournament,
+    list_tournaments,
+    UserAlreadyInActiveTournament,
     record_tournament_match_result,
     start_tournament,
+    TournamentCannotBeCancelled,
+    delete_tournament,
+    TournamentNotParticipant,
+    leave_tournament,
 )
 from service.schemas import (
     LeaderboardEntryResponse,
@@ -79,19 +85,53 @@ async def user_matches(user_id: int, session: SessionDependency):
 async def start_match(body: MatchCreateRequest, session: SessionDependency):
     return await create_match(session, body.player1_id, body.player2_id)
 
-
 @router.post("/tournaments", status_code=status.HTTP_201_CREATED, response_model=TournamentCreateResponse)
 async def create_tournament_endpoint(
     body: TournamentCreateRequest,
     session: SessionDependency,
     creator_id: int = Depends(get_current_user_id),
 ):
-    tournament = await create_tournament(session, body.name, creator_id, body.max_participants)
+    try:
+        tournament = await create_tournament(session, body.name, creator_id, body.max_participants)
+    except UserAlreadyInActiveTournament:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="User already participates in an active tournament",
+        )
+
     return TournamentCreateResponse(
         id=tournament.id,
         join_link=f"/api/game/tournaments/{tournament.id}/join",
     )
 
+@router.get("/tournaments", response_model=list[TournamentDetailResponse])
+async def get_tournaments(session: SessionDependency):
+    tournaments = await list_tournaments(session)
+    response = []
+
+    for tournament in tournaments:
+        result = await get_tournament_with_participants(session, tournament.id)
+        if result is None:
+            continue
+
+        tournament, participants, matches = result
+        response.append(
+            TournamentDetailResponse(
+                id=tournament.id,
+                name=tournament.name,
+                creator_id=tournament.creator_id,
+                max_participants=tournament.max_participants,
+                status=tournament.status,
+                created_at=tournament.created_at,
+                participants=[
+                    TournamentParticipantResponse(user_id=p.user_id, joined_at=p.joined_at)
+                    for p in participants
+                ],
+                matches=[TournamentMatchResponse.model_validate(m) for m in matches],
+            )
+        )
+
+    return response
 
 @router.get("/tournaments/{tournament_id}", response_model=TournamentDetailResponse)
 async def get_tournament(tournament_id: int, session: SessionDependency):
@@ -110,6 +150,53 @@ async def get_tournament(tournament_id: int, session: SessionDependency):
         matches=[TournamentMatchResponse.model_validate(m) for m in matches],
     )
 
+@router.post("/tournaments/{tournament_id}/leave", status_code=status.HTTP_204_NO_CONTENT)
+async def leave_tournament_endpoint(
+    tournament_id: int,
+    session: SessionDependency,
+    user_id: int = Depends(get_current_user_id),
+):
+    try:
+        await leave_tournament(session, tournament_id, user_id)
+    except TournamentNotFound:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Tournament not found",
+        )
+    except TournamentNotOpen:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Only open tournaments can be left",
+        )
+    except TournamentNotParticipant:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User is not a participant in this tournament",
+        )
+
+@router.delete("/tournaments/{tournament_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_tournament_endpoint(
+    tournament_id: int,
+    session: SessionDependency,
+    user_id: int = Depends(get_current_user_id),
+):
+    try:
+        await delete_tournament(session, tournament_id, user_id)
+    except TournamentNotFound:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Tournament not found",
+        )
+    except NotTournamentCreator:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the creator can cancel the tournament",
+        )
+    except TournamentCannotBeCancelled:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Only open tournaments can be cancelled",
+        )
 
 @router.post("/tournaments/{tournament_id}/join", status_code=status.HTTP_201_CREATED)
 async def join_tournament_endpoint(
@@ -127,6 +214,11 @@ async def join_tournament_endpoint(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="User already registered")
     except TournamentFull:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Tournament is full")
+    except UserAlreadyInActiveTournament:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="User already participates in another active tournament",
+        )
     return {"detail": "Joined successfully"}
 
 

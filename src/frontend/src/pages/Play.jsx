@@ -1,4 +1,3 @@
-import { useNavigate } from 'react-router-dom'
 import NavbarComponent from '../Components/Navbar'
 import PongCanvas from '../Components/PongCanvas'
 
@@ -24,27 +23,6 @@ const quickActions = [
 ]
 
 export default function Play() {
-  const navigate = useNavigate()
-
-  function handleOpenWaitingRoom() {
-    navigate('/game/waiting/test-room', {
-      state: {
-        currentUser: {
-          id: 1,
-          username: 'Bruno',
-          avatarUrl: '/avatar_placeholder.jpg',
-        },
-        opponent: {
-          id: 2,
-          username: 'RemotePlayer',
-          avatarUrl: '/avatar_placeholder.jpg',
-        },
-        friendId: 2,
-        friendUsername: 'RemotePlayer',
-      },
-    })
-  }
-
   return (
     <div className="arcade-shell">
       <NavbarComponent />
@@ -60,20 +38,6 @@ export default function Play() {
                   Enter the arcade floor, test your reflexes, and prepare for remote play. This lobby is the bridge
                   between classic Pong action and the new invite plus waiting-room flow.
                 </p>
-
-                <div className="d-flex flex-wrap gap-3">
-                  <button
-                    type="button"
-                    className="arcade-btn arcade-btn-primary"
-                    onClick={handleOpenWaitingRoom}
-                  >
-                    Test waiting room
-                  </button>
-
-                  <a href="#match-modes" className="arcade-btn arcade-btn-secondary">
-                    View modes
-                  </a>
-                </div>
               </div>
 
               <div className="col-12 col-xl-5">

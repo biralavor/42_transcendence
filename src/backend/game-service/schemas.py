@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class MatchResponse(BaseModel):
@@ -67,7 +67,7 @@ class MatchHistoryItem(BaseModel):
 
 class TournamentCreateRequest(BaseModel):
     name: str
-    max_participants: Literal[4, 8]
+    max_participants: int = Field(ge=3, le=8)
 
 
 class TournamentCreateResponse(BaseModel):

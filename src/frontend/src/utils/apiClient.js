@@ -209,6 +209,7 @@ export async function apiCall(url, options = {}) {
  *   console.error('Failed to get user:', err.message)
  * }
  */
+
 export async function apiJson(url, options = {}) {
   // Extract custom headers and skipRefreshOn401 from options, leaving the rest
   // This prevents ...options from overwriting our merged headers
@@ -223,15 +224,23 @@ export async function apiJson(url, options = {}) {
   if (!response.ok) {
     let errorDetails = `HTTP ${response.status}`
     try {
-      const errData = await response.json()
-      if (errData.detail) errorDetails = errData.detail
+      const errText = await response.text()
+      if (errText) {
+        const errData = JSON.parse(errText)
+        if (errData.detail) errorDetails = errData.detail
+      }
     } catch {
-      // Response is not JSON
+      // Response is empty or not JSON
     }
     throw new Error(errorDetails)
   }
 
-  return response.json()
+  if (response.status === 204) {
+    return null
+  }
+
+  const text = await response.text()
+  return text ? JSON.parse(text) : null
 }
 
 /**
