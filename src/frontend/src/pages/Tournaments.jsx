@@ -4,13 +4,6 @@ import NavbarComponent from '../Components/Navbar'
 import { useAuth } from '../context/authContext'
 import { apiCall, apiJson } from '../utils/apiClient'
 
-/**
- * Tournaments hub
- *
- * This page allows authenticated users to create new tournaments and join
- * existing ones. Because the backend now exposes a listing endpoint,
- * this component loads tournaments directly from the game service.
- */
 export default function Tournaments() {
   const navigate = useNavigate()
   const { auth } = useAuth()
@@ -21,7 +14,6 @@ export default function Tournaments() {
   const [maxParticipants, setMaxParticipants] = useState('4')
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState('')
-
   const [hasActiveTournament, setHasActiveTournament] = useState(false)
   const [manualId, setManualId] = useState('')
   const [joiningById, setJoiningById] = useState(false)
