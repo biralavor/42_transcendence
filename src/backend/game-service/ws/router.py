@@ -133,11 +133,19 @@ async def game_websocket(websocket: WebSocket, game_id: str, token: str | None =
     await manager.connect(game_id, websocket)
     
     # Log connection
+    import logging
+    logger = logging.getLogger(__name__)
+    active_in_room = manager.active_connections(game_id)
+    logger.info(
+        f"[CONNECTION] Player {player_id} connected to room {game_id}. "
+        f"Now {active_in_room} player(s) in room."
+    )
+    
     ws_logger.connection(
         game_id=game_id,
         player_id=player_id,
         state='open',
-        metadata={'token_valid': token is not None}
+        metadata={'token_valid': token is not None, 'active_connections': active_in_room}
     )
     
     try:
@@ -222,17 +230,41 @@ async def game_websocket(websocket: WebSocket, game_id: str, token: str | None =
             
             # Pass-through other events (e.g., player_ready, player_unready, cancel_waiting_room)
             else:
+                # Log incoming data details for debugging
+                incoming_event_type = data.get("type", "unknown")
+                incoming_user_id = data.get("user_id", data.get("player_id"))
+                active_connections = manager.active_connections(game_id)
+                
+                # Log the incoming message and room state
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.info(
+                    f"[BROADCAST] {incoming_event_type} from player {incoming_user_id} "
+                    f"to room {game_id} with {active_connections} active connections"
+                )
+                
                 # Log broadcast
                 ws_logger.broadcast(
                     game_id=game_id,
                     payload=data,
-                    client_count=manager.active_connections(game_id)
+                    client_count=active_connections
                 )
-                await manager.broadcast(game_id, data)
+                
+                # Broadcast to all connected clients in this room
+                try:
+                    await manager.broadcast(game_id, data)
+                    logger.info(f"[BROADCAST] Successfully sent {incoming_event_type} to {active_connections} clients")
+                except Exception as e:
+                    logger.error(f"[BROADCAST] Error broadcasting {incoming_event_type}: {e}")
+                
                 ws_logger.flow_end(game_id, 'receive_and_broadcast', flow_start)
     
     except WebSocketDisconnect:
         # Log connection close
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"[DISCONNECT] Player {player_id} disconnected from room {game_id}")
+        
         ws_logger.connection(
             game_id=game_id,
             player_id=player_id,
@@ -246,8 +278,14 @@ async def game_websocket(websocket: WebSocket, game_id: str, token: str | None =
         # Clean up on disconnect
         manager.disconnect(game_id, websocket)
         
+        import logging
+        logger = logging.getLogger(__name__)
+        remaining = manager.active_connections(game_id)
+        logger.info(f"[CLEANUP] Player {player_id} removed from room {game_id}. Remaining: {remaining}")
+        
         # If this was the last player, end the game
-        if manager.active_connections(game_id) == 0:
+        if remaining == 0:
+            logger.info(f"[CLEANUP] Room {game_id} is empty, cleaning up game session")
             await game_manager.delete_session(game_id)
             _setup_sessions.pop(game_id, None)
             _match_ids.pop(game_id, None)

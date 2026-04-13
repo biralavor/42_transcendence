@@ -4,6 +4,7 @@ import NavbarComponent from '../Components/Navbar'
 import { createWsClient } from '../utils/wsClient'
 import './GameWaitingRoom.css'
 import { useAuth } from '../context/authContext'
+import { decodeJWT } from '../utils/jwtUtils'
 import wsLogger from '../utils/wsLogger'
 
 const DEFAULT_AVATAR = '/avatar_placeholder.jpg'
@@ -113,6 +114,18 @@ export default function GameWaitingRoom() {
             setOpponentReady(true)
             wsLogger.uiUpdate(roomId, { opponentReady: true })
           }
+
+          // Debug: log ID matching details
+          if (!isCurrentUser && !isOpponent) {
+            console.debug('[GameWaitingRoom] player_ready ID mismatch:', {
+              incomingUserId: String(data.user_id ?? data.player_id ?? ''),
+              currentUserId: String(currentUser.id ?? ''),
+              opponentUserId: String(opponent.id ?? ''),
+              isCurrentUser,
+              isOpponent,
+              rawData: data,
+            })
+          }
         }
 
         if (data.type === 'player_unready') {
@@ -155,9 +168,19 @@ export default function GameWaitingRoom() {
     // Start flow timing for ready click → broadcast
     const flowStartTime = wsLogger.flowStart(roomId, 'ready_click')
 
-    // Use actual user ID from location.state or fallback to a unique identifier
-    // The server will identify us via JWT, but we need a unique ID for message routing
-    const actualUserId = location.state?.currentUser?.id || location.state?.userId || currentUser.id
+    // CRITICAL: Extract user ID from JWT token (most reliable source)
+    // credential_id in JWT is the actual user ID (4 for João, 5 for Maria, etc.)
+    let actualUserId = null
+    if (auth?.access_token) {
+      const decoded = decodeJWT(auth.access_token)
+      actualUserId = decoded?.credential_id
+    }
+
+    if (!actualUserId) {
+      console.warn('[GameWaitingRoom] Cannot send ready: unable to extract user ID from token')
+      setSystemMessage('Error: Authentication not ready. Please refresh the page.')
+      return
+    }
 
     const payload = {
       type: 'player_ready',
@@ -165,6 +188,14 @@ export default function GameWaitingRoom() {
       user_id: actualUserId,
       username: currentUser.username,
     }
+
+    // Debug: log the actual user ID and context
+    console.debug('[GameWaitingRoom] handleReady:', {
+      actualUserId,
+      auth_user_id: auth?.user?.id,
+      opponent_id: opponent.id,
+      currentUser_id: currentUser.id,
+    })
 
     // Log the ready click with payload
     wsLogger.ready(roomId, payload)
@@ -186,7 +217,19 @@ export default function GameWaitingRoom() {
   }
 
   function handleCancel() {
-    const actualUserId = location.state?.currentUser?.id || location.state?.userId || currentUser.id
+    // Extract user ID from JWT token
+    let actualUserId = null
+    if (auth?.access_token) {
+      const decoded = decodeJWT(auth.access_token)
+      actualUserId = decoded?.credential_id
+    }
+
+    if (!actualUserId) {
+      console.warn('[GameWaitingRoom] Cannot send cancel: unable to extract user ID from token')
+      navigate('/play')
+      return
+    }
+
     const cancelPayload = {
       type: 'cancel_waiting_room',
       room_id: roomId,

@@ -130,7 +130,22 @@ export default function GameInviteModal() {
 
             // Only navigate after successful API response
             if (visibleNotification.roomId) {
-                navigate(`/game/waiting/${visibleNotification.roomId}`)
+                // Always pass opponent data from the notification
+                // Pass current user if available, but opponent is critical for sync
+                navigate(`/game/waiting/${visibleNotification.roomId}`, {
+                    state: {
+                        ...(user?.id && {
+                            currentUser: {
+                                id: user.id,
+                                username: user.username,
+                            },
+                        }),
+                        opponent: {
+                            id: visibleNotification.senderUserId,
+                            username: visibleNotification.senderUsername,
+                        },
+                    },
+                })
             }
 
             // Only clear modal on success
@@ -202,7 +217,22 @@ export default function GameInviteModal() {
 
         // Navigate to game if this is an accepted response with room_id
         if (isResponse && visibleNotification.roomId) {
-            navigate(`/game/waiting/${visibleNotification.roomId}`)
+            // Always pass opponent data from the notification
+            // Pass current user if available, but opponent is critical for sync
+            navigate(`/game/waiting/${visibleNotification.roomId}`, {
+                state: {
+                    ...(user?.id && {
+                        currentUser: {
+                            id: user.id,
+                            username: user.username,
+                        },
+                    }),
+                    opponent: {
+                        id: visibleNotification.senderUserId,
+                        username: visibleNotification.senderUsername,
+                    },
+                },
+            })
         }
 
         setVisibleNotification(null)
