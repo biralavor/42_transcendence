@@ -57,8 +57,9 @@ export default function GameInviteModal() {
                         '[GameInviteModal] Notification missing from_user_id, will not process:',
                         notif
                     )
-                    // Mark as processed anyway to avoid re-showing broken notification
+                    // Mark as processed and read to avoid re-showing and remove from unread count
                     processedIdsRef.current.add(notif.id)
+                    markRead(notif.id)
                     continue
                 }
 
