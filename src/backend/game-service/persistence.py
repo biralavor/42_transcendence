@@ -1,7 +1,11 @@
 import random
 from datetime import datetime, timezone
 
-from sqlalchemy import or_, select, case, func, union_all, table, column, String, Integer, delete
+from sqlalchemy import (
+    or_, select, case, func, union_all,
+    table, column, String, Integer, text
+)
+
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -566,3 +570,55 @@ async def get_leaderboard(db: AsyncSession, limit: int = 20) -> list[dict]:
         {**row, "rank": rank}
         for rank, row in enumerate(result.mappings().all(), start=1)
     ]
+
+# increment on game end?
+async def award_xp(user_id: int, amount: int, session: AsyncSession):
+    statement = text("""
+    INSERT INTO user_xp (user_id, xp)
+    VALUES (:user_id, :amount)
+    ON CONFLICT (user_id) DO UPDATE SET xp = user_xp.xp + :amount
+    RETURNING xp
+    """)
+    result = await session.execute(
+        statement, {'user_id': user_id, 'amount': amount}
+    )
+    result_scalar = result.scalar_one()
+    # await session.commit() # maybe better let caller commit session
+    return result_scalar
+
+
+# check on game end?
+async def victories(user_id: int, session: AsyncSession) -> int | None:
+    statement = text("""
+WITH matches_results AS
+(
+  SELECT
+    winner_id
+    ,count(winner_id)
+    AS wins
+  FROM matches
+  WHERE winner_id = :user_id
+  GROUP BY winner_id
+)
+, tournament_matches_results AS
+(
+  SELECT
+     winner_id AS twinner_id
+    ,count(winner_id)
+    AS twins
+  FROM tournament_matches
+  WHERE winner_id = :user_id
+  GROUP BY winner_id
+)
+SELECT
+  (COALESCE(wins, 0) + COALESCE(twins, 0))
+  AS wins_total
+FROM matches_results
+  FULL JOIN tournament_matches_results ON winner_id = twinner_id
+LIMIT 1
+    """)
+    result = await session.execute(
+        statement, {'user_id': user_id}
+    )
+    result_scalar: int | None = result.scalar_one_or_none()
+    return result_scalar
