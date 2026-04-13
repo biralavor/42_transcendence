@@ -78,15 +78,31 @@ export default function GameWaitingRoom() {
         // Log incoming payload
         wsLogger.receive(roomId, data)
 
-        // Use username as identifier since actual user_id might not always be available
-        // We compare: if the incoming username === our displayed currentUser.username, it's from us
+        // Normalize IDs to strings for consistent comparison (backend sends numbers, state may have strings)
+        const incomingUserId = String(data.user_id ?? data.player_id ?? '')
         const incomingUsername = data.username
-        const incomingUserId = data.user_id ?? data.player_id
 
-        // Identify sender: if username is "You", it's from current player (us)
-        // Any other username is from the opponent
-        const isCurrentUser = incomingUsername === currentUser.username || incomingUserId === currentUser.id
-        const isOpponent = incomingUsername && incomingUsername !== currentUser.username
+        // Identify sender by normalized ID (most reliable) or username fallback if ID unavailable
+        const currentUserId = String(currentUser.id ?? '')
+        const opponentUserId = String(opponent.id ?? '')
+
+        // Prefer ID matching; use username only if ID is missing/empty
+        let isCurrentUser = false
+        let isOpponent = false
+
+        if (incomingUserId && currentUserId) {
+          isCurrentUser = incomingUserId === currentUserId
+        } else if (!incomingUserId && incomingUsername) {
+          // Fallback to username if ID unavailable
+          isCurrentUser = incomingUsername === currentUser.username
+        }
+
+        if (incomingUserId && opponentUserId) {
+          isOpponent = incomingUserId === opponentUserId
+        } else if (!incomingUserId && incomingUsername) {
+          // Fallback to username if ID unavailable
+          isOpponent = incomingUsername === opponent.username
+        }
 
         if (data.type === 'player_ready') {
           if (isCurrentUser) {
