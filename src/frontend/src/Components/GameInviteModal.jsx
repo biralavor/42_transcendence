@@ -101,6 +101,7 @@ export default function GameInviteModal() {
                 const msg = '[GameInviteModal] Cannot accept: missing from_user_id in notification'
                 console.error(msg, currentNotif)
                 setErrorMessage('Error: Invalid invite data. Please try again or dismiss.')
+                setIsResponding(false)
                 return
             }
 
@@ -118,6 +119,7 @@ export default function GameInviteModal() {
                 const errorData = await response.json().catch(() => ({}))
                 console.error('[GameInviteModal] Accept API error:', { status: response.status, error: errorData })
                 setErrorMessage(`Failed to accept invite (${response.status}). Please try again.`)
+                setIsResponding(false)
                 return
             }
 
@@ -129,13 +131,15 @@ export default function GameInviteModal() {
             if (visibleNotification.roomId) {
                 navigate(`/game/waiting/${visibleNotification.roomId}`)
             }
+
+            // Only clear modal on success
+            setVisibleNotification(null)
+            setErrorMessage(null)
+            setIsResponding(false)
         } catch (error) {
             console.error('[GameInviteModal] Error accepting invite:', error)
             setErrorMessage('Network error. Please try again.')
-        } finally {
             setIsResponding(false)
-            setVisibleNotification(null)
-            setErrorMessage(null)
         }
     }
 
@@ -152,6 +156,7 @@ export default function GameInviteModal() {
                 const msg = '[GameInviteModal] Cannot decline: missing from_user_id in notification'
                 console.error(msg, currentNotif)
                 setErrorMessage('Error: Invalid invite data. Please try again or dismiss.')
+                setIsResponding(false)
                 return
             }
 
@@ -168,19 +173,22 @@ export default function GameInviteModal() {
                 const errorData = await response.json().catch(() => ({}))
                 console.error('[GameInviteModal] Decline API error:', { status: response.status, error: errorData })
                 setErrorMessage(`Failed to decline invite (${response.status}). Please try again.`)
+                setIsResponding(false)
                 return
             }
 
             // Success: mark as read and process the notification
             markRead(visibleNotification.id)
             processedIdsRef.current.add(visibleNotification.id)
+
+            // Only clear modal on success
+            setVisibleNotification(null)
+            setErrorMessage(null)
+            setIsResponding(false)
         } catch (error) {
             console.error('[GameInviteModal] Error declining invite:', error)
             setErrorMessage('Network error. Please try again.')
-        } finally {
             setIsResponding(false)
-            setVisibleNotification(null)
-            setErrorMessage(null)
         }
     }
 
