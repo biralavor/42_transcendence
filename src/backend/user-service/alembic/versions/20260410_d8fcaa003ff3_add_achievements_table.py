@@ -1,7 +1,7 @@
 """add_achievements_table
 
 Revision ID: d8fcaa003ff3
-Revises: c1d2e3f4a5b6
+Revises: e7dfb79cd018
 Create Date: 2026-04-10 08:23:53.579531
 
 """
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = 'd8fcaa003ff3'
-down_revision: Union[str, None] = 'c1d2e3f4a5b6'
+down_revision: Union[str, None] = 'e7dfb79cd018'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
