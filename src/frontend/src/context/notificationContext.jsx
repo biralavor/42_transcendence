@@ -30,7 +30,9 @@ export function NotificationProvider({ children }) {
             if (Array.isArray(data)) {
                 setNotifications(data)
             } else {
-                console.warn('[notificationContext] Invalid notifications response format, got:', typeof data, Object.keys(data))
+                // Guard Object.keys to avoid throwing if data is null or non-object
+                const keys = data && typeof data === 'object' ? Object.keys(data) : 'N/A'
+                console.warn('[notificationContext] Invalid notifications response format, got:', typeof data, keys)
                 setNotifications([])
             }
         } catch (err) {
