@@ -14,7 +14,8 @@ from service.ws.event_registry import notification_event_registry
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-notification_manager = ConnectionManager()
+# Inject notification_event_registry signal callback into manager (dependency injection pattern)
+notification_manager = ConnectionManager(signal_callback=notification_event_registry.signal_event)
 
 SessionDep = Annotated[AsyncSession, Depends(get_db)]
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 import logging
-from typing import TYPE_CHECKING, Dict, Set
+from typing import TYPE_CHECKING, Dict, Set, Optional, Callable, Awaitable
 
 if TYPE_CHECKING:
     from fastapi import WebSocket
@@ -9,10 +9,15 @@ logger = logging.getLogger(__name__)
 
 
 class ConnectionManager:
-    """Manages WebSocket connections grouped by room/game id."""
+    """Manages WebSocket connections grouped by room/game id.
+    
+    Optionally signals an event registry when broadcasts occur.
+    Designed for dependency injection: each service provides its own signal callback.
+    """
 
-    def __init__(self) -> None:
+    def __init__(self, signal_callback: Optional[Callable[[str], Awaitable[None]]] = None) -> None:
         self._rooms: Dict[str, Set[WebSocket]] = {}
+        self._signal_callback = signal_callback
 
     async def connect(self, room_id: str, websocket: "WebSocket") -> None:
         await websocket.accept()
@@ -32,24 +37,13 @@ class ConnectionManager:
                 logger.warning(f"Failed to send to client in room {room_id}: {e}")
                 self.disconnect(room_id, ws)
         
-        # Signal handlers that data is ready (event-driven delivery)
-        # Try both user-service and chat-service registries (safe for any service)
-        try:
-            # Try user-service registry first (most common)
+        # Signal event registry if callback provided (event-driven delivery)
+        if self._signal_callback:
             try:
-                from service.ws.event_registry import notification_event_registry
-                await notification_event_registry.signal_event(room_id)
-            except (ImportError, AttributeError):
-                # Fall back to chat-service registry if available
-                try:
-                    from service.ws.event_registry import chat_notification_event_registry
-                    await chat_notification_event_registry.signal_event(room_id)
-                except (ImportError, AttributeError):
-                    # No registry available, skip signaling (graceful fallback)
-                    pass
-        except Exception as e:
-            # Non-blocking: signaling is best-effort, don't fail broadcast
-            logger.debug(f"Failed to signal notification event for room {room_id}: {e}")
+                await self._signal_callback(room_id)
+            except Exception as e:
+                # Non-blocking: signaling is best-effort, don't fail broadcast
+                logger.debug(f"Failed to signal event for room {room_id}: {e}")
 
     def active_connections(self, room_id: str) -> int:
         return len(self._rooms.get(room_id, set()))

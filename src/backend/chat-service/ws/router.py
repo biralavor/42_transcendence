@@ -16,7 +16,8 @@ from service.ws.event_registry import chat_notification_event_registry
 router = APIRouter()
 manager = ConnectionManager()
 # Per-user notification connections, keyed by str(uid)
-notifications_manager = ConnectionManager()
+# Inject chat_notification_event_registry signal callback (dependency injection pattern)
+notifications_manager = ConnectionManager(signal_callback=chat_notification_event_registry.signal_event)
 
 _ALGORITHM = "HS256"
 SENDER_MAX_LEN = 50
@@ -207,12 +208,7 @@ async def chat_websocket(websocket: WebSocket, room_slug: str, token: str = "") 
                         "room_slug": room_slug,
                         "preview": data["content"][:80],
                     })
-                    
-                    # Signal handlers that data is ready (event-driven delivery)
-                    try:
-                        await chat_notification_event_registry.signal_event(str(recipient_uid))
-                    except Exception as e:
-                        pass  # Non-blocking: signaling is best-effort
+                    # broadcast() now signals the registry via injected callback (event-driven delivery)
     except WebSocketDisconnect:
         pass
     finally:
