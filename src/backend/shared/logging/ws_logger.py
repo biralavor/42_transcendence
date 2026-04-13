@@ -7,6 +7,7 @@ Usage:
     ws_logger.latency('ready_to_broadcast', start_time)
 """
 
+import os
 import logging
 import time
 import json
@@ -14,11 +15,12 @@ from typing import Any, Dict, Optional, List
 from dataclasses import dataclass, asdict
 from datetime import datetime
 
-# Configure logging
-logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-WS_LOG_ENABLED = True  # Set to False to disable logging
+# Enable WS logging only if explicitly requested via environment variable (default: disabled for production)
+# Automatically enabled when using `make seed` for development/debugging
+# Can also be enabled manually: WS_LOG_DEBUG=true make re-back
+WS_LOG_ENABLED = os.getenv('WS_LOG_DEBUG', 'false').lower() == 'true'
 
 
 @dataclass

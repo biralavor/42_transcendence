@@ -6,7 +6,7 @@
  *   wsLogger.latency('ready_to_broadcast', startTime)
  */
 
-const WS_LOG_ENABLED = true; // Set to false to disable all logging
+const WS_LOG_ENABLED = import.meta.env.DEV; // Only enable logging in development builds
 
 class WebSocketLogger {
   constructor() {
