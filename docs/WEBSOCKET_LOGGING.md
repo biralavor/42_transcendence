@@ -64,21 +64,6 @@ wsLogger.latency('notification_arrival', notificationStartTime)
 
 ---
 
----
-
-## 🎯 Event-Driven Notification Architecture
-
-### What Changed (2026-04-12)
-
-Transcendence notifications now use **event-driven delivery** instead of polling-based WebSocket handlers:
-
-| Aspect | Before | After |
-|--------|--------|-------|
-| **Delivery Method** | Sleep loop (poll every 1s) | Event signaling (instant) |
-| **Latency** | 900-1000ms | < 50ms |
-| **CPU Usage** | High (constant polling) | Low (only on events) |
-| **Example** | Game invite appears after 1s | Game invite modal instant |
-
 ### How It Works
 
 ```
