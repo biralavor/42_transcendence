@@ -1,5 +1,5 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import { BrowserRouter } from 'react-router-dom'
+import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import GameWaitingRoom from './GameWaitingRoom'
 import { decodeJWT } from '../utils/jwtUtils'
 import * as wsClient from '../utils/wsClient'
@@ -43,6 +43,28 @@ vi.mock('../Components/Navbar', () => ({
     default: () => <div data-testid="navbar">Navbar</div>,
 }))
 
+/**
+ * Helper to render GameWaitingRoom with proper routing setup.
+ * MemoryRouter + Routes allows useParams() and useLocation() to work correctly.
+ * 
+ * @param {string} roomId - The game room ID for the URL param
+ * @param {object} locationState - The location.state to pass via navigation
+ */
+function renderWithRouter(roomId = '123', locationState = {}) {
+    const initialEntries = [{
+        pathname: `/game/waiting/${roomId}`,
+        state: locationState,
+    }]
+
+    return render(
+        <MemoryRouter initialEntries={initialEntries}>
+            <Routes>
+                <Route path="/game/waiting/:roomId" element={<GameWaitingRoom />} />
+            </Routes>
+        </MemoryRouter>
+    )
+}
+
 describe('GameWaitingRoom - Ready Message Sync', () => {
     let mockWs
     let wsConnectHandler
@@ -75,18 +97,13 @@ describe('GameWaitingRoom - Ready Message Sync', () => {
         it('should extract credential_id from JWT token for handleReady', async () => {
             const location = { state: { opponent: { id: 5, username: 'maria' } } }
 
-            render(
-                <BrowserRouter>
-                    <GameWaitingRoom />
-                </BrowserRouter>,
-                { initialEntries: [{ pathname: '/game/waiting/invite-4-5-123', state: location.state }] }
-            )
+            renderWithRouter('invite-4-5-123', location.state)
 
             // Simulate WebSocket connection
             wsConnectHandler.onOpen?.()
 
             // Click ready button
-            const readyButton = screen.getByText('Get Ready')
+            const readyButton = screen.getByText('Ready')
             fireEvent.click(readyButton)
 
             // Verify decodeJWT was called
@@ -107,16 +124,11 @@ describe('GameWaitingRoom - Ready Message Sync', () => {
 
             const location = { state: { opponent: { id: 5, username: 'maria' } } }
 
-            render(
-                <BrowserRouter>
-                    <GameWaitingRoom />
-                </BrowserRouter>,
-                { initialEntries: [{ pathname: '/game/waiting/invite-4-5-123', state: location.state }] }
-            )
+            renderWithRouter('invite-4-5-123', location.state)
 
             wsConnectHandler.onOpen?.()
 
-            const readyButton = screen.getByText('Get Ready')
+            const readyButton = screen.getByText('Ready')
             fireEvent.click(readyButton)
 
             // Should not send message
@@ -138,12 +150,7 @@ describe('GameWaitingRoom - Ready Message Sync', () => {
                 },
             }
 
-            render(
-                <BrowserRouter>
-                    <GameWaitingRoom />
-                </BrowserRouter>,
-                { initialEntries: [{ pathname: '/game/waiting/invite-4-5-123', state: location.state }] }
-            )
+            renderWithRouter('invite-4-5-123', location.state)
 
             wsConnectHandler.onOpen?.()
 
@@ -168,12 +175,7 @@ describe('GameWaitingRoom - Ready Message Sync', () => {
                 },
             }
 
-            render(
-                <BrowserRouter>
-                    <GameWaitingRoom />
-                </BrowserRouter>,
-                { initialEntries: [{ pathname: '/game/waiting/invite-4-5-123', state: location.state }] }
-            )
+            renderWithRouter('invite-4-5-123', location.state)
 
             wsConnectHandler.onOpen?.()
 
@@ -198,12 +200,7 @@ describe('GameWaitingRoom - Ready Message Sync', () => {
                 },
             }
 
-            render(
-                <BrowserRouter>
-                    <GameWaitingRoom />
-                </BrowserRouter>,
-                { initialEntries: [{ pathname: '/game/waiting/invite-4-5-123', state: location.state }] }
-            )
+            renderWithRouter('invite-4-5-123', location.state)
 
             wsConnectHandler.onOpen?.()
 
@@ -228,12 +225,7 @@ describe('GameWaitingRoom - Ready Message Sync', () => {
                 },
             }
 
-            render(
-                <BrowserRouter>
-                    <GameWaitingRoom />
-                </BrowserRouter>,
-                { initialEntries: [{ pathname: '/game/waiting/invite-4-5-123', state: location.state }] }
-            )
+            renderWithRouter('invite-4-5-123', location.state)
 
             wsConnectHandler.onOpen?.()
 
@@ -259,17 +251,12 @@ describe('GameWaitingRoom - Ready Message Sync', () => {
                 },
             }
 
-            render(
-                <BrowserRouter>
-                    <GameWaitingRoom />
-                </BrowserRouter>,
-                { initialEntries: [{ pathname: '/game/waiting/invite-4-5-123', state: location.state }] }
-            )
+            renderWithRouter('invite-4-5-123', location.state)
 
             wsConnectHandler.onOpen?.()
 
             // Step 1: João sends ready
-            const readyButton = screen.getByText('Get Ready')
+            const readyButton = screen.getByText('Ready')
             fireEvent.click(readyButton)
 
             expect(mockWs.send).toHaveBeenCalledWith(
@@ -311,12 +298,7 @@ describe('GameWaitingRoom - Ready Message Sync', () => {
                 },
             }
 
-            render(
-                <BrowserRouter>
-                    <GameWaitingRoom />
-                </BrowserRouter>,
-                { initialEntries: [{ pathname: '/game/waiting/invite-4-5-123', state: location.state }] }
-            )
+            renderWithRouter('invite-4-5-123', location.state)
 
             wsConnectHandler.onOpen?.()
 
@@ -342,12 +324,7 @@ describe('GameWaitingRoom - Ready Message Sync', () => {
                 },
             }
 
-            render(
-                <BrowserRouter>
-                    <GameWaitingRoom />
-                </BrowserRouter>,
-                { initialEntries: [{ pathname: '/game/waiting/invite-4-5-123', state: location.state }] }
-            )
+            renderWithRouter('invite-4-5-123', location.state)
 
             wsConnectHandler.onOpen?.()
 
@@ -382,12 +359,7 @@ describe('GameWaitingRoom - Ready Message Sync', () => {
                 },
             }
 
-            render(
-                <BrowserRouter>
-                    <GameWaitingRoom />
-                </BrowserRouter>,
-                { initialEntries: [{ pathname: '/game/waiting/invite-4-5-123', state: location.state }] }
-            )
+            renderWithRouter('invite-4-5-123', location.state)
 
             wsConnectHandler.onOpen?.()
 
