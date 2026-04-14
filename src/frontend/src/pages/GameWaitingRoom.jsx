@@ -4,7 +4,6 @@ import NavbarComponent from '../Components/Navbar'
 import { createWsClient } from '../utils/wsClient'
 import './GameWaitingRoom.css'
 import { useAuth } from '../context/authContext'
-import { decodeJWT } from '../utils/jwtUtils'
 import wsLogger from '../utils/wsLogger'
 
 const DEFAULT_AVATAR = '/avatar_placeholder.jpg'
@@ -168,17 +167,13 @@ export default function GameWaitingRoom() {
     // Start flow timing for ready click → broadcast
     const flowStartTime = wsLogger.flowStart(roomId, 'ready_click')
 
-    // CRITICAL: Extract user ID from JWT token (most reliable source)
-    // credential_id in JWT is the actual user ID (4 for João, 5 for Maria, etc.)
-    let actualUserId = null
-    if (auth?.access_token) {
-      const decoded = decodeJWT(auth.access_token)
-      actualUserId = decoded?.credential_id
-    }
+    // Use actual user ID from navigation state or auth context (matches game-service broadcasts)
+    // NOTE: JWT credential_id is Credentials.id, NOT Users.id — must use real user ID for ID matching
+    const actualUserId = currentUser.id || auth?.user?.id
 
-    if (!actualUserId) {
-      console.warn('[GameWaitingRoom] Cannot send ready: unable to extract user ID from token')
-      setSystemMessage('Error: Authentication not ready. Please refresh the page.')
+    if (!actualUserId || actualUserId === 'local-player') {
+      console.warn('[GameWaitingRoom] Cannot send ready: missing valid user ID from navigation state or auth')
+      setSystemMessage('Error: User identification failed. Please refresh the page.')
       return
     }
 
@@ -217,15 +212,12 @@ export default function GameWaitingRoom() {
   }
 
   function handleCancel() {
-    // Extract user ID from JWT token
-    let actualUserId = null
-    if (auth?.access_token) {
-      const decoded = decodeJWT(auth.access_token)
-      actualUserId = decoded?.credential_id
-    }
+    // Use actual user ID from navigation state or auth context (must match handleReady)
+    // NOTE: JWT credential_id is Credentials.id, NOT Users.id — must use real user ID for consistency
+    const actualUserId = currentUser.id || auth?.user?.id
 
-    if (!actualUserId) {
-      console.warn('[GameWaitingRoom] Cannot send cancel: unable to extract user ID from token')
+    if (!actualUserId || actualUserId === 'local-player') {
+      console.warn('[GameWaitingRoom] Cannot send cancel: missing valid user ID from navigation state or auth')
       navigate('/play')
       return
     }
