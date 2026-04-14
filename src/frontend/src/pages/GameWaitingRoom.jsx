@@ -22,6 +22,7 @@ export default function GameWaitingRoom() {
   const navigate = useNavigate()
   const { auth } = useAuth()
   const wsRef = useRef(null)
+  const wsFlowStartRef = useRef(null)
 
   const hasInviteContext = Boolean(
     location.state?.currentUser || location.state?.opponent || location.state?.friendUsername
@@ -48,6 +49,7 @@ export default function GameWaitingRoom() {
   const [opponentReady, setOpponentReady] = useState(false)
   const [systemMessage, setSystemMessage] = useState('Waiting for both players to get ready.')
   const [gameStartReceived, setGameStartReceived] = useState(false)
+  const [resolvedUserId, setResolvedUserId] = useState(null)
 
   useEffect(() => {
     const scheme = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
@@ -149,16 +151,57 @@ export default function GameWaitingRoom() {
     return () => ws.close()
   }, [roomId, currentUser.id, opponent.id, navigate, auth?.access_token])
 
+  // Fetch user ID from stable source (/auth/me) if location.state was lost (hard refresh/direct nav)
+  useEffect(() => {
+    if (currentUser.id && currentUser.id !== 'local-player') {
+      // Already have a valid user ID from navigation state
+      setResolvedUserId(currentUser.id)
+      return
+    }
+
+    // Hard refresh or direct navigation: currentUser.id is fallback 'local-player'
+    // Fetch real user ID from /auth/me
+    if (!auth?.access_token) {
+      return
+    }
+
+    let cancelled = false
+    const fetchUserId = async () => {
+      try {
+        const response = await fetch('/api/users/auth/me', {
+          headers: {
+            Authorization: `Bearer ${auth.access_token}`,
+          },
+        })
+        if (!response.ok) {
+          throw new Error(`Failed to fetch user: ${response.status}`)
+        }
+        const me = await response.json()
+        if (!cancelled && me?.id) {
+          setResolvedUserId(me.id)
+        }
+      } catch (err) {
+        console.warn('[GameWaitingRoom] Failed to resolve user ID on hard refresh:', err.message)
+        if (!cancelled) {
+          setSystemMessage('Error: Cannot identify user. Please navigate from the invite.')
+        }
+      }
+    }
+
+    void fetchUserId()
+    return () => { cancelled = true }
+  }, [currentUser.id, auth?.access_token])
+
   useEffect(() => {
     if (currentReady && opponentReady && !gameStartReceived) {
       setSystemMessage('Both players are ready. Waiting for backend game_start event...')
       // End the flow once both players are ready
-      if (window._wsFlowStart) {
-        wsLogger.flowEnd(roomId, 'ready_to_both_ready', window._wsFlowStart)
-        delete window._wsFlowStart
+      if (wsFlowStartRef.current) {
+        wsLogger.flowEnd(roomId, 'ready_to_both_ready', wsFlowStartRef.current)
+        wsFlowStartRef.current = null
       }
     }
-  }, [currentReady, opponentReady, gameStartReceived])
+  }, [currentReady, opponentReady, gameStartReceived, roomId])
 
   function handleReady() {
     if (currentReady || !wsRef.current)
@@ -167,13 +210,13 @@ export default function GameWaitingRoom() {
     // Start flow timing for ready click → broadcast
     const flowStartTime = wsLogger.flowStart(roomId, 'ready_click')
 
-    // Use actual user ID from navigation state or auth context (matches game-service broadcasts)
+    // Use actual user ID from navigation state, resolved user ID (from /auth/me on hard refresh), or auth context
     // NOTE: JWT credential_id is Credentials.id, NOT Users.id — must use real user ID for ID matching
-    const actualUserId = currentUser.id || auth?.user?.id
+    const actualUserId = (currentUser.id !== 'local-player' ? currentUser.id : null) || resolvedUserId || auth?.user?.id
 
     if (!actualUserId || actualUserId === 'local-player') {
-      console.warn('[GameWaitingRoom] Cannot send ready: missing valid user ID from navigation state or auth')
-      setSystemMessage('Error: User identification failed. Please refresh the page.')
+      console.warn('[GameWaitingRoom] Cannot send ready: missing valid user ID. Tried: location.state, /auth/me, auth context')
+      setSystemMessage('Error: User identification failed. Please navigate from a game invite.')
       return
     }
 
@@ -207,17 +250,17 @@ export default function GameWaitingRoom() {
     // Measure latency from ready click to send
     wsLogger.latency('ready_click_to_send', flowStartTime)
 
-    // Store flow start for later measurement in onMessage
-    window._wsFlowStart = flowStartTime
+    // Store flow start for later measurement in onMessage (component-scoped to avoid state leaks)
+    wsFlowStartRef.current = flowStartTime
   }
 
   function handleCancel() {
-    // Use actual user ID from navigation state or auth context (must match handleReady)
+    // Use actual user ID from navigation state, resolved user ID (from /auth/me on hard refresh), or auth context
     // NOTE: JWT credential_id is Credentials.id, NOT Users.id — must use real user ID for consistency
-    const actualUserId = currentUser.id || auth?.user?.id
+    const actualUserId = (currentUser.id !== 'local-player' ? currentUser.id : null) || resolvedUserId || auth?.user?.id
 
     if (!actualUserId || actualUserId === 'local-player') {
-      console.warn('[GameWaitingRoom] Cannot send cancel: missing valid user ID from navigation state or auth')
+      console.warn('[GameWaitingRoom] Cannot send cancel: missing valid user ID. Tried: location.state, /auth/me, auth context')
       navigate('/play')
       return
     }

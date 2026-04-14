@@ -844,8 +844,9 @@ if container_running user-service; then
     out=$(docker exec user-service sh -c "pip install -q --root-user-action=ignore pytest==8.3.5 httpx==0.28.1 pytest-asyncio==0.24.0 && cd /app && pytest service/tests/ -v 2>&1" || echo "")
     pass_count=$(echo "$out" | grep -oE '[0-9]+ passed' | awk '{print $1}' | head -1 || echo "0")
     fail_count=$(echo "$out" | grep -oE '[0-9]+ failed' | awk '{print $1}' | head -1 || echo "0")
-    if [[ -z "$pass_count" ]] || [[ "$pass_count" == "0" ]]; then
-        printf "${RED}[FAIL]${RESET} User Service unit tests (no tests found or crashed)\n"
+    # Fail suite if: no tests found, tests crashed, or any tests failed
+    if [[ -z "$pass_count" ]] || [[ "$pass_count" == "0" ]] || [[ "$fail_count" != "0" ]] && [[ "$fail_count" != "" ]]; then
+        printf "${RED}[FAIL]${RESET} User Service unit tests (${pass_count} passed, ${fail_count} failed)\n"
         SUITE_PASS["$suite_name"]=0
         SUITE_FAIL["$suite_name"]=1
         ((FAIL++))

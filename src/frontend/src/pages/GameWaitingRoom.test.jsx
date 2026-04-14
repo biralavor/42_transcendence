@@ -93,9 +93,14 @@ describe('GameWaitingRoom - Ready Message Sync', () => {
         vi.clearAllMocks()
     })
 
-    describe('JWT Token User ID Extraction', () => {
-        it('should extract credential_id from JWT token for handleReady', async () => {
-            const location = { state: { opponent: { id: 5, username: 'maria' } } }
+    describe('User ID Extraction from Navigation State', () => {
+        it('should extract user ID from navigate state (currentUser) for handleReady', async () => {
+            const location = {
+                state: {
+                    currentUser: { id: 4, username: 'joao' },
+                    opponent: { id: 5, username: 'maria' },
+                },
+            }
 
             renderWithRouter('invite-4-5-123', location.state)
 
@@ -106,22 +111,17 @@ describe('GameWaitingRoom - Ready Message Sync', () => {
             const readyButton = screen.getByText('Ready')
             fireEvent.click(readyButton)
 
-            // Verify decodeJWT was called
-            expect(decodeJWT).toHaveBeenCalledWith(mockAuthContext.auth.access_token)
-
-            // Verify payload contains extracted credential_id
+            // Verify payload contains user_id from navigation state
             expect(mockWs.send).toHaveBeenCalledWith(
                 expect.objectContaining({
                     type: 'player_ready',
-                    user_id: 4, // From credential_id
+                    user_id: 4, // From location.state.currentUser.id
                     username: 'You',
                 })
             )
         })
 
-        it('should not send ready if JWT token extraction fails', async () => {
-            decodeJWT.mockReturnValue(null)
-
+        it('should fail ready if currentUser not provided in navigation state', async () => {
             const location = { state: { opponent: { id: 5, username: 'maria' } } }
 
             renderWithRouter('invite-4-5-123', location.state)
@@ -136,7 +136,7 @@ describe('GameWaitingRoom - Ready Message Sync', () => {
 
             // Should show error message
             await waitFor(() => {
-                expect(screen.getByText(/Error: Authentication not ready/)).toBeInTheDocument()
+                expect(screen.getByText(/Error: User identification failed/)).toBeInTheDocument()
             })
         })
     })
