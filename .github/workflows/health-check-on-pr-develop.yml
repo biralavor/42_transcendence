@@ -47,12 +47,18 @@ jobs:
                   CHAT_SERVICE_PORT=8003
                   FRONTEND_PORT=3000
                   JWT_SECRET_KEY=${JWT_SECRET_KEY}
+                  DOMAIN=localhost
                   EOF
 
             - name: Build and start all services (make)
               run: |
                   export DOMAIN=localhost
                   make
+                  # make wait (inside make check) polls only user/game/chat endpoints.
+                  # Adminer depends solely on db and may still be joining the network.
+                  # A brief wait ensures all containers are fully connected before make check runs.
+                  echo "Waiting 10s for adminer to fully join transcendence_network..."
+                  sleep 10
 
             - name: Run full health check (make check)
               id: health_check
