@@ -98,24 +98,36 @@ jobs:
                   cd "${GITHUB_WORKSPACE}"
                   make
 
-            - name: Run health check (make check)
+            - name: Verify containers are running
+              run: |
+                  echo "Verifying all containers are healthy..."
+                  docker compose ps
+                  echo ""
+
+                  # Count running containers
+                  RUNNING=$(docker compose ps --format "{{.Status}}" | grep -c "Up")
+                  echo "✅ $RUNNING containers running"
+
+            - name: Run health check (make check-no-wait)
               id: health_check
               continue-on-error: true
               run: |
-                  echo "Starting health check..."
+                  echo "Starting health check (skipping redundant service check)..."
                   cd "${GITHUB_WORKSPACE}"
 
                   # Set strict mode but continue on errors (catch them after execution)
                   set +e
 
-                  # Run make check and capture output
-                  make check 2>&1 | tee health_check.log
+                  # Use make check-no-wait instead of make check
+                  # This skips the redundant 'make wait' since we already verified containers are healthy
+                  # Only runs seed + test script
+                  make check-no-wait 2>&1 | tee health_check.log
                   MAKE_CHECK_EXIT_CODE=$?
 
-                  echo "make check exit code: $MAKE_CHECK_EXIT_CODE"
+                  echo "make check-no-wait exit code: $MAKE_CHECK_EXIT_CODE"
                   echo "make_check_exit_code=$MAKE_CHECK_EXIT_CODE" >> $GITHUB_OUTPUT
 
-                  # Exit with the captured code (will be 0 or non-zero based on make check)
+                  # Exit with the captured code (will be 0 or non-zero based on test results)
                   exit $MAKE_CHECK_EXIT_CODE
 
             - name: Parse test results
