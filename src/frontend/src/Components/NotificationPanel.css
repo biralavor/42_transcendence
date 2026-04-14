@@ -13,6 +13,17 @@
     box-shadow: 0 8px 0 rgba(59, 36, 29, 0.85);
 }
 
+/* Mobile/tablet responsive: center panel and constrain width on smaller screens */
+@media (max-width: 1023px) {
+    .notif-panel {
+        right: auto;
+        left: 10rem;
+        transform: translateX(-50%);
+        width: min(90vw, 320px);
+        max-height: 50vh;
+    }
+}
+
 .notif-panel__header {
     display: flex;
     align-items: center;
