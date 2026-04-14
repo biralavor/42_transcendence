@@ -74,6 +74,12 @@ jobs:
                   echo "Docker Compose version:"
                   docker-compose --version
 
+            - name: Start services (make up)
+              run: |
+                  echo "Building backend-base and starting services..."
+                  cd "${GITHUB_WORKSPACE}"
+                  make
+
             - name: Run health check (make check)
               id: health_check
               continue-on-error: true
