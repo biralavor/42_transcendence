@@ -23,7 +23,7 @@ export default function GameWaitingRoom() {
   const wsRef = useRef(null)
 
   const hasInviteContext = Boolean(
-    location.state?.currentUser || location.state?.opponent || location.state?.friendUsername
+    location.state?.currentUser || location.state?.opponent || location.state?.friendUsername,
   )
 
   const currentUser = useMemo(() => (
@@ -41,6 +41,29 @@ export default function GameWaitingRoom() {
       avatarUrl: DEFAULT_AVATAR,
     })
   ), [location.state])
+
+  const [canonicalPlayer1Id, canonicalPlayer2Id] = useMemo(() => {
+    const stateP1 = Number(location.state?.player1_id)
+    const stateP2 = Number(location.state?.player2_id)
+
+    if (Number.isInteger(stateP1) && Number.isInteger(stateP2)) {
+      return [stateP1, stateP2]
+    }
+
+    const a = Number(currentUser.id)
+    const b = Number(opponent.id)
+
+    if (Number.isInteger(a) && Number.isInteger(b)) {
+      return a <= b ? [a, b] : [b, a]
+    }
+
+    return [null, null]
+  }, [location.state, currentUser.id, opponent.id])
+
+  const existingMatchId = useMemo(() => {
+    const matchId = Number(location.state?.matchId ?? location.state?.match_id)
+    return Number.isInteger(matchId) ? matchId : null
+  }, [location.state])
 
   const [connected, setConnected] = useState(false)
   const [currentReady, setCurrentReady] = useState(false)
@@ -66,8 +89,9 @@ export default function GameWaitingRoom() {
         setSystemMessage('Connection lost. Trying to reconnect...')
       },
       onMessage: (data) => {
-        if (!data || typeof data !== 'object')
+        if (!data || typeof data !== 'object') {
           return
+        }
 
         const incomingUserId = String(data.user_id ?? data.player_id ?? '')
         const isCurrentUser = incomingUserId && incomingUserId === String(currentUser.id)
@@ -89,7 +113,17 @@ export default function GameWaitingRoom() {
 
         if (data.type === 'game_start') {
           setGameStartReceived(true)
-          setSystemMessage('Both players are ready. Game start event received.')
+          setSystemMessage('Both players are ready. Starting match...')
+
+          navigate(`/game/${roomId}`, {
+            replace: true,
+            state: {
+              ...location.state,
+              player1_id: data.player1_id ?? canonicalPlayer1Id,
+              player2_id: data.player2_id ?? canonicalPlayer2Id,
+              matchId: data.match_id ?? existingMatchId,
+            },
+          })
         }
       },
     })
@@ -97,7 +131,17 @@ export default function GameWaitingRoom() {
     wsRef.current = ws
 
     return () => ws.close()
-  }, [roomId, currentUser.id, opponent.id, navigate, auth?.access_token])
+  }, [
+    roomId,
+    currentUser.id,
+    opponent.id,
+    navigate,
+    auth?.access_token,
+    location.state,
+    canonicalPlayer1Id,
+    canonicalPlayer2Id,
+    existingMatchId,
+  ])
 
   useEffect(() => {
     if (currentReady && opponentReady && !gameStartReceived) {
@@ -106,8 +150,14 @@ export default function GameWaitingRoom() {
   }, [currentReady, opponentReady, gameStartReceived])
 
   function handleReady() {
-    if (currentReady || !wsRef.current)
+    if (currentReady || !wsRef.current) {
       return
+    }
+
+    if (!Number.isInteger(canonicalPlayer1Id) || !Number.isInteger(canonicalPlayer2Id)) {
+      setSystemMessage('Missing player ids for this room.')
+      return
+    }
 
     setCurrentReady(true)
     setSystemMessage('You are ready. Waiting for the other player...')
@@ -115,8 +165,11 @@ export default function GameWaitingRoom() {
     wsRef.current.send({
       type: 'player_ready',
       room_id: roomId,
-      user_id: currentUser.id,
+      user_id: Number(currentUser.id),
       username: currentUser.username,
+      player1_id: canonicalPlayer1Id,
+      player2_id: canonicalPlayer2Id,
+      match_id: existingMatchId,
     })
   }
 
@@ -124,8 +177,11 @@ export default function GameWaitingRoom() {
     wsRef.current?.send({
       type: 'cancel_waiting_room',
       room_id: roomId,
-      user_id: currentUser.id,
+      user_id: Number(currentUser.id),
       username: currentUser.username,
+      player1_id: canonicalPlayer1Id,
+      player2_id: canonicalPlayer2Id,
+      match_id: existingMatchId,
     })
 
     navigate('/play')

@@ -32,6 +32,8 @@ from service.persistence import (
     delete_tournament,
     TournamentNotParticipant,
     leave_tournament,
+    TournamentNotInProgress,
+    withdraw_tournament,
 )
 from service.schemas import (
     LeaderboardEntryResponse,
@@ -173,6 +175,61 @@ async def leave_tournament_endpoint(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User is not a participant in this tournament",
         )
+
+@router.post(
+    "/tournaments/{tournament_id}/withdraw",
+    response_model=TournamentDetailResponse,
+)
+async def withdraw_tournament_endpoint(
+    tournament_id: int,
+    session: SessionDependency,
+    user_id: int = Depends(get_current_user_id),
+):
+    try:
+        _, tournament_complete = await withdraw_tournament(session, tournament_id, user_id)
+    except TournamentNotFound:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Tournament not found",
+        )
+    except TournamentNotInProgress:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Only tournaments in progress can be withdrawn from",
+        )
+    except TournamentNotParticipant:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User is not a participant in this tournament",
+        )
+
+    await ws_manager.broadcast(
+        f"tournament_{tournament_id}",
+        {"type": "tournament_updated", "tournament_id": tournament_id},
+    )
+
+    if tournament_complete:
+        await ws_manager.broadcast(
+            f"tournament_{tournament_id}",
+            {"type": "tournament_complete", "tournament_id": tournament_id},
+        )
+
+    result = await get_tournament_with_participants(session, tournament_id)
+    tournament, participants, matches = result
+
+    return TournamentDetailResponse(
+        id=tournament.id,
+        name=tournament.name,
+        creator_id=tournament.creator_id,
+        max_participants=tournament.max_participants,
+        status=tournament.status,
+        created_at=tournament.created_at,
+        participants=[
+            TournamentParticipantResponse(user_id=p.user_id, joined_at=p.joined_at)
+            for p in participants
+        ],
+        matches=[TournamentMatchResponse.model_validate(m) for m in matches],
+    )
 
 @router.delete("/tournaments/{tournament_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_tournament_endpoint(
