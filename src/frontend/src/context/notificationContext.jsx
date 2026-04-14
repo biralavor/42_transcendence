@@ -24,7 +24,7 @@ export function NotificationProvider({ children }) {
             if (!r.ok) {
                 console.error('[notificationContext] Failed to fetch notifications:', r.status)
                 setNotifications([])
-                return
+                throw new Error(`Failed to fetch notifications: ${r.status}`)
             }
             const data = await r.json()
             if (Array.isArray(data)) {
@@ -34,10 +34,12 @@ export function NotificationProvider({ children }) {
                 const keys = data && typeof data === 'object' ? Object.keys(data) : 'N/A'
                 console.warn('[notificationContext] Invalid notifications response format, got:', typeof data, keys)
                 setNotifications([])
+                throw new Error(`Invalid response format: ${typeof data}`)
             }
         } catch (err) {
             console.error('[notificationContext] Error fetching notifications:', err.message)
             setNotifications([])
+            throw err
         }
     }, [])
 
