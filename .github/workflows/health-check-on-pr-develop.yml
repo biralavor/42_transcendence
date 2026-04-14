@@ -1,0 +1,198 @@
+name: Health Check on PR to develop
+
+on:
+    pull_request:
+        branches:
+            - develop
+        types:
+            - opened
+            - reopened
+            - synchronize
+            - ready_for_review
+
+jobs:
+    health-check:
+        name: Run make check on Alpine
+        runs-on: ubuntu-latest
+        timeout-minutes: 13
+
+        # Use Alpine container with Docker-in-Docker support
+        container:
+            image: alpine:latest
+
+        services:
+            # Docker-in-Docker service for building and running containers
+            docker:
+                image: docker:dind
+                options: >-
+                    --privileged
+                    --health-cmd "docker info"
+                    --health-interval 10s
+                    --health-timeout 5s
+                    --health-retries 5
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v6
+
+            - name: Install dependencies on Alpine
+              run: |
+                  # Install required tools for Alpine Linux
+                  apk add --no-cache \
+                    docker-cli \
+                    docker-compose \
+                    make \
+                    bash \
+                    curl \
+                    git \
+                    python3
+
+            - name: Wait for Docker daemon
+              run: |
+                  # Wait for Docker daemon to be ready
+                  echo "Waiting for Docker daemon..."
+                  for i in {1..30}; do
+                    if docker ps &>/dev/null; then
+                      echo "Docker daemon is ready"
+                      exit 0
+                    fi
+                    echo "Attempt $i/30 - Docker not ready yet, waiting..."
+                    sleep 2
+                  done
+                  echo "Docker daemon failed to start"
+                  exit 1
+
+            - name: Verify Docker and Docker Compose
+              run: |
+                  echo "Docker version:"
+                  docker --version
+                  echo ""
+                  echo "Docker Compose version:"
+                  docker-compose --version
+
+            - name: Run health check (make check)
+              id: health_check
+              continue-on-error: true
+              run: |
+                  echo "Starting health check..."
+                  cd "${GITHUB_WORKSPACE}"
+
+                  # Set strict mode but continue on errors (catch them after execution)
+                  set +e
+
+                  # Run make check and capture output
+                  make check 2>&1 | tee health_check.log
+                  MAKE_CHECK_EXIT_CODE=$?
+
+                  echo "make check exit code: $MAKE_CHECK_EXIT_CODE"
+                  echo "make_check_exit_code=$MAKE_CHECK_EXIT_CODE" >> $GITHUB_OUTPUT
+
+                  # Exit with the captured code (will be 0 or non-zero based on make check)
+                  exit $MAKE_CHECK_EXIT_CODE
+
+            - name: Parse test results
+              id: parse_results
+              if: always()
+              run: |
+                  # Extract FAILED count from the summary
+                  if [[ -f "make_check_results.txt" ]]; then
+                    FAILED=$(grep "TOTAL.*FAILED:" make_check_results.txt | grep -oP 'FAILED: \K\d+' || echo "0")
+                    PASSED=$(grep "TOTAL.*PASSED:" make_check_results.txt | grep -oP 'PASSED: \K\d+' || echo "0")
+                  elif [[ -f "health_check.log" ]]; then
+                    FAILED=$(grep "TOTAL.*FAILED:" health_check.log | grep -oP 'FAILED: \K\d+' || echo "0")
+                    PASSED=$(grep "TOTAL.*PASSED:" health_check.log | grep -oP 'PASSED: \K\d+' || echo "0")
+                  else
+                    FAILED="0"
+                    PASSED="0"
+                  fi
+
+                  echo "Test Results Summary:"
+                  echo "  PASSED: $PASSED"
+                  echo "  FAILED: $FAILED"
+                  echo ""
+                  echo "passed=$PASSED" >> $GITHUB_OUTPUT
+                  echo "failed=$FAILED" >> $GITHUB_OUTPUT
+
+                  # Return non-zero if any tests failed
+                  if [[ "$FAILED" -gt 0 ]]; then
+                    echo "❌ Health check FAILED: $FAILED test(s) failing"
+                    exit 1
+                  else
+                    echo "✅ Health check PASSED: All tests passing"
+                    exit 0
+                  fi
+
+            - name: Upload health check results
+              if: always()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: health-check-results
+                  path: |
+                      make_check_results.txt
+                      health_check.log
+                  retention-days: 30
+
+            - name: Comment PR with results
+              if: always()
+              uses: actions/github-script@v7
+              with:
+                  script: |
+                      const fs = require('fs');
+                      let resultsContent = "⚠️ Health check output not found";
+
+                      if (fs.existsSync('make_check_results.txt')) {
+                        resultsContent = fs.readFileSync('make_check_results.txt', 'utf8');
+                      } else if (fs.existsSync('health_check.log')) {
+                        resultsContent = fs.readFileSync('health_check.log', 'utf8');
+                      }
+
+                      // Extract summary section
+                      const summaryMatch = resultsContent.match(/SUITE RESULTS[\s\S]*?══+/);
+                      const summaryContent = summaryMatch ? summaryMatch[0] : resultsContent.slice(-2000);
+
+                      const passed = parseInt('${{ steps.parse_results.outputs.passed }}') || 0;
+                      const failed = parseInt('${{ steps.parse_results.outputs.failed }}') || 0;
+
+                      const statusEmoji = failed > 0 ? '❌' : '✅';
+                      const statusText = failed > 0 ? 'FAILED' : 'PASSED';
+
+                      const comment = [
+                        `## ${statusEmoji} Health Check ${statusText}`,
+                        '',
+                        '**Summary:**',
+                        `- **Passed:** ${passed}`,
+                        `- **Failed:** ${failed}`,
+                        '',
+                        '<details>',
+                        '<summary>Full Results</summary>',
+                        '',
+                        '```',
+                        summaryContent,
+                        '```',
+                        '',
+                        '</details>'
+                      ].join('\n');
+
+                      try {
+                        github.rest.issues.createComment({
+                          issue_number: context.issue.number,
+                          owner: context.repo.owner,
+                          repo: context.repo.repo,
+                          body: comment
+                        });
+                      } catch (error) {
+                        console.log('Warning: Could not post comment to PR:', error.message);
+                      }
+
+            - name: Report job status
+              if: always()
+              run: |
+                  FAILED="${{ steps.parse_results.outputs.failed }}"
+
+                  if [[ "$FAILED" -gt 0 ]]; then
+                    echo "❌ JOB FAILED: $FAILED test(s) are failing"
+                    exit 1
+                  else
+                    echo "✅ JOB PASSED: All mandatory checks passed"
+                    exit 0
+                  fi
