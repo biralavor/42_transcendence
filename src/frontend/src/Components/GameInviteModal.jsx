@@ -260,13 +260,30 @@ export default function GameInviteModal() {
                     )}
                 </div>
                 <div className="game-invite-modal__actions">
-                    {isInvite ? (
+                    {errorMessage ? (
+                        <>
+                            <button
+                                type="button"
+                                className="arcade-btn arcade-btn-primary game-invite-btn"
+                                onClick={() => setErrorMessage('')}
+                            >
+                                Retry
+                            </button>
+                            <button
+                                type="button"
+                                className="arcade-btn arcade-btn-secondary game-invite-btn"
+                                onClick={onClose}
+                            >
+                                Close
+                            </button>
+                        </>
+                    ) : isInvite ? (
                         <>
                             <button
                                 type="button"
                                 className="arcade-btn arcade-btn-primary game-invite-btn"
                                 onClick={handleAccept}
-                                disabled={isResponding || !!errorMessage}
+                                disabled={isResponding}
                                 autoFocus
                             >
                                 {isResponding ? 'Accepting...' : 'Accept'}
@@ -275,7 +292,7 @@ export default function GameInviteModal() {
                                 type="button"
                                 className="arcade-btn arcade-btn-secondary game-invite-btn"
                                 onClick={handleDecline}
-                                disabled={isResponding || !!errorMessage}
+                                disabled={isResponding}
                             >
                                 {isResponding ? 'Declining...' : 'Decline'}
                             </button>

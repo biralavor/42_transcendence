@@ -24,3 +24,6 @@ package-lock.json
 # Alembic backups
 *.bak.codex
 .npm-cache/
+
+# Tem result tests logs
+make_check_results.txt

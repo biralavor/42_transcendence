@@ -350,13 +350,6 @@ async def deliver_game_notification(
     
     await session.commit()  # Persist notification to database before broadcasting
     
-    # Include the notification ID in the payload so frontend can mark it as read when user responds
-    payload_with_notif_id = {
-        **payload,
-        "notification_id": notif.id,  # Add DB notification ID for incoming invites
-    }
-    
-    await notification_manager.broadcast(str(body.to_user_id), payload_with_notif_id)
     await notification_manager.broadcast(str(body.to_user_id), _notif_payload(notif))
     return Response(status_code=204)
 

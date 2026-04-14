@@ -26,10 +26,11 @@ WITH requested AS
   GROUP BY addressee_id
 )
 SELECT
-  (requests_accepted + accepted_requests)
+  COALESCE(requested.requests_accepted, 0)
+  + COALESCE(accepted.accepted_requests, 0)
   AS friends
 FROM requested
-  INNER JOIN accepted ON requester_id = addressee_id
+  FULL OUTER JOIN accepted ON requester_id = addressee_id
 LIMIT 1
     """)
     result = await session.execute(

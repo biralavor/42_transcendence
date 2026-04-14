@@ -18,6 +18,8 @@ manager = ConnectionManager()
 _setup_sessions: dict[str, tuple[int, int]] = {}
 # Maps game_id (str) → match_id (int) for database updates
 _match_ids: dict[str, int] = {}
+# Maps game_id (str) → {player_id: ready_bool} for waiting-room ready tracking
+_player_ready: dict[str, dict[int, bool]] = {}
 
 
 async def _broadcast_state(game_id: str, state_snapshot: dict) -> None:
@@ -164,6 +166,43 @@ async def game_websocket(websocket: WebSocket, game_id: str, token: str | None =
             
             event_type = data.get("type")
             
+            # Handle player_ready: track ready state and broadcast game_start when both ready
+            if event_type == "player_ready":
+                if game_id not in _player_ready:
+                    _player_ready[game_id] = {}
+                _player_ready[game_id][player_id] = True
+                
+                # Broadcast player_ready to all connected clients
+                await manager.broadcast(game_id, data)
+                ws_logger.ready(game_id, player_id, data)
+                
+                # Check if both players are ready
+                if game_id in _setup_sessions:
+                    p1, p2 = _setup_sessions[game_id]
+                    ready_states = _player_ready.get(game_id, {})
+                    if ready_states.get(p1) and ready_states.get(p2):
+                        # Both ready: broadcast game_start to initiate game
+                        await manager.broadcast(game_id, {
+                            "type": "game_start",
+                            "player1_id": p1,
+                            "player2_id": p2,
+                        })
+                        ws_logger.session_state(game_id, {
+                            'p1_id': p1,
+                            'p2_id': p2,
+                            'status': 'both_players_ready'
+                        })
+            
+            # Handle player_unready: update ready state and broadcast
+            elif event_type == "player_unready":
+                if game_id not in _player_ready:
+                    _player_ready[game_id] = {}
+                _player_ready[game_id][player_id] = False
+                
+                # Broadcast player_unready to all connected clients
+                await manager.broadcast(game_id, data)
+                ws_logger.uiUpdate(game_id, {'player_unready': player_id})
+            
             # Handle game_start: initialize game session
             if event_type == "game_start":
                 ws_logger.ready(game_id, player_id, data)
@@ -289,3 +328,4 @@ async def game_websocket(websocket: WebSocket, game_id: str, token: str | None =
             await game_manager.delete_session(game_id)
             _setup_sessions.pop(game_id, None)
             _match_ids.pop(game_id, None)
+            _player_ready.pop(game_id, None)

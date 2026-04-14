@@ -56,6 +56,8 @@ wait:
 
 .PHONY: seed
 seed:
+	@echo "Waiting 5 seconds for seed operations to complete..."
+	@sleep 5
 	@docker compose cp tests/seed_dev.py user-service:/app/seed_dev.py
 	@docker compose exec -e WS_LOG_DEBUG=true user-service python3 /app/seed_dev.py
 

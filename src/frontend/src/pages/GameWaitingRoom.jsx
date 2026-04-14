@@ -85,7 +85,10 @@ export default function GameWaitingRoom() {
         const incomingUsername = data.username
 
         // Identify sender by normalized ID (most reliable) or username fallback if ID unavailable
-        const currentUserId = String(currentUser.id ?? '')
+        // Prefer resolvedUserId (from server) over currentUser.id (which may be 'local-player' after hard refresh)
+        const currentUserId = String(
+          (resolvedUserId !== null ? resolvedUserId : null) || currentUser.id || ''
+        )
         const opponentUserId = String(opponent.id ?? '')
 
         // Prefer ID matching; use username only if ID is missing/empty
@@ -142,6 +145,14 @@ export default function GameWaitingRoom() {
           setGameStartReceived(true)
           setSystemMessage('Both players are ready. Game start event received.')
           wsLogger.uiUpdate(roomId, { gameStart: true })
+
+          // Navigate to the actual game
+          navigate(`/game/${roomId}`, {
+            state: {
+              currentUser,
+              opponent,
+            }
+          })
         }
       },
     })

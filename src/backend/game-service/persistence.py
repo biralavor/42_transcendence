@@ -156,9 +156,52 @@ async def withdraw_tournament(
     db: AsyncSession,
     tournament_id: int,
     user_id: int,
-) -> None:
-    """Alias for leave_tournament - user withdraws from a tournament."""
-    return await leave_tournament(db, tournament_id, user_id)
+) -> tuple[Tournament, bool]:
+    """User withdraws from a tournament in progress.
+    
+    Returns (tournament, tournament_complete).
+    """
+    result = await db.execute(
+        select(Tournament).where(Tournament.id == tournament_id).with_for_update()
+    )
+    tournament = result.scalars().first()
+
+    if tournament is None:
+        raise TournamentNotFound()
+
+    if tournament.status != "in_progress":
+        raise TournamentNotInProgress()
+
+    participant_result = await db.execute(
+        select(TournamentParticipant).where(
+            TournamentParticipant.tournament_id == tournament_id,
+            TournamentParticipant.user_id == user_id,
+        )
+    )
+    participant = participant_result.scalars().first()
+
+    if participant is None:
+        raise TournamentNotParticipant()
+
+    await db.delete(participant)
+    await db.flush()
+    
+    # Check if tournament should be marked complete
+    # (all remaining participants are no longer actively playing)
+    remaining_participants_result = await db.execute(
+        select(TournamentParticipant).where(
+            TournamentParticipant.tournament_id == tournament_id
+        )
+    )
+    remaining_participants = list(remaining_participants_result.scalars().all())
+    
+    tournament_complete = False
+    if not remaining_participants:
+        tournament.status = "complete"
+        tournament_complete = True
+    
+    await db.commit()
+    return tournament, tournament_complete
 
 async def create_tournament(
     db: AsyncSession, name: str, creator_id: int, max_participants: int
@@ -622,10 +665,10 @@ WITH matches_results AS
   GROUP BY winner_id
 )
 SELECT
-  (wins + twins)
+  (COALESCE(wins, 0) + COALESCE(twins, 0))
   AS wins_total
 FROM matches_results
-  INNER JOIN tournament_matches_results ON winner_id = twinner_id
+  FULL OUTER JOIN tournament_matches_results ON winner_id = twinner_id
 LIMIT 1
     """)
     result = await session.execute(
