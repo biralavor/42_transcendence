@@ -199,10 +199,10 @@ async def test_game_invite_persists_notification_row():
     assert args[1] == 7                   # user_id = to_user_id
     assert args[2] == "game_invite"       # type taken from body.type, not hardcoded
     assert "invited" in args[3]           # correct message for game_invite
-    # Two broadcasts: raw payload (for invite UI) + notification envelope (for bell)
-    assert mock_mgr.broadcast.await_count == 2
-    envelope_call = mock_mgr.broadcast.call_args_list[1]
-    assert envelope_call[0][1]["type"] == "notification"
+    # Single broadcast: notification envelope with all data
+    assert mock_mgr.broadcast.await_count == 1
+    broadcast_call = mock_mgr.broadcast.call_args_list[0]
+    assert broadcast_call[0][1]["type"] == "notification"
 
 
 @pytest.mark.asyncio

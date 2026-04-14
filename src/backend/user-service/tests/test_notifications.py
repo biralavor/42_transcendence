@@ -150,6 +150,12 @@ async def test_create_notification_adds_row_and_returns_it(mock_db_session):
     async def fake_refresh(obj):
         obj.id = 42
 
+    # Mock the context manager for begin_nested (savepoint)
+    mock_begin_nested = AsyncMock()
+    mock_begin_nested.__aenter__ = AsyncMock(return_value=None)
+    mock_begin_nested.__aexit__ = AsyncMock(return_value=None)
+    mock_db_session.begin_nested.return_value = mock_begin_nested
+    
     mock_db_session.refresh = AsyncMock(side_effect=fake_refresh)
 
     result = await create_notification(
@@ -157,7 +163,7 @@ async def test_create_notification_adds_row_and_returns_it(mock_db_session):
     )
 
     mock_db_session.add.assert_called_once()
-    mock_db_session.commit.assert_awaited_once()
+    mock_db_session.flush.assert_awaited_once()
     mock_db_session.refresh.assert_awaited_once()
     assert result.user_id == 7
     assert result.type == "friend_request"
