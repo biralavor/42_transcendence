@@ -117,7 +117,6 @@ async def presence_endpoint(websocket: WebSocket, session: SessionDep, token: st
         pass
     except asyncio.CancelledError:
         logger.debug("WS /presence cancelled for user %d", user_id)
-        await presence_event_registry.cleanup_event(str(user_id))
         raise
     except Exception:
         logger.exception("WS /presence unexpected error for user %d", user_id)
@@ -138,3 +137,7 @@ async def presence_endpoint(websocket: WebSocket, session: SessionDep, token: st
                     await set_user_status(user_id, "offline", db_session)
             except Exception:
                 logger.exception("WS /presence cleanup error for user %d", user_id)
+            finally:
+                # Clean up presence event registry entry when user goes fully offline
+                # Prevents unbounded growth of registry dict over time (one entry per user ever connected)
+                await presence_event_registry.cleanup_event(str(user_id))

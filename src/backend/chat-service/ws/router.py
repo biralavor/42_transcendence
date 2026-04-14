@@ -295,7 +295,6 @@ async def notifications_websocket(websocket: WebSocket, token: str = "") -> None
             
     except asyncio.CancelledError:
         logger.debug(f"WS /ws/notifications cancelled for user {uid}")
-        await chat_notification_event_registry.cleanup_event(user_key)
         raise
     except WebSocketDisconnect:
         pass
@@ -303,3 +302,7 @@ async def notifications_websocket(websocket: WebSocket, token: str = "") -> None
         logger.exception(f"WS /ws/notifications unexpected error for user {uid}: {e}")
     finally:
         notifications_manager.disconnect(user_key, websocket)
+        # Clean up chat notification event registry entry when last connection for user is gone
+        # Prevents unbounded growth of registry dict over time (one entry per user ever connected)
+        if notifications_manager.active_connections(user_key) == 0:
+            await chat_notification_event_registry.cleanup_event(user_key)

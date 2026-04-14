@@ -115,9 +115,12 @@ async def notification_endpoint(
         pass
     except asyncio.CancelledError:
         logger.debug("WS /notifications cancelled for user %d", user_id)
-        await notification_event_registry.cleanup_event(room)
         raise
     except Exception:
         logger.exception("WS /notifications unexpected error for user %d", user_id)
     finally:
         notification_manager.disconnect(room, websocket)
+        # Clean up notification event registry entry when last connection for room is gone
+        # Prevents unbounded growth of registry dict over time (one entry per user ever connected)
+        if notification_manager.active_connections(room) == 0:
+            await notification_event_registry.cleanup_event(room)
