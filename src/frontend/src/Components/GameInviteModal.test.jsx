@@ -112,9 +112,17 @@ describe('GameInviteModal - Incoming Invites (Global)', () => {
             fireEvent.click(acceptBtn)
 
             await waitFor(() => {
-                // Should navigate to game room with room_id
+                // Should navigate to game room with room_id and pass opponent data via state
                 expect(mockNavigate).toHaveBeenCalledWith(
-                    expect.stringContaining('/game/waiting/invite-4-5-123456')
+                    '/game/waiting/invite-4-5-123456',
+                    expect.objectContaining({
+                        state: expect.objectContaining({
+                            opponent: expect.objectContaining({
+                                id: 4,
+                                username: 'Player1',
+                            }),
+                        }),
+                    })
                 )
             })
         })

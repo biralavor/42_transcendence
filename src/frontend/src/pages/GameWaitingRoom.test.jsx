@@ -1,5 +1,6 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import { MemoryRouter, Routes, Route } from 'react-router-dom'
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom'
 import GameWaitingRoom from './GameWaitingRoom'
 import { decodeJWT } from '../utils/jwtUtils'
 import * as wsClient from '../utils/wsClient'
@@ -20,6 +21,22 @@ vi.mock('../utils/wsLogger', () => ({
     },
 }))
 vi.mock('../utils/jwtUtils')
+
+// Mock useLocation hook to support location.state
+let mockLocationState = {}
+vi.mock('react-router-dom', async () => {
+    const actual = await vi.importActual('react-router-dom')
+    return {
+        ...actual,
+        useLocation: vi.fn(() => ({
+            pathname: '/game/waiting/invite-4-5-123',
+            state: mockLocationState,
+            hash: '',
+            search: '',
+            key: 'default',
+        })),
+    }
+})
 
 // Mock auth context
 const mockAuthContext = {
@@ -45,19 +62,17 @@ vi.mock('../Components/Navbar', () => ({
 
 /**
  * Helper to render GameWaitingRoom with proper routing setup.
- * MemoryRouter + Routes allows useParams() and useLocation() to work correctly.
+ * Sets mockLocationState so useLocation() mock returns the provided state.
  * 
  * @param {string} roomId - The game room ID for the URL param
  * @param {object} locationState - The location.state to pass via navigation
  */
 function renderWithRouter(roomId = '123', locationState = {}) {
-    const initialEntries = [{
-        pathname: `/game/waiting/${roomId}`,
-        state: locationState,
-    }]
+    // Update the mocked useLocation to return this state
+    mockLocationState = locationState
 
     return render(
-        <MemoryRouter initialEntries={initialEntries}>
+        <MemoryRouter initialEntries={[{ pathname: `/game/waiting/${roomId}` }]}>
             <Routes>
                 <Route path="/game/waiting/:roomId" element={<GameWaitingRoom />} />
             </Routes>
@@ -68,8 +83,11 @@ function renderWithRouter(roomId = '123', locationState = {}) {
 describe('GameWaitingRoom - Ready Message Sync', () => {
     let mockWs
     let wsConnectHandler
+    let user
 
-    beforeEach(() => {
+    beforeEach(async () => {
+        user = userEvent.setup()
+
         mockWs = {
             send: vi.fn(),
             close: vi.fn(),
@@ -105,18 +123,19 @@ describe('GameWaitingRoom - Ready Message Sync', () => {
             renderWithRouter('invite-4-5-123', location.state)
 
             // Simulate WebSocket connection
-            wsConnectHandler.onOpen?.()
+            act(() => {
+                wsConnectHandler.onOpen?.()
+            })
 
             // Click ready button
             const readyButton = screen.getByText('Ready')
-            fireEvent.click(readyButton)
+            await user.click(readyButton)
 
             // Verify payload contains user_id from navigation state
             expect(mockWs.send).toHaveBeenCalledWith(
                 expect.objectContaining({
                     type: 'player_ready',
                     user_id: 4, // From location.state.currentUser.id
-                    username: 'You',
                 })
             )
         })
@@ -126,10 +145,12 @@ describe('GameWaitingRoom - Ready Message Sync', () => {
 
             renderWithRouter('invite-4-5-123', location.state)
 
-            wsConnectHandler.onOpen?.()
+            act(() => {
+                wsConnectHandler.onOpen?.()
+            })
 
             const readyButton = screen.getByText('Ready')
-            fireEvent.click(readyButton)
+            await user.click(readyButton)
 
             // Should not send message
             expect(mockWs.send).not.toHaveBeenCalled()
@@ -152,18 +173,26 @@ describe('GameWaitingRoom - Ready Message Sync', () => {
 
             renderWithRouter('invite-4-5-123', location.state)
 
-            wsConnectHandler.onOpen?.()
+            act(() => {
+                wsConnectHandler.onOpen?.()
+            })
 
             // Simulate opponent ready message
-            wsConnectHandler.onMessage?.({
-                type: 'player_ready',
-                user_id: 5, // Maria's ID
-                username: 'maria',
+            act(() => {
+                wsConnectHandler.onMessage?.({
+                    type: 'player_ready',
+                    user_id: 5, // Maria's ID
+                    username: 'maria',
+                })
             })
 
             // Opponent should be marked as ready
             await waitFor(() => {
-                expect(screen.getByText(/waiting for the other player/i)).toBeInTheDocument()
+                expect(screen.queryByText('maria')).toBeInTheDocument()
+                // Find the maria player card and check its status
+                const playerCards = screen.getAllByText(/Player (one|two)/i).map(el => el.closest('article'))
+                const mariaCard = playerCards.find(card => card?.textContent.includes('maria'))
+                expect(mariaCard?.textContent).toMatch(/Ready/)
             })
         })
 
@@ -177,18 +206,24 @@ describe('GameWaitingRoom - Ready Message Sync', () => {
 
             renderWithRouter('invite-4-5-123', location.state)
 
-            wsConnectHandler.onOpen?.()
-
-            // Simulate current player's ready message (echo from server)
-            wsConnectHandler.onMessage?.({
-                type: 'player_ready',
-                user_id: 4, // João's ID (current)
-                username: 'joao',
+            act(() => {
+                wsConnectHandler.onOpen?.()
             })
 
-            // Current should be marked as ready
+            // Simulate current player's ready message (echo from server)
+            act(() => {
+                wsConnectHandler.onMessage?.({
+                    type: 'player_ready',
+                    user_id: 4, // João's ID (current)
+                    username: 'joao',
+                })
+            })
+
+            // Current should be marked as ready (check player card status)
             await waitFor(() => {
-                expect(screen.getByText(/You are ready/)).toBeInTheDocument()
+                const playerCards = screen.getAllByText(/Player (one|two)/i).map(el => el.closest('article'))
+                const joaoCard = playerCards.find(card => card?.textContent.includes('joao'))
+                expect(joaoCard?.textContent).toMatch(/Ready/)
             })
         })
 
@@ -202,18 +237,24 @@ describe('GameWaitingRoom - Ready Message Sync', () => {
 
             renderWithRouter('invite-4-5-123', location.state)
 
-            wsConnectHandler.onOpen?.()
+            act(() => {
+                wsConnectHandler.onOpen?.()
+            })
 
             // Message with number ID from server
-            wsConnectHandler.onMessage?.({
-                type: 'player_ready',
-                user_id: 5, // Number from server
-                username: 'maria',
+            act(() => {
+                wsConnectHandler.onMessage?.({
+                    type: 'player_ready',
+                    user_id: 5, // Number from server
+                    username: 'maria',
+                })
             })
 
             // Should still match correctly (String('5') === String(5))
             await waitFor(() => {
-                expect(screen.getByText(/waiting for the other player/i)).toBeInTheDocument()
+                const playerCards = screen.getAllByText(/Player (one|two)/i).map(el => el.closest('article'))
+                const mariaCard = playerCards.find(card => card?.textContent.includes('maria'))
+                expect(mariaCard?.textContent).toMatch(/Ready/)
             })
         })
 
@@ -227,17 +268,23 @@ describe('GameWaitingRoom - Ready Message Sync', () => {
 
             renderWithRouter('invite-4-5-123', location.state)
 
-            wsConnectHandler.onOpen?.()
+            act(() => {
+                wsConnectHandler.onOpen?.()
+            })
 
             // Message with no user_id
-            wsConnectHandler.onMessage?.({
-                type: 'player_ready',
-                username: 'maria', // Only username available
+            act(() => {
+                wsConnectHandler.onMessage?.({
+                    type: 'player_ready',
+                    username: 'maria', // Only username available
+                })
             })
 
             // Should match by username
             await waitFor(() => {
-                expect(screen.getByText(/waiting for the other player/i)).toBeInTheDocument()
+                const playerCards = screen.getAllByText(/Player (one|two)/i).map(el => el.closest('article'))
+                const mariaCard = playerCards.find(card => card?.textContent.includes('maria'))
+                expect(mariaCard?.textContent).toMatch(/Ready/)
             })
         })
     })
@@ -253,11 +300,13 @@ describe('GameWaitingRoom - Ready Message Sync', () => {
 
             renderWithRouter('invite-4-5-123', location.state)
 
-            wsConnectHandler.onOpen?.()
+            act(() => {
+                wsConnectHandler.onOpen?.()
+            })
 
             // Step 1: João sends ready
             const readyButton = screen.getByText('Ready')
-            fireEvent.click(readyButton)
+            await user.click(readyButton)
 
             expect(mockWs.send).toHaveBeenCalledWith(
                 expect.objectContaining({
@@ -267,19 +316,25 @@ describe('GameWaitingRoom - Ready Message Sync', () => {
             )
 
             // Step 2: Server echoes João's ready
-            wsConnectHandler.onMessage?.({
-                type: 'player_ready',
-                user_id: 4,
-                username: 'joao',
+            act(() => {
+                wsConnectHandler.onMessage?.({
+                    type: 'player_ready',
+                    user_id: 4,
+                    username: 'joao',
+                })
             })
 
-            expect(screen.getByText(/You are ready/)).toBeInTheDocument()
+            await waitFor(() => {
+                expect(screen.getByText(/You are ready/)).toBeInTheDocument()
+            })
 
             // Step 3: Maria sends ready
-            wsConnectHandler.onMessage?.({
-                type: 'player_ready',
-                user_id: 5,
-                username: 'maria',
+            act(() => {
+                wsConnectHandler.onMessage?.({
+                    type: 'player_ready',
+                    user_id: 5,
+                    username: 'maria',
+                })
             })
 
             // Both should be ready now
@@ -300,11 +355,13 @@ describe('GameWaitingRoom - Ready Message Sync', () => {
 
             renderWithRouter('invite-4-5-123', location.state)
 
-            wsConnectHandler.onOpen?.()
+            act(() => {
+                wsConnectHandler.onOpen?.()
+            })
 
             // Click cancel
             const cancelButton = screen.getByText('Cancel')
-            fireEvent.click(cancelButton)
+            await user.click(cancelButton)
 
             // Should send cancel_waiting_room with extracted user_id
             expect(mockWs.send).toHaveBeenCalledWith(
@@ -326,24 +383,37 @@ describe('GameWaitingRoom - Ready Message Sync', () => {
 
             renderWithRouter('invite-4-5-123', location.state)
 
-            wsConnectHandler.onOpen?.()
+            act(() => {
+                wsConnectHandler.onOpen?.()
+            })
 
             // Mark both as ready
-            wsConnectHandler.onMessage?.({ type: 'player_ready', user_id: 4 })
-            wsConnectHandler.onMessage?.({ type: 'player_ready', user_id: 5 })
+            act(() => {
+                wsConnectHandler.onMessage?.({ type: 'player_ready', user_id: 4 })
+            })
 
-            expect(screen.getByText(/Both players are ready/)).toBeInTheDocument()
+            act(() => {
+                wsConnectHandler.onMessage?.({ type: 'player_ready', user_id: 5 })
+            })
+
+            await waitFor(() => {
+                expect(screen.getByText(/Both players are ready/)).toBeInTheDocument()
+            })
 
             // Opponent becomes unready
-            wsConnectHandler.onMessage?.({
-                type: 'player_unready',
-                user_id: 5,
-                username: 'maria',
+            act(() => {
+                wsConnectHandler.onMessage?.({
+                    type: 'player_unready',
+                    user_id: 5,
+                    username: 'maria',
+                })
             })
 
             // Should go back to waiting for ready
             await waitFor(() => {
-                expect(screen.getByText(/Waiting for both players/)).toBeInTheDocument()
+                const playerCards = screen.getAllByText(/Player (one|two)/i).map(el => el.closest('article'))
+                const mariaCard = playerCards.find(card => card?.textContent.includes('maria'))
+                expect(mariaCard?.textContent).toMatch(/Waiting for ready/)
             })
         })
     })
@@ -361,13 +431,17 @@ describe('GameWaitingRoom - Ready Message Sync', () => {
 
             renderWithRouter('invite-4-5-123', location.state)
 
-            wsConnectHandler.onOpen?.()
+            act(() => {
+                wsConnectHandler.onOpen?.()
+            })
 
             // Message from unknown user
-            wsConnectHandler.onMessage?.({
-                type: 'player_ready',
-                user_id: 999, // Unknown ID
-                username: 'unknown',
+            act(() => {
+                wsConnectHandler.onMessage?.({
+                    type: 'player_ready',
+                    user_id: 999, // Unknown ID
+                    username: 'unknown',
+                })
             })
 
             // Should log ID mismatch

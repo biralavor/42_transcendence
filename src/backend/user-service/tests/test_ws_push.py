@@ -207,7 +207,7 @@ async def test_game_invite_persists_notification_row():
 
 @pytest.mark.asyncio
 async def test_game_invite_response_persists_with_correct_type():
-    """POST /game-invites type=game_invite_response → persists with type='game_invite_response'."""
+    """POST /game-invite/response → persists with type='game_invite_response'."""
     mock_create = AsyncMock(return_value=_fake_notif("game_invite_response", user_id=3))
 
     with patch("service.main._notifications.create_notification", new=mock_create), \
@@ -215,9 +215,8 @@ async def test_game_invite_response_persists_with_correct_type():
         mock_mgr.broadcast = AsyncMock()
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.post(
-                "/game-invites",
+                "/game-invite/response",
                 json={
-                    "type": "game_invite_response",
                     "to_user_id": 3,
                     "room_id": "invite-9999-3-000",
                     "status": "accepted",
@@ -225,7 +224,7 @@ async def test_game_invite_response_persists_with_correct_type():
                 headers={"Authorization": "Bearer fake-token"},
             )
 
-    assert resp.status_code == 204
+    assert resp.status_code == 201
     args = mock_create.call_args[0]
     assert args[2] == "game_invite_response"
     assert "accepted" in args[3]

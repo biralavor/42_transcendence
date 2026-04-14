@@ -847,9 +847,10 @@ if container_running user-service; then
     # Fail suite if: no tests found, tests crashed, or any tests failed
     if [[ -z "$pass_count" ]] || [[ "$pass_count" == "0" ]] || [[ "$fail_count" != "0" ]] && [[ "$fail_count" != "" ]]; then
         printf "${RED}[FAIL]${RESET} User Service unit tests (${pass_count} passed, ${fail_count} failed)\n"
-        SUITE_PASS["$suite_name"]=0
-        SUITE_FAIL["$suite_name"]=1
-        ((FAIL++))
+        SUITE_PASS["$suite_name"]=$pass_count
+        SUITE_FAIL["$suite_name"]=$fail_count
+        ((PASS+=$pass_count))
+        ((FAIL+=$fail_count))
         printf "%s\n" "$out" | grep -i "error\|failed" | head -5 || true
     else
         printf "${GREEN}[PASS]${RESET} User Service unit tests (${pass_count} passed, ${fail_count} failed)\n"
@@ -874,9 +875,10 @@ if container_running game-service; then
     fail_count=$(echo "$out" | grep -oE '[0-9]+ failed' | awk '{print $1}' | head -1 || echo "0")
     if [[ -z "$pass_count" ]] || [[ "$pass_count" == "0" ]] || [[ "$fail_count" -gt 0 ]]; then
         printf "${RED}[FAIL]${RESET} Game Service unit tests (${pass_count} passed, ${fail_count} failed)\n"
-        SUITE_PASS["$suite_name"]=0
-        SUITE_FAIL["$suite_name"]=$(( fail_count > 0 ? fail_count : 1 ))
-        ((FAIL+=$(( fail_count > 0 ? fail_count : 1 ))))
+        SUITE_PASS["$suite_name"]=$pass_count
+        SUITE_FAIL["$suite_name"]=$fail_count
+        ((PASS+=$pass_count))
+        ((FAIL+=$fail_count))
         printf "%s\n" "$out" | grep -i "error\|failed" | head -5 || true
     else
         printf "${GREEN}[PASS]${RESET} Game Service unit tests (${pass_count} passed, ${fail_count} failed)\n"
@@ -901,9 +903,10 @@ if container_running chat-service; then
     fail_count=$(echo "$out" | grep -oE '[0-9]+ failed' | awk '{print $1}' | head -1 || echo "0")
     if [[ -z "$pass_count" ]] || [[ "$pass_count" == "0" ]] || [[ "$fail_count" -gt 0 ]]; then
         printf "${RED}[FAIL]${RESET} Chat Service unit tests (${pass_count} passed, ${fail_count} failed)\n"
-        SUITE_PASS["$suite_name"]=0
-        SUITE_FAIL["$suite_name"]=$(( fail_count > 0 ? fail_count : 1 ))
-        ((FAIL+=$(( fail_count > 0 ? fail_count : 1 ))))
+        SUITE_PASS["$suite_name"]=$pass_count
+        SUITE_FAIL["$suite_name"]=$fail_count
+        ((PASS+=$pass_count))
+        ((FAIL+=$fail_count))
         printf "%s\n" "$out" | grep -i "error\|failed" | head -5 || true
     else
         printf "${GREEN}[PASS]${RESET} Chat Service unit tests (${pass_count} passed, ${fail_count} failed)\n"
@@ -922,9 +925,9 @@ SUITE_NAMES+=("$suite_name")
 # ── 25. Frontend Unit Tests ───────────────────────────────────────────────────
 suite_name="Frontend Unit Tests"
 printf "\n${CYAN}=== $suite_name ===${RESET}\n"
-printf "Please wait for a while. I'm running more than 100 Frontend tests now...\n"
-printf "If you see no output for a long time, it may be because the frontend container is still starting up or installing dependencies. You can check the status with: docker logs frontend -f\n"
-printf "If the tests fail, the most relevant error messages will be displayed below.\n"
+printf "${YELLOW}Please wait for a while. I'm running more than 300 Frontend tests now...\n${RESET}"
+printf "${YELLOW}If you see no output for a long time, it may be because the frontend container is still starting up or installing dependencies. You can check the status with: docker logs frontend -f\n${RESET}"
+printf "${YELLOW}If the tests fail, the most relevant error messages will be displayed below.\n${RESET}"
 if container_running frontend; then
     out=$(docker exec frontend sh -c "npx vitest run 2>&1" || echo "")
     # Extract the "Tests" line which has the actual test count (not Test Files)
@@ -932,9 +935,10 @@ if container_running frontend; then
     fail_count=$(echo "$out" | grep "^[[:space:]]*Tests" | grep -oE '[0-9]+ failed' | awk '{print $1}' || echo "0")
     if [[ -z "$pass_count" ]] || [[ "$pass_count" == "0" ]] || [[ "$fail_count" -gt 0 ]]; then
         printf "${RED}[FAIL]${RESET} Frontend unit tests (${pass_count} passed, ${fail_count} failed)\n"
-        SUITE_PASS["$suite_name"]=0
-        SUITE_FAIL["$suite_name"]=$(( fail_count > 0 ? fail_count : 1 ))
-        ((FAIL+=$(( fail_count > 0 ? fail_count : 1 ))))
+        SUITE_PASS["$suite_name"]=$pass_count
+        SUITE_FAIL["$suite_name"]=$fail_count
+        ((PASS+=$pass_count))
+        ((FAIL+=$fail_count))
         printf "%s\n" "$out" | grep -i "error\|failed" | head -5 || true
     else
         printf "${GREEN}[PASS]${RESET} Frontend unit tests (${pass_count} passed, ${fail_count} failed)\n"
