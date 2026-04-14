@@ -16,146 +16,60 @@ permissions:
 
 jobs:
     health-check:
-        name: Run make check on Alpine
+        name: Run make check
         runs-on: ubuntu-latest
         timeout-minutes: 13
 
-        # Use Alpine container with Docker-in-Docker support
-        container:
-            image: alpine:latest
-
-        services:
-            # Docker-in-Docker service for building and running containers
-            docker:
-                image: docker:dind
-                options: >-
-                    --privileged
-                    --health-cmd "docker info"
-                    --health-interval 10s
-                    --health-timeout 5s
-                    --health-retries 5
-
         steps:
             - name: Checkout repository
-              uses: actions/checkout@v6
-
-            - name: Install dependencies on Alpine
-              run: |
-                  # Install required tools for Alpine Linux
-                  apk add --no-cache \
-                    docker-cli \
-                    docker-compose \
-                    make \
-                    bash \
-                    curl \
-                    git \
-                    python3
-
-            - name: Wait for Docker daemon
-              run: |
-                  # Wait for Docker daemon to be ready
-                  echo "Waiting for Docker daemon..."
-                  for i in {1..30}; do
-                    if docker ps &>/dev/null; then
-                      echo "Docker daemon is ready"
-                      exit 0
-                    fi
-                    echo "Attempt $i/30 - Docker not ready yet, waiting..."
-                    sleep 2
-                  done
-                  echo "Docker daemon failed to start"
-                  exit 1
+              uses: actions/checkout@v4
 
             - name: Verify Docker and Docker Compose
               run: |
                   echo "Docker version:"
                   docker --version
-                  echo ""
                   echo "Docker Compose version:"
-                  docker-compose --version
+                  docker compose version
 
             - name: Create .env file
               env:
                   DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
                   JWT_SECRET_KEY: ${{ secrets.JWT_SECRET_KEY }}
               run: |
-                  cat > .env << EOF
+                  cat > .env <<EOF
                   DB_HOST=db
                   DB_PORT=5432
                   DB_USER=transcendence_user
-                  DB_PASSWORD=$DB_PASSWORD
+                  DB_PASSWORD=${DB_PASSWORD}
                   DB_NAME=transcendence_db
                   USER_SERVICE_PORT=8001
                   GAME_SERVICE_PORT=8002
                   CHAT_SERVICE_PORT=8003
                   FRONTEND_PORT=3000
-                  JWT_SECRET_KEY=$JWT_SECRET_KEY
+                  JWT_SECRET_KEY=${JWT_SECRET_KEY}
                   EOF
 
-            - name: Start services (make up)
+            - name: Build and start all services (make)
               run: |
-                  echo "Building backend-base and starting services..."
-                  cd "${GITHUB_WORKSPACE}"
-                  # Set DOMAIN for docker-compose (required by Makefile)
                   export DOMAIN=localhost
                   make
 
-            - name: Verify containers are running
-              run: |
-                  echo "Verifying all containers are healthy..."
-                  docker compose ps
-                  echo ""
-
-                  # Wait for frontend to stabilize (it often restarts initially)
-                  echo "Waiting for frontend to stabilize..."
-                  for i in {1..15}; do
-                    FRONTEND_STATUS=$(docker compose ps frontend --format "{{.Status}}" 2>/dev/null || echo "")
-                    if [[ "$FRONTEND_STATUS" == "Up"* ]]; then
-                      echo "✅ Frontend is running"
-                      break
-                    fi
-                    echo "Attempt $i/15 - Frontend status: $FRONTEND_STATUS"
-                    sleep 2
-                  done
-
-                  # Count running containers
-                  RUNNING=$(docker compose ps --format "{{.Status}}" | grep -c "Up")
-                  echo "✅ $RUNNING containers running"
-
-            - name: Run health check (make check-no-wait)
+            - name: Run full health check (make check)
               id: health_check
               continue-on-error: true
               run: |
-                  echo "Starting health check (skipping redundant service check)..."
-                  cd "${GITHUB_WORKSPACE}"
-
-                  # Set strict mode but continue on errors (catch them after execution)
+                  export DOMAIN=localhost
                   set +e
-
-                  # Use make check-no-wait instead of make check
-                  # This skips the redundant 'make wait' since we already verified containers are healthy
-                  # Only runs seed + test script
-                  make check-no-wait 2>&1 | tee health_check.log
-                  MAKE_CHECK_EXIT_CODE=$?
-
-                  echo "make check-no-wait exit code: $MAKE_CHECK_EXIT_CODE"
-                  echo "make_check_exit_code=$MAKE_CHECK_EXIT_CODE" >> $GITHUB_OUTPUT
-
-                  # Exit with the captured code (will be 0 or non-zero based on test results)
-                  exit $MAKE_CHECK_EXIT_CODE
+                  make check
+                  echo "make_check_exit_code=$?" >> $GITHUB_OUTPUT
 
             - name: Parse test results
               id: parse_results
               if: always()
               run: |
-                  # Extract FAILED count from the summary
-                  # Note: Using sed instead of grep -P because BusyBox grep doesn't support Perl regex
                   if [[ -f "make_check_results.txt" ]]; then
                     FAILED=$(grep "TOTAL.*FAILED:" make_check_results.txt | sed 's/.*FAILED: \([0-9]*\).*/\1/' || echo "0")
                     PASSED=$(grep "TOTAL.*PASSED:" make_check_results.txt | sed 's/.*PASSED: \([0-9]*\).*/\1/' || echo "0")
-                  elif [[ -f "health_check.log" ]]; then
-                    FAILED=$(grep "TOTAL.*FAILED:" health_check.log | sed 's/.*FAILED: \([0-9]*\).*/\1/' || echo "0")
-                    PASSED=$(grep "TOTAL.*PASSED:" health_check.log | sed 's/.*PASSED: \([0-9]*\).*/\1/' || echo "0")
                   else
                     FAILED="0"
                     PASSED="0"
@@ -164,11 +78,9 @@ jobs:
                   echo "Test Results Summary:"
                   echo "  PASSED: $PASSED"
                   echo "  FAILED: $FAILED"
-                  echo ""
                   echo "passed=$PASSED" >> $GITHUB_OUTPUT
                   echo "failed=$FAILED" >> $GITHUB_OUTPUT
 
-                  # Return non-zero if any tests failed
                   if [[ "$FAILED" -gt 0 ]]; then
                     echo "❌ Health check FAILED: $FAILED test(s) failing"
                     exit 1
