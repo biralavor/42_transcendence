@@ -66,7 +66,17 @@ jobs:
               run: |
                   export DOMAIN=localhost
                   set +e
-                  make check
+                  # Run wait + seed separately so we can re-verify stability after the
+                  # TRUNCATE TABLE CASCADE in seed_dev.py. That truncation acquires an
+                  # ACCESS EXCLUSIVE lock on all tables and can disrupt uvicorn's DB
+                  # connection pool, causing a brief container restart. The second
+                  # 'make wait' ensures all three services are back up before the test
+                  # script runs the docker network inspect check.
+                  make wait
+                  make seed
+                  make wait
+                  PAGER=cat GIT_PAGER=cat bash tests/TranscendenceHealthCheck.sh \
+                    | tee >(sed 's/\x1b\[[0-9;]*m//g' > make_check_results.txt) | cat
                   echo "make_check_exit_code=$?" >> $GITHUB_OUTPUT
 
             - name: Parse test results
