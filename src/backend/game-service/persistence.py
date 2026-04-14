@@ -59,6 +59,10 @@ class TournamentCannotBeCancelled(Exception):
 class TournamentNotParticipant(Exception):
     pass
 
+
+class TournamentNotInProgress(Exception):
+    pass
+
 async def delete_tournament(
     db: AsyncSession,
     tournament_id: int,
@@ -147,6 +151,14 @@ async def leave_tournament(
             await db.delete(tournament)
 
     await db.commit()
+
+async def withdraw_tournament(
+    db: AsyncSession,
+    tournament_id: int,
+    user_id: int,
+) -> None:
+    """Alias for leave_tournament - user withdraws from a tournament."""
+    return await leave_tournament(db, tournament_id, user_id)
 
 async def create_tournament(
     db: AsyncSession, name: str, creator_id: int, max_participants: int
