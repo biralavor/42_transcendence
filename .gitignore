@@ -28,3 +28,8 @@ package-lock.json
 # Tem result tests logs
 make_check_results.txt
 .codex/
+.codex
+
+# Test result logs
+make_check_results.txt
+release.txt
