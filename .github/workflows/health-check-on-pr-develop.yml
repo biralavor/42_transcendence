@@ -96,6 +96,8 @@ jobs:
               run: |
                   echo "Building backend-base and starting services..."
                   cd "${GITHUB_WORKSPACE}"
+                  # Set DOMAIN for docker-compose (required by Makefile)
+                  export DOMAIN=localhost
                   make
 
             - name: Verify containers are running
@@ -103,6 +105,18 @@ jobs:
                   echo "Verifying all containers are healthy..."
                   docker compose ps
                   echo ""
+
+                  # Wait for frontend to stabilize (it often restarts initially)
+                  echo "Waiting for frontend to stabilize..."
+                  for i in {1..15}; do
+                    FRONTEND_STATUS=$(docker compose ps frontend --format "{{.Status}}" 2>/dev/null || echo "")
+                    if [[ "$FRONTEND_STATUS" == "Up"* ]]; then
+                      echo "✅ Frontend is running"
+                      break
+                    fi
+                    echo "Attempt $i/15 - Frontend status: $FRONTEND_STATUS"
+                    sleep 2
+                  done
 
                   # Count running containers
                   RUNNING=$(docker compose ps --format "{{.Status}}" | grep -c "Up")
@@ -135,12 +149,13 @@ jobs:
               if: always()
               run: |
                   # Extract FAILED count from the summary
+                  # Note: Using sed instead of grep -P because BusyBox grep doesn't support Perl regex
                   if [[ -f "make_check_results.txt" ]]; then
-                    FAILED=$(grep "TOTAL.*FAILED:" make_check_results.txt | grep -oP 'FAILED: \K\d+' || echo "0")
-                    PASSED=$(grep "TOTAL.*PASSED:" make_check_results.txt | grep -oP 'PASSED: \K\d+' || echo "0")
+                    FAILED=$(grep "TOTAL.*FAILED:" make_check_results.txt | sed 's/.*FAILED: \([0-9]*\).*/\1/' || echo "0")
+                    PASSED=$(grep "TOTAL.*PASSED:" make_check_results.txt | sed 's/.*PASSED: \([0-9]*\).*/\1/' || echo "0")
                   elif [[ -f "health_check.log" ]]; then
-                    FAILED=$(grep "TOTAL.*FAILED:" health_check.log | grep -oP 'FAILED: \K\d+' || echo "0")
-                    PASSED=$(grep "TOTAL.*PASSED:" health_check.log | grep -oP 'PASSED: \K\d+' || echo "0")
+                    FAILED=$(grep "TOTAL.*FAILED:" health_check.log | sed 's/.*FAILED: \([0-9]*\).*/\1/' || echo "0")
+                    PASSED=$(grep "TOTAL.*PASSED:" health_check.log | sed 's/.*PASSED: \([0-9]*\).*/\1/' || echo "0")
                   else
                     FAILED="0"
                     PASSED="0"
