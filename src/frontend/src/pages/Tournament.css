@@ -114,3 +114,27 @@
   font-size: 0.8rem;
   color: var(--metal-silver);
 }
+
+.tournament-matches {
+  margin-top: 1.5rem;
+}
+
+.matches-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1rem;
+  align-items: stretch;
+}
+
+.tournament-match-cell {
+  border: 2px solid var(--metal-silver);
+  border-radius: 8px;
+  padding: 0.75rem;
+  background-color: var(--night-blue);
+  min-height: 150px;
+  height: 100%;
+}
+
+.tournament-match-cell.finished {
+  border-color: var(--accent-primary, #4caf50);
+}
