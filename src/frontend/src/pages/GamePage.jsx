@@ -5,12 +5,6 @@ import PongCanvasMultiplayer from '../Components/PongCanvasMultiplayer'
 import './GamePage.css'
 import { apiJson } from '../utils/apiClient'
 
-/**
- * GamePage - Multiplayer Pong Game with Server-Authoritative Logic
- *
- * This page is reached after both players are ready in GameWaitingRoom.
- * It renders the game canvas connected to the backend game-service.
- */
 export default function GamePage() {
   const { roomId } = useParams()
   const navigate = useNavigate()
@@ -62,13 +56,24 @@ export default function GamePage() {
   return (
     <>
       <NavbarComponent />
-      <main className="game-page">
-        <PongCanvasMultiplayer
-          gameId={roomId}
-          player1Id={player1Id}
-          player2Id={player2Id}
-          onGameEnd={handleGameEnd}
-        />
+      <main className="arcade-content game-page">
+        <section className="arcade-screen game-page-screen">
+          <div className="arcade-panel game-page-panel">
+            <div className="game-page-header">
+              <span className="arcade-display game-page-kicker">Live Match</span>
+              <h1 className="arcade-title game-page-title">Pong Arena</h1>
+            </div>
+
+            <div className="game-page-canvas-shell">
+              <PongCanvasMultiplayer
+                gameId={roomId}
+                player1Id={player1Id}
+                player2Id={player2Id}
+                onGameEnd={handleGameEnd}
+              />
+            </div>
+          </div>
+        </section>
       </main>
     </>
   )
