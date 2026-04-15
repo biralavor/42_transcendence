@@ -75,9 +75,9 @@ async def leaderboard(
     for sort_pair in order.split(','):
         entry = sort_pair.split(':', maxsplit = 1)
         if len(entry) == 1:
-            sort_assoc.append((entry[0], 'ASC'))
+            sort_assoc.append((entry[0].strip(), 'ASC'))
         elif len(entry) == 2:
-            sort_assoc.append((entry[0], entry[1]))
+            sort_assoc.append((entry[0].strip().lower(), entry[1].strip().upper()))
     paginated_result = \
         await get_leaderboard_paginated(session, limit, page, sort_assoc)
     return paginated_result

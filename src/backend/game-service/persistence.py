@@ -556,7 +556,7 @@ async def get_leaderboard_paginated(
         db: AsyncSession,
         limit: int = 20,
         page: int = 0,
-        sort_assoc: list[tuple[str, str]] = None
+        sort_assoc: list[tuple[str, str]] | None = None
 ) -> dict | None:
     offset = page * limit
     default_sort_string = """
@@ -795,7 +795,10 @@ SELECT
     AS last_page
     , :limit as per_page
     , (table user_count) as total
-    , COALESCE(jsonb_agg(to_jsonb(page_ranking_results)), '[]'::jsonb)
+    , COALESCE(
+        jsonb_agg(to_jsonb(page_ranking_results) ORDER BY {sort_string}),
+        '[]'::jsonb
+    )
     AS results
     , (SELECT to_jsonb(summary) FROM summary)
     AS summary
