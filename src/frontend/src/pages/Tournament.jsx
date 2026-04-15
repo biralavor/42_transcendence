@@ -358,23 +358,14 @@ export default function Tournament() {
     })
   }
 
-  const matchesByRound = useMemo(() => {
-    const map = {}
+  const sortedMatches = useMemo(() => {
+    if (!tournament?.matches) return []
 
-    if (tournament?.matches) {
-      for (const m of tournament.matches) {
-        const r = m.round ?? 0
-        map[r] = map[r] || []
-        map[r].push(m)
-      }
-    }
-
-    return Object.entries(map)
-      .sort((a, b) => Number(a[0]) - Number(b[0]))
-      .map(([round, list]) => ({
-        round: Number(round),
-        matches: list.sort((a, b) => a.position - b.position),
-      }))
+    return [...tournament.matches].sort((a, b) => {
+      const roundDiff = Number(a.round ?? 0) - Number(b.round ?? 0)
+      if (roundDiff !== 0) return roundDiff
+      return Number(a.position ?? 0) - Number(b.position ?? 0)
+    })
   }, [tournament])
 
   function renderMatchCell(match) {
@@ -607,21 +598,16 @@ export default function Tournament() {
               </div>
             )}
 
-            <div className="tournament-bracket">
-              {matchesByRound.length === 0 && (
+            <div className="tournament-matches">
+              <h2 className="arcade-section-title mb-3">Tournament Matches</h2>
+                      
+              {sortedMatches.length === 0 && (
                 <p className="arcade-copy">No matches scheduled yet.</p>
               )}
-
-              {matchesByRound.length > 0 && (
-                <div className="bracket-rounds">
-                  {matchesByRound.map(({ round, matches }) => (
-                    <div className="bracket-round" key={round}>
-                      <h3 className="arcade-section-title mb-3">Round {round}</h3>
-                      <div className="bracket-matches">
-                        {matches.map((match) => renderMatchCell(match))}
-                      </div>
-                    </div>
-                  ))}
+            
+              {sortedMatches.length > 0 && (
+                <div className="matches-grid">
+                  {sortedMatches.map((match) => renderMatchCell(match))}
                 </div>
               )}
             </div>

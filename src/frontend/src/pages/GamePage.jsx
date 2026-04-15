@@ -13,6 +13,7 @@ export default function GamePage() {
   const player1Id = location.state?.player1_id || location.state?.currentUser?.id
   const player2Id = location.state?.player2_id || location.state?.opponent?.id
   const tournamentId = location.state?.tournamentId
+  const matchId = location.state?.matchId
   const tournamentMatchId = location.state?.tournamentMatchId
   const [submittingResult, setSubmittingResult] = useState(false)
 
@@ -29,17 +30,19 @@ export default function GamePage() {
   async function handleGameEnd(result) {
     console.log('Game ended:', result)
 
-    if (tournamentId && tournamentMatchId && !submittingResult) {
+    if (tournamentId && matchId && !submittingResult) {
       setSubmittingResult(true)
       try {
-        await apiJson(`/api/game/tournaments/${tournamentId}/matches/${tournamentMatchId}/result`, {
+        await apiJson(`/api/game/tournaments/${tournamentId}/matches/${matchId}/result`, {
           method: 'POST',
           body: JSON.stringify(result),
         })
-        navigate(`/tournaments/${tournamentId}`)
+        navigate(`/tournaments/${tournamentId}`, { replace: true })
         return
       } catch (error) {
         console.error('Failed to submit tournament result:', error)
+        navigate(`/tournaments/${tournamentId}`, { replace: true })
+        return
       } finally {
         setSubmittingResult(false)
       }
@@ -52,7 +55,7 @@ export default function GamePage() {
     })
   }
 
-  return (
+return (
     <>
       <NavbarComponent />
       <main className="arcade-content game-page">
