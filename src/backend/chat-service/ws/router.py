@@ -1,5 +1,7 @@
 # Note: sys.path is set by main.py (Docker) or test file (host) — not repeated here.
 import re
+import asyncio
+import logging
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from jose import jwt
 from sqlalchemy import text
@@ -9,11 +11,13 @@ from shared.ws.manager import ConnectionManager
 from shared.database import AsyncSessionLocal
 from shared.config.settings import settings
 from service.persistence import get_or_create_room, save_message, get_room_history, is_blocked
+from service.ws.event_registry import chat_notification_event_registry
 
 router = APIRouter()
 manager = ConnectionManager()
 # Per-user notification connections, keyed by str(uid)
-notifications_manager = ConnectionManager()
+# Inject chat_notification_event_registry signal callback (dependency injection pattern)
+notifications_manager = ConnectionManager(signal_callback=chat_notification_event_registry.signal_event)
 
 _ALGORITHM = "HS256"
 SENDER_MAX_LEN = 50
@@ -75,9 +79,10 @@ async def _sender_is_blocked(
 async def chat_websocket(websocket: WebSocket, room_slug: str, token: str = "") -> None:
     # Healthcheck endpoint: restricted, one-shot, no relay
     if room_slug == "healthcheck":
-        # Restrict to localhost or healthcheck_token query parameter for security
+        # Restrict to localhost or internal Docker network for health checks
+        # Accept connections from localhost, Docker internal network (172.x.x.x), and healthcheck_token
         client_host = websocket.client.host if websocket.client else ""
-        is_local = client_host in ("127.0.0.1", "localhost", "::1")
+        is_local = client_host in ("127.0.0.1", "localhost", "::1") or client_host.startswith("172.")
         is_authorized = is_local or (token == settings.HEALTHCHECK_TOKEN if hasattr(settings, 'HEALTHCHECK_TOKEN') else False)
         
         if not is_authorized:
@@ -129,34 +134,46 @@ async def chat_websocket(websocket: WebSocket, room_slug: str, token: str = "") 
             return
 
     await manager.connect(room_slug, websocket)
+    
+    # Get room info and history once on connect (outside loop)
     try:
         async with AsyncSessionLocal() as db:
             room = await get_or_create_room(db, room_slug)
             history = await get_room_history(db, room.id)
-            for msg in history:
-                await websocket.send_json({"content": msg.content, "sender": msg.sender_name})
+            room_id = room.id
+    except Exception:
+        await websocket.close(code=4002)
+        return
+    
+    # Send history to client
+    for msg in history:
+        await websocket.send_json({"content": msg.content, "sender": msg.sender_name})
+    
+    # Main message loop - acquire DB connection only when needed
+    try:
+        while True:
+            data = await websocket.receive_json()
 
-            while True:
-                data = await websocket.receive_json()
-
-                # Typing event — broadcast only, never persisted
-                if isinstance(data, dict) and data.get("type") == "typing":
-                    sender = data.get("sender")
-                    # For DMs, use verified sender_username; for public rooms, trust client
-                    typing_sender = sender_username if dm_participants is not None else sender
-                    if isinstance(typing_sender, str) and 0 < len(typing_sender) <= SENDER_MAX_LEN:
+            # Typing event — broadcast only, never persisted
+            if isinstance(data, dict) and data.get("type") == "typing":
+                sender = data.get("sender")
+                # For DMs, use verified sender_username; for public rooms, trust client
+                typing_sender = sender_username if dm_participants is not None else sender
+                if isinstance(typing_sender, str) and 0 < len(typing_sender) <= SENDER_MAX_LEN:
+                    async with AsyncSessionLocal() as db:
                         if not await _sender_is_blocked(dm_participants, sender_uid, db):
                             await manager.broadcast(
                                 room_slug,
                                 {"type": "typing", "sender": typing_sender, "sender_uid": sender_uid},
                             )
-                    continue
+                continue
 
-                error = _validate(data)
-                if error:
-                    await websocket.send_json({"error": error})
-                    continue
+            error = _validate(data)
+            if error:
+                await websocket.send_json({"error": error})
+                continue
 
+            async with AsyncSessionLocal() as db:
                 if await _sender_is_blocked(dm_participants, sender_uid, db):
                     continue
 
@@ -164,7 +181,7 @@ async def chat_websocket(websocket: WebSocket, room_slug: str, token: str = "") 
                 message_sender = sender_username if dm_participants is not None else data["sender"]
                 
                 try:
-                    await save_message(db, room.id, message_sender, data["content"])
+                    await save_message(db, room_id, message_sender, data["content"])
                 except SQLAlchemyError:
                     await websocket.send_json({"error": "failed to save message"})
                     continue
@@ -191,6 +208,7 @@ async def chat_websocket(websocket: WebSocket, room_slug: str, token: str = "") 
                         "room_slug": room_slug,
                         "preview": data["content"][:80],
                     })
+                    # broadcast() now signals the registry via injected callback (event-driven delivery)
     except WebSocketDisconnect:
         pass
     finally:
@@ -199,6 +217,8 @@ async def chat_websocket(websocket: WebSocket, room_slug: str, token: str = "") 
 
 @router.websocket("/ws/notifications")
 async def notifications_websocket(websocket: WebSocket, token: str = "") -> None:
+    logger = logging.getLogger(__name__)
+    
     credential_id = _uid_from_token(token)
     if credential_id is None:
         await websocket.accept()
@@ -222,12 +242,67 @@ async def notifications_websocket(websocket: WebSocket, token: str = "") -> None
     user_key = str(uid)
     await notifications_manager.connect(user_key, websocket)
     try:
+        # Event-driven notification delivery with instant disconnect detection.
+        # Race two tasks: (1) wait for notification event, (2) detect client disconnect
+        # Whichever completes first wins—notifications fire instantly, disconnects are caught immediately.
         while True:
-            # Keep-alive: discard any client messages; server only pushes
-            msg = await websocket.receive()
-            if msg.get("type") == "websocket.disconnect":
+            event = await chat_notification_event_registry.get_or_create_event(user_key)
+            
+            # Create concurrent tasks for notification and disconnect detection
+            notify_task = asyncio.create_task(event.wait())
+            disconnect_task = asyncio.create_task(websocket.receive_text())
+            
+            try:
+                # Race: first to complete wins
+                # - If notification fires: notify_task completes, we clear and loop
+                # - If client disconnects: disconnect_task raises WebSocketDisconnect
+                # - If neither: timeout after 10s (fail-safe for stuck clients)
+                done, pending = await asyncio.wait(
+                    [notify_task, disconnect_task],
+                    timeout=10.0,
+                    return_when=asyncio.FIRST_COMPLETED
+                )
+                
+                # Cancel pending tasks to avoid resource leaks
+                for task in pending:
+                    task.cancel()
+                    try:
+                        await task
+                    except asyncio.CancelledError:
+                        pass
+                
+                # Check which task completed
+                if disconnect_task in done:
+                    # Client sent data or disconnected (listen-only, so this is unexpected)
+                    # If disconnect: receive_text() raised WebSocketDisconnect (caught below)
+                    # If data: log warning and break (client shouldn't send on listen-only channel)
+                    try:
+                        data = disconnect_task.result()
+                        logger.warning("Client sent data on listen-only channel: %s", data)
+                    except WebSocketDisconnect:
+                        # Expected disconnect path
+                        pass
+                    break
+                
+                # Notification received! Clear event and loop for next notification
+                if notify_task in done:
+                    await chat_notification_event_registry.clear_event(user_key)
+                # else: timeout (fail-safe), loop continues
+                    
+            except WebSocketDisconnect:
+                # Clean disconnect signal
                 break
-    except (WebSocketDisconnect, RuntimeError):
+            
+    except asyncio.CancelledError:
+        logger.debug(f"WS /ws/notifications cancelled for user {uid}")
+        raise
+    except WebSocketDisconnect:
         pass
+    except Exception as e:
+        logger.exception(f"WS /ws/notifications unexpected error for user {uid}: {e}")
     finally:
         notifications_manager.disconnect(user_key, websocket)
+        # Clean up chat notification event registry entry when last connection for user is gone
+        # Prevents unbounded growth of registry dict over time (one entry per user ever connected)
+        if notifications_manager.active_connections(user_key) == 0:
+            await chat_notification_event_registry.cleanup_event(user_key)

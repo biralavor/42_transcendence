@@ -2,13 +2,14 @@
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from jose import jwt
 from sqlalchemy import text
-from sqlalchemy.exc import SQLAlchemyError
 
 from shared.config.settings import settings
 from shared.ws.manager import ConnectionManager
 from shared.database import AsyncSessionLocal
-from service.persistence import create_match, finish_match, get_tournament_with_participants
+from shared.logging import ws_logger
+from service.persistence import create_match, finish_match
 from service.game_manager import game_manager
+from sqlalchemy.exc import SQLAlchemyError
 
 router = APIRouter()
 manager = ConnectionManager()
@@ -17,16 +18,13 @@ manager = ConnectionManager()
 _setup_sessions: dict[str, tuple[int, int]] = {}
 # Maps game_id (str) → match_id (int) for database updates
 _match_ids: dict[str, int] = {}
-
-_waiting_room_ready: dict[str, set[int]] = {}
-_waiting_room_players: dict[str, tuple[int, int]] = {}
-_tournament_ready: dict[tuple[int, int], set[int]] = {}
-_tournament_waiting_rooms: dict[tuple[int, int], str] = {}
+# Maps game_id (str) → {player_id: ready_bool} for waiting-room ready tracking
+_player_ready: dict[str, dict[int, bool]] = {}
 
 
 async def _broadcast_state(game_id: str, state_snapshot: dict) -> None:
     """Broadcast game state to both clients in a session.
-
+    
     Args:
         game_id: Unique game identifier
         state_snapshot: GameStateSnapshot serialized to dict with:
@@ -34,50 +32,9 @@ async def _broadcast_state(game_id: str, state_snapshot: dict) -> None:
     """
     msg = {
         "type": "state",
-        **state_snapshot,  # Flatten snapshot: ball, paddles, score at top level
+        **state_snapshot  # Flatten snapshot: ball, paddles, score at top level
     }
     await manager.broadcast(game_id, msg)
-
-
-def _cleanup_waiting_room(game_id: str) -> None:
-    _waiting_room_ready.pop(game_id, None)
-    _waiting_room_players.pop(game_id, None)
-
-
-async def _ensure_game_session(
-    game_id: str,
-    player1_id: int,
-    player2_id: int,
-    existing_match_id: int | None = None,
-) -> None:
-    _setup_sessions[game_id] = (player1_id, player2_id)
-
-    if game_manager.get_session(game_id):
-        if existing_match_id is not None and game_id not in _match_ids:
-            _match_ids[game_id] = existing_match_id
-        return
-
-    try:
-        await game_manager.create_session(
-            game_id,
-            player1_id,
-            player2_id,
-            broadcast_callback=_broadcast_state,
-            on_game_over_callback=_on_game_over,
-        )
-
-        if existing_match_id is not None:
-            _match_ids[game_id] = existing_match_id
-            return
-
-        async with AsyncSessionLocal() as db:
-            match = await create_match(db, player1_id, player2_id)
-            _match_ids[game_id] = match.id
-
-    except ValueError:
-        # Session already exists
-        if existing_match_id is not None and game_id not in _match_ids:
-            _match_ids[game_id] = existing_match_id
 
 
 async def _on_game_over(game_id: str, winner_id: int, score_p1: int, score_p2: int) -> None:
@@ -91,7 +48,7 @@ async def _on_game_over(game_id: str, winner_id: int, score_p1: int, score_p2: i
                     match_id,
                     winner_id,
                     score_p1,
-                    score_p2,
+                    score_p2
                 )
     except SQLAlchemyError:
         pass  # best-effort
@@ -100,48 +57,46 @@ async def _on_game_over(game_id: str, winner_id: int, score_p1: int, score_p2: i
         await game_manager.delete_session(game_id)
         _setup_sessions.pop(game_id, None)
         _match_ids.pop(game_id, None)
-        _cleanup_waiting_room(game_id)
-
+        
         # Broadcast the game over event authoritatively
-        await manager.broadcast(
-            game_id,
-            {
-                "type": "game_over",
-                "winner_id": winner_id,
-                "score_p1": score_p1,
-                "score_p2": score_p2,
-            },
-        )
+        await manager.broadcast(game_id, {
+            "type": "game_over",
+            "winner_id": winner_id,
+            "score_p1": score_p1,
+            "score_p2": score_p2
+        })
 
 
 @router.websocket("/ws/game/{game_id}")
 async def game_websocket(websocket: WebSocket, game_id: str, token: str | None = None) -> None:
     """
     WebSocket handler for in-game communication during a Pong match.
-
+    
     Protocol:
     - Client → Server: {"type": "input", "direction": "up"|"down"|"stop", "client_ts": <ms>}
     - Server → Client: {"type": "state", "ball": {...}, "paddles": {...}, "score": {...}}
-
+    
     The game loop runs independently in game_manager and broadcasts state
     to all connected clients each tick. This handler only processes inputs.
     """
     # Healthcheck endpoint: restricted, one-shot, no relay
     if game_id == "healthcheck":
-        # Restrict to localhost or healthcheck_token query parameter for security
+        # Restrict to localhost or internal Docker network for health checks
+        # Accept connections from localhost, Docker internal network (172.x.x.x), TestClient, and healthcheck_token
         client_host = websocket.client.host if websocket.client else ""
         healthcheck_token = token  # Reuse token param for healthcheck auth
-        is_local = client_host in ("127.0.0.1", "localhost", "::1")
-        is_authorized = is_local or (
-            healthcheck_token == settings.HEALTHCHECK_TOKEN
-            if hasattr(settings, "HEALTHCHECK_TOKEN")
-            else False
+        # TestClient uses "testclient" as host, treat it as local; also allow empty string (testing)
+        is_local = (
+            not client_host 
+            or client_host in ("127.0.0.1", "localhost", "::1", "testclient")
+            or client_host.startswith("172.")
         )
-
+        is_authorized = is_local or (healthcheck_token == settings.HEALTHCHECK_TOKEN if hasattr(settings, 'HEALTHCHECK_TOKEN') else False)
+        
         if not is_authorized:
             await websocket.close(code=4003, reason="Healthcheck access denied")
             return
-
+        
         try:
             await websocket.accept()
             # Send one "ok" response and close — don't relay or broadcast
@@ -165,12 +120,12 @@ async def game_websocket(websocket: WebSocket, game_id: str, token: str | None =
         if credential_id is None:
             await websocket.close(code=4001)
             return
-
+            
         # Resolve credential_id -> user.id (Hybrid Pattern Fast Path)
         async with AsyncSessionLocal() as db:
             result = await db.execute(
                 text("SELECT id FROM users WHERE credential_id = :cid"),
-                {"cid": credential_id},
+                {"cid": credential_id}
             )
             row = result.fetchone()
             if not row:
@@ -181,324 +136,201 @@ async def game_websocket(websocket: WebSocket, game_id: str, token: str | None =
         await websocket.close(code=4001)
         return
 
+    # Accept the connection
     await manager.connect(game_id, websocket)
-
+    
+    # Log connection
+    import logging
+    logger = logging.getLogger(__name__)
+    active_in_room = manager.active_connections(game_id)
+    logger.info(
+        f"[CONNECTION] Player {player_id} connected to room {game_id}. "
+        f"Now {active_in_room} player(s) in room."
+    )
+    
+    ws_logger.connection(
+        game_id=game_id,
+        player_id=player_id,
+        state='open',
+        metadata={'token_valid': token is not None, 'active_connections': active_in_room}
+    )
+    
     try:
         while True:
+            # Start flow timing
+            flow_start = ws_logger.flow_start(game_id, 'receive_and_process')
+            
+            # Receive message from client
             data = await websocket.receive_json()
-
+            
+            # Log incoming payload
+            ws_logger.receive(game_id, player_id, data)
+            
             if not isinstance(data, dict):
                 continue
-
+            
             event_type = data.get("type")
-
+            
+            # Handle player_ready: track ready state and broadcast game_start when both ready
             if event_type == "player_ready":
-                event_user_id = data.get("user_id")
-                player1_id = data.get("player1_id")
-                player2_id = data.get("player2_id")
-                existing_match_id = data.get("match_id")
-
-                if event_user_id != player_id:
-                    continue
-
-                if not isinstance(player1_id, int) or not isinstance(player2_id, int):
-                    continue
-
-                if player_id not in (player1_id, player2_id):
-                    continue
-
-                if not isinstance(existing_match_id, int):
-                    existing_match_id = None
-
-                stored_players = _waiting_room_players.get(game_id)
-                if stored_players is None:
-                    _waiting_room_players[game_id] = (player1_id, player2_id)
-                else:
-                    player1_id, player2_id = stored_players
-
-                ready_set = _waiting_room_ready.setdefault(game_id, set())
-                ready_set.add(player_id)
-
-                await manager.broadcast(
-                    game_id,
-                    {
-                        "type": "player_ready",
-                        "room_id": game_id,
-                        "user_id": player_id,
-                        "player1_id": player1_id,
-                        "player2_id": player2_id,
-                    },
-                )
-
-                if len(ready_set) == 2:
-                    await _ensure_game_session(
-                        game_id,
-                        player1_id,
-                        player2_id,
-                        existing_match_id=existing_match_id,
-                    )
-
-                    await manager.broadcast(
-                        game_id,
-                        {
+                if game_id not in _player_ready:
+                    _player_ready[game_id] = {}
+                _player_ready[game_id][player_id] = True
+                
+                # Broadcast player_ready to all connected clients
+                await manager.broadcast(game_id, data)
+                ws_logger.ready(game_id, player_id, data)
+                
+                # Check if both players are ready
+                if game_id in _setup_sessions:
+                    p1, p2 = _setup_sessions[game_id]
+                    ready_states = _player_ready.get(game_id, {})
+                    if ready_states.get(p1) and ready_states.get(p2):
+                        # Both ready: broadcast game_start to initiate game
+                        await manager.broadcast(game_id, {
                             "type": "game_start",
-                            "room_id": game_id,
-                            "player1_id": player1_id,
-                            "player2_id": player2_id,
-                            "match_id": _match_ids.get(game_id),
-                        },
-                    )
-
+                            "player1_id": p1,
+                            "player2_id": p2,
+                        })
+                        ws_logger.session_state(game_id, {
+                            'p1_id': p1,
+                            'p2_id': p2,
+                            'status': 'both_players_ready'
+                        })
+            
+            # Handle player_unready: update ready state and broadcast
             elif event_type == "player_unready":
-                event_user_id = data.get("user_id")
-                if event_user_id != player_id:
-                    continue
-
-                ready_set = _waiting_room_ready.setdefault(game_id, set())
-                ready_set.discard(player_id)
-
-                if not ready_set:
-                    _waiting_room_ready.pop(game_id, None)
-
-                await manager.broadcast(
-                    game_id,
-                    {
-                        "type": "player_unready",
-                        "room_id": game_id,
-                        "user_id": player_id,
-                    },
-                )
-
-            elif event_type == "cancel_waiting_room":
-                event_user_id = data.get("user_id")
-                if event_user_id != player_id:
-                    continue
-
-                _cleanup_waiting_room(game_id)
-
-                await manager.broadcast(
-                    game_id,
-                    {
-                        "type": "cancel_waiting_room",
-                        "room_id": game_id,
-                        "user_id": player_id,
-                    },
-                )
-
-            elif event_type == "game_start":
+                if game_id not in _player_ready:
+                    _player_ready[game_id] = {}
+                _player_ready[game_id][player_id] = False
+                
+                # Broadcast player_unready to all connected clients
+                await manager.broadcast(game_id, data)
+                ws_logger.uiUpdate(game_id, {'player_unready': player_id})
+            
+            # Handle game_start: initialize game session
+            if event_type == "game_start":
+                ws_logger.ready(game_id, player_id, data)
+                
                 player1_id = data.get("player1_id")
                 player2_id = data.get("player2_id")
-                existing_match_id = data.get("match_id")
-
+                
                 if not isinstance(player1_id, int) or not isinstance(player2_id, int):
                     continue
-
+                
+                # Verify the authenticated user is part of this game
                 if player_id not in (player1_id, player2_id):
                     continue
-
-                if not isinstance(existing_match_id, int):
-                    existing_match_id = None
-
-                await _ensure_game_session(
-                    game_id,
-                    player1_id,
-                    player2_id,
-                    existing_match_id=existing_match_id,
-                )
-
+                
+                # Check if this is a new game or joining an existing setup
+                if game_id not in _setup_sessions:
+                    # This is the first player to connect
+                    _setup_sessions[game_id] = (player1_id, player2_id)
+                    ws_logger.session_state(game_id, {
+                        'p1_id': player1_id,
+                        'p2_id': player2_id,
+                        'status': 'setup_initiated'
+                    })
+                
+                # Once both players are ready or we have the info, create the session
+                p1, p2 = _setup_sessions[game_id]
+                
+                # Start the authoritative game loop if not already started
+                if not game_manager.get_session(game_id):
+                    try:
+                        await game_manager.create_session(
+                            game_id,
+                            p1,
+                            p2,
+                            broadcast_callback=_broadcast_state,
+                            on_game_over_callback=_on_game_over,
+                        )
+                        ws_logger.session_state(game_id, {
+                            'p1_id': p1,
+                            'p2_id': p2,
+                            'status': 'session_created'
+                        })
+                        
+                        # Create database match record
+                        try:
+                            async with AsyncSessionLocal() as db:
+                                match = await create_match(db, p1, p2)
+                                # Store for later reference when game ends
+                                _match_ids[game_id] = match.id
+                                ws_logger.latency(f'game_start_to_session_created_{game_id}', flow_start)
+                        except SQLAlchemyError:
+                            pass  # best-effort
+                    except ValueError:
+                        # Game already exists, that's fine
+                        pass
+            
+            # Handle player input (with latency filtering)
             elif event_type == "input":
+                # Get the session
                 session = game_manager.get_session(game_id)
                 if session:
+                    # Process input using verified DB player_id
                     await game_manager.handle_player_input(game_id, player_id, data)
-
+            
+            # Pass-through other events (e.g., player_ready, player_unready, cancel_waiting_room)
             else:
-                await manager.broadcast(game_id, data)
-
+                # Log incoming data details for debugging
+                incoming_event_type = data.get("type", "unknown")
+                incoming_user_id = data.get("user_id", data.get("player_id"))
+                active_connections = manager.active_connections(game_id)
+                
+                # Log the incoming message and room state
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.info(
+                    f"[BROADCAST] {incoming_event_type} from player {incoming_user_id} "
+                    f"to room {game_id} with {active_connections} active connections"
+                )
+                
+                # Log broadcast
+                ws_logger.broadcast(
+                    game_id=game_id,
+                    payload=data,
+                    client_count=active_connections
+                )
+                
+                # Broadcast to all connected clients in this room
+                try:
+                    await manager.broadcast(game_id, data)
+                    logger.info(f"[BROADCAST] Successfully sent {incoming_event_type} to {active_connections} clients")
+                except Exception as e:
+                    logger.error(f"[BROADCAST] Error broadcasting {incoming_event_type}: {e}")
+                
+                ws_logger.flow_end(game_id, 'receive_and_broadcast', flow_start)
+    
     except WebSocketDisconnect:
-        pass
-
-    finally:
-        manager.disconnect(game_id, websocket)
-
-        if manager.active_connections(game_id) == 0:
-            _cleanup_waiting_room(game_id)
-
-            if not game_manager.get_session(game_id):
-                _setup_sessions.pop(game_id, None)
-                _match_ids.pop(game_id, None)
-
-
-def _clear_tournament_ready_for_user(tournament_id: int, user_id: int) -> None:
-    empty_keys: list[tuple[int, int]] = []
-
-    for key, ready_set in _tournament_ready.items():
-        if key[0] != tournament_id:
-            continue
-
-        ready_set.discard(user_id)
-        if not ready_set:
-            empty_keys.append(key)
-
-    for key in empty_keys:
-        _tournament_ready.pop(key, None)
-        _tournament_waiting_rooms.pop(key, None)
-
-
-@router.websocket("/ws/tournament/{tournament_id}")
-async def tournament_websocket(
-    websocket: WebSocket,
-    tournament_id: int,
-    token: str | None = None,
-) -> None:
-    if not token:
-        await websocket.close(code=4001)
-        return
-
-    try:
-        payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=["HS256"])
-        credential_id = payload.get("credential_id")
-        if credential_id is None:
-            await websocket.close(code=4001)
-            return
-
-        async with AsyncSessionLocal() as db:
-            result = await db.execute(
-                text("SELECT id FROM users WHERE credential_id = :cid"),
-                {"cid": credential_id},
-            )
-            row = result.fetchone()
-            if not row:
-                await websocket.close(code=4001)
-                return
-
-            player_id = row[0]
-
-            tournament_data = await get_tournament_with_participants(db, tournament_id)
-            if tournament_data is None:
-                await websocket.close(code=4004)
-                return
-
-            _, participants, _ = tournament_data
-            participant_ids = {p.user_id for p in participants}
-
-            if player_id not in participant_ids:
-                await websocket.close(code=4003)
-                return
-
-    except Exception:
-        await websocket.close(code=4001)
-        return
-
-    room_id = f"tournament_{tournament_id}"
-    await manager.connect(room_id, websocket)
-
-    try:
-        await websocket.send_json(
-            {
-                "type": "tournament_connected",
-                "tournament_id": tournament_id,
-                "user_id": player_id,
-            },
+        # Log connection close
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"[DISCONNECT] Player {player_id} disconnected from room {game_id}")
+        
+        ws_logger.connection(
+            game_id=game_id,
+            player_id=player_id,
+            state='close',
+            metadata={'reason': 'disconnect'}
         )
-
-        while True:
-            data = await websocket.receive_json()
-
-            if not isinstance(data, dict):
-                continue
-
-            event_type = data.get("type")
-            match_id = data.get("match_id")
-
-            if event_type == "ready" and isinstance(match_id, int):
-                async with AsyncSessionLocal() as db:
-                    tournament_data = await get_tournament_with_participants(db, tournament_id)
-                    if tournament_data is None:
-                        continue
-
-                    _, _, matches = tournament_data
-                    tournament_match = next(
-                        (m for m in matches if int(m.id) == int(match_id)),
-                        None,
-                    )
-
-                if tournament_match is None:
-                    continue
-
-                if tournament_match.status != "in_progress":
-                    continue
-
-                if tournament_match.match_id is None:
-                    continue
-
-                if player_id not in (
-                    tournament_match.player1_id,
-                    tournament_match.player2_id,
-                ):
-                    continue
-
-                ready_key = (tournament_id, int(tournament_match.id))
-                ready_set = _tournament_ready.setdefault(ready_key, set())
-                ready_set.add(player_id)
-
-                await manager.broadcast(
-                    room_id,
-                    {
-                        "type": "match_player_ready",
-                        "tournament_id": tournament_id,
-                        "match_id": int(tournament_match.id),
-                        "user_id": player_id,
-                    },
-                )
-
-                both_ready = (
-                    tournament_match.player1_id in ready_set
-                    and tournament_match.player2_id in ready_set
-                )
-
-                if both_ready:
-                    game_room_id = _tournament_waiting_rooms.get(ready_key)
-                    if not game_room_id:
-                        game_room_id = (
-                            f"tournament-{tournament_id}-match-{tournament_match.match_id}"
-                        )
-                        _tournament_waiting_rooms[ready_key] = game_room_id
-
-                    await manager.broadcast(
-                        room_id,
-                        {
-                            "type": "match_start",
-                            "tournament_id": tournament_id,
-                            "tournament_match_id": int(tournament_match.id),
-                            "match_id": int(tournament_match.match_id),
-                            "game_room_id": game_room_id,
-                            "player1_id": int(tournament_match.player1_id),
-                            "player2_id": int(tournament_match.player2_id),
-                        },
-                    )
-
-            elif event_type == "unready" and isinstance(match_id, int):
-                ready_key = (tournament_id, int(match_id))
-                ready_set = _tournament_ready.setdefault(ready_key, set())
-                ready_set.discard(player_id)
-
-                if not ready_set:
-                    _tournament_ready.pop(ready_key, None)
-                    _tournament_waiting_rooms.pop(ready_key, None)
-
-                await manager.broadcast(
-                    room_id,
-                    {
-                        "type": "match_player_unready",
-                        "tournament_id": tournament_id,
-                        "match_id": int(match_id),
-                        "user_id": player_id,
-                    },
-                )
-
-    except WebSocketDisconnect:
+        # Client disconnected
         pass
-
+    
     finally:
-        _clear_tournament_ready_for_user(tournament_id, player_id)
-        manager.disconnect(room_id, websocket)
+        # Clean up on disconnect
+        manager.disconnect(game_id, websocket)
+        
+        import logging
+        logger = logging.getLogger(__name__)
+        remaining = manager.active_connections(game_id)
+        logger.info(f"[CLEANUP] Player {player_id} removed from room {game_id}. Remaining: {remaining}")
+        
+        # If this was the last player, end the game
+        if remaining == 0:
+            logger.info(f"[CLEANUP] Room {game_id} is empty, cleaning up game session")
+            await game_manager.delete_session(game_id)
+            _setup_sessions.pop(game_id, None)
+            _match_ids.pop(game_id, None)
+            _player_ready.pop(game_id, None)

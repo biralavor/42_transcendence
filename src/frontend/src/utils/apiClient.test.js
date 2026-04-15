@@ -28,6 +28,11 @@ describe('apiClient', () => {
     // Mock window.dispatchEvent
     global.dispatchEvent = vi.fn()
 
+    // Mock window.location.href to prevent jsdom navigation errors
+    // jsdom doesn't support full page navigation, so we mock it
+    delete window.location
+    window.location = { href: '' }
+
     // Default: have stored auth available
     authStorage.getStoredAuth.mockReturnValue({
       access_token: 'valid_token_123',

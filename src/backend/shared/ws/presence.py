@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Dict, Set
 
 if TYPE_CHECKING:
     from fastapi import WebSocket
+
+logger = logging.getLogger(__name__)
 
 
 class PresenceManager:
@@ -31,6 +34,15 @@ class PresenceManager:
                 await ws.send_json(message)
             except Exception:
                 self.disconnect(user_id, ws)
+        
+        # Signal handlers that data is ready (event-driven delivery)
+        # Try to signal presence_event_registry if available (graceful fallback)
+        try:
+            from service.ws.event_registry import presence_event_registry
+            await presence_event_registry.signal_event(str(user_id))
+        except (ImportError, AttributeError, Exception) as e:
+            # Non-blocking: signaling is best-effort, don't fail broadcast
+            pass
 
 
 presence_manager = PresenceManager()

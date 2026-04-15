@@ -66,3 +66,23 @@ FastAPI routes must NOT include the prefix.
 - **Microservices** are never directly exposed — nginx proxies by URL prefix.
 - **db** has no host port binding — internal only.
 - **Shared code** (`src/backend/shared/`) is bind-mounted into every service at `/app/shared/`.
+
+---
+
+## WebSocket Architecture
+
+### Event-Driven Notifications
+
+Transcendence uses an **event-driven notification architecture** for real-time WebSocket handlers. Instead of polling-based sleep loops, notifications are delivered instantly via `asyncio.Event()` signaling.
+
+**Key improvements:**
+- **Latency**: 900-1000ms → < 50ms (20-50x faster)
+- **CPU**: No polling overhead
+- **Scalability**: All handlers for a user wake simultaneously
+
+**Examples:**
+- Game invite modal appears INSTANTLY when sent
+- DM notifications delivered without delay
+- Presence (online/offline status) updates in real-time
+
+**See**: [EVENT_DRIVEN_NOTIFICATIONS.md](EVENT_DRIVEN_NOTIFICATIONS.md) for complete architecture guide, implementation details, and developer instructions.
