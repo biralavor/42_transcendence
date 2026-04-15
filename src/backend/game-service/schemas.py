@@ -80,6 +80,8 @@ class TournamentMatchResponse(BaseModel):
     player2_id: int | None
     winner_id: int | None
     status: str
+    score_p1: int = 0
+    score_p2: int = 0
 
 
 class TournamentDetailResponse(BaseModel):
