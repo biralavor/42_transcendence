@@ -394,6 +394,7 @@ async def finish_match(
     match.score_p2 = score_p2
     match.finished_at = datetime.now(timezone.utc)
     match.status = "finished"
+    await award_xp(winner_id, 10, db)
     await db.commit()
     await db.refresh(match)
     return match
@@ -444,6 +445,7 @@ async def record_tournament_match_result(
         match.status = "finished"
         match.finished_at = datetime.now(timezone.utc)
 
+    await award_xp(winner_id, 100, db)
     current_round = tm.round
     round_result = await db.execute(
         select(TournamentMatch)
@@ -904,8 +906,9 @@ async def get_leaderboard(db: AsyncSession, limit: int = 20) -> list[dict]:
         for rank, row in enumerate(result.mappings().all(), start=1)
     ]
 
-# increment on game end?
+
 async def award_xp(user_id: int, amount: int, session: AsyncSession):
+    """ caller should commit session"""
     statement = text("""
     INSERT INTO user_xp (user_id, xp)
     VALUES (:user_id, :amount)
@@ -915,13 +918,91 @@ async def award_xp(user_id: int, amount: int, session: AsyncSession):
     result = await session.execute(
         statement, {'user_id': user_id, 'amount': amount}
     )
-    result_scalar = result.scalar_one()
-    # await session.commit() # maybe better let caller commit session
-    return result_scalar
+    result_victories = await victories(user_id, session)
+    tournament_amount_xp = 100
+    if amount == tournament_amount_xp:
+        result_victories['tournament_wins'] += 1
+    else:
+        result_victories['regular_wins'] += 1
+    await reward_game_achievement_if_should(result_victories, user_id, session)
+    xp = result.scalar_one()
+    return xp
 
 
-# check on game end?
-async def victories(user_id: int, session: AsyncSession) -> int | None:
+async def reward_game_achievement_if_should(
+        result_victories: dict[str, int], user_id: int, session: AsyncSession):
+    """ caller should commit session"""
+    win_breakpoints = [1, 3, 5, 10, 25, 50, 100, 250, 500, 1000]
+
+    regular_achievement = next((
+        w_break for w_break in win_breakpoints
+        if result_victories['regular_wins'] == w_break
+    ), None)
+
+    if regular_achievement is not None:
+        achievement = {
+            "a_key": f'win{regular_achievement}',
+            "a_name": f'win {regular_achievement} matches',
+            "a_desc": f'You Won {regular_achievement} regular matches',
+            "a_icon": f'({regular_achievement})'
+        }
+        await insert_game_achievement(user_id, achievement, session)
+
+    tournment_achievement = next((
+        w_break for w_break in win_breakpoints
+        if result_victories['tournament_wins'] == w_break
+    ), None)
+
+    if tournment_achievement is not None:
+        achievement = {
+            "a_key": f'twin{tournament_achievement}',
+            "a_name": f'win {tournament_achievement} tournament matches',
+            "a_desc": f'You Won {tournament_achievement} tournament matches',
+            "a_icon": f'_\({tournament_achievement})/_'
+        }
+        await insert_game_achievement(user_id, achievement, session)
+
+
+async def insert_game_achievement(
+        user_id: int, achievement: dict[str,str], session: AsyncSession):
+    """ caller should commit session"""
+    statement = text("""
+WITH
+insert_achievement_if_not_exists AS
+(
+    INSERT INTO achievements (key, name, description, icon)
+        VALUES (:a_key, :a_name, :a_desc, :a_icon)
+    ON CONFLICT (key) DO NOTHING
+    RETURNING id
+)
+, insertion_user_achievement AS
+(
+
+    INSERT INTO user_achievements (user_id, achievement_id)
+        VALUES (:user_id, COALESCE((SELECT id FROM achievements WHERE key = :a_key),
+                                   (table insert_achievement_if_not_exists)))
+    ON CONFLICT (user_id, achievement_id) DO NOTHING
+    RETURNING achievement_id
+)
+, insertion_notification AS
+(
+    INSERT INTO notifications (user_id, type, message)
+        VALUES (:user_id, 'game_achievement', :a_desc)
+)
+SELECT
+    :user_id as user_id
+    ,*
+FROM achievements
+    JOIN insertion_user_achievement on achievement_id = achievements.id
+    """)
+    result = await session.execute(
+        statement, {'user_id': user_id, **achievement}
+    )
+
+    return result.mappings().one_or_none()
+
+
+async def victories(user_id: int, session: AsyncSession) -> dict[str, str]:
     statement = text("""
 WITH matches_results AS
 (
@@ -944,8 +1025,12 @@ WITH matches_results AS
   GROUP BY winner_id
 )
 SELECT
-  (COALESCE(wins, 0) + COALESCE(twins, 0))
+  COALESCE(wins, 0)
   AS wins_total
+  , COALESCE(twins, 0)
+  AS tournament_wins
+  , COALESCE(wins, 0) - COALESCE(twins, 0)
+  AS regular_wins
 FROM matches_results
   FULL OUTER JOIN tournament_matches_results ON winner_id = twinner_id
 LIMIT 1
@@ -953,5 +1038,11 @@ LIMIT 1
     result = await session.execute(
         statement, {'user_id': user_id}
     )
-    result_scalar: int | None = result.scalar_one_or_none()
-    return result_scalar
+
+    ret = result.mappings().one_or_none() or {
+        'wins_total': 0,
+        'regular_wins': 0,
+        'tournament_wins': 0
+    }
+
+    return {**ret}
