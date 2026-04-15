@@ -256,14 +256,27 @@ async def get_tournament_with_participants(
     tournament = result.scalars().first()
     if tournament is None:
         return None
+
     participants_result = await db.execute(
-        select(TournamentParticipant).where(TournamentParticipant.tournament_id == tournament_id)
+        select(TournamentParticipant).where(
+            TournamentParticipant.tournament_id == tournament_id
+        )
     )
     participants = list(participants_result.scalars().all())
+
     matches_result = await db.execute(
-        select(TournamentMatch).where(TournamentMatch.tournament_id == tournament_id)
+        select(TournamentMatch, Match.score_p1, Match.score_p2)
+        .outerjoin(Match, Match.id == TournamentMatch.match_id)
+        .where(TournamentMatch.tournament_id == tournament_id)
     )
-    matches = list(matches_result.scalars().all())
+    rows = matches_result.all()
+
+    matches = []
+    for tm, score_p1, score_p2 in rows:
+        tm.score_p1 = score_p1 or 0
+        tm.score_p2 = score_p2 or 0
+        matches.append(tm)
+
     return tournament, participants, matches
 
 async def list_tournaments(db: AsyncSession) -> list[Tournament]:

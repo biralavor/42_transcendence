@@ -27,7 +27,12 @@ export default function Tournament() {
   }, [currentUser, tournament])
 
   const isJoined = useMemo(() => {
-    return currentUser && tournament && tournament.participants?.some(
+    if (!currentUser || !tournament) return false
+  
+    const isActive =
+      tournament.status === 'open' || tournament.status === 'in_progress'
+  
+    return isActive && tournament.participants?.some(
       (p) => Number(p.user_id) === Number(currentUser.id),
     )
   }, [currentUser, tournament])
@@ -50,13 +55,34 @@ export default function Tournament() {
     const stats = {}
 
     tournament.participants.forEach(({ user_id }) => {
-      stats[user_id] = { userId: user_id, wins: 0, matches: 0 }
+      stats[user_id] = {
+        userId: user_id,
+        wins: 0,
+        matches: 0,
+        goalsFor: 0,
+        goalsAgainst: 0,
+      }
     })
 
     if (tournament.matches) {
       tournament.matches.forEach((m) => {
-        if (m.player1_id != null && stats[m.player1_id]) stats[m.player1_id].matches++
-        if (m.player2_id != null && stats[m.player2_id]) stats[m.player2_id].matches++
+        const p1Id = m.player1_id
+        const p2Id = m.player2_id
+        const p1Score = Number(m.score_p1 ?? 0)
+        const p2Score = Number(m.score_p2 ?? 0)
+
+        if (p1Id != null && stats[p1Id]) {
+          stats[p1Id].matches++
+          stats[p1Id].goalsFor += p1Score
+          stats[p1Id].goalsAgainst += p2Score
+        }
+
+        if (p2Id != null && stats[p2Id]) {
+          stats[p2Id].matches++
+          stats[p2Id].goalsFor += p2Score
+          stats[p2Id].goalsAgainst += p1Score
+        }
+
         if (m.status === 'finished' && m.winner_id != null && stats[m.winner_id]) {
           stats[m.winner_id].wins++
         }
@@ -65,17 +91,28 @@ export default function Tournament() {
 
     const entries = Object.values(stats).map((s) => {
       const prof = profiles[s.userId] || {}
+
       return {
         userId: s.userId,
         username: prof.username || `User ${s.userId}`,
         avatarUrl: prof.avatarUrl || '/avatar_placeholder.jpg',
         wins: s.wins,
         matches: s.matches,
+        goalsFor: s.goalsFor,
+        goalsAgainst: s.goalsAgainst,
+        goalDifference: s.goalsFor - s.goalsAgainst,
         points: s.wins,
       }
     })
 
-    entries.sort((a, b) => b.points - a.points)
+    entries.sort((a, b) =>
+      b.points - a.points ||
+      b.goalDifference - a.goalDifference ||
+      b.goalsFor - a.goalsFor ||
+      b.wins - a.wins ||
+      a.username.localeCompare(b.username)
+    )
+
     return entries
   }, [tournament, profiles])
 
@@ -573,8 +610,12 @@ export default function Tournament() {
                     <thead>
                       <tr>
                         <th>Player</th>
-                        <th>Wins</th>
-                        <th>Matches</th>
+                        <th>Pts</th>
+                        <th>W</th>
+                        <th>MP</th>
+                        <th>GF</th>
+                        <th>GA</th>
+                        <th>GD</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -588,8 +629,12 @@ export default function Tournament() {
                             />
                             <span>{row.username}</span>
                           </td>
-                          <td>{row.wins}</td>
-                          <td>{row.matches}</td>
+                            <td>{row.points}</td>
+                            <td>{row.wins}</td>
+                            <td>{row.matches}</td>
+                            <td>{row.goalsFor}</td>
+                            <td>{row.goalsAgainst}</td>
+                            <td>{row.goalDifference}</td>
                         </tr>
                       ))}
                     </tbody>

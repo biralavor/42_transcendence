@@ -247,10 +247,16 @@ export default function Tournaments() {
     navigate(`/tournaments/${id}`)
   }
 
-  function hasJoined(t) {
-    if (!currentUser || !t.participants) return false
-    return t.participants.some((p) => Number(p.user_id) === Number(currentUser.id))
-  }
+  function isActiveTournament(t) {
+  return t?.status === 'open' || t?.status === 'in_progress'
+}
+
+function hasJoined(t) {
+  if (!currentUser || !t.participants) return false
+  if (!isActiveTournament(t)) return false
+
+  return t.participants.some((p) => Number(p.user_id) === Number(currentUser.id))
+}
 
   return (
     <div className="arcade-shell">
