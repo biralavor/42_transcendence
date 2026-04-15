@@ -1,18 +1,71 @@
-/* Game Page Styles */
-
 .game-page {
+  padding: 24px 16px;
+}
+
+.game-page-screen {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+.game-page-panel {
   width: 100%;
-  height: calc(100vh - var(--nav-height)); /* Subtract navbar height */
-  margin-top: var(--nav-height);
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 18px;
+}
+
+.game-page-header {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
-  overflow: hidden;
+  gap: 8px;
+  margin-bottom: 18px;
+  text-align: center;
 }
 
-.game-page > * {
+.game-page-kicker {
+  display: inline-block;
+}
+
+.game-page-title {
+  margin: 0;
+}
+
+.game-page-canvas-shell {
+  width: 100%;
+  max-width: 840px;
+  margin: 0 auto;
+}
+
+.game-page-canvas-shell .pong-canvas-container {
+  width: 100%;
+  max-width: 840px;
+  margin: 0 auto;
+}
+
+.game-page-canvas-shell .pong-canvas-wrapper {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+}
+
+.game-page-canvas-shell canvas {
+  display: block;
   width: 100%;
   height: 100%;
+}
+
+@media (max-width: 768px) {
+  .game-page {
+    padding: 16px 10px;
+  }
+
+  .game-page-panel {
+    padding: 12px;
+  }
+
+  .game-page-canvas-shell,
+  .game-page-canvas-shell .pong-canvas-container {
+    max-width: 100%;
+  }
 }
