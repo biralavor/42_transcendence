@@ -394,6 +394,7 @@ async def finish_match(
     match.score_p2 = score_p2
     match.finished_at = datetime.now(timezone.utc)
     match.status = "finished"
+    await db.flush()
     await award_xp(winner_id, 10, db)
     await db.commit()
     await db.refresh(match)
@@ -444,7 +445,7 @@ async def record_tournament_match_result(
         match.score_p2 = score_p2
         match.status = "finished"
         match.finished_at = datetime.now(timezone.utc)
-
+    await db.flush()
     await award_xp(winner_id, 100, db)
     current_round = tm.round
     round_result = await db.execute(
@@ -541,6 +542,8 @@ def leaderboard_order_by_str(sort_assoc: list[tuple[str, str]] | None) -> str | 
         'goals_scored',
         'goals_conceded',
         'goal_difference',
+        'max_streak',
+        'current_streak'
     ]
     order_columns = []
     for (sort_key, order) in sort_assoc:
@@ -951,7 +954,7 @@ async def reward_game_achievement_if_should(
         }
         await insert_game_achievement(user_id, achievement, session)
 
-    tournment_achievement = next((
+    tournament_achievement = next((
         w_break for w_break in win_breakpoints
         if result_victories['tournament_wins'] == w_break
     ), None)
@@ -1005,7 +1008,7 @@ FROM achievements
     return result.mappings().one_or_none()
 
 
-async def victories(user_id: int, session: AsyncSession) -> dict[str, str]:
+async def victories(user_id: int, session: AsyncSession) -> dict[str, int]:
     statement = text("""
 WITH matches_results AS
 (

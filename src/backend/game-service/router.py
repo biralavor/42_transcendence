@@ -37,7 +37,6 @@ from service.persistence import (
     withdraw_tournament,
 )
 from service.schemas import (
-    LeaderboardEntryResponse,
     MatchCreateRequest,
     MatchFinishRequest,
     MatchHistoryItem,
