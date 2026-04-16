@@ -127,3 +127,6 @@ Authorization: Bearer <access_token>
     "score_p1": 3,
     "score_p2": 5
 }
+
+##
+GET https://localhost:8443/api/game/leaderboard?limit=4&page=1&order=wins:desc,display_name:asc HTTP/1.1

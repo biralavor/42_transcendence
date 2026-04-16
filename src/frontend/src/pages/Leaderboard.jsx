@@ -1,11 +1,64 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import NavbarComponent from '../Components/Navbar'
 
-export default function Leaderboard() {
-  const [entries, setEntries] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
+/**
+ * @typedef {Object} LeaderboardEntry
+ * @property {number} rank - The rank position
+ * @property {number} total_games - Number of total games played
+ * @property {number} wins - Number of wins
+ * @property {number} losses - Number of losses
+ * @property {number} points - Total points
+ * @property {number} user_id - User's unique identifier
+ * @property {number} max_streak - Maximum winning streak achieved
+ * @property {string} display_name - User's display name
+ * @property {number} goals_scored - Total goals scored
+ * @property {number} current_streak - Current winning streak
+ * @property {number} goals_conceded - Total goals conceded
+ * @property {number} goal_difference - Goal difference (scored - conceded)
+ */
 
+/**
+ * @typedef {Object} StatWithName
+ * @property {number} value - value of stats
+ * @property {string} display_name - Display name of the user who achieved this
+ */
+
+/**
+ * @typedef {Object} LeaderboardSummary
+ * @property {StatWithName} max_points - User with maximum points
+ * @property {StatWithName} max_max_streak - User with maximum streak achievement
+ * @property {StatWithName} max_current_streak - User with maximum current streak
+ */
+
+/**
+ * @typedef {Object} LeaderboardResponse
+ * @property {number} page - Current page number
+ * @property {number} last_page - Last page number
+ * @property {number} per_page - Number of items per page
+ * @property {number} total - Total number of items across all pages
+ * @property {LeaderboardEntry[]} results - Array of leaderboard entries
+ * @property {LeaderboardSummary } summary - Summary statistics for the leaderboard
+ */
+
+export default function Leaderboard() {
+  /** @type {[LeaderboardResponse, React.Dispatch<React.SetStateAction<LeaderboardResponse>>]} */
+  const [page, setPage] = useState({
+    page: 0,
+    last_page: 0,
+    per_page: 0,
+    total: 0,
+    results: [],
+    summary: {
+      max_max_streak: {value: 0, display_name: 'No Data'},
+      max_current_streak: {value: 0, display_name: 'No Data'},
+      max_points: {value: 0, display_name: 'No Data'}
+    }
+  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  const entries = page.results ?? [];
+  const summary = page.summary
   useEffect(() => {
     const controller = new AbortController()
     // Flag to track whether the component has been unmounted.  We set this to
@@ -32,7 +85,7 @@ export default function Leaderboard() {
         const leaderboardData = await leaderboardResp.json()
         // Skip updates if the request was aborted or the effect was cancelled.
         if (controller.signal.aborted || cancelled) return
-        setEntries(leaderboardData)
+        setPage(leaderboardData)
       } catch (requestError) {
         // Ignore abort errors; otherwise report a generic failure.  Avoid
         // updating state if the component has unmounted or the request was aborted.
@@ -53,26 +106,6 @@ export default function Leaderboard() {
       controller.abort()
     }
   }, [])
-
-  const summary = useMemo(() => {
-    if (entries.length === 0) {
-      return {
-        highestPoints: 0,
-        longestWins: 0,
-        risingPlayer: 'No data',
-      }
-    }
-
-    const highestPoints = entries[0]?.points ?? 0
-    const longestWins = Math.max(...entries.map((entry) => entry.wins))
-    const rising = entries.find((entry) => entry.rank > 1) ?? entries[0]
-
-    return {
-      highestPoints,
-      longestWins,
-      risingPlayer: rising.username || `Player ${rising.user_id}`,
-    }
-  }, [entries])
 
   return (
     <div className="arcade-shell">
@@ -101,19 +134,25 @@ export default function Leaderboard() {
               <div className="col-12 col-md-4">
                 <article className="arcade-card h-100 text-center">
                   <p className="arcade-kicker mb-2">Highest points</p>
-                  <div className="arcade-title mb-0" style={{ fontSize: '2.4rem' }}>{summary.highestPoints}</div>
+                  <div className="arcade-title mb-0" style={{ fontSize: '2.4rem' }}>
+                    {summary.max_points.display_name}: {summary.max_points.value}
+                  </div>
                 </article>
               </div>
               <div className="col-12 col-md-4">
                 <article className="arcade-card h-100 text-center">
-                  <p className="arcade-kicker mb-2">Most wins</p>
-                  <div className="arcade-title mb-0" style={{ fontSize: '2.4rem' }}>{summary.longestWins}W</div>
+                  <p className="arcade-kicker mb-2">Largest all-time win streak</p>
+                  <div className="arcade-title mb-0" style={{ fontSize: '2.4rem' }}>
+                    {summary.max_max_streak.display_name}: {summary.max_max_streak.value}
+                  </div>
                 </article>
               </div>
               <div className="col-12 col-md-4">
                 <article className="arcade-card h-100 text-center">
-                  <p className="arcade-kicker mb-2">Rising player</p>
-                  <div className="arcade-title mb-0" style={{ fontSize: '2rem' }}>{summary.risingPlayer}</div>
+                  <p className="arcade-kicker mb-2">Largest current win streak</p>
+                  <div className="arcade-title mb-0" style={{ fontSize: '2rem' }}>
+                    {summary.max_current_streak.display_name}: {summary.max_current_streak.value}
+                  </div>
                 </article>
               </div>
             </div>
@@ -131,15 +170,17 @@ export default function Leaderboard() {
                   <table className="leaderboard-table">
                     <thead>
                       <tr>
-                        <th>Rank</th>
-                        <th>Player</th>
-                        <th>W</th>
-                        <th>L</th>
-                        <th>GP</th>
-                        <th>GF</th>
-                        <th>GA</th>
-                        <th>GD</th>
-                        <th>Pts</th>
+                        <th title='Player position in ranking'>Rank</th>
+                        <th title='Player display name'>Player</th>
+                        <th title='Wins'>W</th>
+                        <th title='Losses'>L</th>
+                        <th title='Games Played'>GP</th>
+                        <th title='Goals For, that is goals scored'>GF</th>
+                        <th title='Goals Against, that is goals conceded'>GA</th>
+                        <th title='Goals Difference, that is the difference between scored and conceded'>GD</th>
+                        <th title='Points'>Pts</th>
+                        <th title='Max Win Streak'>MWS</th>
+                        <th title='Current Win Streak'>CWS</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -148,7 +189,7 @@ export default function Leaderboard() {
                         return (
                           <tr key={entry.user_id} className={rowClass}>
                             <td>#{entry.rank}</td>
-                            <td>{entry.username || `Player ${entry.user_id}`}</td>
+                            <td>{entry.display_name || `Player ${entry.user_id}`}</td>
                             <td>{entry.wins}</td>
                             <td>{entry.losses}</td>
                             <td>{entry.total_games}</td>
@@ -156,6 +197,8 @@ export default function Leaderboard() {
                             <td>{entry.goals_conceded}</td>
                             <td>{entry.goal_difference}</td>
                             <td>{entry.points}</td>
+                            <td>{entry.max_streak}</td>
+                            <td>{entry.current_streak}</td>
                           </tr>
                         )
                       })}

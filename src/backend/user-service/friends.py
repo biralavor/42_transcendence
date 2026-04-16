@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from service.models.friendship import Friendship
 from service.models.user import User
-
+from service.persistence import reward_friendship_achievement_if_should
 
 async def get_friends(user_id: int, session: AsyncSession) -> list[User]:
     """Returns User objects for all accepted friends of user_id."""
@@ -130,6 +130,9 @@ async def respond_to_friend_request(
         if action == "accept":
             friendship.status = "accepted"
             await session.flush()
+            await reward_friendship_achievement_if_should(
+                friendship.requester_id, friendship.addressee_id, session
+            )
         else:
             await session.delete(friendship)
     

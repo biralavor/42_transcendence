@@ -26,20 +26,6 @@ class StatsResponse(BaseModel):
     goals_scored: int
     goals_conceded: int
 
-
-class LeaderboardEntryResponse(BaseModel):
-    rank: int
-    user_id: int
-    username: str
-    wins: int
-    losses: int
-    total_games: int
-    goals_scored: int
-    goals_conceded: int
-    goal_difference: int
-    points: int
-
-
 class MatchCreateRequest(BaseModel):
     player1_id: int
     player2_id: int
@@ -107,3 +93,35 @@ class TournamentDetailResponse(BaseModel):
     created_at: datetime
     participants: list[TournamentParticipantResponse]
     matches: list[TournamentMatchResponse] = []
+
+## Leaderboard
+class PlayerStats(BaseModel):
+    rank: int
+    wins: int
+    losses: int
+    points: int
+    user_id: int
+    max_streak: int
+    total_games: int
+    display_name: str
+    goals_scored: int
+    current_streak: int
+    goals_conceded: int
+    goal_difference: int
+
+class StatEntry(BaseModel):
+    value: int
+    display_name: str
+
+class Summary(BaseModel):
+    max_points: StatEntry
+    max_max_streak: StatEntry
+    max_current_streak: StatEntry
+
+class LeaderboardResponse(BaseModel):
+    page: int
+    last_page: int
+    per_page: int
+    total: int
+    results: list[PlayerStats]
+    summary: Summary
