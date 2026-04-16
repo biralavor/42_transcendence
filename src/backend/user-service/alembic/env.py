@@ -40,7 +40,7 @@ from shared.config.settings import settings  # noqa: E402
 from shared.database import Base             # noqa: E402
 
 # Import the service models so Alembic can detect them in Base.metadata
-from models.user import User  # noqa: E402, F401
+from models.user import User              # noqa: E402, F401
 from models.notification import Notification  # noqa: E402, F401
 from models.achievements import Achievement, UserAchievement, UserXP  # noqa: E402, F401
 
