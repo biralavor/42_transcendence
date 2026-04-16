@@ -221,7 +221,7 @@ async def withdraw_tournament(
 
     await db.commit()
     await db.refresh(tournament)
-    return tournament, tournament_complete, newly_assigned, newly_assigned
+    return tournament, tournament_complete, newly_assigned
 
 async def create_tournament(
     db: AsyncSession, name: str, creator_id: int, max_participants: int
@@ -572,7 +572,7 @@ async def record_tournament_match_result(
         match.status = "finished"
         match.finished_at = datetime.now(timezone.utc)
 
-    await _assign_available_tournament_matches(db, tournament_id)
+    newly_assigned = await _assign_available_tournament_matches(db, tournament_id)
 
     all_matches_result = await db.execute(
         select(TournamentMatch).where(TournamentMatch.tournament_id == tournament_id)
@@ -589,7 +589,7 @@ async def record_tournament_match_result(
 
     await db.commit()
     await db.refresh(tournament)
-    return tournament, tournament_complete, newly_assigned, newly_assigned
+    return tournament, tournament_complete, newly_assigned
 
 
 async def get_match(db: AsyncSession, match_id: int) -> Match | None:

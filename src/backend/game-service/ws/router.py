@@ -266,7 +266,14 @@ async def game_websocket(websocket: WebSocket, game_id: str, token: str | None =
                 payload = {"type": "player_unready", "room_id": game_id, "user_id": player_id}
                 ws_logger.broadcast(game_id, payload, client_count=manager.active_connections(game_id))
                 await manager.broadcast(game_id, payload)
-                ws_logger.uiUpdate(game_id, {"player_unready": player_id})
+                ws_logger.session_state(
+                    game_id,
+                    {
+                        "status": "player_unready",
+                        "user_id": player_id,
+                        "ready_players": sorted(ready_set),
+                    },
+                )
 
             elif event_type == "cancel_waiting_room":
                 event_user_id = data.get("user_id")
