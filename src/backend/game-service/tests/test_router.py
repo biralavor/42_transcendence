@@ -175,9 +175,10 @@ async def test_get_leaderboard_returns_ranked_rows(client):
     resp = await client.get("/leaderboard")
     assert resp.status_code == 200
     data = resp.json()
+    print(data)
     assert len(data['results']) == 3
     assert data['results'][0]["rank"] == 1
-    assert data['results'][0]["user_id"] == 1
+    assert data['results'][0]["user_id"] == 5001
     assert data['results'][0]["points"] == 3
 
 
@@ -197,8 +198,8 @@ async def test_get_leaderboard_honors_limit_query_param(client):
 
 @pytest.mark.asyncio
 async def test_get_leaderboard_limit_one_page_one(client):
-    for user_id1 in [1, 1, 2, 3, 1, 20, 30, 30, 30]:
-        for user_id2 in [1, 2, 3, 10, 20, 30, 99, 999]:
+    for user_id1 in [5001, 5001, 5002, 5003, 5001, 5020, 5030, 5030, 5030]:
+        for user_id2 in [5001, 5002, 5003, 5010, 5020, 5030, 5099, 5999]:
             if user_id1 == user_id2:
                 continue
             resp_create = await client.post("/matches", json={"player1_id": user_id1, "player2_id": user_id2})
@@ -226,8 +227,8 @@ async def test_get_leaderboard_limit_one_page_one(client):
 
 @pytest.mark.asyncio
 async def test_get_leaderboard_limit_one_page_zero_rank_desc(client):
-    for user_id1 in [1, 1, 2, 3, 1, 20, 30, 30, 30]:
-        for user_id2 in [1, 2, 3, 10, 20, 30, 99, 999]:
+    for user_id1 in [5001, 5001, 5002, 5003, 5001, 5020, 5030, 5030, 5030]:
+        for user_id2 in [5001, 5002, 5003, 5010, 5020, 5030, 5099, 5999]:
             if user_id1 == user_id2:
                 continue
             resp_create = await client.post("/matches", json={"player1_id": user_id1, "player2_id": user_id2})
