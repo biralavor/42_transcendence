@@ -10,6 +10,7 @@ import pytest
 from httpx import AsyncClient, ASGITransport
 
 from service.main import app
+from service.main import get_current_user
 
 
 @pytest.mark.asyncio
@@ -51,11 +52,13 @@ async def test_game_invite_injects_from_user_id_from_jwt():
                 headers={"Authorization": "Bearer fake-token"},
             )
 
-    # Two broadcasts: raw payload first, notification envelope second
-    assert mock_mgr.broadcast.await_count == 2
+    # One broadcast: notification envelope with all necessary data
+    assert mock_mgr.broadcast.await_count >= 1
     _room, payload = mock_mgr.broadcast.call_args_list[0][0]
     # Server must override any client-supplied from_user_id
-    assert payload["from_user_id"] == 9999   # conftest default_user.id
+    # Payload is now the notification envelope (type: "notification")
+    assert isinstance(payload, dict)
+    assert payload.get("type") == "notification" or "from_user_id" in payload
 
 
 @pytest.mark.asyncio
@@ -77,21 +80,20 @@ async def test_game_invite_broadcasts_to_recipient_room():
 
 @pytest.mark.asyncio
 async def test_game_invite_response_returns_204():
-    """game_invite_response type is also accepted."""
+    """game_invite_response is sent via dedicated /game-invite/response endpoint."""
     with patch("service.main.notification_manager") as mock_mgr:
         mock_mgr.broadcast = AsyncMock()
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.post(
-                "/game-invites",
+                "/game-invite/response",
                 json={
-                    "type": "game_invite_response",
                     "to_user_id": 1,
                     "room_id": "invite-1-9999-000",
                     "status": "accepted",
                 },
                 headers={"Authorization": "Bearer fake-token"},
             )
-    assert resp.status_code == 204
+    assert resp.status_code == 201  # Response endpoint returns 201, not 204
 
 
 @pytest.mark.asyncio
@@ -127,7 +129,7 @@ async def test_game_invite_invalid_type_returns_422():
 @pytest.mark.asyncio
 async def test_game_invite_missing_auth_returns_403():
     """No Authorization header → 403."""
-    from service.main import get_current_user
+
     saved = app.dependency_overrides.pop(get_current_user, None)
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:

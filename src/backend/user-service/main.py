@@ -1,5 +1,6 @@
 from typing import Annotated
 from datetime import datetime, timezone
+import logging
 
 from fastapi import FastAPI, status, Depends, HTTPException
 from fastapi.responses import Response
@@ -11,7 +12,7 @@ from service.schemas import (
     Login, LoginResponse, RefreshRequest, RegisterRequest, RegisterResponse,
     ProfileResponse, UpdateProfileRequest, MeResponse,
     FriendResponse, FriendRequestResponse, FriendRequestAction,
-    NotificationResponse, GameNotificationRequest,
+    NotificationResponse, GameNotificationRequest, GameInviteResponseRequest,
 )
 from service.models.user import User
 from service.service import authenticate, refresh_access_token, register_credentials, get_profile, update_profile, get_me
@@ -29,6 +30,7 @@ SessionDependency = Annotated[AsyncSession, Depends(get_db)]
 bearer_scheme = HTTPBearer()
 
 app = FastAPI(title="User Service")
+logger = logging.getLogger(__name__)
 
 
 async def get_current_user(
@@ -130,6 +132,8 @@ def _notif_payload(notif) -> dict:
         "type": "notification",
         "notification": {
             "id": notif.id,
+            "user_id": notif.user_id,
+            "from_user_id": notif.from_user_id,
             "type": notif.type,
             "message": notif.message,
             "read": notif.read,
@@ -139,15 +143,17 @@ def _notif_payload(notif) -> dict:
 
 
 def _game_notif_message(sender: str, body) -> str:
-    """Return a human-readable notification message for each game event type."""
+    """Return a human-readable notification message for each game event type.
+    
+    Note: game_invite_response messages are generated directly in deliver_game_invite_response()
+    and should NOT be sent through the /game-invites endpoint.
+    """
     if body.type == "game_invite":
-        return f"{sender} invited you to play Pong"
-    if body.type == "game_invite_response":
-        if body.status == "accepted":
-            return f"{sender} accepted your game invite"
-        if body.status == "declined":
-            return f"{sender} declined your game invite"
-        return f"{sender} responded to your game invite"
+        msg = f"{sender} invited you to play Pong"
+        # Encode room_id in message for Maria to extract and redirect
+        if body.room_id:
+            msg += f" [ROOM_ID:{body.room_id}]"
+        return msg
     # game_invite_timeout
     return f"Your game invite with {sender} has expired"
 
@@ -222,6 +228,53 @@ async def search_users_endpoint(session: SessionDependency, q: str = ""):
     return await search_users(q, session)
 
 
+@app.post("/game-invite/response", status_code=201)
+async def deliver_game_invite_response(
+    body: GameInviteResponseRequest,
+    session: SessionDependency,
+    current_user: User = Depends(get_current_user),
+):
+    """Create a game invite response notification for the original inviter.
+    
+    Called when user declines/accepts a game invite.
+    Validates that to_user_id is not the current user (prevents self-targeting).
+    Broadcasts the notification to the recipient via WS if they are online.
+    """
+    # Prevent self-targeting: cannot send response to yourself
+    if body.to_user_id == current_user.id:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot send game invite response to yourself"
+        )
+    
+    try:
+        # Create message based on response status
+        if body.status == 'declined':
+            message = f"{current_user.username} declined your match invite"
+        elif body.status == 'accepted':
+            message = f"{current_user.username} accepted your match invite"
+            # Include room_id in message for navigation (only on acceptance)
+            if body.room_id:
+                message += f" [ROOM_ID:{body.room_id}]"
+        elif body.status == 'timeout':
+            message = f"{current_user.username}'s invite expired"
+        else:
+            message = f"{current_user.username} responded to your match invite"
+        
+        notif = await _notifications.create_notification(
+            session, body.to_user_id, "game_invite_response",
+            message, from_user_id=current_user.id,
+        )
+        await session.commit()
+        
+        # Broadcast the notification to the recipient via WS (if online)
+        await notification_manager.broadcast(str(body.to_user_id), _notif_payload(notif))
+        
+        return {"status": "ok", "notification_id": notif.id}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @app.get("/notifications", response_model=list[NotificationResponse])
 async def list_notifications(
     session: SessionDependency,
@@ -229,7 +282,8 @@ async def list_notifications(
 ):
     """Return last 20 notifications for the authenticated caller, newest first."""
     notifications = await _notifications.get_notifications(session, current_user.id)
-    return [NotificationResponse.model_validate(n) for n in notifications]
+    response_list = [NotificationResponse.model_validate(n) for n in notifications]
+    return response_list
 
 
 @app.put("/notifications/read-all", status_code=204)
@@ -239,6 +293,7 @@ async def read_all_notifications(
 ):
     """Mark all caller's notifications as read."""
     await _notifications.mark_all_notifications_read(session, current_user.id)
+    await session.commit()  # Persist changes to database
     return Response(status_code=204)
 
 
@@ -250,6 +305,7 @@ async def read_notification(
 ):
     """Mark a single notification as read. Returns 404 if not owned by caller."""
     notif = await _notifications.mark_notification_read(session, notification_id, current_user.id)
+    await session.commit()  # Persist changes to database
     return NotificationResponse.model_validate(notif)
 
 
@@ -261,6 +317,7 @@ async def remove_notification(
 ):
     """Delete a single notification. Returns 404 if not owned by caller."""
     await _notifications.delete_notification(session, notification_id, current_user.id)
+    await session.commit()  # Persist changes to database
     return Response(status_code=204)
 
 
@@ -285,12 +342,14 @@ async def deliver_game_notification(
         notif = await _notifications.create_notification(
             session, body.to_user_id, body.type,
             _game_notif_message(current_user.username, body),
+            from_user_id=current_user.id,  # Store sender ID for game_invite notifications
         )
     except ValueError as e:
         # Message length validation failed
         raise HTTPException(status_code=400, detail=str(e))
     
-    await notification_manager.broadcast(str(body.to_user_id), payload)
+    await session.commit()  # Persist notification to database before broadcasting
+    
     await notification_manager.broadcast(str(body.to_user_id), _notif_payload(notif))
     return Response(status_code=204)
 

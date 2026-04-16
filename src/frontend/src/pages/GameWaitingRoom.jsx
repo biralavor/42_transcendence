@@ -4,6 +4,7 @@ import NavbarComponent from '../Components/Navbar'
 import { createWsClient } from '../utils/wsClient'
 import './GameWaitingRoom.css'
 import { useAuth } from '../context/authContext'
+import wsLogger from '../utils/wsLogger'
 
 const DEFAULT_AVATAR = '/avatar_placeholder.jpg'
 
@@ -21,6 +22,7 @@ export default function GameWaitingRoom() {
   const navigate = useNavigate()
   const { auth } = useAuth()
   const wsRef = useRef(null)
+  const wsFlowStartRef = useRef(null)
 
   const hasInviteContext = Boolean(
     location.state?.currentUser || location.state?.opponent || location.state?.friendUsername
@@ -47,6 +49,7 @@ export default function GameWaitingRoom() {
   const [opponentReady, setOpponentReady] = useState(false)
   const [systemMessage, setSystemMessage] = useState('Waiting for both players to get ready.')
   const [gameStartReceived, setGameStartReceived] = useState(false)
+  const [resolvedUserId, setResolvedUserId] = useState(null)
 
   useEffect(() => {
     const scheme = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
@@ -60,22 +63,73 @@ export default function GameWaitingRoom() {
       onOpen: () => {
         setConnected(true)
         setSystemMessage('Connected to waiting room. Ready up when you are set.')
+        wsLogger.connection(roomId, 'open', {
+          currentUser: currentUser.id,
+          opponent: opponent.id,
+        })
       },
       onClose: () => {
         setConnected(false)
         setSystemMessage('Connection lost. Trying to reconnect...')
+        wsLogger.connection(roomId, 'close')
       },
       onMessage: (data) => {
         if (!data || typeof data !== 'object')
           return
 
+        // Log incoming payload
+        wsLogger.receive(roomId, data)
+
+        // Normalize IDs to strings for consistent comparison (backend sends numbers, state may have strings)
         const incomingUserId = String(data.user_id ?? data.player_id ?? '')
-        const isCurrentUser = incomingUserId && incomingUserId === String(currentUser.id)
-        const isOpponent = incomingUserId && incomingUserId === String(opponent.id)
+        const incomingUsername = data.username
+
+        // Identify sender by normalized ID (most reliable) or username fallback if ID unavailable
+        // Prefer resolvedUserId (from server) over currentUser.id (which may be 'local-player' after hard refresh)
+        const currentUserId = String(
+          (resolvedUserId !== null ? resolvedUserId : null) || currentUser.id || ''
+        )
+        const opponentUserId = String(opponent.id ?? '')
+
+        // Prefer ID matching; use username only if ID is missing/empty
+        let isCurrentUser = false
+        let isOpponent = false
+
+        if (incomingUserId && currentUserId) {
+          isCurrentUser = incomingUserId === currentUserId
+        } else if (!incomingUserId && incomingUsername) {
+          // Fallback to username if ID unavailable
+          isCurrentUser = incomingUsername === currentUser.username
+        }
+
+        if (incomingUserId && opponentUserId) {
+          isOpponent = incomingUserId === opponentUserId
+        } else if (!incomingUserId && incomingUsername) {
+          // Fallback to username if ID unavailable
+          isOpponent = incomingUsername === opponent.username
+        }
 
         if (data.type === 'player_ready') {
-          if (isCurrentUser) setCurrentReady(true)
-          if (isOpponent) setOpponentReady(true)
+          if (isCurrentUser) {
+            setCurrentReady(true)
+            wsLogger.uiUpdate(roomId, { currentReady: true })
+          }
+          if (isOpponent) {
+            setOpponentReady(true)
+            wsLogger.uiUpdate(roomId, { opponentReady: true })
+          }
+
+          // Debug: log ID matching details
+          if (!isCurrentUser && !isOpponent) {
+            console.debug('[GameWaitingRoom] player_ready ID mismatch:', {
+              incomingUserId: String(data.user_id ?? data.player_id ?? ''),
+              currentUserId: String(currentUser.id ?? ''),
+              opponentUserId: String(opponent.id ?? ''),
+              isCurrentUser,
+              isOpponent,
+              rawData: data,
+            })
+          }
         }
 
         if (data.type === 'player_unready') {
@@ -90,6 +144,15 @@ export default function GameWaitingRoom() {
         if (data.type === 'game_start') {
           setGameStartReceived(true)
           setSystemMessage('Both players are ready. Game start event received.')
+          wsLogger.uiUpdate(roomId, { gameStart: true })
+
+          // Navigate to the actual game
+          navigate(`/game/${roomId}`, {
+            state: {
+              currentUser,
+              opponent,
+            }
+          })
         }
       },
     })
@@ -99,34 +162,129 @@ export default function GameWaitingRoom() {
     return () => ws.close()
   }, [roomId, currentUser.id, opponent.id, navigate, auth?.access_token])
 
+  // Fetch user ID from stable source (/auth/me) if location.state was lost (hard refresh/direct nav)
+  useEffect(() => {
+    if (currentUser.id && currentUser.id !== 'local-player') {
+      // Already have a valid user ID from navigation state
+      setResolvedUserId(currentUser.id)
+      return
+    }
+
+    // Hard refresh or direct navigation: currentUser.id is fallback 'local-player'
+    // Fetch real user ID from /auth/me
+    if (!auth?.access_token) {
+      return
+    }
+
+    let cancelled = false
+    const fetchUserId = async () => {
+      try {
+        const response = await fetch('/api/users/auth/me', {
+          headers: {
+            Authorization: `Bearer ${auth.access_token}`,
+          },
+        })
+        if (!response.ok) {
+          throw new Error(`Failed to fetch user: ${response.status}`)
+        }
+        const me = await response.json()
+        if (!cancelled && me?.id) {
+          setResolvedUserId(me.id)
+        }
+      } catch (err) {
+        console.warn('[GameWaitingRoom] Failed to resolve user ID on hard refresh:', err.message)
+        if (!cancelled) {
+          setSystemMessage('Error: Cannot identify user. Please navigate from the invite.')
+        }
+      }
+    }
+
+    void fetchUserId()
+    return () => { cancelled = true }
+  }, [currentUser.id, auth?.access_token])
+
   useEffect(() => {
     if (currentReady && opponentReady && !gameStartReceived) {
       setSystemMessage('Both players are ready. Waiting for backend game_start event...')
+      // End the flow once both players are ready
+      if (wsFlowStartRef.current) {
+        wsLogger.flowEnd(roomId, 'ready_to_both_ready', wsFlowStartRef.current)
+        wsFlowStartRef.current = null
+      }
     }
-  }, [currentReady, opponentReady, gameStartReceived])
+  }, [currentReady, opponentReady, gameStartReceived, roomId])
 
   function handleReady() {
     if (currentReady || !wsRef.current)
       return
 
+    // Start flow timing for ready click → broadcast
+    const flowStartTime = wsLogger.flowStart(roomId, 'ready_click')
+
+    // Use actual user ID from navigation state, resolved user ID (from /auth/me on hard refresh), or auth context
+    // NOTE: JWT credential_id is Credentials.id, NOT Users.id — must use real user ID for ID matching
+    const actualUserId = (currentUser.id !== 'local-player' ? currentUser.id : null) || resolvedUserId || auth?.user?.id
+
+    if (!actualUserId || actualUserId === 'local-player') {
+      console.warn('[GameWaitingRoom] Cannot send ready: missing valid user ID. Tried: location.state, /auth/me, auth context')
+      setSystemMessage('Error: User identification failed. Please navigate from a game invite.')
+      return
+    }
+
+    const payload = {
+      type: 'player_ready',
+      room_id: roomId,
+      user_id: actualUserId,
+      username: currentUser.username,
+    }
+
+    // Debug: log the actual user ID and context
+    console.debug('[GameWaitingRoom] handleReady:', {
+      actualUserId,
+      auth_user_id: auth?.user?.id,
+      opponent_id: opponent.id,
+      currentUser_id: currentUser.id,
+    })
+
+    // Log the ready click with payload
+    wsLogger.ready(roomId, payload)
+
     setCurrentReady(true)
     setSystemMessage('You are ready. Waiting for the other player...')
 
-    wsRef.current.send({
-      type: 'player_ready',
-      room_id: roomId,
-      user_id: currentUser.id,
-      username: currentUser.username,
-    })
+    // Send through WebSocket
+    wsRef.current.send(payload)
+
+    // Log the send event
+    wsLogger.send(roomId, payload)
+
+    // Measure latency from ready click to send
+    wsLogger.latency('ready_click_to_send', flowStartTime)
+
+    // Store flow start for later measurement in onMessage (component-scoped to avoid state leaks)
+    wsFlowStartRef.current = flowStartTime
   }
 
   function handleCancel() {
-    wsRef.current?.send({
+    // Use actual user ID from navigation state, resolved user ID (from /auth/me on hard refresh), or auth context
+    // NOTE: JWT credential_id is Credentials.id, NOT Users.id — must use real user ID for consistency
+    const actualUserId = (currentUser.id !== 'local-player' ? currentUser.id : null) || resolvedUserId || auth?.user?.id
+
+    if (!actualUserId || actualUserId === 'local-player') {
+      console.warn('[GameWaitingRoom] Cannot send cancel: missing valid user ID. Tried: location.state, /auth/me, auth context')
+      navigate('/play')
+      return
+    }
+
+    const cancelPayload = {
       type: 'cancel_waiting_room',
       room_id: roomId,
-      user_id: currentUser.id,
+      user_id: actualUserId,
       username: currentUser.username,
-    })
+    }
+
+    wsLogger.send(roomId, cancelPayload)
+    wsRef.current?.send(cancelPayload)
 
     navigate('/play')
   }

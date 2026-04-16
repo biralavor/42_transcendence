@@ -9,6 +9,7 @@ class Notification(Base):
 
     id         = Column(Integer, primary_key=True, index=True)
     user_id    = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    from_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)  # Sender for game_invite
     type       = Column(String(50), nullable=False)   # friend_request | game_invite | tournament_match | match_result
     message    = Column(Text, nullable=False)
     read       = Column(Boolean, nullable=False, server_default="false")

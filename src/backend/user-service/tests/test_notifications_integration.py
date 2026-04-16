@@ -91,6 +91,6 @@ async def test_game_invite_broadcasts_and_notifies():
                 )
                 
                 assert resp.status_code == 204
-                assert mock_broadcast.call_count == 2
+                assert mock_broadcast.call_count == 1
     finally:
         app.dependency_overrides.clear()

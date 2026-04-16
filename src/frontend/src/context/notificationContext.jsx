@@ -13,6 +13,9 @@ export function NotificationProvider({ children }) {
     const inviteVisibleRef = useRef(false)
     // Stable first-seen timestamp per DM room slug — set once, never updated, so sort order is stable
     const dmFirstSeenRef = useRef({})
+    // Track WS connection state for smart polling
+    const wsConnectedRef = useRef(false)
+    const wsRef = useRef(null)
 
     // Define all useCallback hooks before useEffect hooks to avoid temporal dead zone
     const fetchNotifications = useCallback(async () => {
@@ -21,18 +24,22 @@ export function NotificationProvider({ children }) {
             if (!r.ok) {
                 console.error('[notificationContext] Failed to fetch notifications:', r.status)
                 setNotifications([])
-                return
+                throw new Error(`Failed to fetch notifications: ${r.status}`)
             }
             const data = await r.json()
             if (Array.isArray(data)) {
                 setNotifications(data)
             } else {
-                console.warn('[notificationContext] Invalid notifications response format')
+                // Guard Object.keys to avoid throwing if data is null or non-object
+                const keys = data && typeof data === 'object' ? Object.keys(data) : 'N/A'
+                console.warn('[notificationContext] Invalid notifications response format, got:', typeof data, keys)
                 setNotifications([])
+                throw new Error(`Invalid response format: ${typeof data}`)
             }
         } catch (err) {
             console.error('[notificationContext] Error fetching notifications:', err.message)
             setNotifications([])
+            throw err
         }
     }, [])
 
@@ -48,6 +55,11 @@ export function NotificationProvider({ children }) {
             const r = await apiCall(`/api/users/notifications/${id}/read`, { method: 'PUT' })
             if (!r.ok) {
                 console.error(`[notificationContext] Failed to mark notification ${id} as read:`, r.status)
+                // If 404, the notification doesn't exist in the backend, remove it from state
+                if (r.status === 404) {
+                    console.debug(`[notificationContext] Removing non-existent notification ${id} from state`)
+                    setNotifications(prev => prev.filter(n => n.id !== id))
+                }
                 return
             }
             setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n))
@@ -133,6 +145,11 @@ export function NotificationProvider({ children }) {
         const scheme = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
         const url = `${scheme}//${window.location.host}/api/users/ws/notifications/${userId}?token=${auth.access_token}`
         const ws = new WebSocket(url)
+        wsRef.current = ws
+
+        ws.onopen = () => {
+            wsConnectedRef.current = true
+        }
 
         ws.onmessage = (event) => {
             try {
@@ -151,8 +168,79 @@ export function NotificationProvider({ children }) {
             }
         }
 
-        return () => ws.close()
+        ws.onclose = () => {
+            wsConnectedRef.current = false
+        }
+
+        ws.onerror = () => {
+            wsConnectedRef.current = false
+        }
+
+        return () => {
+            wsConnectedRef.current = false
+            ws.close()
+            wsRef.current = null
+        }
     }, [userId, auth.access_token])
+
+    // Step 4: Smart polling - only when WS is disconnected or document is hidden
+    // This reduces backend load significantly by avoiding redundant polling when WS is healthy
+    useEffect(() => {
+        if (!userId) return
+
+        let pollInterval = null
+        let pollTimeoutId = null
+        let failureCount = 0
+
+        const shouldPoll = () => {
+            // Don't poll if WS is connected and document is visible
+            return !wsConnectedRef.current || document.hidden
+        }
+
+        const poll = async () => {
+            try {
+                await fetchNotifications()
+                failureCount = 0
+            } catch (err) {
+                failureCount++
+                console.debug('[notificationContext] Smart polling error:', err.message)
+            }
+
+            if (shouldPoll()) {
+                // Apply exponential backoff on repeated failures (cap at 15s), otherwise use 5s
+                const backoffMultiplier = Math.min(failureCount * 2, 3) // Max 3x multiplier = 15s
+                const nextInterval = 5000 * backoffMultiplier
+                pollTimeoutId = setTimeout(poll, nextInterval)
+            }
+        }
+
+        // Listen to visibility changes
+        const handleVisibilityChange = () => {
+            if (document.hidden) {
+                // Pause polling when hidden
+                if (pollTimeoutId) clearTimeout(pollTimeoutId)
+                if (pollInterval) clearInterval(pollInterval)
+                pollInterval = null
+                pollTimeoutId = null
+            } else if (shouldPoll()) {
+                // Resume polling when visible and WS is disconnected
+                poll()
+            }
+        }
+
+        document.addEventListener('visibilitychange', handleVisibilityChange)
+
+        // Start polling if needed
+        if (shouldPoll()) {
+            poll()
+        }
+
+        return () => {
+            document.removeEventListener('visibilitychange', handleVisibilityChange)
+            if (pollInterval) clearInterval(pollInterval)
+            if (pollTimeoutId) clearTimeout(pollTimeoutId)
+        }
+    }, [userId, fetchNotifications])
 
     // Convert DM unreadCounts to pseudo-notifications and merge with real notifications
     const combinedNotifications = useMemo(() => {
@@ -182,7 +270,8 @@ export function NotificationProvider({ children }) {
 
         // Merge and sort by created_at (DMs are synthetic, so put them at the top)
         const merged = [...dmNotifs, ...notifications]
-        return merged.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+        const sorted = merged.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+        return sorted
     }, [notifications, unreadCounts, userId, dmSenders])
 
     // System notifications only — DM unreads are surfaced via useUnread() on the Chat link
@@ -200,6 +289,8 @@ export function NotificationProvider({ children }) {
         removeNotification,
         setInviteVisible,
     }), [combinedNotifications, totalUnreadCount, fetchNotifications, markRead, markAllRead, removeNotification, setInviteVisible])
+
+
 
     return (
         <NotificationContext.Provider value={value}>

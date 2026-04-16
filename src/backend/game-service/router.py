@@ -19,6 +19,7 @@ from service.persistence import (
     create_tournament,
     finish_match,
     get_leaderboard,
+    get_leaderboard_paginated,
     get_match,
     get_tournament_with_participants,
     get_user_matches,
@@ -32,9 +33,10 @@ from service.persistence import (
     delete_tournament,
     TournamentNotParticipant,
     leave_tournament,
+    TournamentNotInProgress,
+    withdraw_tournament,
 )
 from service.schemas import (
-    LeaderboardEntryResponse,
     MatchCreateRequest,
     MatchFinishRequest,
     MatchHistoryItem,
@@ -46,6 +48,7 @@ from service.schemas import (
     TournamentDetailResponse,
     TournamentMatchResponse,
     TournamentParticipantResponse,
+    LeaderboardResponse
 )
 from service.ws.router import manager as ws_manager
 from shared.database import get_db
@@ -60,15 +63,23 @@ async def user_stats(user_id: int, session: SessionDependency):
     return await get_user_stats(session, user_id)
 
 
-@router.get("/leaderboard", response_model=list[LeaderboardEntryResponse])
+@router.get("/leaderboard", response_model=LeaderboardResponse)
 async def leaderboard(
     session: SessionDependency,
-    # Use FastAPI's Query parameters to enforce bounds and document them.  This
-    # replaces manual normalization and will return a 422 response if the
-    # provided limit is out of range.  Defaults to 20, minimum 1, maximum 100.
     limit: int = Query(20, ge=1, le=100),
-) -> list[LeaderboardEntryResponse]:
-    return await get_leaderboard(session, limit)
+    page: int = Query(0, ge=0),
+    order: str = Query('')
+):
+    sort_assoc = []
+    for sort_pair in order.split(','):
+        entry = sort_pair.split(':', maxsplit = 1)
+        if len(entry) == 1:
+            sort_assoc.append((entry[0].strip(), 'ASC'))
+        elif len(entry) == 2:
+            sort_assoc.append((entry[0].strip().lower(), entry[1].strip().upper()))
+    paginated_result = \
+        await get_leaderboard_paginated(session, limit, page, sort_assoc)
+    return paginated_result
 
 
 @router.get("/matches/history/{user_id}", response_model=list[MatchHistoryItem])
@@ -173,6 +184,61 @@ async def leave_tournament_endpoint(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User is not a participant in this tournament",
         )
+
+@router.post(
+    "/tournaments/{tournament_id}/withdraw",
+    response_model=TournamentDetailResponse,
+)
+async def withdraw_tournament_endpoint(
+    tournament_id: int,
+    session: SessionDependency,
+    user_id: int = Depends(get_current_user_id),
+):
+    try:
+        _, tournament_complete = await withdraw_tournament(session, tournament_id, user_id)
+    except TournamentNotFound:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Tournament not found",
+        )
+    except TournamentNotInProgress:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Only tournaments in progress can be withdrawn from",
+        )
+    except TournamentNotParticipant:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User is not a participant in this tournament",
+        )
+
+    await ws_manager.broadcast(
+        f"tournament_{tournament_id}",
+        {"type": "tournament_updated", "tournament_id": tournament_id},
+    )
+
+    if tournament_complete:
+        await ws_manager.broadcast(
+            f"tournament_{tournament_id}",
+            {"type": "tournament_complete", "tournament_id": tournament_id},
+        )
+
+    result = await get_tournament_with_participants(session, tournament_id)
+    tournament, participants, matches = result
+
+    return TournamentDetailResponse(
+        id=tournament.id,
+        name=tournament.name,
+        creator_id=tournament.creator_id,
+        max_participants=tournament.max_participants,
+        status=tournament.status,
+        created_at=tournament.created_at,
+        participants=[
+            TournamentParticipantResponse(user_id=p.user_id, joined_at=p.joined_at)
+            for p in participants
+        ],
+        matches=[TournamentMatchResponse.model_validate(m) for m in matches],
+    )
 
 @router.delete("/tournaments/{tournament_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_tournament_endpoint(

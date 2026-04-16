@@ -1,7 +1,7 @@
 import pytest
 
-from service.ai import predict_intercept_y
-from service.game_session import GameSession
+from ai import predict_intercept_y
+from game_session import GameSession
 
 H = GameSession.CANVAS_HEIGHT  # 512
 R = GameSession.BALL_RADIUS    # 8

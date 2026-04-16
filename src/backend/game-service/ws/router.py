@@ -6,6 +6,7 @@ from sqlalchemy import text
 from shared.config.settings import settings
 from shared.ws.manager import ConnectionManager
 from shared.database import AsyncSessionLocal
+from shared.logging import ws_logger
 from service.persistence import create_match, finish_match
 from service.game_manager import game_manager
 from sqlalchemy.exc import SQLAlchemyError
@@ -17,6 +18,8 @@ manager = ConnectionManager()
 _setup_sessions: dict[str, tuple[int, int]] = {}
 # Maps game_id (str) → match_id (int) for database updates
 _match_ids: dict[str, int] = {}
+# Maps game_id (str) → {player_id: ready_bool} for waiting-room ready tracking
+_player_ready: dict[str, dict[int, bool]] = {}
 
 
 async def _broadcast_state(game_id: str, state_snapshot: dict) -> None:
@@ -78,10 +81,16 @@ async def game_websocket(websocket: WebSocket, game_id: str, token: str | None =
     """
     # Healthcheck endpoint: restricted, one-shot, no relay
     if game_id == "healthcheck":
-        # Restrict to localhost or healthcheck_token query parameter for security
+        # Restrict to localhost or internal Docker network for health checks
+        # Accept connections from localhost, Docker internal network (172.x.x.x), TestClient, and healthcheck_token
         client_host = websocket.client.host if websocket.client else ""
         healthcheck_token = token  # Reuse token param for healthcheck auth
-        is_local = client_host in ("127.0.0.1", "localhost", "::1")
+        # TestClient uses "testclient" as host, treat it as local; also allow empty string (testing)
+        is_local = (
+            not client_host 
+            or client_host in ("127.0.0.1", "localhost", "::1", "testclient")
+            or client_host.startswith("172.")
+        )
         is_authorized = is_local or (healthcheck_token == settings.HEALTHCHECK_TOKEN if hasattr(settings, 'HEALTHCHECK_TOKEN') else False)
         
         if not is_authorized:
@@ -130,18 +139,79 @@ async def game_websocket(websocket: WebSocket, game_id: str, token: str | None =
     # Accept the connection
     await manager.connect(game_id, websocket)
     
+    # Log connection
+    import logging
+    logger = logging.getLogger(__name__)
+    active_in_room = manager.active_connections(game_id)
+    logger.info(
+        f"[CONNECTION] Player {player_id} connected to room {game_id}. "
+        f"Now {active_in_room} player(s) in room."
+    )
+    
+    ws_logger.connection(
+        game_id=game_id,
+        player_id=player_id,
+        state='open',
+        metadata={'token_valid': token is not None, 'active_connections': active_in_room}
+    )
+    
     try:
         while True:
+            # Start flow timing
+            flow_start = ws_logger.flow_start(game_id, 'receive_and_process')
+            
             # Receive message from client
             data = await websocket.receive_json()
+            
+            # Log incoming payload
+            ws_logger.receive(game_id, player_id, data)
             
             if not isinstance(data, dict):
                 continue
             
             event_type = data.get("type")
             
+            # Handle player_ready: track ready state and broadcast game_start when both ready
+            if event_type == "player_ready":
+                if game_id not in _player_ready:
+                    _player_ready[game_id] = {}
+                _player_ready[game_id][player_id] = True
+                
+                # Broadcast player_ready to all connected clients
+                await manager.broadcast(game_id, data)
+                ws_logger.ready(game_id, player_id, data)
+                
+                # Check if both players are ready
+                if game_id in _setup_sessions:
+                    p1, p2 = _setup_sessions[game_id]
+                    ready_states = _player_ready.get(game_id, {})
+                    if ready_states.get(p1) and ready_states.get(p2):
+                        # Both ready: broadcast game_start to initiate game
+                        await manager.broadcast(game_id, {
+                            "type": "game_start",
+                            "player1_id": p1,
+                            "player2_id": p2,
+                        })
+                        ws_logger.session_state(game_id, {
+                            'p1_id': p1,
+                            'p2_id': p2,
+                            'status': 'both_players_ready'
+                        })
+            
+            # Handle player_unready: update ready state and broadcast
+            elif event_type == "player_unready":
+                if game_id not in _player_ready:
+                    _player_ready[game_id] = {}
+                _player_ready[game_id][player_id] = False
+                
+                # Broadcast player_unready to all connected clients
+                await manager.broadcast(game_id, data)
+                ws_logger.uiUpdate(game_id, {'player_unready': player_id})
+            
             # Handle game_start: initialize game session
             if event_type == "game_start":
+                ws_logger.ready(game_id, player_id, data)
+                
                 player1_id = data.get("player1_id")
                 player2_id = data.get("player2_id")
                 
@@ -156,6 +226,11 @@ async def game_websocket(websocket: WebSocket, game_id: str, token: str | None =
                 if game_id not in _setup_sessions:
                     # This is the first player to connect
                     _setup_sessions[game_id] = (player1_id, player2_id)
+                    ws_logger.session_state(game_id, {
+                        'p1_id': player1_id,
+                        'p2_id': player2_id,
+                        'status': 'setup_initiated'
+                    })
                 
                 # Once both players are ready or we have the info, create the session
                 p1, p2 = _setup_sessions[game_id]
@@ -170,12 +245,19 @@ async def game_websocket(websocket: WebSocket, game_id: str, token: str | None =
                             broadcast_callback=_broadcast_state,
                             on_game_over_callback=_on_game_over,
                         )
+                        ws_logger.session_state(game_id, {
+                            'p1_id': p1,
+                            'p2_id': p2,
+                            'status': 'session_created'
+                        })
+                        
                         # Create database match record
                         try:
                             async with AsyncSessionLocal() as db:
                                 match = await create_match(db, p1, p2)
                                 # Store for later reference when game ends
                                 _match_ids[game_id] = match.id
+                                ws_logger.latency(f'game_start_to_session_created_{game_id}', flow_start)
                         except SQLAlchemyError:
                             pass  # best-effort
                     except ValueError:
@@ -192,9 +274,47 @@ async def game_websocket(websocket: WebSocket, game_id: str, token: str | None =
             
             # Pass-through other events (e.g., player_ready, player_unready, cancel_waiting_room)
             else:
-                await manager.broadcast(game_id, data)
+                # Log incoming data details for debugging
+                incoming_event_type = data.get("type", "unknown")
+                incoming_user_id = data.get("user_id", data.get("player_id"))
+                active_connections = manager.active_connections(game_id)
+                
+                # Log the incoming message and room state
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.info(
+                    f"[BROADCAST] {incoming_event_type} from player {incoming_user_id} "
+                    f"to room {game_id} with {active_connections} active connections"
+                )
+                
+                # Log broadcast
+                ws_logger.broadcast(
+                    game_id=game_id,
+                    payload=data,
+                    client_count=active_connections
+                )
+                
+                # Broadcast to all connected clients in this room
+                try:
+                    await manager.broadcast(game_id, data)
+                    logger.info(f"[BROADCAST] Successfully sent {incoming_event_type} to {active_connections} clients")
+                except Exception as e:
+                    logger.error(f"[BROADCAST] Error broadcasting {incoming_event_type}: {e}")
+                
+                ws_logger.flow_end(game_id, 'receive_and_broadcast', flow_start)
     
     except WebSocketDisconnect:
+        # Log connection close
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"[DISCONNECT] Player {player_id} disconnected from room {game_id}")
+        
+        ws_logger.connection(
+            game_id=game_id,
+            player_id=player_id,
+            state='close',
+            metadata={'reason': 'disconnect'}
+        )
         # Client disconnected
         pass
     
@@ -202,8 +322,15 @@ async def game_websocket(websocket: WebSocket, game_id: str, token: str | None =
         # Clean up on disconnect
         manager.disconnect(game_id, websocket)
         
+        import logging
+        logger = logging.getLogger(__name__)
+        remaining = manager.active_connections(game_id)
+        logger.info(f"[CLEANUP] Player {player_id} removed from room {game_id}. Remaining: {remaining}")
+        
         # If this was the last player, end the game
-        if manager.active_connections(game_id) == 0:
+        if remaining == 0:
+            logger.info(f"[CLEANUP] Room {game_id} is empty, cleaning up game session")
             await game_manager.delete_session(game_id)
             _setup_sessions.pop(game_id, None)
             _match_ids.pop(game_id, None)
+            _player_ready.pop(game_id, None)

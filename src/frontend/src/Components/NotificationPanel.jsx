@@ -56,7 +56,9 @@ export default function NotificationPanel({ onClose }) {
     const panelRef = useRef(null)
 
     useEffect(() => {
-        fetchNotifications()
+        fetchNotifications().catch(() => {
+            // Error already logged in notificationContext; just silently ignore promise rejection
+        })
     }, [fetchNotifications])
 
     useEffect(() => {

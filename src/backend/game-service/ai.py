@@ -1,4 +1,12 @@
-from service.game_session import GameSession
+"""Pure AI helpers for the Pong game-service.
+
+These functions are intentionally stateless and decoupled from
+``GameSession`` so they are trivial to unit-test. The first piece is
+:func:`predict_intercept_y`, which forecasts where the ball will reach
+a given X coordinate after reflecting off the top/bottom walls.
+"""
+
+from game_session import GameSession
 
 
 def predict_intercept_y(

@@ -148,6 +148,85 @@ Optionally, append `#N` to cross-link the commit to the Issue on GitHub:
 git commit -m "feat(auth): add Google OAuth login #42"
 ```
 
+---
+
+## Part 3 — Automated Testing (CI/CD Pipeline)
+
+### Automated Health Checks on PR
+
+When you open or update a PR targeting `develop`, GitHub Actions automatically runs the **complete health check** (`make check`) to validate:
+
+✅ All **676 tests** pass (unit + integration)  
+✅ All **7 services** are healthy (containers, network, TLS)  
+✅ **PostgreSQL** schema is valid  
+✅ **Backend** (User, Game, Chat services) — 205 unit tests  
+✅ **Frontend** (React components) — 329 unit tests  
+✅ **E2E** integration tests — 142 health checks  
+
+### Understanding PR Comments
+
+Once the workflow completes, you'll see a comment on your PR with results:
+
+#### ✅ All Tests Passing
+```
+✅ Health Check PASSED
+
+Summary:
+- Passed: 676
+- Failed: 0
+```
+
+#### ❌ Tests Failing
+```
+❌ Health Check FAILED
+
+Summary:
+- Passed: 654
+- Failed: 22
+```
+
+Click **Full Results** to see the detailed output from each service.
+
+### PR Merge Requirements
+
+**Your PR can only merge to `develop` if:**
+1. ✅ All health checks pass (`FAILED: 0`)
+2. ✅ At least 1 code review approval
+3. ✅ All conversations resolved
+4. ✅ No new breaking changes identified
+
+If the workflow shows `FAILED > 0`, your commit introduced a failing test or broke a service. Check the detailed output in the comment and fix the issue before requesting re-review.
+
+### Local Testing Before Pushing
+
+**Always run `make check` locally before pushing your PR:**
+
+```bash
+# In the repo root
+make check
+```
+
+This runs the same tests as the GitHub Actions workflow, so you can catch failures early without waiting for CI feedback. Much faster than pushing → failing → fixing → pushing again.
+
+**Expected output** (all passing):
+```
+[PASS]  Container Status                         pass:7   fail:0
+[PASS]  Network Validation                       pass:4   fail:0
+[PASS]  User Service Unit Tests                  pass:109 fail:0
+[PASS]  Game Service Unit Tests                  pass:60  fail:0
+[PASS]  Chat Service Unit Tests                  pass:36  fail:0
+[PASS]  Frontend Unit Tests                      pass:329 fail:0
+
+TOTAL      PASSED: 676  FAILED: 0
+All mandatory checks passed! Transcendence is healthy.
+```
+
+### See Also
+
+- **Workflow file**: `.github/workflows/health-check-on-pr-develop.yml`
+- **Test documentation**: `docs/How_to_add_tests.md` (comprehensive testing guide)
+- **Health check logic**: `tests/TranscendenceHealthCheck.sh`
+
 Push to your feature branch:
 ```bash
 git push

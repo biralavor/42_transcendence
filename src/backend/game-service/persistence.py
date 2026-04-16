@@ -3,9 +3,8 @@ from datetime import datetime, timezone
 
 from sqlalchemy import (
     or_, select, case, func, union_all,
-    table, column, String, Integer, text
+    table, column, String, Integer, text, delete
 )
-
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -58,6 +57,10 @@ class TournamentCannotBeCancelled(Exception):
 
 
 class TournamentNotParticipant(Exception):
+    pass
+
+
+class TournamentNotInProgress(Exception):
     pass
 
 async def delete_tournament(
@@ -148,6 +151,57 @@ async def leave_tournament(
             await db.delete(tournament)
 
     await db.commit()
+
+async def withdraw_tournament(
+    db: AsyncSession,
+    tournament_id: int,
+    user_id: int,
+) -> tuple[Tournament, bool]:
+    """User withdraws from a tournament in progress.
+    
+    Returns (tournament, tournament_complete).
+    """
+    result = await db.execute(
+        select(Tournament).where(Tournament.id == tournament_id).with_for_update()
+    )
+    tournament = result.scalars().first()
+
+    if tournament is None:
+        raise TournamentNotFound()
+
+    if tournament.status != "in_progress":
+        raise TournamentNotInProgress()
+
+    participant_result = await db.execute(
+        select(TournamentParticipant).where(
+            TournamentParticipant.tournament_id == tournament_id,
+            TournamentParticipant.user_id == user_id,
+        )
+    )
+    participant = participant_result.scalars().first()
+
+    if participant is None:
+        raise TournamentNotParticipant()
+
+    await db.delete(participant)
+    await db.flush()
+    
+    # Check if tournament should be marked complete
+    # (all remaining participants are no longer actively playing)
+    remaining_participants_result = await db.execute(
+        select(TournamentParticipant).where(
+            TournamentParticipant.tournament_id == tournament_id
+        )
+    )
+    remaining_participants = list(remaining_participants_result.scalars().all())
+    
+    tournament_complete = False
+    if not remaining_participants:
+        tournament.status = "complete"
+        tournament_complete = True
+    
+    await db.commit()
+    return tournament, tournament_complete
 
 async def create_tournament(
     db: AsyncSession, name: str, creator_id: int, max_participants: int
@@ -340,6 +394,8 @@ async def finish_match(
     match.score_p2 = score_p2
     match.finished_at = datetime.now(timezone.utc)
     match.status = "finished"
+    await db.flush()
+    await award_xp(winner_id, 10, db)
     await db.commit()
     await db.refresh(match)
     return match
@@ -389,7 +445,8 @@ async def record_tournament_match_result(
         match.score_p2 = score_p2
         match.status = "finished"
         match.finished_at = datetime.now(timezone.utc)
-
+    await db.flush()
+    await award_xp(winner_id, 100, db)
     current_round = tm.round
     round_result = await db.execute(
         select(TournamentMatch)
@@ -471,6 +528,290 @@ async def get_user_matches(db: AsyncSession, user_id: int) -> list[Match]:
         .order_by(Match.started_at.desc())
     )
     return list(result.scalars().all())
+
+def leaderboard_order_by_str(sort_assoc: list[tuple[str, str]] | None) -> str | None:
+    if sort_assoc is None:
+        return None
+    valid_columns = [
+        'rank',
+        'display_name',
+        'points',
+        'total_games',
+        'wins',
+        'losses',
+        'goals_scored',
+        'goals_conceded',
+        'goal_difference',
+        'max_streak',
+        'current_streak'
+    ]
+    order_columns = []
+    for (sort_key, order) in sort_assoc:
+        norm_order = 'DESC' if order.upper() == 'DESC' else 'ASC'
+        norm_key = sort_key.lower() if sort_key.lower() in valid_columns else None
+        if norm_key is not None:
+            order_columns.append(f"{norm_key} {norm_order}")
+    result = ', '.join(order_columns) if len(order_columns) > 0 else None
+    return result
+
+
+async def get_leaderboard_paginated(
+        db: AsyncSession,
+        limit: int = 20,
+        page: int = 0,
+        sort_assoc: list[tuple[str, str]] | None = None
+) -> dict | None:
+    offset = page * limit
+    default_sort_string = """
+points DESC,
+goal_difference DESC,
+goals_scored DESC,
+user_id ASC
+    """
+    sort_string = leaderboard_order_by_str(sort_assoc)
+    sort_string = sort_string if sort_string is not None else default_sort_string
+    statement = text(f"""
+WITH all_matches AS
+(
+    SELECT
+        id AS match_id
+        , player1_id
+        , player2_id
+        , winner_id
+        , score_p1
+        , score_p2
+        , status
+    FROM matches
+    WHERE status IS NOT NULL AND status = 'finished'
+    ORDER BY match_id ASC
+)
+, stats_away AS
+(
+    SELECT
+        player2_id
+        AS user_id
+        , count(winner_id) FILTER(WHERE player2_id = winner_id)
+        AS wins
+        , count(winner_id) FILTER(WHERE player1_id = winner_id)
+        AS losses
+        , sum(score_p2)
+        AS goals_scored
+        , sum(score_p1)
+        AS goals_conceded
+    FROM all_matches
+    GROUP BY player2_id
+)
+, stats_home AS
+(
+    SELECT
+        player1_id
+        AS user_id
+        , count(winner_id) FILTER(WHERE player1_id = winner_id)
+        AS wins
+        , count(winner_id) FILTER(WHERE player2_id = winner_id)
+        AS losses
+        , sum(score_p1)
+        AS goals_scored
+        , sum(score_p2)
+        AS goals_conceded
+    FROM all_matches
+    GROUP BY player1_id
+)
+, stats_all AS
+(
+    SELECT * FROM stats_away
+    UNION ALL
+    SELECT * FROM stats_home
+)
+, user_distinct AS
+(
+    SELECT
+        DISTINCT user_id
+        AS user_id
+    FROM stats_all
+)
+, user_count AS
+(
+    SELECT
+        count(*) AS ranked_users
+    FROM user_distinct
+)
+, match_streaks AS
+(
+    SELECT
+        u.user_id
+        , m.match_id
+        , m.winner_id
+
+        , SUM(CASE WHEN m.winner_id = u.user_id
+                   THEN 0
+                   ELSE 1
+              END
+          ) OVER (
+            PARTITION BY u.user_id
+            ORDER BY m.match_id ASC
+            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+        )
+        AS streak_group
+    FROM user_distinct u
+    CROSS JOIN LATERAL (
+        SELECT match_id, winner_id
+        FROM all_matches
+        WHERE player1_id = u.user_id OR player2_id = u.user_id
+        ORDER BY match_id ASC
+    ) m
+)
+, user_win_streaks AS
+(
+    SELECT
+        user_id
+        , streak_group
+        , COUNT(*) FILTER(WHERE user_id = winner_id)
+        AS streak_length
+        , MAX(streak_group) OVER (PARTITION BY user_id)
+        AS last_group
+    FROM match_streaks
+    GROUP BY user_id, streak_group
+)
+, user_win_streak_stats AS
+(
+    SELECT
+        user_id
+        , MAX(streak_length)
+        AS max_streak
+        , MAX(streak_length)
+               FILTER (WHERE streak_group = last_group)
+        AS current_streak
+    FROM user_win_streaks
+    GROUP BY user_id
+)
+, ranked_stats AS
+(
+    SELECT
+        users.id
+        AS user_id
+        , COALESCE(users.display_name, users.username)
+        AS display_name
+        , sum(wins)
+        AS wins
+        , sum(losses)
+        AS losses
+        , sum(wins) + sum(losses)
+        AS total_games
+        , sum(goals_scored)
+        AS goals_scored
+        , sum(goals_conceded)
+        AS goals_conceded
+        , (sum(goals_scored) - sum(goals_conceded))
+        AS goal_difference
+        , (3 * SUM(wins))
+        AS points
+        , current_streak
+        , max_streak
+    FROM stats_all
+        INNER JOIN users
+            ON users.id = stats_all.user_id
+        INNER JOIN user_win_streak_stats
+            ON user_win_streak_stats.user_id = users.id
+    GROUP BY users.id, users.display_name, current_streak, max_streak
+)
+, ranking_results AS
+(
+    SELECT
+        ROW_NUMBER() OVER (ORDER BY {default_sort_string})
+        AS rank
+        , display_name
+        , user_id
+        , points
+        , total_games
+        , wins
+        , losses
+        , goals_scored
+        , goals_conceded
+        , goal_difference
+        , current_streak
+        , max_streak
+    FROM ranked_stats
+)
+, summary AS
+(
+    SELECT
+        COALESCE(
+            (SELECT
+                jsonb_build_object(
+                    'display_name', display_name,
+                    'value', max_streak
+                )
+             FROM ranking_results
+             ORDER BY max_streak DESC, {default_sort_string}
+             LIMIT 1),
+            jsonb_build_object(
+                'display_name', 'No Data',
+                'value', 0
+            )
+        )
+        AS max_max_streak
+        , COALESCE(
+            (SELECT
+                jsonb_build_object(
+                    'display_name', display_name,
+                    'value', points
+                )
+             FROM ranking_results
+             ORDER BY {default_sort_string}
+             LIMIT 1),
+            jsonb_build_object(
+                'display_name', 'No Data',
+                'value', 0
+            )
+        )
+        AS max_points
+        , COALESCE(
+            (SELECT
+                jsonb_build_object(
+                    'display_name', display_name,
+                    'value', current_streak
+                )
+             FROM ranking_results
+             ORDER BY current_streak DESC, {default_sort_string}
+             LIMIT 1),
+            jsonb_build_object(
+                'display_name', 'No Data',
+                'value', 0
+            )
+        )
+        AS max_current_streak
+)
+, page_ranking_results AS (
+    SELECT * FROM ranking_results
+    ORDER BY {sort_string}
+    LIMIT :limit
+    OFFSET (SELECT
+               LEAST(:offset,
+                     GREATEST(0, ranked_users - :limit))
+            FROM user_count)
+)
+SELECT
+    LEAST(:page, (((table user_count) - 1) / :limit))
+    AS page
+    , (((table user_count) - 1) / :limit)
+    AS last_page
+    , :limit as per_page
+    , (table user_count) as total
+    , COALESCE(
+        jsonb_agg(to_jsonb(page_ranking_results) ORDER BY {sort_string}),
+        '[]'::jsonb
+    )
+    AS results
+    , (SELECT to_jsonb(summary) FROM summary)
+    AS summary
+FROM page_ranking_results
+    """)
+
+    result = await db.execute(
+        statement, {'offset': offset, 'limit': limit, 'page': page}
+    )
+    return result.mappings().one_or_none()
 
 
 async def get_leaderboard(db: AsyncSession, limit: int = 20) -> list[dict]:
@@ -571,8 +912,9 @@ async def get_leaderboard(db: AsyncSession, limit: int = 20) -> list[dict]:
         for rank, row in enumerate(result.mappings().all(), start=1)
     ]
 
-# increment on game end?
+
 async def award_xp(user_id: int, amount: int, session: AsyncSession):
+    """ caller should commit session"""
     statement = text("""
     INSERT INTO user_xp (user_id, xp)
     VALUES (:user_id, :amount)
@@ -582,13 +924,87 @@ async def award_xp(user_id: int, amount: int, session: AsyncSession):
     result = await session.execute(
         statement, {'user_id': user_id, 'amount': amount}
     )
-    result_scalar = result.scalar_one()
-    # await session.commit() # maybe better let caller commit session
-    return result_scalar
+    result_victories = await victories(user_id, session)
+    tournament_amount_xp = 100
+    await reward_game_achievement_if_should(result_victories, user_id, session)
+    xp = result.scalar_one()
+    return xp
 
 
-# check on game end?
-async def victories(user_id: int, session: AsyncSession) -> int | None:
+async def reward_game_achievement_if_should(
+        result_victories: dict[str, int], user_id: int, session: AsyncSession):
+    """ caller should commit session"""
+    win_breakpoints = [1, 3, 5, 10, 25, 50, 100, 250, 500, 1000]
+
+    regular_achievement = next((
+        w_break for w_break in win_breakpoints
+        if result_victories['regular_wins'] == w_break
+    ), None)
+
+    if regular_achievement is not None:
+        achievement = {
+            "a_key": f'win{regular_achievement}',
+            "a_name": f'win {regular_achievement} matches',
+            "a_desc": f'You Won {regular_achievement} regular matches',
+            "a_icon": f'({regular_achievement})'
+        }
+        await insert_game_achievement(user_id, achievement, session)
+
+    tournament_achievement = next((
+        w_break for w_break in win_breakpoints
+        if result_victories['tournament_wins'] == w_break
+    ), None)
+
+    if tournament_achievement is not None:
+        achievement = {
+            "a_key": f'twin{tournament_achievement}',
+            "a_name": f'win {tournament_achievement} tournament matches',
+            "a_desc": f'You Won {tournament_achievement} tournament matches',
+            "a_icon": f'_\({tournament_achievement})/_'
+        }
+        await insert_game_achievement(user_id, achievement, session)
+
+
+async def insert_game_achievement(
+        user_id: int, achievement: dict[str,str], session: AsyncSession):
+    """ caller should commit session"""
+    statement = text("""
+WITH
+insert_achievement_if_not_exists AS
+(
+    INSERT INTO achievements (key, name, description, icon)
+        VALUES (:a_key, :a_name, :a_desc, :a_icon)
+    ON CONFLICT (key) DO NOTHING
+    RETURNING id
+)
+, insertion_user_achievement AS
+(
+
+    INSERT INTO user_achievements (user_id, achievement_id)
+        VALUES (:user_id, COALESCE((SELECT id FROM achievements WHERE key = :a_key),
+                                   (table insert_achievement_if_not_exists)))
+    ON CONFLICT (user_id, achievement_id) DO NOTHING
+    RETURNING achievement_id
+)
+, insertion_notification AS
+(
+    INSERT INTO notifications (user_id, type, message)
+        VALUES (:user_id, 'game_achievement', :a_desc)
+)
+SELECT
+    :user_id as user_id
+    ,*
+FROM achievements
+    JOIN insertion_user_achievement on achievement_id = achievements.id
+    """)
+    result = await session.execute(
+        statement, {'user_id': user_id, **achievement}
+    )
+
+    return result.mappings().one_or_none()
+
+
+async def victories(user_id: int, session: AsyncSession) -> dict[str, int]:
     statement = text("""
 WITH matches_results AS
 (
@@ -611,14 +1027,24 @@ WITH matches_results AS
   GROUP BY winner_id
 )
 SELECT
-  (COALESCE(wins, 0) + COALESCE(twins, 0))
+  COALESCE(wins, 0)
   AS wins_total
+  , COALESCE(twins, 0)
+  AS tournament_wins
+  , COALESCE(wins, 0) - COALESCE(twins, 0)
+  AS regular_wins
 FROM matches_results
-  FULL JOIN tournament_matches_results ON winner_id = twinner_id
+  FULL OUTER JOIN tournament_matches_results ON winner_id = twinner_id
 LIMIT 1
     """)
     result = await session.execute(
         statement, {'user_id': user_id}
     )
-    result_scalar: int | None = result.scalar_one_or_none()
-    return result_scalar
+
+    ret = result.mappings().one_or_none() or {
+        'wins_total': 0,
+        'regular_wins': 0,
+        'tournament_wins': 0
+    }
+
+    return {**ret}
