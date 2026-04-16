@@ -74,3 +74,9 @@ async def get_current_user_id(
             status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
         )
     return user_id
+
+async def get_current_token(
+    credentials: HTTPAuthorizationCredentials = Depends(_bearer),
+) -> str:
+    return credentials.credentials
+

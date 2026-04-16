@@ -156,10 +156,10 @@ async def withdraw_tournament(
     db: AsyncSession,
     tournament_id: int,
     user_id: int,
-) -> tuple[Tournament, bool]:
+) -> tuple[Tournament, bool, list[TournamentMatch]]:
     """User withdraws from a tournament in progress.
-    
-    Returns (tournament, tournament_complete).
+
+    Returns (tournament, tournament_complete, newly_assigned).
     """
     result = await db.execute(
         select(Tournament).where(Tournament.id == tournament_id).with_for_update()
@@ -185,7 +185,7 @@ async def withdraw_tournament(
 
     await db.delete(participant)
     await db.flush()
-    
+
     # Check if tournament should be marked complete
     # (all remaining participants are no longer actively playing)
     remaining_participants_result = await db.execute(
@@ -194,14 +194,16 @@ async def withdraw_tournament(
         )
     )
     remaining_participants = list(remaining_participants_result.scalars().all())
-    
+
     tournament_complete = False
     if not remaining_participants:
         tournament.status = "complete"
         tournament_complete = True
-    
+
     await db.commit()
-    return tournament, tournament_complete
+    await db.refresh(tournament)
+    newly_assigned: list[TournamentMatch] = []
+    return tournament, tournament_complete, newly_assigned
 
 async def create_tournament(
     db: AsyncSession, name: str, creator_id: int, max_participants: int
@@ -421,10 +423,10 @@ async def record_tournament_match_result(
     winner_id: int,
     score_p1: int = 0,
     score_p2: int = 0,
-) -> tuple[Tournament, bool]:
+) -> tuple[Tournament, bool, list[TournamentMatch]]:
     """Record the winner of a tournament match and advance the bracket.
 
-    Returns (tournament, tournament_complete).
+    Returns (tournament, tournament_complete, newly_assigned).
     """
     result = await db.execute(
         select(Tournament).where(Tournament.id == tournament_id).with_for_update()
@@ -471,6 +473,7 @@ async def record_tournament_match_result(
     )
     round_matches = list(round_result.scalars().all())
 
+    newly_assigned: list[TournamentMatch] = []
     tournament_complete = False
     if all(rm.status == "finished" for rm in round_matches):
         if len(round_matches) == 1:
@@ -498,10 +501,11 @@ async def record_tournament_match_result(
                     status="pending",
                 )
                 db.add(new_tm)
+                newly_assigned.append(new_tm)
 
     await db.commit()
     await db.refresh(tournament)
-    return tournament, tournament_complete
+    return tournament, tournament_complete, newly_assigned
 
 
 async def get_match(db: AsyncSession, match_id: int) -> Match | None:

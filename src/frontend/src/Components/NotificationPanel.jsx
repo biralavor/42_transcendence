@@ -9,6 +9,9 @@ const TYPE_LABELS = {
     game_invite: 'Game Invite',
     game_invite_response: 'Invite Response',
     game_invite_timeout: 'Invite Expired',
+    tournament_full: 'Tournament Ready',
+    tournament_match_available: 'Tournament Match',
+    tournament_complete: 'Tournament Complete',
     unread_chat: 'Unread Chat',
 }
 
@@ -30,6 +33,12 @@ function formatDateTime(isoString) {
 }
 
 // Get navigation path based on notification type
+function extractTournamentId(message) {
+    if (!message) return null
+    const match = message.match(/\[TOURNAMENT_ID:(\d+)\]/)
+    return match ? match[1] : null
+}
+
 function getNotificationRoute(notif) {
     switch (notif.type) {
         case 'friend_request':
@@ -42,8 +51,13 @@ function getNotificationRoute(notif) {
             return '/play'
         case 'game_invite_timeout':
             return '/play'
+        case 'tournament_full':
+        case 'tournament_match_available':
+        case 'tournament_complete': {
+            const tournamentId = extractTournamentId(notif.message)
+            return tournamentId ? `/tournaments/${tournamentId}` : '/tournaments'
+        }
         case 'unread_chat':
-            // Navigate to chat with the room slug
             return `/chat/${notif.room_slug}`
         default:
             return null

@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Literal, Optional
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class Login(BaseModel):
@@ -146,6 +146,9 @@ NOTIFICATION_TYPES = Literal[
     "game_invite",
     "game_invite_response",
     "game_invite_timeout",
+    "tournament_full",
+    "tournament_match_available",
+    "tournament_complete",
     "unread_chat",
     "match_result",
 ]
@@ -179,25 +182,34 @@ class PreferencesUpdateRequest(BaseModel):
 
 
 class GameNotificationRequest(BaseModel):
-    """Request to send a game-related notification.
-    
-    Only game INVITE notification types are allowed here (not responses).
-    Responses must use the dedicated /game-invite/response endpoint.
-    The server injects `from_user_id` and `from_username` from JWT auth to prevent impersonation.
-    `to_user_id` must be positive and different from the authenticated user.
-    """
-    type: Literal["game_invite", "game_invite_timeout"]  # Removed game_invite_response
+    """Request to send game- or tournament-related notifications."""
+
+    type: Literal[
+        "game_invite",
+        "game_invite_timeout",
+        "tournament_full",
+        "tournament_match_available",
+        "tournament_complete",
+    ]
     to_user_id: int
-    room_id: str
-    # game_invite
-    to_username:     Optional[str] = None
+    room_id: Optional[str] = None
+    tournament_id: Optional[int] = None
+    to_username: Optional[str] = None
     from_avatar_url: Optional[str] = None
-    expires_at:      Optional[int] = None
-    
+    expires_at: Optional[int] = None
+
     @field_validator('to_user_id')
     @classmethod
     def validate_to_user_id(cls, v: int) -> int:
-        """Ensure to_user_id is a positive integer."""
         if v <= 0:
             raise ValueError('to_user_id must be a positive integer')
         return v
+
+    @model_validator(mode="after")
+    def validate_context(self):
+        if self.type in {"game_invite", "game_invite_timeout"} and not self.room_id:
+            raise ValueError('room_id is required for game invite notifications')
+        if self.type in {"tournament_full", "tournament_match_available", "tournament_complete"}:
+            if self.tournament_id is None or self.tournament_id <= 0:
+                raise ValueError('tournament_id is required for tournament notifications')
+        return self
