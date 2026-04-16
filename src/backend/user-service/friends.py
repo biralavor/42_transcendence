@@ -131,7 +131,7 @@ async def respond_to_friend_request(
             friendship.status = "accepted"
             await session.flush()
             await reward_friendship_achievement_if_should(
-                request_id, addressee_id, session
+                friendship.requester_id, friendship.addressee_id, session
             )
         else:
             await session.delete(friendship)

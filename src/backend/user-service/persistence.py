@@ -4,12 +4,13 @@ from sqlalchemy import text
 async def reward_friendship_achievement_if_should(
         requester_id, addressee_id, session
 ):
+    print('requester_id', requester_id, 'addressee_id', addressee_id)
     friendship_brekpoints = [1, 3, 5, 11, 21, 42, 77, 111, 450, 987]
 
     requester_friendship_count = \
-        ((await friend_count(requester_id, session)) or 0) + 1
+        ((await friend_count(requester_id, session)) or 0)
     addressee_friendship_count = \
-        ((await friend_count(addressee_id, session)) or 0) + 1
+        ((await friend_count(addressee_id, session)) or 0)
 
     if requester_friendship_count in friendship_brekpoints:
         achievement = {

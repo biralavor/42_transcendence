@@ -959,7 +959,7 @@ async def reward_game_achievement_if_should(
         if result_victories['tournament_wins'] == w_break
     ), None)
 
-    if tournment_achievement is not None:
+    if tournament_achievement is not None:
         achievement = {
             "a_key": f'twin{tournament_achievement}',
             "a_name": f'win {tournament_achievement} tournament matches',
