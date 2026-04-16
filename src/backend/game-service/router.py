@@ -1,22 +1,28 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from service.auth import get_current_user_id
+from service.auth import get_current_token, get_current_user_id
 from service.history import get_match_history
+from service.notifications import send_tournament_notification
 from service.persistence import (
     InvalidWinner,
     NotTournamentCreator,
+    TournamentCannotBeCancelled,
     TournamentFull,
     TournamentMatchAlreadyFinished,
     TournamentMatchNotFound,
     TournamentNotEnoughParticipants,
     TournamentNotFound,
+    TournamentNotInProgress,
     TournamentNotOpen,
+    TournamentNotParticipant,
+    UserAlreadyInActiveTournament,
     UserAlreadyRegistered,
     create_match,
     create_tournament,
+    delete_tournament,
     finish_match,
     get_leaderboard,
     get_match,
@@ -24,15 +30,10 @@ from service.persistence import (
     get_user_matches,
     get_user_stats,
     join_tournament,
+    leave_tournament,
     list_tournaments,
-    UserAlreadyInActiveTournament,
     record_tournament_match_result,
     start_tournament,
-    TournamentCannotBeCancelled,
-    delete_tournament,
-    TournamentNotParticipant,
-    leave_tournament,
-    TournamentNotInProgress,
     withdraw_tournament,
 )
 from service.schemas import (
@@ -41,12 +42,12 @@ from service.schemas import (
     MatchFinishRequest,
     MatchHistoryItem,
     MatchResponse,
-    TournamentMatchResultRequest,
     StatsResponse,
     TournamentCreateRequest,
     TournamentCreateResponse,
     TournamentDetailResponse,
     TournamentMatchResponse,
+    TournamentMatchResultRequest,
     TournamentParticipantResponse,
 )
 from service.ws.router import manager as ws_manager
@@ -57,6 +58,47 @@ router = APIRouter()
 SessionDependency = Annotated[AsyncSession, Depends(get_db)]
 
 
+def _build_tournament_detail(tournament, participants, matches) -> TournamentDetailResponse:
+    return TournamentDetailResponse(
+        id=tournament.id,
+        name=tournament.name,
+        creator_id=tournament.creator_id,
+        max_participants=tournament.max_participants,
+        status=tournament.status,
+        created_at=tournament.created_at,
+        participants=[
+            TournamentParticipantResponse(user_id=p.user_id, joined_at=p.joined_at)
+            for p in participants
+        ],
+        matches=[TournamentMatchResponse.model_validate(m) for m in matches],
+    )
+
+
+async def _notify_match_available(token: str, tournament_id: int, matches) -> None:
+    for match in matches:
+        if getattr(match, "status", None) != "in_progress":
+            continue
+        for player_id in (match.player1_id, match.player2_id):
+            if player_id is None:
+                continue
+            await send_tournament_notification(
+                token,
+                player_id,
+                "tournament_match_available",
+                tournament_id,
+            )
+
+
+async def _notify_tournament_complete(token: str, tournament_id: int, participants) -> None:
+    for participant in participants:
+        await send_tournament_notification(
+            token,
+            participant.user_id,
+            "tournament_complete",
+            tournament_id,
+        )
+
+
 @router.get("/stats/{user_id}", response_model=StatsResponse)
 async def user_stats(user_id: int, session: SessionDependency):
     return await get_user_stats(session, user_id)
@@ -65,9 +107,6 @@ async def user_stats(user_id: int, session: SessionDependency):
 @router.get("/leaderboard", response_model=list[LeaderboardEntryResponse])
 async def leaderboard(
     session: SessionDependency,
-    # Use FastAPI's Query parameters to enforce bounds and document them.  This
-    # replaces manual normalization and will return a 422 response if the
-    # provided limit is out of range.  Defaults to 20, minimum 1, maximum 100.
     limit: int = Query(20, ge=1, le=100),
 ) -> list[LeaderboardEntryResponse]:
     return await get_leaderboard(session, limit)
@@ -86,6 +125,7 @@ async def user_matches(user_id: int, session: SessionDependency):
 @router.post("/matches", status_code=status.HTTP_201_CREATED, response_model=MatchResponse)
 async def start_match(body: MatchCreateRequest, session: SessionDependency):
     return await create_match(session, body.player1_id, body.player2_id)
+
 
 @router.post("/tournaments", status_code=status.HTTP_201_CREATED, response_model=TournamentCreateResponse)
 async def create_tournament_endpoint(
@@ -106,6 +146,7 @@ async def create_tournament_endpoint(
         join_link=f"/api/game/tournaments/{tournament.id}/join",
     )
 
+
 @router.get("/tournaments", response_model=list[TournamentDetailResponse])
 async def get_tournaments(session: SessionDependency):
     tournaments = await list_tournaments(session)
@@ -115,25 +156,11 @@ async def get_tournaments(session: SessionDependency):
         result = await get_tournament_with_participants(session, tournament.id)
         if result is None:
             continue
-
-        tournament, participants, matches = result
-        response.append(
-            TournamentDetailResponse(
-                id=tournament.id,
-                name=tournament.name,
-                creator_id=tournament.creator_id,
-                max_participants=tournament.max_participants,
-                status=tournament.status,
-                created_at=tournament.created_at,
-                participants=[
-                    TournamentParticipantResponse(user_id=p.user_id, joined_at=p.joined_at)
-                    for p in participants
-                ],
-                matches=[TournamentMatchResponse.model_validate(m) for m in matches],
-            )
-        )
+        full_tournament, participants, matches = result
+        response.append(_build_tournament_detail(full_tournament, participants, matches))
 
     return response
+
 
 @router.get("/tournaments/{tournament_id}", response_model=TournamentDetailResponse)
 async def get_tournament(tournament_id: int, session: SessionDependency):
@@ -141,16 +168,8 @@ async def get_tournament(tournament_id: int, session: SessionDependency):
     if result is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tournament not found")
     tournament, participants, matches = result
-    return TournamentDetailResponse(
-        id=tournament.id,
-        name=tournament.name,
-        creator_id=tournament.creator_id,
-        max_participants=tournament.max_participants,
-        status=tournament.status,
-        created_at=tournament.created_at,
-        participants=[TournamentParticipantResponse(user_id=p.user_id, joined_at=p.joined_at) for p in participants],
-        matches=[TournamentMatchResponse.model_validate(m) for m in matches],
-    )
+    return _build_tournament_detail(tournament, participants, matches)
+
 
 @router.post("/tournaments/{tournament_id}/leave", status_code=status.HTTP_204_NO_CONTENT)
 async def leave_tournament_endpoint(
@@ -161,47 +180,28 @@ async def leave_tournament_endpoint(
     try:
         await leave_tournament(session, tournament_id, user_id)
     except TournamentNotFound:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Tournament not found",
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tournament not found")
     except TournamentNotOpen:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Only open tournaments can be left",
-        )
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Only open tournaments can be left")
     except TournamentNotParticipant:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User is not a participant in this tournament",
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User is not a participant in this tournament")
 
-@router.post(
-    "/tournaments/{tournament_id}/withdraw",
-    response_model=TournamentDetailResponse,
-)
+
+@router.post("/tournaments/{tournament_id}/withdraw", response_model=TournamentDetailResponse)
 async def withdraw_tournament_endpoint(
     tournament_id: int,
     session: SessionDependency,
     user_id: int = Depends(get_current_user_id),
+    token: str = Depends(get_current_token),
 ):
     try:
-        _, tournament_complete = await withdraw_tournament(session, tournament_id, user_id)
+        _, tournament_complete, newly_assigned = await withdraw_tournament(session, tournament_id, user_id)
     except TournamentNotFound:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Tournament not found",
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tournament not found")
     except TournamentNotInProgress:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Only tournaments in progress can be withdrawn from",
-        )
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Only tournaments in progress can be withdrawn from")
     except TournamentNotParticipant:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User is not a participant in this tournament",
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User is not a participant in this tournament")
 
     await ws_manager.broadcast(
         f"tournament_{tournament_id}",
@@ -217,19 +217,12 @@ async def withdraw_tournament_endpoint(
     result = await get_tournament_with_participants(session, tournament_id)
     tournament, participants, matches = result
 
-    return TournamentDetailResponse(
-        id=tournament.id,
-        name=tournament.name,
-        creator_id=tournament.creator_id,
-        max_participants=tournament.max_participants,
-        status=tournament.status,
-        created_at=tournament.created_at,
-        participants=[
-            TournamentParticipantResponse(user_id=p.user_id, joined_at=p.joined_at)
-            for p in participants
-        ],
-        matches=[TournamentMatchResponse.model_validate(m) for m in matches],
-    )
+    await _notify_match_available(token, tournament_id, newly_assigned)
+    if tournament_complete:
+        await _notify_tournament_complete(token, tournament_id, participants)
+
+    return _build_tournament_detail(tournament, participants, matches)
+
 
 @router.delete("/tournaments/{tournament_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_tournament_endpoint(
@@ -240,26 +233,19 @@ async def delete_tournament_endpoint(
     try:
         await delete_tournament(session, tournament_id, user_id)
     except TournamentNotFound:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Tournament not found",
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tournament not found")
     except NotTournamentCreator:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only the creator can cancel the tournament",
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the creator can cancel the tournament")
     except TournamentCannotBeCancelled:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Only open tournaments can be cancelled",
-        )
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Only open tournaments can be cancelled")
+
 
 @router.post("/tournaments/{tournament_id}/join", status_code=status.HTTP_201_CREATED)
 async def join_tournament_endpoint(
     tournament_id: int,
     session: SessionDependency,
     user_id: int = Depends(get_current_user_id),
+    token: str = Depends(get_current_token),
 ):
     try:
         await join_tournament(session, tournament_id, user_id)
@@ -276,6 +262,17 @@ async def join_tournament_endpoint(
             status_code=status.HTTP_409_CONFLICT,
             detail="User already participates in another active tournament",
         )
+
+    result = await get_tournament_with_participants(session, tournament_id)
+    if result is not None:
+        tournament, participants, _ = result
+        if tournament.status == "open" and len(participants) == tournament.max_participants:
+            await send_tournament_notification(
+                token,
+                tournament.creator_id,
+                "tournament_full",
+                tournament.id,
+            )
     return {"detail": "Joined successfully"}
 
 
@@ -284,6 +281,7 @@ async def start_tournament_endpoint(
     tournament_id: int,
     session: SessionDependency,
     user_id: int = Depends(get_current_user_id),
+    token: str = Depends(get_current_token),
 ):
     try:
         tournament, matches = await start_tournament(session, tournament_id, user_id)
@@ -297,40 +295,29 @@ async def start_tournament_endpoint(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Tournament is not full yet")
 
     result = await get_tournament_with_participants(session, tournament_id)
-    tournament, participants, _ = result
-
-    response = TournamentDetailResponse(
-        id=tournament.id,
-        name=tournament.name,
-        creator_id=tournament.creator_id,
-        max_participants=tournament.max_participants,
-        status=tournament.status,
-        created_at=tournament.created_at,
-        participants=[TournamentParticipantResponse(user_id=p.user_id, joined_at=p.joined_at) for p in participants],
-        matches=[TournamentMatchResponse.model_validate(m) for m in matches],
-    )
+    tournament, participants, current_matches = result
 
     await ws_manager.broadcast(
         f"tournament_{tournament_id}",
         {"type": "tournament_updated", "tournament_id": tournament_id},
     )
 
-    return response
+    await _notify_match_available(token, tournament_id, matches)
+
+    return _build_tournament_detail(tournament, participants, current_matches)
 
 
-@router.post(
-    "/tournaments/{tournament_id}/matches/{match_id}/result",
-    response_model=TournamentDetailResponse,
-)
+@router.post("/tournaments/{tournament_id}/matches/{match_id}/result", response_model=TournamentDetailResponse)
 async def record_tournament_match_result_endpoint(
     tournament_id: int,
     match_id: int,
     body: TournamentMatchResultRequest,
     session: SessionDependency,
     user_id: int = Depends(get_current_user_id),
+    token: str = Depends(get_current_token),
 ):
     try:
-        _, tournament_complete = await record_tournament_match_result(
+        _, tournament_complete, newly_assigned = await record_tournament_match_result(
             session, tournament_id, match_id, body.winner_id, body.score_p1, body.score_p2
         )
     except TournamentNotFound:
@@ -346,6 +333,7 @@ async def record_tournament_match_result_endpoint(
         f"tournament_{tournament_id}",
         {"type": "tournament_updated", "tournament_id": tournament_id},
     )
+
     if tournament_complete:
         await ws_manager.broadcast(
             f"tournament_{tournament_id}",
@@ -354,16 +342,12 @@ async def record_tournament_match_result_endpoint(
 
     result = await get_tournament_with_participants(session, tournament_id)
     tournament, participants, matches = result
-    return TournamentDetailResponse(
-        id=tournament.id,
-        name=tournament.name,
-        creator_id=tournament.creator_id,
-        max_participants=tournament.max_participants,
-        status=tournament.status,
-        created_at=tournament.created_at,
-        participants=[TournamentParticipantResponse(user_id=p.user_id, joined_at=p.joined_at) for p in participants],
-        matches=[TournamentMatchResponse.model_validate(m) for m in matches],
-    )
+
+    await _notify_match_available(token, tournament_id, newly_assigned)
+    if tournament_complete:
+        await _notify_tournament_complete(token, tournament_id, participants)
+
+    return _build_tournament_detail(tournament, participants, matches)
 
 
 @router.post("/matches/{match_id}/finish", response_model=MatchResponse)

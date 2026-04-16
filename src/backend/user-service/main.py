@@ -143,19 +143,21 @@ def _notif_payload(notif) -> dict:
 
 
 def _game_notif_message(sender: str, body) -> str:
-    """Return a human-readable notification message for each game event type.
-    
-    Note: game_invite_response messages are generated directly in deliver_game_invite_response()
-    and should NOT be sent through the /game-invites endpoint.
-    """
+    """Return a human-readable notification message for each game/tournament event type."""
     if body.type == "game_invite":
         msg = f"{sender} invited you to play Pong"
-        # Encode room_id in message for Maria to extract and redirect
         if body.room_id:
             msg += f" [ROOM_ID:{body.room_id}]"
         return msg
-    # game_invite_timeout
-    return f"Your game invite with {sender} has expired"
+    if body.type == "game_invite_timeout":
+        return f"Your game invite with {sender} has expired"
+    if body.type == "tournament_full":
+        return f"Your tournament is full and ready to start [TOURNAMENT_ID:{body.tournament_id}]"
+    if body.type == "tournament_match_available":
+        return f"You have a tournament match ready to play [TOURNAMENT_ID:{body.tournament_id}]"
+    if body.type == "tournament_complete":
+        return f"Tournament finished. Check the final standings [TOURNAMENT_ID:{body.tournament_id}]"
+    return "Notification"
 
 
 @app.post("/friends/request/{addressee_id}",

@@ -29,6 +29,12 @@ export default function GameInviteModal() {
     return match ? match[1] : null
   }
 
+  const extractTournamentId = (message) => {
+    if (!message) return null
+    const match = message.match(/\[TOURNAMENT_ID:(\d+)\]/)
+    return match ? match[1] : null
+  }
+
   const parseSenderInfo = (message, notif) => {
     const match = message.match(/^(.+?) invited you/)
     return {
@@ -81,7 +87,7 @@ export default function GameInviteModal() {
     debounceTimerRef.current = setTimeout(() => {
       const unreadNotifs = notifications.filter(
         (n) =>
-          (n.type === 'game_invite_response' || n.type === 'game_invite') &&
+          (['game_invite_response', 'game_invite', 'tournament_full', 'tournament_match_available', 'tournament_complete'].includes(n.type)) &&
           !n.read &&
           n.id != null,
       )
@@ -109,6 +115,7 @@ export default function GameInviteModal() {
           type: notif.type,
           message: notif.message,
           roomId,
+          tournamentId: extractTournamentId(notif.message),
           senderUserId: senderInfo.fromUserId,
           senderUsername: senderInfo.username,
         })
@@ -155,6 +162,7 @@ export default function GameInviteModal() {
 
   const isInvite = visibleNotification.type === 'game_invite'
   const isResponse = visibleNotification.type === 'game_invite_response'
+  const isTournamentNotice = ['tournament_full', 'tournament_match_available', 'tournament_complete'].includes(visibleNotification.type)
 
   const handleAccept = async () => {
     setIsResponding(true)
@@ -289,6 +297,10 @@ export default function GameInviteModal() {
       })
     }
 
+    if (isTournamentNotice && visibleNotification.tournamentId) {
+      navigate(`/tournaments/${visibleNotification.tournamentId}`)
+    }
+
     setVisibleNotification(null)
     setErrorMessage(null)
   }
@@ -304,7 +316,7 @@ export default function GameInviteModal() {
       <div className="game-invite-modal">
         <div className="game-invite-modal__content">
           <h2 className="game-invite-modal__title">
-            {isInvite ? 'Match Invite' : 'Invite Response'}
+            {isInvite ? 'Match Invite' : isResponse ? 'Invite Response' : 'Tournament Update'}
           </h2>
           <p className="game-invite-modal__message">{visibleNotification.message}</p>
           {errorMessage && (

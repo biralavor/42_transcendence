@@ -152,7 +152,7 @@ async def withdraw_tournament(
     db: AsyncSession,
     tournament_id: int,
     user_id: int,
-) -> tuple[Tournament, bool]:
+) -> tuple[Tournament, bool, list[TournamentMatch]]:
     result = await db.execute(
         select(Tournament).where(Tournament.id == tournament_id).with_for_update()
     )
@@ -207,7 +207,7 @@ async def withdraw_tournament(
     if tournament.creator_id == user_id and other_participants:
         tournament.creator_id = other_participants[0].user_id
 
-    await _assign_available_tournament_matches(db, tournament_id)
+    newly_assigned = await _assign_available_tournament_matches(db, tournament_id)
 
     all_matches_result = await db.execute(
         select(TournamentMatch).where(TournamentMatch.tournament_id == tournament_id)
@@ -221,7 +221,7 @@ async def withdraw_tournament(
 
     await db.commit()
     await db.refresh(tournament)
-    return tournament, tournament_complete
+    return tournament, tournament_complete, newly_assigned, newly_assigned
 
 async def create_tournament(
     db: AsyncSession, name: str, creator_id: int, max_participants: int
@@ -499,7 +499,7 @@ async def start_tournament(
     tournament.status = "in_progress"
     await db.flush()
 
-    await _assign_available_tournament_matches(db, tournament_id)
+    newly_assigned = await _assign_available_tournament_matches(db, tournament_id)
 
     await db.commit()
 
@@ -538,7 +538,7 @@ async def record_tournament_match_result(
     winner_id: int,
     score_p1: int = 0,
     score_p2: int = 0,
-) -> tuple[Tournament, bool]:
+) -> tuple[Tournament, bool, list[TournamentMatch]]:
     result = await db.execute(
         select(Tournament).where(Tournament.id == tournament_id).with_for_update()
     )
@@ -589,7 +589,7 @@ async def record_tournament_match_result(
 
     await db.commit()
     await db.refresh(tournament)
-    return tournament, tournament_complete
+    return tournament, tournament_complete, newly_assigned, newly_assigned
 
 
 async def get_match(db: AsyncSession, match_id: int) -> Match | None:
