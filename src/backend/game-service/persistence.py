@@ -926,10 +926,6 @@ async def award_xp(user_id: int, amount: int, session: AsyncSession):
     )
     result_victories = await victories(user_id, session)
     tournament_amount_xp = 100
-    if amount == tournament_amount_xp:
-        result_victories['tournament_wins'] += 1
-    else:
-        result_victories['regular_wins'] += 1
     await reward_game_achievement_if_should(result_victories, user_id, session)
     xp = result.scalar_one()
     return xp
