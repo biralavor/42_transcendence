@@ -41,22 +41,31 @@ async def db():
 
 
 async def _setup_tournament(db, max_participants: int):
+    # Ensure the required users exist (idempotent INSERT) so the test is
+    # self-contained and doesn't depend on pre-seeded database state.
+    # credentials must be inserted first due to the FK on users.credential_id.
+    for uid in range(1, max_participants + 1):
+        await db.execute(
+            text(
+                "INSERT INTO credentials (id, username, password) VALUES (:id, :u, 'x') "
+                "ON CONFLICT (id) DO NOTHING"
+            ),
+            {"id": uid, "u": f"test_user_{uid}"},
+        )
+        await db.execute(
+            text(
+                "INSERT INTO users (id, username, credential_id) VALUES (:id, :u, :cid) "
+                "ON CONFLICT (id) DO NOTHING"
+            ),
+            {"id": uid, "u": f"test_user_{uid}", "cid": uid},
+        )
+    await db.flush()
+
     tournament = await create_tournament(db, name="t", creator_id=1, max_participants=max_participants)
     # Note: create_tournament() already adds creator (uid=1) as a participant
     # So we only need to add remaining participants (2 through max_participants)
-    statement = text("""
-SELECT
-    DISTINCT id
-FROM users
-WHERE
-    NOT id = 1
-ORDER BY id DESC
-LIMIT :limit
-    """)
-    result = await db.execute(statement, {'limit': max_participants - 1})
-    data = result.all()
-    for uid in data:
-        await join_tournament(db, tournament.id, uid[0])
+    for uid in range(2, max_participants + 1):
+        await join_tournament(db, tournament.id, uid)
     _, matches = await start_tournament(db, tournament.id, user_id=1)
     return tournament, matches
 
