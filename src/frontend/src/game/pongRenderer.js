@@ -89,6 +89,8 @@ export function render(canvasContext, gameState, isKickoff, themeImages = null) 
   // Background: image fills canvas, or canvas stays transparent (black by CSS)
   if (themeImages?.background) {
     renderingCanvas.drawImage(themeImages.background, 0, 0, canvasContext.width, canvasContext.height);
+    renderingCanvas.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    renderingCanvas.fillRect(0, 0, canvasContext.width, canvasContext.height);
   }
 
   renderingCanvas.strokeStyle = canvasContext.primaryColor;
