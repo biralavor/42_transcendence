@@ -196,6 +196,23 @@ def test_ai_stops_when_on_target():
     assert s.p2_direction == "stop"
 
 
+def test_ai_holds_error_direction_between_intervals():
+    """Error direction is held for the whole reaction interval, not re-rolled per tick."""
+    s = _make_session()
+    s.ai_last_eval_ms = 0.0
+    # First call: delay elapsed, random error → ai_is_erroring=True, direction="stop"
+    with patch("service.ai.random.random", return_value=0.0):
+        update_ai_paddle(s, error_rate=1.0, reaction_delay_ms=9999, wrong_move_rate=0.0)
+    assert s.ai_is_erroring is True
+    assert s.p2_direction == "stop"
+
+    # Second call: delay NOT elapsed, random would normally flip direction, but is ignored
+    with patch("service.ai.random.random", return_value=1.0):  # no error — but ignored
+        update_ai_paddle(s, error_rate=1.0, reaction_delay_ms=9999, wrong_move_rate=0.0)
+    # Should still be erroring from previous interval decision
+    assert s.p2_direction == "stop"
+
+
 def test_ai_updates_last_eval_ms_after_evaluation():
     s = _make_session()
     s.ai_last_eval_ms = 0.0

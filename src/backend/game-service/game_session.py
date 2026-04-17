@@ -34,13 +34,14 @@ class GameSession:
     CANVAS_HEIGHT = 512
     PADDLE_WIDTH = 20
     PADDLE_HEIGHT = 100
-    PADDLE_SPEED = 5.0 
+    PADDLE_SPEED = 11.4  # 2 px/tick × (512/90) — matches frontend MAX_PLAYER_VEL in backend coords
     BALL_RADIUS = 8
     INITIAL_BALL_X = CANVAS_WIDTH / 2
     INITIAL_BALL_Y = CANVAS_HEIGHT / 2
-    INITIAL_BALL_VX = 3.0 
+    INITIAL_BALL_VX = 25.6  # 4 px/tick × (1024/160) — matches frontend initial ball speed
     INITIAL_BALL_VY = 0.0
-    MAX_BALL_SPEED = 8.0  # base value; use self.max_ball_speed (scaled) in game logic 
+    MAX_BALL_SPEED = 51.2  # 8 px/tick × (1024/160) — 2× initial speed cap
+    SUBSTEPS = 4           # physics sub-steps per tick to prevent ball tunneling
     WIN_SCORE = 10
     FPS = 30
     TICK_INTERVAL = 1.0 / FPS  # ~33.3 ms
@@ -71,6 +72,8 @@ class GameSession:
         self.ai_last_eval_ms: float = 0.0
         self.ai_target_y: float = self.CANVAS_HEIGHT / 2
         self.ai_params: dict | None = None
+        self.ai_is_erroring: bool = False
+        self.ai_error_direction: str = "stop"
         
     def get_state_snapshot(self) -> GameStateSnapshot:
         return GameStateSnapshot(
@@ -153,7 +156,7 @@ class GameSession:
         hit_position = (self.ball.y - paddle_y) / self.PADDLE_HEIGHT
         hit_position = max(0.0, min(1.0, hit_position))  # Clamp to [0, 1]
         angle_factor = (hit_position - 0.5) * 2.0  # [-1, 1]
-        self.ball.vy = angle_factor * 2.5
+        self.ball.vy = angle_factor * 14.2  # 2.5 × (512/90) — proportional to canvas height
         speed = (self.ball.vx ** 2 + self.ball.vy ** 2) ** 0.5
         if speed > self.max_ball_speed:
             scale = self.max_ball_speed / speed
@@ -163,16 +166,15 @@ class GameSession:
     def check_scoring(self) -> None:
         if self.ball.x < 0:
             self.score.p2 += 1
-            self._reset_ball()
-        
+            self._reset_ball(vx_sign=1)   # serve toward p2 (the scorer)
         elif self.ball.x > self.CANVAS_WIDTH:
             self.score.p1 += 1
-            self._reset_ball()
+            self._reset_ball(vx_sign=-1)  # serve toward p1 (the scorer)
     
-    def _reset_ball(self) -> None:
+    def _reset_ball(self, vx_sign: int = 1) -> None:
         self.ball.x = self.INITIAL_BALL_X
         self.ball.y = self.INITIAL_BALL_Y
-        self.ball.vx = self.INITIAL_BALL_VX * self.speed_multiplier
+        self.ball.vx = vx_sign * self.INITIAL_BALL_VX * self.speed_multiplier
         self.ball.vy = self.INITIAL_BALL_VY
     
     def check_victory(self) -> tuple[bool, int | None]:
@@ -184,7 +186,10 @@ class GameSession:
     
     def tick(self) -> None:
         self.update_paddles()
-        self.update_ball()
-        self.check_collisions()
+        frac = 1.0 / self.SUBSTEPS
+        for _ in range(self.SUBSTEPS):
+            self.ball.x += self.ball.vx * frac
+            self.ball.y += self.ball.vy * frac
+            self.check_collisions()
         self.check_scoring()
         self.tick_count += 1

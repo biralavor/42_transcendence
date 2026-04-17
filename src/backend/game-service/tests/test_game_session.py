@@ -126,6 +126,28 @@ def test_game_session_has_ai_state_attrs():
     assert s.ai_last_eval_ms == 0.0
     assert hasattr(s, 'ai_target_y')
     assert s.ai_target_y == GameSession.CANVAS_HEIGHT / 2
+    assert hasattr(s, 'ai_is_erroring')
+    assert s.ai_is_erroring is False
+    assert hasattr(s, 'ai_error_direction')
+    assert s.ai_error_direction == "stop"
+
+
+def test_reset_ball_left_exit_serves_positive_vx():
+    """Ball exits left (p2 scores) → ball serves toward p2 (positive vx)."""
+    from service.game_session import GameSession
+    session = GameSession(player1_id=1, player2_id=2)
+    session.ball.x = -1.0
+    session.check_scoring()
+    assert session.ball.vx > 0
+
+
+def test_reset_ball_right_exit_serves_negative_vx():
+    """Ball exits right (p1 scores) → ball serves toward p1 (negative vx)."""
+    from service.game_session import GameSession
+    session = GameSession(player1_id=1, player2_id=2)
+    session.ball.x = GameSession.CANVAS_WIDTH + 1.0
+    session.check_scoring()
+    assert session.ball.vx < 0
 
 
 def test_speed_multiplier_default_is_1():

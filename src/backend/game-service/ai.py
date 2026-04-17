@@ -89,7 +89,8 @@ def update_ai_paddle(
     """
     now_ms = time.monotonic() * 1000
 
-    # Re-evaluate intercept when the delay window has elapsed
+    # Re-evaluate once per reaction interval — this is where error decisions are batched,
+    # preventing per-tick direction flicker caused by high error_rate.
     if now_ms - session.ai_last_eval_ms >= reaction_delay_ms:
         raw_target = predict_intercept_y(
             ball_x=session.ball.x,
@@ -101,17 +102,24 @@ def update_ai_paddle(
         if target_noise > 0:
             raw_target += random.gauss(0, target_noise)
         session.ai_target_y = max(0.0, min(session.CANVAS_HEIGHT, raw_target))
+
+        # Decide error state for this entire interval (not per-tick)
+        if random.random() < error_rate:
+            if wrong_move_rate > 0 and random.random() < wrong_move_rate:
+                session.ai_error_direction = random.choice(["up", "down", "stop"])
+            else:
+                session.ai_error_direction = "stop"
+            session.ai_is_erroring = True
+        else:
+            session.ai_is_erroring = False
+
         session.ai_last_eval_ms = now_ms
 
-    # Randomly make an error this tick (simulates missed/wrong reaction)
-    if random.random() < error_rate:
-        if wrong_move_rate > 0 and random.random() < wrong_move_rate:
-            session.p2_direction = random.choice(["up", "down", "stop"])
-        else:
-            session.p2_direction = "stop"
+    # Apply current state: hold error direction or track smoothly
+    if session.ai_is_erroring:
+        session.p2_direction = session.ai_error_direction
         return
 
-    # Move paddle center toward ai_target_y
     paddle_center = session.paddles.p2 + session.PADDLE_HEIGHT / 2
     if paddle_center < session.ai_target_y - session.PADDLE_SPEED:
         session.p2_direction = "down"
