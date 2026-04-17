@@ -1,6 +1,7 @@
 import NavbarComponent from '../Components/Navbar'
 import PongCanvas from '../Components/PongCanvas'
 import GameSettings from '../Components/GameSettings'
+import VsCpuCard from '../Components/VsCpuCard'
 
 const matchModes = [
   {
@@ -96,6 +97,9 @@ export default function Play() {
             </div>
 
             <div id="match-modes" className="row g-4">
+              <div className="col-12 col-md-6 col-xl-4">
+                <VsCpuCard />
+              </div>
               {matchModes.map((mode) => (
                 <div className="col-12 col-md-6 col-xl-4" key={mode.title}>
                   <article className="arcade-card h-100 p-4">

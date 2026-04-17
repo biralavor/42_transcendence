@@ -16,20 +16,20 @@ export default function GamePage() {
   const navigate = useNavigate()
   const location = useLocation()
 
-  const player1Id = location.state?.player1_id || location.state?.currentUser?.id
-  const player2Id = location.state?.player2_id || location.state?.opponent?.id
+  const player1Id = location.state?.player1_id ?? location.state?.currentUser?.id
+  const player2Id = location.state?.player2_id ?? location.state?.opponent?.id
   const tournamentId = location.state?.tournamentId
   const tournamentMatchId = location.state?.tournamentMatchId
   const [submittingResult, setSubmittingResult] = useState(false)
 
   useEffect(() => {
     // Redirect to play if no room context or missing player IDs
-    if (!roomId || !player1Id || !player2Id) {
+    if (!roomId || player1Id == null || player2Id == null) {
       navigate('/play')
     }
   }, [roomId, player1Id, player2Id, navigate])
 
-  if (!roomId || !player1Id || !player2Id) {
+  if (!roomId || player1Id == null || player2Id == null) {
     return null // Prevent rendering the canvas with missing IDs while navigating away
   }
 
