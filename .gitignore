@@ -27,3 +27,4 @@ package-lock.json
 
 # Tem result tests logs
 make_check_results.txt
+.codex/

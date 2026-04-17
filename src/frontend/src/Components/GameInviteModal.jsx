@@ -1,205 +1,395 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import GameInviteModal from './GameInviteModal'
-import { apiCall } from '../utils/apiClient'
+import { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/authContext'
 import { useNotifications } from '../context/notificationContext'
-import { useNavigate } from 'react-router-dom'
+import { apiCall } from '../utils/apiClient'
+import './GameInviteModal.css'
 
-vi.mock('../context/notificationContext', () => ({
-  useNotifications: vi.fn(),
-}))
+/**
+ * GameInviteModal - Global modal for game invite notifications
+ * Shows both incoming invites (game_invite) and responses (game_invite_response)
+ * Works on ANY page, not just Profile/Chat
+ */
+export default function GameInviteModal() {
+  const { auth } = useAuth()
+  const { notifications, markRead } = useNotifications()
+  const navigate = useNavigate()
 
-vi.mock('../context/authContext', () => ({
-  useAuth: vi.fn(),
-}))
+  const [visibleNotification, setVisibleNotification] = useState(null)
+  const [isResponding, setIsResponding] = useState(false)
+  const [errorMessage, setErrorMessage] = useState(null)
+  const [currentUser, setCurrentUser] = useState(null)
 
-vi.mock('react-router-dom', async () => {
-  const actual = await vi.importActual('react-router-dom')
-  return {
-    ...actual,
-    useNavigate: vi.fn(),
-  }
-})
+  const processedIdsRef = useRef(new Set())
+  const debounceTimerRef = useRef(null)
 
-vi.mock('../utils/apiClient', () => ({
-  apiCall: vi.fn(),
-}))
-
-describe('GameInviteModal', () => {
-  const mockNavigate = vi.fn()
-  const mockMarkRead = vi.fn()
-
-  const inviteNotification = {
-    id: 1,
-    type: 'game_invite',
-    message: 'Player1 invited you to play Pong [ROOM_ID:invite-4-5-123456]',
-    read: false,
-    from_user_id: 4,
-    user_id: 5,
-    created_at: '2026-04-12T04:11:51.291867+00:00',
+  const extractRoomId = (message) => {
+    if (!message) return null
+    const match = message.match(/\[ROOM_ID:([^\]]+)\]/)
+    return match ? match[1] : null
   }
 
-  const responseNotification = {
-    id: 2,
-    type: 'game_invite_response',
-    message: 'Player1 accepted your invite [ROOM_ID:invite-4-5-123456]',
-    read: false,
-    from_user_id: 4,
-    user_id: 5,
-    created_at: '2026-04-12T04:12:00.000000+00:00',
+  const extractTournamentId = (message) => {
+    if (!message) return null
+    const match = message.match(/\[TOURNAMENT_ID:(\d+)\]/)
+    return match ? match[1] : null
   }
 
-  const tournamentNotification = {
-    id: 3,
-    type: 'tournament_match_available',
-    message: 'You have a tournament match ready to play. [TOURNAMENT_ID:9]',
-    read: false,
-    from_user_id: 1,
-    user_id: 5,
-    created_at: '2026-04-12T04:13:00.000000+00:00',
+  const parseSenderInfo = (message, notif) => {
+    const match = message.match(/^(.+?) invited you/)
+    return {
+      username: match ? match[1] : 'Player',
+      fromUserId: notif.from_user_id || notif.user_id,
+    }
   }
 
-  beforeEach(() => {
-    vi.clearAllMocks()
+  useEffect(() => {
+    let cancelled = false
 
-    useNavigate.mockReturnValue(mockNavigate)
-
-    useAuth.mockReturnValue({
-      auth: { access_token: 'test-token' },
-    })
-
-    useNotifications.mockReturnValue({
-      notifications: [],
-      markRead: mockMarkRead,
-    })
-
-    apiCall.mockImplementation(async (url, options = {}) => {
-      if (url === '/api/users/auth/me') {
-        return new Response(JSON.stringify({ id: 5, username: 'You' }), { status: 200 })
+    async function loadMe() {
+      if (!auth?.access_token) {
+        setCurrentUser(null)
+        return
       }
 
-      if (url === '/api/users/game-invite/response') {
-        return new Response(JSON.stringify({ status: 'ok' }), { status: 200 })
+      try {
+        const response = await apiCall('/api/users/auth/me')
+        if (!response.ok) {
+          throw new Error(`Failed to load current user: ${response.status}`)
+        }
+
+        const me = await response.json()
+
+        if (!cancelled) {
+          setCurrentUser({
+            id: me.id,
+            username: me.username,
+          })
+        }
+      } catch (error) {
+        console.error('[GameInviteModal] Failed to resolve current user:', error)
+        if (!cancelled) {
+          setCurrentUser(null)
+        }
+      }
+    }
+
+    loadMe()
+
+    return () => {
+      cancelled = true
+    }
+  }, [auth?.access_token])
+
+  useEffect(() => {
+    clearTimeout(debounceTimerRef.current)
+
+    debounceTimerRef.current = setTimeout(() => {
+      const unreadNotifs = notifications.filter(
+        (n) =>
+          (['game_invite_response', 'game_invite', 'tournament_full', 'tournament_match_available', 'tournament_complete'].includes(n.type)) &&
+          !n.read &&
+          n.id != null,
+      )
+
+      for (const notif of unreadNotifs) {
+        if (processedIdsRef.current.has(notif.id)) {
+          continue
+        }
+
+        if (!notif.from_user_id) {
+          console.error(
+            '[GameInviteModal] Notification missing from_user_id, will not process:',
+            notif,
+          )
+          processedIdsRef.current.add(notif.id)
+          markRead(notif.id)
+          continue
+        }
+
+        const roomId = extractRoomId(notif.message)
+        const senderInfo = parseSenderInfo(notif.message, notif)
+
+        setVisibleNotification({
+          id: notif.id,
+          type: notif.type,
+          message: notif.message,
+          roomId,
+          tournamentId: extractTournamentId(notif.message),
+          senderUserId: senderInfo.fromUserId,
+          senderUsername: senderInfo.username,
+          recipientUserId: notif.user_id,
+        })
+        setErrorMessage(null)
+        break
+      }
+    }, 100)
+
+    return () => clearTimeout(debounceTimerRef.current)
+  }, [notifications, markRead])
+
+  const buildWaitingRoomState = ({
+    opponentId,
+    opponentUsername,
+    fallbackSelfId = null,
+    fallbackSelfUsername = 'You',
+  }) => {
+    const selfId = currentUser?.id ?? fallbackSelfId
+    const selfUsername = currentUser?.username || fallbackSelfUsername
+    const selfNumericId = Number(selfId)
+    const opponentNumericId = Number(opponentId)
+
+    const hasValidIds =
+      Number.isInteger(selfNumericId) && Number.isInteger(opponentNumericId)
+
+    const [player1Id, player2Id] = hasValidIds
+      ? selfNumericId <= opponentNumericId
+        ? [selfNumericId, opponentNumericId]
+        : [opponentNumericId, selfNumericId]
+      : [null, null]
+
+    return {
+      ...(selfId != null && {
+        currentUser: {
+          id: hasValidIds ? selfNumericId : selfId,
+          username: selfUsername,
+        },
+      }),
+      opponent: {
+        id: hasValidIds ? opponentNumericId : opponentId,
+        username: opponentUsername,
+      },
+      friendId: hasValidIds ? opponentNumericId : opponentId,
+      friendUsername: opponentUsername,
+      player1_id: player1Id,
+      player2_id: player2Id,
+    }
+  }
+
+  if (!visibleNotification) return null
+
+  const isInvite = visibleNotification.type === 'game_invite'
+  const isResponse = visibleNotification.type === 'game_invite_response'
+  const isTournamentNotice = ['tournament_full', 'tournament_match_available', 'tournament_complete'].includes(visibleNotification.type)
+
+  const handleAccept = async () => {
+    setIsResponding(true)
+    setErrorMessage(null)
+
+    try {
+      const currentNotif = notifications.find((n) => n.id === visibleNotification.id)
+      const senderUserId = currentNotif?.from_user_id
+
+      if (!senderUserId) {
+        console.error(
+          '[GameInviteModal] Cannot accept: missing from_user_id in notification',
+          currentNotif,
+        )
+        setErrorMessage('Error: Invalid invite data. Please try again or dismiss.')
+        setIsResponding(false)
+        return
       }
 
-      throw new Error(`Unhandled apiCall mock for ${url}`)
-    })
-  })
-
-  it('renders incoming invite modal with Accept/Decline actions', async () => {
-    useNotifications.mockReturnValue({
-      notifications: [inviteNotification],
-      markRead: mockMarkRead,
-    })
-
-    render(<GameInviteModal />)
-
-    await waitFor(() => {
-      expect(screen.getByText('Match Invite')).toBeInTheDocument()
-      expect(screen.getByText(/Player1 invited you/)).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: /Accept/i })).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: /Decline/i })).toBeInTheDocument()
-    })
-  })
-
-  it('accepting an invite calls the response endpoint and navigates with waiting-room state', async () => {
-    useNotifications.mockReturnValue({
-      notifications: [inviteNotification],
-      markRead: mockMarkRead,
-    })
-
-    render(<GameInviteModal />)
-
-    fireEvent.click(await screen.findByRole('button', { name: /Accept/i }))
-
-    await waitFor(() => {
-      expect(apiCall).toHaveBeenCalledWith(
-        '/api/users/game-invite/response',
-        expect.objectContaining({
-          method: 'POST',
+      const response = await apiCall('/api/users/game-invite/response', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to_user_id: senderUserId,
+          status: 'accepted',
+          room_id: visibleNotification.roomId,
         }),
-      )
-    })
+      })
 
-    await waitFor(() => {
-      expect(mockNavigate).toHaveBeenCalledWith(
-        '/game/waiting/invite-4-5-123456',
-        expect.objectContaining({
-          state: expect.objectContaining({
-            currentUser: expect.objectContaining({
-              id: 5,
-              username: 'You',
-            }),
-            opponent: expect.objectContaining({
-              id: 4,
-              username: 'Player1',
-            }),
-            player1_id: 4,
-            player2_id: 5,
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        console.error('[GameInviteModal] Accept API error:', {
+          status: response.status,
+          error: errorData,
+        })
+        setErrorMessage(`Failed to accept invite (${response.status}). Please try again.`)
+        setIsResponding(false)
+        return
+      }
+
+      markRead(visibleNotification.id)
+      processedIdsRef.current.add(visibleNotification.id)
+
+      const recipientUserId =
+        currentNotif?.user_id ?? visibleNotification.recipientUserId
+
+      if (visibleNotification.roomId) {
+        navigate(`/game/waiting/${visibleNotification.roomId}`, {
+          state: buildWaitingRoomState({
+            opponentId: visibleNotification.senderUserId,
+            opponentUsername: visibleNotification.senderUsername,
+            fallbackSelfId: recipientUserId,
           }),
+        })
+      }
+
+      setVisibleNotification(null)
+      setErrorMessage(null)
+      setIsResponding(false)
+    } catch (error) {
+      console.error('[GameInviteModal] Error accepting invite:', error)
+      setErrorMessage('Network error. Please try again.')
+      setIsResponding(false)
+    }
+  }
+
+  const handleDecline = async () => {
+    setIsResponding(true)
+    setErrorMessage(null)
+
+    try {
+      const currentNotif = notifications.find((n) => n.id === visibleNotification.id)
+      const senderUserId = currentNotif?.from_user_id
+
+      if (!senderUserId) {
+        console.error(
+          '[GameInviteModal] Cannot decline: missing from_user_id in notification',
+          currentNotif,
+        )
+        setErrorMessage('Error: Invalid invite data. Please try again or dismiss.')
+        setIsResponding(false)
+        return
+      }
+
+      const response = await apiCall('/api/users/game-invite/response', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to_user_id: senderUserId,
+          status: 'declined',
         }),
-      )
-    })
+      })
 
-    expect(mockMarkRead).toHaveBeenCalledWith(inviteNotification.id)
-  })
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        console.error('[GameInviteModal] Decline API error:', {
+          status: response.status,
+          error: errorData,
+        })
+        setErrorMessage(`Failed to decline invite (${response.status}). Please try again.`)
+        setIsResponding(false)
+        return
+      }
 
-  it('declining an invite marks it as read and closes the modal', async () => {
-    useNotifications.mockReturnValue({
-      notifications: [inviteNotification],
-      markRead: mockMarkRead,
-    })
+      markRead(visibleNotification.id)
+      processedIdsRef.current.add(visibleNotification.id)
 
-    render(<GameInviteModal />)
+      setVisibleNotification(null)
+      setErrorMessage(null)
+      setIsResponding(false)
+    } catch (error) {
+      console.error('[GameInviteModal] Error declining invite:', error)
+      setErrorMessage('Network error. Please try again.')
+      setIsResponding(false)
+    }
+  }
 
-    fireEvent.click(await screen.findByRole('button', { name: /Decline/i }))
+  const handleDismiss = () => {
+    if (visibleNotification.id) {
+      markRead(visibleNotification.id)
+      processedIdsRef.current.add(visibleNotification.id)
+    }
 
-    await waitFor(() => {
-      expect(mockMarkRead).toHaveBeenCalledWith(inviteNotification.id)
-      expect(screen.queryByText('Match Invite')).not.toBeInTheDocument()
-    })
-  })
+    if (isResponse && visibleNotification.roomId) {
+      const currentNotif = notifications.find((n) => n.id === visibleNotification.id)
+      const recipientUserId =
+        currentNotif?.user_id ?? visibleNotification.recipientUserId
 
-  it('dismissing a game_invite_response navigates to the waiting room with resolved ids', async () => {
-    useNotifications.mockReturnValue({
-      notifications: [responseNotification],
-      markRead: mockMarkRead,
-    })
-
-    render(<GameInviteModal />)
-
-    fireEvent.click(await screen.findByRole('button', { name: /OK/i }))
-
-    await waitFor(() => {
-      expect(mockNavigate).toHaveBeenCalledWith(
-        '/game/waiting/invite-4-5-123456',
-        expect.objectContaining({
-          state: expect.objectContaining({
-            currentUser: expect.objectContaining({ id: 5 }),
-            opponent: expect.objectContaining({ id: 4, username: 'Player1' }),
-            player1_id: 4,
-            player2_id: 5,
-          }),
+      navigate(`/game/waiting/${visibleNotification.roomId}`, {
+        state: buildWaitingRoomState({
+          opponentId: visibleNotification.senderUserId,
+          opponentUsername: visibleNotification.senderUsername,
+          fallbackSelfId: recipientUserId,
         }),
-      )
-    })
-  })
+      })
+    }
 
-  it('dismissing a tournament lifecycle notification navigates to the tournament page', async () => {
-    useNotifications.mockReturnValue({
-      notifications: [tournamentNotification],
-      markRead: mockMarkRead,
-    })
+    if (isTournamentNotice && visibleNotification.tournamentId) {
+      navigate(`/tournaments/${visibleNotification.tournamentId}`)
+    }
 
-    render(<GameInviteModal />)
+    setVisibleNotification(null)
+    setErrorMessage(null)
+  }
 
-    fireEvent.click(await screen.findByRole('button', { name: /OK/i }))
+  return (
+    <div
+      className="game-invite-modal-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-label={isInvite ? 'Game invite' : 'Game invite response'}
+      tabIndex={-1}
+    >
+      <div className="game-invite-modal">
+        <div className="game-invite-modal__content">
+          <h2 className="game-invite-modal__title">
+            {isInvite ? 'Match Invite' : isResponse ? 'Invite Response' : 'Tournament Update'}
+          </h2>
+          <p className="game-invite-modal__message">{visibleNotification.message}</p>
+          {errorMessage && (
+            <p className="game-invite-modal__error" role="alert">
+              {errorMessage}
+            </p>
+          )}
+        </div>
 
-    await waitFor(() => {
-      expect(mockNavigate).toHaveBeenCalledWith('/tournaments/9')
-    })
-    expect(mockMarkRead).toHaveBeenCalledWith(tournamentNotification.id)
-  })
-})
-  
+        <div className="game-invite-modal__actions">
+          {errorMessage ? (
+            <>
+              <button
+                type="button"
+                className="arcade-btn arcade-btn-primary game-invite-btn"
+                onClick={() => setErrorMessage('')}
+              >
+                Retry
+              </button>
+              <button
+                type="button"
+                className="arcade-btn arcade-btn-secondary game-invite-btn"
+                onClick={() => {
+                  setVisibleNotification(null)
+                  setErrorMessage(null)
+                }}
+              >
+                Close
+              </button>
+            </>
+          ) : isInvite ? (
+            <>
+              <button
+                type="button"
+                className="arcade-btn arcade-btn-primary game-invite-btn"
+                onClick={handleAccept}
+                disabled={isResponding}
+                autoFocus
+              >
+                {isResponding ? 'Accepting...' : 'Accept'}
+              </button>
+              <button
+                type="button"
+                className="arcade-btn arcade-btn-secondary game-invite-btn"
+                onClick={handleDecline}
+                disabled={isResponding}
+              >
+                {isResponding ? 'Declining...' : 'Decline'}
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              className="arcade-btn arcade-btn-secondary game-invite-btn"
+              onClick={handleDismiss}
+              autoFocus
+            >
+              OK
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}

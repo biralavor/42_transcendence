@@ -26,8 +26,19 @@ async def _override_get_db():
 @pytest_asyncio.fixture
 async def client():
     async with _engine.begin() as conn:
-        # Only truncate match-specific tables, NOT users/credentials (seeded data)
-        await conn.execute(text("TRUNCATE TABLE matches RESTART IDENTITY CASCADE"))
+        # Defensively clear abandoned transactions left by earlier suites sharing the same DB.
+        await conn.execute(text(
+            "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+            "WHERE state IN ('idle in transaction', 'idle in transaction (aborted)') "
+            "AND datname = current_database() "
+            "AND pid <> pg_backend_pid()"
+        ))
+        # Use a single TRUNCATE statement to keep lock acquisition order deterministic
+        # across integration modules and avoid intermittent deadlocks.
+        await conn.execute(text(
+            "TRUNCATE TABLE tournament_matches, tournament_participants, "
+            "tournaments, matches, users, credentials RESTART IDENTITY CASCADE"
+        ))
         
         # Create isolated test credentials with high IDs to avoid conflicts with seeded users
         test_users = [

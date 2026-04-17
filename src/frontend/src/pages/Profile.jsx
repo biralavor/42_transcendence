@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from 'react'
 import NavbarComponent from '../Components/Navbar'
 import GameSettings from '../Components/GameSettings'
 import { getAvatarFilter } from '../utils/avatarFilter'
-import { apiCall, apiJson } from '../utils/apiClient'
+import { apiCall } from '../utils/apiClient'
 import './Profile.css'
 import FriendsSidebar from '../Components/FriendsSidebar'
 import { useAuth } from '../context/authContext'
@@ -76,16 +76,36 @@ export default function Profile() {
 
     const controller = new AbortController()
     const { signal } = controller
+    setLoading(true)
+    setError('')
 
-    apiCall('/api/users/auth/me', { signal })
-      .then(r => {
-        if (!r.ok) throw new Error(`Auth failed: ${r.status}`)
-        return r.json()
-      })
-      .then(me => {
+    const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+    const fetchMeWithRetry = async () => {
+      const maxAttempts = 2
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        const response = await apiCall('/api/users/auth/me', { signal })
+        if (response.ok) {
+          return response.json()
+        }
+
+        const shouldRetry = response.status >= 500 && attempt < maxAttempts
+        if (!shouldRetry) {
+          throw new Error(`Auth failed: ${response.status}`)
+        }
+        await wait(250)
+      }
+
+      throw new Error('Auth failed: retry limit reached')
+    }
+
+    ;(async () => {
+      try {
+        const me = await fetchMeWithRetry()
         const id = me.id
         setUserId(id)
-        return Promise.all([
+
+        const [profileResult, historyResult] = await Promise.allSettled([
           apiCall(`/api/users/profile/${id}`, { signal }).then(r => {
             if (!r.ok) throw new Error(`Profile fetch failed: ${r.status}`)
             return r.json()
@@ -95,8 +115,12 @@ export default function Profile() {
             return r.json()
           }),
         ])
-      })
-      .then(([profileData, historyData]) => {
+
+        if (profileResult.status !== 'fulfilled') {
+          throw profileResult.reason
+        }
+
+        const profileData = profileResult.value
         setProfile({
           displayName: profileData.display_name ?? '',
           darkMode: profileData.dark_mode ?? false,
@@ -106,14 +130,20 @@ export default function Profile() {
           status: profileData.status,
           createdAt: profileData.created_at,
         })
-        setHistory(historyData)
-      })
-      .catch(err => {
+
+        if (historyResult.status === 'fulfilled') {
+          setHistory(historyResult.value)
+        } else {
+          // History is non-critical for rendering profile core data.
+          console.warn('[Profile] Match history unavailable:', historyResult.reason?.message || historyResult.reason)
+          setHistory([])
+        }
+      } catch (err) {
         if (err.name !== 'AbortError') setError(err.message)
-      })
-      .finally(() => {
+      } finally {
         if (!signal.aborted) setLoading(false)
-      })
+      }
+    })()
 
     return () => controller.abort()
   }, [auth.access_token])
@@ -134,14 +164,16 @@ export default function Profile() {
   const handleSave = async (e) => {
     e.preventDefault()
     try {
-      await apiJson(`/api/users/profile/${userId}`, {
+      const response = await apiCall(`/api/users/profile/${userId}`, {
         method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           display_name: profile.displayName,
           bio: profile.bio,
           dark_mode: profile.darkMode,
         }),
       })
+      if (!response.ok) throw new Error('Save failed')
       setSaveStatus('Profile updated successfully!')
       clearTimeout(saveStatusTimer.current)
       saveStatusTimer.current = setTimeout(() => setSaveStatus(''), 3000)
