@@ -13,14 +13,15 @@ from service.schemas import (
     ProfileResponse, UpdateProfileRequest, MeResponse,
     FriendResponse, FriendRequestResponse, FriendRequestAction,
     NotificationResponse, GameNotificationRequest, GameInviteResponseRequest,
-    PreferencesResponse, PreferencesUpdateRequest,
+    PreferencesResponse, PreferencesUpdateRequest, SearchResponse
+
 )
 from service.models.user import User
 from service.service import authenticate, refresh_access_token, register_credentials, get_profile, update_profile, get_me
 import service.friends as _friends
 from service.friends import (
     get_friends, get_pending_requests, get_sent_requests,
-    delete_friendship, search_users,
+    delete_friendship, search_users, search_users_paginated
 )
 import service.notifications as _notifications
 from shared.database import get_db
@@ -253,13 +254,24 @@ async def remove_friend(
         raise HTTPException(status_code=404, detail="Friendship not found")
 
 
-@app.get("/search", response_model=list[FriendResponse])
+@app.get("/search" , response_model=SearchResponse)
 async def search_users_endpoint(session: SessionDependency, q: str = ""):
     if q is None or q == "":
         raise HTTPException(status_code=400, detail="missing required query-parameter q on /search")
     if len(q) < 2:
-        return []
-    return await search_users(q, session)
+        return {
+            'results': [],
+            'total': 0,
+            'page': 0,
+            'per_page': 0,
+            'last_page': 0
+        }
+
+    paginated_search_result = await search_users_paginated(q, session)
+    print(paginated_search_result)
+    return paginated_search_result
+    # return {'results': [], 'total': 0, 'page': 0, 'per_page': 0}
+    # return await search_users(q, session)
 
 
 @app.post("/game-invite/response", status_code=201)

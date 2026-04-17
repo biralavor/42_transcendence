@@ -1,6 +1,6 @@
 # src/backend/user-service/friends.py
 from fastapi import HTTPException
-from sqlalchemy import select, or_, and_
+from sqlalchemy import select, or_, and_, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from service.models.friendship import Friendship
@@ -170,3 +170,26 @@ async def search_users(query: str, session: AsyncSession) -> list[User]:
         select(User).where(User.username.ilike(f"%{query}%")).limit(10)
     )
     return result.scalars().all()
+
+async def search_users_paginated(query: str, session: AsyncSession) -> list[User]:
+    """Returns up to 10 users whose username contains query (case-insensitive)."""
+    statement = text("""
+WITH all_users as
+(
+    SELECT id, username, avatar_url, status FROM users
+)
+SELECT
+    0
+    AS total
+    , 0
+    AS page
+    , 0
+    AS per_page
+    , 0
+    AS last_page
+    , COALESCE((SELECT jsonb_agg(to_jsonb(all_users)) FROM all_users)
+               , '[]'::jsonb)
+    AS results
+    """)
+    result = await session.execute(statement)
+    return result.mappings().one()
