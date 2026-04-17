@@ -114,9 +114,23 @@ def test_difficulty_params_has_three_levels():
 
 
 def test_difficulty_params_values():
-    assert DIFFICULTY_PARAMS["easy"]   == {"error_rate": 0.35, "reaction_delay_ms": 200}
-    assert DIFFICULTY_PARAMS["medium"] == {"error_rate": 0.15, "reaction_delay_ms": 100}
-    assert DIFFICULTY_PARAMS["hard"]   == {"error_rate": 0.05, "reaction_delay_ms":  30}
+    # Verify required keys and key invariants; exact numeric values are
+    # tuned for win-rate targets (see test_ai_win_rate.py) and may be
+    # adjusted without breaking the contract below.
+    required_keys = {"error_rate", "reaction_delay_ms", "wrong_move_rate", "target_noise"}
+    for level in ("easy", "medium", "hard"):
+        params = DIFFICULTY_PARAMS[level]
+        assert required_keys.issubset(params.keys()), (
+            f"DIFFICULTY_PARAMS[{level!r}] missing keys: {required_keys - params.keys()}"
+        )
+        assert 0.0 <= params["error_rate"] <= 1.0
+        assert params["reaction_delay_ms"] > 0
+        assert 0.0 <= params["wrong_move_rate"] <= 1.0
+        assert params["target_noise"] >= 0.0
+    # hard should be the most accurate difficulty
+    assert DIFFICULTY_PARAMS["hard"]["error_rate"] < DIFFICULTY_PARAMS["medium"]["error_rate"]
+    assert DIFFICULTY_PARAMS["medium"]["error_rate"] < DIFFICULTY_PARAMS["easy"]["error_rate"]
+    assert DIFFICULTY_PARAMS["hard"]["target_noise"] <= DIFFICULTY_PARAMS["medium"]["target_noise"]
 
 
 # ── update_ai_paddle behaviour ─────────────────────────────────────────────

@@ -14,9 +14,9 @@ from service.game_session import GameSession
 AI_PLAYER_ID = 0  # sentinel: real user IDs are always > 0
 
 DIFFICULTY_PARAMS: dict[str, dict] = {
-    "easy":   {"error_rate": 0.35, "reaction_delay_ms": 200},
-    "medium": {"error_rate": 0.15, "reaction_delay_ms": 100},
-    "hard":   {"error_rate": 0.05, "reaction_delay_ms":  30},
+    "easy":   {"error_rate": 0.85, "reaction_delay_ms": 400, "wrong_move_rate": 0.60, "target_noise": 300.0},
+    "medium": {"error_rate": 0.82, "reaction_delay_ms": 250, "wrong_move_rate": 0.55, "target_noise": 220.0},
+    "hard":   {"error_rate": 0.05, "reaction_delay_ms":  30, "wrong_move_rate": 0.00, "target_noise":   0.0},
 }
 
 
@@ -68,14 +68,20 @@ def update_ai_paddle(
     session: GameSession,
     error_rate: float = 0.15,
     reaction_delay_ms: int = 100,
+    wrong_move_rate: float = 0.00,
+    target_noise: float = 0.0,
 ) -> None:
     """Drive the AI paddle (p2) for one tick.
 
-    Two imperfection parameters:
-    - error_rate: probability [0, 1] per tick that the AI freezes (holds
-      position), simulating a missed reaction.
+    Four imperfection parameters:
+    - error_rate: probability [0, 1] per tick that the AI makes an error.
     - reaction_delay_ms: minimum milliseconds between intercept
       re-evaluations, simulating human reaction time lag.
+    - wrong_move_rate: when an error occurs, probability [0, 1] that the
+      AI moves in a random direction instead of stopping.  Simulates a
+      confused / panicking player rather than a frozen one.
+    - target_noise: standard deviation (pixels) of Gaussian noise added to
+      the computed intercept target, simulating imprecise aim.
 
     State is stored on ``session``:
     - session.ai_last_eval_ms  — monotonic timestamp of last re-evaluation
@@ -85,18 +91,24 @@ def update_ai_paddle(
 
     # Re-evaluate intercept when the delay window has elapsed
     if now_ms - session.ai_last_eval_ms >= reaction_delay_ms:
-        session.ai_target_y = predict_intercept_y(
+        raw_target = predict_intercept_y(
             ball_x=session.ball.x,
             ball_y=session.ball.y,
             ball_vx=session.ball.vx,
             ball_vy=session.ball.vy,
             ai_paddle_x=session.CANVAS_WIDTH - session.PADDLE_WIDTH,
         )
+        if target_noise > 0:
+            raw_target += random.gauss(0, target_noise)
+        session.ai_target_y = max(0.0, min(session.CANVAS_HEIGHT, raw_target))
         session.ai_last_eval_ms = now_ms
 
-    # Randomly ignore the intercept this tick (simulates missed reaction)
+    # Randomly make an error this tick (simulates missed/wrong reaction)
     if random.random() < error_rate:
-        session.p2_direction = "stop"
+        if wrong_move_rate > 0 and random.random() < wrong_move_rate:
+            session.p2_direction = random.choice(["up", "down", "stop"])
+        else:
+            session.p2_direction = "stop"
         return
 
     # Move paddle center toward ai_target_y
