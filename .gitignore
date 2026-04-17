@@ -29,7 +29,6 @@ package-lock.json
 make_check_results.txt
 .codex/
 .codex
-
+release.txt
 # Test result logs
 make_check_results.txt
-release.txt
