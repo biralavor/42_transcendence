@@ -42,13 +42,13 @@ async def test_search_without_query_returns_400(client):
     assert resp.status_code == 400
 
 @pytest.mark.asyncio
-async def test_search_with_query_returns_200(client):
+async def test_search_with_search_query_returns_200(client):
 
     resp = await client.get("/search?q=a")
     assert resp.status_code == 200
 
 @pytest.mark.asyncio
-async def test_search_with_query_returns_schema(client):
+async def test_search_with_search_query_returns_schema(client):
 
     resp = await client.get("/search?q=a")
     assert resp.status_code == 200
@@ -75,99 +75,26 @@ async def test_search_with_query_returns_schema(client):
            assert isinstance(element.get('username'), str)
            assert isinstance(element.get('avalar_url'), (str | None))
            assert isinstance(element.get('status'), str)
-
     else:
         print('WARNING testing with empty database, skiped some assertions')
 
+@pytest.mark.asyncio
+async def test_search_with_limit_query_one_returns_at_most_one_element(client):
 
-# # --------------------------------------------------------------------------- #
-# # POST /matches/{match_id}/finish
-# # --------------------------------------------------------------------------- #
+    limit = 1
+    resp = await client.get(f"/search?q=a&limit={limit}")
+    assert resp.status_code == 200
+    data = resp.json()
+    results = data.get('results')
+    assert results is not None
+    assert len(results) <= 1
 
-# @pytest.mark.asyncio
-# async def test_finish_match_returns_updated(client):
-#     resp_create = await client.post("/matches", json={"player1_id": 5001, "player2_id": 5002})
-#     match_id = resp_create.json()["id"]
-#     resp = await client.post(f"/matches/{match_id}/finish", json={"winner_id": 5001, "score_p1": 7, "score_p2": 3})
-#     assert resp.status_code == 200
-#     data = resp.json()
-#     assert data["status"] == "finished"
-#     assert data["winner_id"] == 5001
-#     assert data["score_p1"] == 7
-#     assert data["score_p2"] == 3
-
-
-# @pytest.mark.asyncio
-# async def test_finish_match_404_for_unknown_id(client):
-#     resp = await client.post("/matches/99999/finish", json={"winner_id": 5001, "score_p1": 7, "score_p2": 3})
-#     assert resp.status_code == 404
-
-
-# @pytest.mark.asyncio
-# async def test_finish_match_409_if_already_finished(client):
-#     resp_create = await client.post("/matches", json={"player1_id": 5001, "player2_id": 5002})
-#     match_id = resp_create.json()["id"]
-#     await client.post(f"/matches/{match_id}/finish", json={"winner_id": 5001, "score_p1": 7, "score_p2": 3})
-#     resp = await client.post(f"/matches/{match_id}/finish", json={"winner_id": 5001, "score_p1": 7, "score_p2": 3})
-#     assert resp.status_code == 409
-
-
-# # --------------------------------------------------------------------------- #
-# # GET /stats/{user_id}
-# # --------------------------------------------------------------------------- #
-
-# @pytest.mark.asyncio
-# async def test_get_stats_empty_for_new_user(client):
-#     resp = await client.get("/stats/999")
-#     assert resp.status_code == 200
-#     data = resp.json()
-#     assert data["user_id"] == 999
-#     assert data["wins"] == 0
-#     assert data["losses"] == 0
-#     assert data["total_games"] == 0
-
-
-# @pytest.mark.asyncio
-# async def test_get_stats_reflects_finished_matches(client):
-#     resp_create = await client.post("/matches", json={"player1_id": 5010, "player2_id": 5020})
-#     match_id = resp_create.json()["id"]
-#     await client.post(f"/matches/{match_id}/finish", json={"winner_id": 5010, "score_p1": 7, "score_p2": 2})
-
-#     resp = await client.get("/stats/5010")
-#     assert resp.status_code == 200
-#     data = resp.json()
-#     assert data["wins"] == 1
-#     assert data["losses"] == 0
-#     assert data["total_games"] == 1
-#     assert data["goals_scored"] == 7
-#     assert data["goals_conceded"] == 2
-
-
-# # --------------------------------------------------------------------------- #
-# # GET /matches/{user_id}
-# # --------------------------------------------------------------------------- #
-
-# @pytest.mark.asyncio
-# async def test_get_matches_empty_for_new_user(client):
-#     resp = await client.get("/matches/888")
-#     assert resp.status_code == 200
-#     assert resp.json() == []
-
-
-# @pytest.mark.asyncio
-# async def test_get_matches_returns_both_sides(client):
-#     # user 5030 plays as player1 and as player2
-#     await client.post("/matches", json={"player1_id": 5030, "player2_id": 5999})
-#     await client.post("/matches", json={"player1_id": 5999, "player2_id": 5030})
-
-#     resp = await client.get("/matches/5030")
-#     assert resp.status_code == 200
-#     assert len(resp.json()) == 2
-
-
-# # --------------------------------------------------------------------------- #
-# # GET /leaderboard
-# # --------------------------------------------------------------------------- #
+    resp = await client.get(f"/search?q=test&limit={limit}")
+    assert resp.status_code == 200
+    data = resp.json()
+    results = data.get('results')
+    assert results is not None
+    assert len(results) <= 1
 
 # @pytest.mark.asyncio
 # async def test_get_leaderboard_returns_ranked_rows(client):
