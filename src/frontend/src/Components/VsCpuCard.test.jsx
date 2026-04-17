@@ -74,6 +74,16 @@ describe('VsCpuCard', () => {
     expect(screen.getByRole('button', { name: /confirm/i })).toBeInTheDocument()
   })
 
+  it('on /auth/me error shows alert and does not call POST /ai', async () => {
+    apiJson.mockRejectedValueOnce(new Error('401 Unauthorized'))
+    render(<VsCpuCard />)
+    fireEvent.click(screen.getByRole('button', { name: /vs cpu/i }))
+    fireEvent.click(screen.getByRole('button', { name: /confirm/i }))
+    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument())
+    expect(apiJson).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('button', { name: /confirm/i })).toBeInTheDocument()
+  })
+
   it('selecting Easy and confirming sends difficulty: "easy"', async () => {
     apiJson.mockResolvedValueOnce({ id: 42, username: 'bira' })
     apiJson.mockResolvedValueOnce({ game_id: 'xyz-789' })

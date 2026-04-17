@@ -12,10 +12,12 @@ export default function VsCpuCard() {
   const [error, setError] = useState(null)
 
   async function handleConfirm() {
+    if (step === 'loading') return
     setStep('loading')
     setError(null)
     try {
       const me = await apiJson('/api/users/auth/me')
+      if (!me?.id) throw new Error('Not authenticated')
       const { game_id } = await apiJson('/api/game/ai', {
         method: 'POST',
         body: JSON.stringify({ player_id: me.id, difficulty }),
