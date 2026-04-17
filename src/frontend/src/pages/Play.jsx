@@ -97,7 +97,7 @@ export default function Play() {
             </div>
 
             <div id="match-modes" className="row g-4">
-              <div className="col-12 col-md-6 col-xl-4">
+              <div className="col-12 col-md-6 col-xl-4" key="vs-cpu">
                 <VsCpuCard />
               </div>
               {matchModes.map((mode) => (
