@@ -74,8 +74,9 @@ export class CanvasGameContext {
  * @param {CanvasGameContext} canvasContext
  * @param {GameState} gameState
  * @param {() => boolean} isKickoff - returns true game is paused after goal
+ * @param {{ background: HTMLImageElement|null, ball: HTMLImageElement|null, paddleLeft: HTMLImageElement|null, paddleRight: HTMLImageElement|null }|null} [themeImages]
  */
-export function render(canvasContext, gameState, isKickoff) {
+export function render(canvasContext, gameState, isKickoff, themeImages = null) {
   const renderingCanvas = canvasContext.rendering2d;
   const player1 = gameState.player1;
   const player2 = gameState.player2;
@@ -84,6 +85,11 @@ export function render(canvasContext, gameState, isKickoff) {
 
   const fontSize = canvasContext.widthScale * 16;
   renderingCanvas.reset();
+
+  // Background: image fills canvas, or canvas stays transparent (black by CSS)
+  if (themeImages?.background) {
+    renderingCanvas.drawImage(themeImages.background, 0, 0, canvasContext.width, canvasContext.height);
+  }
 
   renderingCanvas.strokeStyle = canvasContext.primaryColor;
   renderingCanvas.lineWidth = 6;
@@ -126,25 +132,42 @@ export function render(canvasContext, gameState, isKickoff) {
       midfieldStripSize.height * canvasContext.heightScale);
   }
 
-  renderingCanvas.fillStyle = player1.color;
-  renderingCanvas.fillRect(player1.position.x  * canvasContext.widthScale,
-                           player1.position.y  * canvasContext.heightScale,
-                           player1.size.width  * canvasContext.widthScale,
-                           player1.size.height * canvasContext.heightScale);
+  // Player 1 paddle
+  const p1x = player1.position.x * canvasContext.widthScale;
+  const p1y = player1.position.y * canvasContext.heightScale;
+  const p1w = player1.size.width  * canvasContext.widthScale;
+  const p1h = player1.size.height * canvasContext.heightScale;
+  if (themeImages?.paddleLeft) {
+    renderingCanvas.drawImage(themeImages.paddleLeft, p1x, p1y, p1w, p1h);
+  } else {
+    renderingCanvas.fillStyle = player1.color;
+    renderingCanvas.fillRect(p1x, p1y, p1w, p1h);
+  }
 
-  renderingCanvas.fillStyle = player2.color;
-  renderingCanvas.fillRect(player2.position.x  * canvasContext.widthScale,
-                           player2.position.y  * canvasContext.heightScale,
-                           player2.size.width  * canvasContext.widthScale,
-                           player2.size.height * canvasContext.heightScale);
-
+  // Player 2 paddle
+  const p2x = player2.position.x * canvasContext.widthScale;
+  const p2y = player2.position.y * canvasContext.heightScale;
+  const p2w = player2.size.width  * canvasContext.widthScale;
+  const p2h = player2.size.height * canvasContext.heightScale;
+  if (themeImages?.paddleRight) {
+    renderingCanvas.drawImage(themeImages.paddleRight, p2x, p2y, p2w, p2h);
+  } else {
+    renderingCanvas.fillStyle = player2.color;
+    renderingCanvas.fillRect(p2x, p2y, p2w, p2h);
+  }
 
   if (isKickoff())
-    return ;
+    return;
 
-  renderingCanvas.fillStyle = ball.color;
-  renderingCanvas.fillRect(ball.position.x  * canvasContext.widthScale,
-                           ball.position.y  * canvasContext.heightScale,
-                           ball.size.width  * canvasContext.widthScale,
-                           ball.size.height * canvasContext.heightScale);
+  // Ball
+  const bx = ball.position.x * canvasContext.widthScale;
+  const by = ball.position.y * canvasContext.heightScale;
+  const bw = ball.size.width  * canvasContext.widthScale;
+  const bh = ball.size.height * canvasContext.heightScale;
+  if (themeImages?.ball) {
+    renderingCanvas.drawImage(themeImages.ball, bx, by, bw, bh);
+  } else {
+    renderingCanvas.fillStyle = ball.color;
+    renderingCanvas.fillRect(bx, by, bw, bh);
+  }
 }

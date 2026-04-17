@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Literal, Optional
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class Login(BaseModel):
@@ -139,6 +139,16 @@ class NotificationResponse(BaseModel):
     message:    str
     read:       bool
     created_at: datetime
+
+
+class PreferencesResponse(BaseModel):
+    theme: str
+    ball_speed_multiplier: float
+
+
+class PreferencesUpdateRequest(BaseModel):
+    theme: Literal["classic", "neon-pong", "neon-two-paddle", "neon-central-paddle", "wood"] = "classic"
+    ball_speed_multiplier: float = Field(ge=0.5, le=2.0, default=1.0)
 
 
 class GameNotificationRequest(BaseModel):
