@@ -36,6 +36,16 @@ async def client():
 async def test_search_without_query_returns_400(client):
     resp = await client.get("/search")
     assert resp.status_code == 400
+    resp = await client.get("/search?q")
+    assert resp.status_code == 400
+    resp = await client.get("/search?q=")
+    assert resp.status_code == 400
+
+@pytest.mark.asyncio
+async def test_search_with_query_returns_200(client):
+
+    resp = await client.get("/search?q=a")
+    assert resp.status_code == 200
 
 
 # # --------------------------------------------------------------------------- #

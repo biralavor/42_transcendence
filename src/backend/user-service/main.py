@@ -255,6 +255,8 @@ async def remove_friend(
 
 @app.get("/search", response_model=list[FriendResponse])
 async def search_users_endpoint(session: SessionDependency, q: str = ""):
+    if q is None or q == "":
+        raise HTTPException(status_code=400, detail="missing required query-parameter q on /search")
     if len(q) < 2:
         return []
     return await search_users(q, session)
