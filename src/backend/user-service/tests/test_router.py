@@ -47,6 +47,17 @@ async def test_search_with_query_returns_200(client):
     resp = await client.get("/search?q=a")
     assert resp.status_code == 200
 
+@pytest.mark.asyncio
+async def test_search_with_query_returns_schema(client):
+
+    resp = await client.get("/search?q=a")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert isinstance(data, dict)
+    assert isinstance(data.get('results'), list)
+    assert isinstance(data.get('total'), int)
+    assert isinstance(data.get('page'), int)
+    assert isinstance(data.get('per_page'), int)
 
 # # --------------------------------------------------------------------------- #
 # # POST /matches/{match_id}/finish
