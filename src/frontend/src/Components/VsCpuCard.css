@@ -1,0 +1,17 @@
+.vs-cpu-difficulty-grid {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.vs-cpu-difficulty-grid button[data-selected='true'] {
+  outline: 2px solid var(--arcade-accent, #0ff);
+  outline-offset: 2px;
+}
+
+.vs-cpu-error {
+  color: var(--arcade-danger, #f55);
+  font-size: 0.85rem;
+  margin-bottom: 0.5rem;
+}
