@@ -171,19 +171,25 @@ async def search_users(query: str, session: AsyncSession) -> list[User]:
     )
     return result.scalars().all()
 
-async def search_users_paginated(query: str, session: AsyncSession) -> list[User]:
+async def search_users_paginated(query: str, limit: int, session: AsyncSession) -> list[User]:
     """Returns up to 10 users whose username contains query (case-insensitive)."""
     statement = text("""
 WITH all_users as
 (
-    SELECT id, username, avatar_url, status FROM users
+    SELECT
+      id
+      , username
+      , avatar_url
+      , status
+    FROM users
+    LIMIT :limit
 )
 SELECT
     0
     AS total
     , 0
     AS page
-    , 0
+    , :limit
     AS per_page
     , 0
     AS last_page
@@ -191,5 +197,5 @@ SELECT
                , '[]'::jsonb)
     AS results
     """)
-    result = await session.execute(statement)
+    result = await session.execute(statement, {'limit': limit})
     return result.mappings().one()

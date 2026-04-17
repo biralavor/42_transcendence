@@ -255,7 +255,11 @@ async def remove_friend(
 
 
 @app.get("/search" , response_model=SearchResponse)
-async def search_users_endpoint(session: SessionDependency, q: str = ""):
+async def search_users_endpoint(
+        session: SessionDependency,
+        q: str = "",
+        limit: int = 10,
+):
     if q is None or q == "":
         raise HTTPException(status_code=400, detail="missing required query-parameter q on /search")
     if len(q) < 2:
@@ -267,7 +271,7 @@ async def search_users_endpoint(session: SessionDependency, q: str = ""):
             'last_page': 0
         }
 
-    paginated_search_result = await search_users_paginated(q, session)
+    paginated_search_result = await search_users_paginated(q, limit, session)
     print(paginated_search_result)
     return paginated_search_result
     # return {'results': [], 'total': 0, 'page': 0, 'per_page': 0}

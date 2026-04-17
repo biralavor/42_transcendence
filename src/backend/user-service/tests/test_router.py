@@ -87,7 +87,9 @@ async def test_search_with_limit_query_one_returns_at_most_one_element(client):
     data = resp.json()
     results = data.get('results')
     assert results is not None
-    assert len(results) <= 1
+    assert len(results) == 0
+    assert data.get('page') == 0
+    assert data.get('per_page') == 0
 
     resp = await client.get(f"/search?q=test&limit={limit}")
     assert resp.status_code == 200
@@ -95,6 +97,8 @@ async def test_search_with_limit_query_one_returns_at_most_one_element(client):
     results = data.get('results')
     assert results is not None
     assert len(results) <= 1
+    assert data.get('page') == 0
+    assert data.get('per_page') == 1
 
 # @pytest.mark.asyncio
 # async def test_get_leaderboard_returns_ranked_rows(client):
