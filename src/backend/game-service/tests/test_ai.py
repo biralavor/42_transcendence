@@ -220,3 +220,22 @@ def test_ai_updates_last_eval_ms_after_evaluation():
     with patch("service.ai.random.random", return_value=1.0):
         update_ai_paddle(s, error_rate=0.0, reaction_delay_ms=0)
     assert s.ai_last_eval_ms >= before
+
+
+def test_ai_uses_paddle_x_p2_not_canvas_edge():
+    """AI must target PADDLE_X_P2 (928), not the old CANVAS_WIDTH-PADDLE_WIDTH (1004).
+
+    Diagonal shot from (512, 256) with vy=1.0:
+      - dx to 928: 416 → t=138.67 → raw_y≈394.67
+      - dx to 1004: 492 → t=164    → raw_y≈420
+    The two values differ by >20px — sufficient to distinguish the target.
+    """
+    s = _make_session(ball_vx=3.0, ball_y=256.0)
+    s.ball.vy = 1.0
+    s.ai_last_eval_ms = 0.0
+    with patch("service.ai.random.random", return_value=1.0):  # no error
+        update_ai_paddle(s, error_rate=0.0, reaction_delay_ms=0)
+    assert abs(s.ai_target_y - 395.0) < 3.0, (
+        f"AI target {s.ai_target_y:.1f} is not near 395 — "
+        "may be targeting old canvas edge (1004) instead of PADDLE_X_P2 (928)"
+    )

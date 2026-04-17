@@ -37,6 +37,7 @@ def run_ai_simulations(n: int, difficulty: str, opponent: str = "random_paddle")
     params = DIFFICULTY_PARAMS[difficulty]
     win_count = 0
     rng = random.Random(42)
+    random.seed(42)  # seed global random so AI error decisions are deterministic
 
     for _ in range(n):
         session = GameSession(player1_id=1, player2_id=AI_PLAYER_ID)
