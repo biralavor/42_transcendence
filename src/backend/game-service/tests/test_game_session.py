@@ -128,6 +128,60 @@ def test_game_session_has_ai_state_attrs():
     assert s.ai_target_y == GameSession.CANVAS_HEIGHT / 2
 
 
+def test_speed_multiplier_default_is_1():
+    from service.game_session import GameSession
+    session = GameSession(player1_id=1, player2_id=2)
+    assert session.speed_multiplier == 1.0
+
+
+def test_initial_ball_vx_respects_speed_multiplier():
+    from service.game_session import GameSession
+    session = GameSession(player1_id=1, player2_id=2, speed_multiplier=2.0)
+    assert abs(session.ball.vx - GameSession.INITIAL_BALL_VX * 2.0) < 0.001
+
+
+def test_reset_ball_uses_speed_multiplier():
+    from service.game_session import GameSession
+    session = GameSession(player1_id=1, player2_id=2, speed_multiplier=1.5)
+    session.ball.x = -1.0
+    session.check_scoring()
+    assert abs(session.ball.vx - GameSession.INITIAL_BALL_VX * 1.5) < 0.001
+
+
+def test_max_ball_speed_scales_with_multiplier():
+    from service.game_session import GameSession
+    session = GameSession(player1_id=1, player2_id=2, speed_multiplier=2.0)
+    assert abs(session.max_ball_speed - GameSession.MAX_BALL_SPEED * 2.0) < 0.001
+
+
+def test_reflect_clamps_to_scaled_max_ball_speed():
+    """_reflect_ball_off_paddle must enforce self.max_ball_speed, not the class constant."""
+    from service.game_session import GameSession
+    session = GameSession(player1_id=1, player2_id=2, speed_multiplier=0.5)
+    # Drive ball into left paddle at a speed above the 0.5x cap (4.0)
+    session.ball.vx = 10.0
+    session.ball.vy = 10.0
+    session._reflect_ball_off_paddle(session.paddles.p1)
+    total_speed = (session.ball.vx ** 2 + session.ball.vy ** 2) ** 0.5
+    assert total_speed <= session.max_ball_speed + 0.01
+
+
+def test_half_speed_boundary_vx_and_max():
+    """0.5x multiplier scales both initial vx and max_ball_speed correctly."""
+    from service.game_session import GameSession
+    session = GameSession(player1_id=1, player2_id=2, speed_multiplier=0.5)
+    assert abs(session.ball.vx - GameSession.INITIAL_BALL_VX * 0.5) < 0.001
+    assert abs(session.max_ball_speed - GameSession.MAX_BALL_SPEED * 0.5) < 0.001
+
+
+def test_defensive_floor_for_zero_speed_multiplier():
+    """speed_multiplier=0 should be floored to 0.1, not cause division-by-zero."""
+    from service.game_session import GameSession
+    session = GameSession(player1_id=1, player2_id=2, speed_multiplier=0.0)
+    assert session.speed_multiplier == 0.1
+    assert session.ball.vx > 0
+
+
 if __name__ == "__main__":
     test_game_session_creation()
     print("✓ test_game_session_creation passed")

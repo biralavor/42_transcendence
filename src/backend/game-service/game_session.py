@@ -40,18 +40,20 @@ class GameSession:
     INITIAL_BALL_Y = CANVAS_HEIGHT / 2
     INITIAL_BALL_VX = 3.0 
     INITIAL_BALL_VY = 0.0
-    MAX_BALL_SPEED = 8.0 
+    MAX_BALL_SPEED = 8.0  # base value; use self.max_ball_speed (scaled) in game logic 
     WIN_SCORE = 10
     FPS = 30
     TICK_INTERVAL = 1.0 / FPS  # ~33.3 ms
     
-    def __init__(self, player1_id: int, player2_id: int):
+    def __init__(self, player1_id: int, player2_id: int, speed_multiplier: float = 1.0):
         self.player1_id = player1_id
         self.player2_id = player2_id
+        self.speed_multiplier = max(0.1, speed_multiplier)
+        self.max_ball_speed = self.MAX_BALL_SPEED * self.speed_multiplier
         self.ball = BallState(
             x=self.INITIAL_BALL_X,
             y=self.INITIAL_BALL_Y,
-            vx=self.INITIAL_BALL_VX,
+            vx=self.INITIAL_BALL_VX * self.speed_multiplier,
             vy=self.INITIAL_BALL_VY,
         )
         self.paddles = PaddleState(
@@ -153,8 +155,8 @@ class GameSession:
         angle_factor = (hit_position - 0.5) * 2.0  # [-1, 1]
         self.ball.vy = angle_factor * 2.5
         speed = (self.ball.vx ** 2 + self.ball.vy ** 2) ** 0.5
-        if speed > self.MAX_BALL_SPEED:
-            scale = self.MAX_BALL_SPEED / speed
+        if speed > self.max_ball_speed:
+            scale = self.max_ball_speed / speed
             self.ball.vx *= scale
             self.ball.vy *= scale
     
@@ -170,7 +172,7 @@ class GameSession:
     def _reset_ball(self) -> None:
         self.ball.x = self.INITIAL_BALL_X
         self.ball.y = self.INITIAL_BALL_Y
-        self.ball.vx = self.INITIAL_BALL_VX
+        self.ball.vx = self.INITIAL_BALL_VX * self.speed_multiplier
         self.ball.vy = self.INITIAL_BALL_VY
     
     def check_victory(self) -> tuple[bool, int | None]:
