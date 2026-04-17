@@ -119,6 +119,15 @@ def test_state_snapshot():
     assert snapshot.score["p1"] == session.score.p1
 
 
+def test_game_session_has_ai_state_attrs():
+    from service.game_session import GameSession
+    s = GameSession(player1_id=1, player2_id=2)
+    assert hasattr(s, 'ai_last_eval_ms')
+    assert s.ai_last_eval_ms == 0.0
+    assert hasattr(s, 'ai_target_y')
+    assert s.ai_target_y == GameSession.CANVAS_HEIGHT / 2
+
+
 if __name__ == "__main__":
     test_game_session_creation()
     print("✓ test_game_session_creation passed")

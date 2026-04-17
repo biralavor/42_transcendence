@@ -94,7 +94,8 @@ class TournamentDetailResponse(BaseModel):
     participants: list[TournamentParticipantResponse]
     matches: list[TournamentMatchResponse] = []
 
-## Leaderboard
+
+# Leaderboard
 class PlayerStats(BaseModel):
     rank: int
     wins: int
@@ -109,14 +110,17 @@ class PlayerStats(BaseModel):
     goals_conceded: int
     goal_difference: int
 
+
 class StatEntry(BaseModel):
     value: int
     display_name: str
+
 
 class Summary(BaseModel):
     max_points: StatEntry
     max_max_streak: StatEntry
     max_current_streak: StatEntry
+
 
 class LeaderboardResponse(BaseModel):
     page: int
@@ -125,3 +129,13 @@ class LeaderboardResponse(BaseModel):
     total: int
     results: list[PlayerStats]
     summary: Summary
+
+
+# AI Game
+class AiGameRequest(BaseModel):
+    player_id: int
+    difficulty: Literal["easy", "medium", "hard"] = "medium"
+
+
+class AiGameResponse(BaseModel):
+    game_id: str
