@@ -3,6 +3,9 @@ import './PongCanvas.css'
 import { GameState } from '../game/pongEngine.js'
 import { CanvasGameContext, render } from '../game/pongRenderer.js';
 import { useAuth } from '../context/authContext'
+import { useGameSettings } from '../context/gameSettingsContext';
+import { THEMES } from '../game/themes';
+import { loadThemeImages } from '../game/themeLoader';
 
 /**
  * PongCanvasMultiplayer - Server-Authoritative Multiplayer Pong
@@ -22,6 +25,8 @@ function PongCanvasMultiplayer(props) {
   const player2Id = props?.player2Id
   const onGameEnd = props?.onGameEnd || (() => { })
   const { auth } = useAuth()
+  const { theme } = useGameSettings()
+  const themeImagesRef = useRef(null)
 
   const canvasRef = useRef(null)
   const keyStateRef = useRef({
@@ -169,6 +174,12 @@ function PongCanvasMultiplayer(props) {
   }
 
   useEffect(() => {
+    loadThemeImages(THEMES[theme] ?? THEMES.classic)
+      .then(images => { themeImagesRef.current = images; })
+      .catch(() => { themeImagesRef.current = null; });
+  }, [theme]);
+
+  useEffect(() => {
     const canvas = canvasRef.current
     const renderingContext = canvas.getContext('2d')
     updateCanvasDimensions()
@@ -203,7 +214,7 @@ function PongCanvasMultiplayer(props) {
       }
 
       // Render the server state using the existing renderer
-      render(canvasContext, gameStateRef.current, () => false)
+      render(canvasContext, gameStateRef.current, () => false, themeImagesRef.current)
 
       loopRef.current = requestAnimationFrame(renderLoop)
     }

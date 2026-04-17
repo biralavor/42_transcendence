@@ -5,6 +5,9 @@ import System from '../game/pongSystem.js';
 import { Callbacks } from '../game/pongExternal.js';
 import { CanvasGameContext, heightRatio } from '../game/pongRenderer.js';
 import { Player, Position } from '../game/pongEntities.js';
+import { useGameSettings } from '../context/gameSettingsContext';
+import { THEMES } from '../game/themes';
+import { loadThemeImages } from '../game/themeLoader';
 
 function getLocalInput(keyState, keyUp, keyDown) {
     let velY = keyState[keyDown] ? 1 : 0;
@@ -49,6 +52,8 @@ export default function PongCanvas(props)
 {
   const player1Kind = props?.player1Kind || 'local';
   const player2Kind = props?.player2Kind || 'local';
+  const { theme, ballSpeedMultiplier } = useGameSettings();
+  const themeImagesRef = useRef(null);
   const canvasRef = useRef(null);
   const keyStateRef = useRef(null);
   const gameStateRef = useRef(null);
@@ -67,7 +72,15 @@ export default function PongCanvas(props)
 
   if (gameStateRef.current == null) {
     gameStateRef.current = new GameState(player1Kind, player2Kind);
+    gameStateRef.current.speedMultiplier = ballSpeedMultiplier;
+    gameStateRef.current.ball.position.velX = 4 * ballSpeedMultiplier;
   }
+
+  useEffect(() => {
+    loadThemeImages(THEMES[theme] ?? THEMES.classic)
+      .then(images => { themeImagesRef.current = images; })
+      .catch(() => { themeImagesRef.current = null; });
+  }, [theme]);
 
   function onGoal() {
     kickoffRef.current = true;
@@ -146,7 +159,7 @@ export default function PongCanvas(props)
           );
 
     function loop() {
-      gameLoop(canvasContext, gameStateRef.current, callbacks);
+      gameLoop(canvasContext, gameStateRef.current, callbacks, themeImagesRef.current);
       loopRef.current = requestAnimationFrame(loop);
     }
 

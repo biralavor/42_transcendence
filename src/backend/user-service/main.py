@@ -13,6 +13,7 @@ from service.schemas import (
     ProfileResponse, UpdateProfileRequest, MeResponse,
     FriendResponse, FriendRequestResponse, FriendRequestAction,
     NotificationResponse, GameNotificationRequest, GameInviteResponseRequest,
+    PreferencesResponse, PreferencesUpdateRequest,
 )
 from service.models.user import User
 from service.service import authenticate, refresh_access_token, register_credentials, get_profile, update_profile, get_me
@@ -94,6 +95,37 @@ async def update_user_profile(
     if profile is None:
         raise HTTPException(status_code=404, detail="User not found")
     return profile
+
+
+@app.get("/preferences", response_model=PreferencesResponse)
+async def get_preferences(
+    session: SessionDependency,
+    current_user: User = Depends(get_current_user),
+) -> PreferencesResponse:
+    prefs = current_user.game_preferences or {}
+    return PreferencesResponse(
+        theme=prefs.get("theme", "classic"),
+        ball_speed_multiplier=prefs.get("ball_speed_multiplier", 1.0),
+    )
+
+
+@app.patch("/preferences", response_model=PreferencesResponse)
+async def update_preferences(
+    body: PreferencesUpdateRequest,
+    session: SessionDependency,
+    current_user: User = Depends(get_current_user),
+) -> PreferencesResponse:
+    current_user.game_preferences = {
+        "theme": body.theme,
+        "ball_speed_multiplier": body.ball_speed_multiplier,
+    }
+    await session.commit()
+    await session.refresh(current_user)
+    prefs = current_user.game_preferences
+    return PreferencesResponse(
+        theme=prefs["theme"],
+        ball_speed_multiplier=prefs["ball_speed_multiplier"],
+    )
 
 
 # TODO(auth): friend endpoints must check JWT identity before modifying
