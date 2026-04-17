@@ -301,3 +301,62 @@ async def test_start_ai_game_creates_match_with_ai_player(client):
     assert matches_resp.status_code == 200
     rows = matches_resp.json()
     assert any(m["player2_id"] == AI_PLAYER_ID for m in rows)
+
+
+@pytest.mark.asyncio
+async def test_start_ai_game_uses_ball_speed_from_preferences(client):
+    """When a user has game_preferences set, the session uses their ball_speed_multiplier."""
+    import asyncio
+    from sqlalchemy import text as sqla_text
+    from service.game_manager import game_manager
+    from service.game_session import GameSession
+
+    # Write a game_preferences row for user 5001
+    async with _engine.begin() as conn:
+        await conn.execute(
+            sqla_text(
+                "UPDATE users SET game_preferences = :prefs WHERE id = :uid"
+            ),
+            {"prefs": '{"theme": "wood", "ball_speed_multiplier": 1.5}', "uid": 5001},
+        )
+
+    resp = await client.post("/ai", json={"player_id": 5001, "difficulty": "medium"})
+    assert resp.status_code == 201
+    game_id = resp.json()["game_id"]
+
+    await asyncio.sleep(0.05)  # let the game loop start
+
+    session = game_manager.get_session(game_id)
+    assert session is not None, "game session was not created within timeout"
+    assert abs(session.speed_multiplier - 1.5) < 0.001
+    assert abs(session.ball.vx - GameSession.INITIAL_BALL_VX * 1.5) < 0.1
+
+    await game_manager.delete_session(game_id)
+
+
+@pytest.mark.asyncio
+async def test_start_ai_game_defaults_speed_when_no_preferences(client):
+    """When a user has no game_preferences, the session defaults to speed 1.0."""
+    import asyncio
+    from sqlalchemy import text as sqla_text
+    from service.game_manager import game_manager
+    from service.game_session import GameSession
+
+    # Ensure user 5002 has no preferences
+    async with _engine.begin() as conn:
+        await conn.execute(
+            sqla_text("UPDATE users SET game_preferences = NULL WHERE id = :uid"),
+            {"uid": 5002},
+        )
+
+    resp = await client.post("/ai", json={"player_id": 5002, "difficulty": "easy"})
+    assert resp.status_code == 201
+    game_id = resp.json()["game_id"]
+
+    await asyncio.sleep(0.05)
+
+    session = game_manager.get_session(game_id)
+    assert session is not None, "game session was not created within timeout"
+    assert abs(session.speed_multiplier - 1.0) < 0.001
+
+    await game_manager.delete_session(game_id)

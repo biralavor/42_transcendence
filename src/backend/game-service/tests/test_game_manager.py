@@ -246,9 +246,56 @@ async def test_game_manager_no_ai_params_leaves_p2_direction_as_stop():
     await manager.delete_session("human-test-1")
 
 
+@pytest.mark.asyncio
+async def test_create_session_applies_speed_multiplier():
+    """GameManager must pass speed_multiplier through to the GameSession."""
+    from service.game_manager import GameManager
+    from service.game_session import GameSession
+
+    manager = GameManager()
+    states = []
+
+    async def mock_broadcast(game_id, state):
+        states.append(state)
+
+    session = await manager.create_session(
+        game_id="speed-test-1",
+        player1_id=1,
+        player2_id=2,
+        broadcast_callback=mock_broadcast,
+        speed_multiplier=2.0,
+    )
+    await asyncio.sleep(0.05)
+    await manager.delete_session("speed-test-1")
+
+    assert abs(session.speed_multiplier - 2.0) < 0.001
+    assert abs(session.ball.vx - GameSession.INITIAL_BALL_VX * 2.0) < 0.1
+
+
+@pytest.mark.asyncio
+async def test_create_session_default_speed_multiplier_is_1():
+    from service.game_manager import GameManager
+
+    manager = GameManager()
+
+    async def mock_broadcast(game_id, state):
+        pass
+
+    session = await manager.create_session(
+        game_id="speed-test-default",
+        player1_id=1,
+        player2_id=2,
+        broadcast_callback=mock_broadcast,
+    )
+    await asyncio.sleep(0.05)
+    await manager.delete_session("speed-test-default")
+
+    assert session.speed_multiplier == 1.0
+
+
 async def main():
     print("Running GameManager integration tests...\n")
-    
+
     try:
         await test_game_manager_creation()
         await test_latency_filter()
@@ -256,7 +303,9 @@ async def main():
         await test_game_manager_ai_params_stored_on_session()
         await test_game_manager_ai_drives_p2_direction()
         await test_game_manager_no_ai_params_leaves_p2_direction_as_stop()
-        
+        await test_create_session_applies_speed_multiplier()
+        await test_create_session_default_speed_multiplier_is_1()
+
         print("\n✅ All integration tests passed!")
     except AssertionError as e:
         print(f"\n❌ Test failed: {e}")
@@ -266,7 +315,7 @@ async def main():
         import traceback
         traceback.print_exc()
         return False
-    
+
     return True
 
 

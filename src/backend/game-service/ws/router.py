@@ -75,12 +75,27 @@ async def _on_game_over(game_id: str, winner_id: int, score_p1: int, score_p2: i
 async def start_ai_game(body: AiGameRequest, db: AsyncSession = Depends(get_db)) -> AiGameResponse:
     """Start an AI game session.
 
-    Creates a match record (player2 = AI_PLAYER_ID), starts the authoritative
+    Creates a match record (player2 = AI_PLAYER_ID), reads the player's
+    game_preferences to get their ball_speed_multiplier, starts the authoritative
     game loop with imperfection parameters for the chosen difficulty, and
     returns a game_id the client can use to connect via WS /ws/game/{game_id}.
     """
     ai_params = DIFFICULTY_PARAMS[body.difficulty]
     game_id = f"ai-{uuid4().hex[:12]}"
+
+    # Read ball_speed_multiplier from the player's game_preferences.
+    # Defaults to 1.0 if the user has no preferences row or the column is NULL.
+    try:
+        result = await db.execute(
+            text("SELECT game_preferences FROM users WHERE id = :uid"),
+            {"uid": body.player_id},
+        )
+        row = result.fetchone()
+        prefs = row[0] if row and row[0] else {}
+        speed_multiplier: float = float(prefs.get("ball_speed_multiplier", 1.0))
+        speed_multiplier = max(0.5, min(2.0, speed_multiplier))  # clamp to valid range
+    except Exception:
+        speed_multiplier = 1.0  # best-effort: fall back to default on any DB error
 
     try:
         match = await create_match(db, body.player_id, AI_PLAYER_ID)
@@ -96,6 +111,7 @@ async def start_ai_game(body: AiGameRequest, db: AsyncSession = Depends(get_db))
             broadcast_callback=_broadcast_state,
             on_game_over_callback=_on_game_over,
             ai_params=ai_params,
+            speed_multiplier=speed_multiplier,
         )
     except ValueError:
         # game_id collision (astronomically unlikely with uuid4, but guard it)

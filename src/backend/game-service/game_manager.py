@@ -23,12 +23,13 @@ class GameManager:
         broadcast_callback: Callable,
         on_game_over_callback: Optional[Callable] = None,
         ai_params: dict | None = None,
+        speed_multiplier: float = 1.0,
     ) -> GameSession:
-        
+
         async with self._session_lock:
             if game_id in self._sessions:
                 raise ValueError(f"Game {game_id} already exists")
-            session = GameSession(player1_id, player2_id)
+            session = GameSession(player1_id, player2_id, speed_multiplier=speed_multiplier)
             session.ai_params = ai_params
             self._sessions[game_id] = session
             self._broadcast_callbacks[game_id] = broadcast_callback
