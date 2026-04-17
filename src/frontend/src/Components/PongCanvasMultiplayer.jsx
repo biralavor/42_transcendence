@@ -1,7 +1,11 @@
 import { useRef, useEffect, useState } from 'react'
 import './PongCanvas.css'
 import { GameState } from '../game/pongEngine.js'
-import { CanvasGameContext, render } from '../game/pongRenderer.js';
+import { CanvasGameContext, render, widthRatio, heightRatio } from '../game/pongRenderer.js';
+
+// Must match game_session.py constants
+const BACKEND_WIDTH = 1024
+const BACKEND_HEIGHT = 512
 import { useAuth } from '../context/authContext'
 import { useGameSettings } from '../context/gameSettingsContext';
 import { THEMES } from '../game/themes';
@@ -114,23 +118,19 @@ function PongCanvasMultiplayer(props) {
         const message = JSON.parse(event.data)
 
         if (message.type === 'state') {
-          // Receive server state and update game
+          // Receive server state and update game.
+          // Backend uses 1024×512 coords; frontend renderer uses widthRatio×heightRatio.
           if (gameStateRef.current) {
-            // Update ball
             if (message.ball) {
-              gameStateRef.current.ball.position.x = message.ball.x
-              gameStateRef.current.ball.position.y = message.ball.y
-              gameStateRef.current.ball.velocity.x = message.ball.vx
-              gameStateRef.current.ball.velocity.y = message.ball.vy
+              gameStateRef.current.ball.position.x = message.ball.x * (widthRatio / BACKEND_WIDTH)
+              gameStateRef.current.ball.position.y = message.ball.y * (heightRatio / BACKEND_HEIGHT)
             }
 
-            // Update paddles
             if (message.paddles) {
-              gameStateRef.current.player1.position.y = message.paddles.p1
-              gameStateRef.current.player2.position.y = message.paddles.p2
+              gameStateRef.current.player1.position.y = message.paddles.p1 * (heightRatio / BACKEND_HEIGHT)
+              gameStateRef.current.player2.position.y = message.paddles.p2 * (heightRatio / BACKEND_HEIGHT)
             }
 
-            // Update score
             if (message.score) {
               gameStateRef.current.score.player1 = message.score.p1
               gameStateRef.current.score.player2 = message.score.p2

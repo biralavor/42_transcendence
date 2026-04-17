@@ -161,7 +161,6 @@ export class Player extends Entity {
       size: Player.#extremeEdgeSize
     };
     if (ballExtreme.isCollidingWith(extremeTop)) {
-      console.log('extreme top')
       return -Player.#extremeFactor;
     }
     const top = {
@@ -169,7 +168,6 @@ export class Player extends Entity {
       size: Player.#edgeSize
     };
     if (ball.isCollidingWith(top)) {
-      console.log('top')
       return -Player.#normalFactor;
     }
 
@@ -181,7 +179,6 @@ export class Player extends Entity {
       size: Player.#extremeEdgeSize
     };
     if (ballExtreme.isCollidingWith(extremeBottom)) {
-      console.log('extreme bottom')
       return Player.#extremeFactor;
     }
     const bottom = {
@@ -192,7 +189,6 @@ export class Player extends Entity {
       size: Player.#edgeSize
     }
     if (ball.isCollidingWith(bottom)) {
-      console.log('bottom')
       return Player.#normalFactor;
     }
     return 0;
