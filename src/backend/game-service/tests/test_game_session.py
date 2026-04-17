@@ -204,6 +204,80 @@ def test_defensive_floor_for_zero_speed_multiplier():
     assert session.ball.vx > 0
 
 
+# ── paddle position constants ──────────────────────────────────────────────
+
+def test_paddle_x_constants_match_frontend_defaults():
+    """PADDLE_X_P1/P2 correspond to local game frontend positions (10 and 145 in 160-unit space)."""
+    from service.game_session import GameSession
+    assert GameSession.PADDLE_X_P1 == 64   # = 10 * (1024/160)
+    assert GameSession.PADDLE_X_P2 == 928  # = 145 * (1024/160)
+
+
+def test_substeps_constant():
+    from service.game_session import GameSession
+    assert GameSession.SUBSTEPS == 4
+
+
+# ── bounce position after collision ───────────────────────────────────────
+
+def test_ball_bounces_off_p1_at_correct_x():
+    """Ball pushed to PADDLE_X_P1 + PADDLE_WIDTH + BALL_RADIUS after left-paddle hit."""
+    from service.game_session import GameSession
+    s = GameSession(player1_id=1, player2_id=2)
+    expected_x = GameSession.PADDLE_X_P1 + GameSession.PADDLE_WIDTH + GameSession.BALL_RADIUS
+    s.ball.x = GameSession.PADDLE_X_P1 + GameSession.PADDLE_WIDTH  # inside paddle zone
+    s.ball.y = GameSession.CANVAS_HEIGHT / 2
+    s.ball.vx = -GameSession.INITIAL_BALL_VX
+    s.paddles.p1 = GameSession.CANVAS_HEIGHT / 2 - GameSession.PADDLE_HEIGHT / 2
+    s.check_collisions()
+    assert s.ball.vx > 0, "vx should be positive after P1 bounce"
+    assert abs(s.ball.x - expected_x) < 1.0
+
+
+def test_ball_bounces_off_p2_at_correct_x():
+    """Ball pushed to PADDLE_X_P2 - BALL_RADIUS after right-paddle hit."""
+    from service.game_session import GameSession
+    s = GameSession(player1_id=1, player2_id=2)
+    expected_x = GameSession.PADDLE_X_P2 - GameSession.BALL_RADIUS
+    s.ball.x = GameSession.PADDLE_X_P2 + 1.0  # inside paddle zone
+    s.ball.y = GameSession.CANVAS_HEIGHT / 2
+    s.ball.vx = GameSession.INITIAL_BALL_VX
+    s.paddles.p2 = GameSession.CANVAS_HEIGHT / 2 - GameSession.PADDLE_HEIGHT / 2
+    s.check_collisions()
+    assert s.ball.vx < 0, "vx should be negative after P2 bounce"
+    assert abs(s.ball.x - expected_x) < 1.0
+
+
+# ── end-to-end bounce during tick() ───────────────────────────────────────
+
+def test_ball_bounces_off_right_paddle_during_tick():
+    """Ball approaching P2 bounces back without scoring."""
+    from service.game_session import GameSession
+    s = GameSession(player1_id=1, player2_id=2)
+    s.ball.x = GameSession.PADDLE_X_P2 - 5.0
+    s.ball.y = GameSession.CANVAS_HEIGHT / 2
+    s.ball.vx = GameSession.INITIAL_BALL_VX
+    s.ball.vy = 0.0
+    s.paddles.p2 = GameSession.CANVAS_HEIGHT / 2 - GameSession.PADDLE_HEIGHT / 2
+    s.tick()
+    assert s.ball.vx < 0, "Ball should bounce left off right paddle"
+    assert s.score.p1 == 0, "No point should be scored"
+
+
+def test_ball_bounces_off_left_paddle_during_tick():
+    """Ball approaching P1 bounces back without scoring."""
+    from service.game_session import GameSession
+    s = GameSession(player1_id=1, player2_id=2)
+    s.ball.x = GameSession.PADDLE_X_P1 + GameSession.PADDLE_WIDTH + 5.0
+    s.ball.y = GameSession.CANVAS_HEIGHT / 2
+    s.ball.vx = -GameSession.INITIAL_BALL_VX
+    s.ball.vy = 0.0
+    s.paddles.p1 = GameSession.CANVAS_HEIGHT / 2 - GameSession.PADDLE_HEIGHT / 2
+    s.tick()
+    assert s.ball.vx > 0, "Ball should bounce right off left paddle"
+    assert s.score.p2 == 0, "No point should be scored"
+
+
 if __name__ == "__main__":
     test_game_session_creation()
     print("✓ test_game_session_creation passed")

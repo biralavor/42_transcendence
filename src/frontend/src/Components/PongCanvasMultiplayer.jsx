@@ -6,7 +6,6 @@ import { CanvasGameContext, render, widthRatio, heightRatio } from '../game/pong
 // Backend coordinate space (for normalizing server positions to frontend units)
 const BACKEND_WIDTH = 1024
 const BACKEND_HEIGHT = 512
-const BACKEND_PADDLE_W = 20  // needed to align paddle X with server collision zones
 import { useAuth } from '../context/authContext'
 import { useGameSettings } from '../context/gameSettingsContext';
 import { THEMES } from '../game/themes';
@@ -194,13 +193,6 @@ function PongCanvasMultiplayer(props) {
     gameStateRef.current.player1.color = canvasContext.crtWhite
     gameStateRef.current.player2.color = canvasContext.crtWhite
     gameStateRef.current.ball.color = canvasContext.crtWhite
-
-    // Align paddle X positions with backend collision zones.
-    // Default player positions (x=10, x=145) don't match backend's (x=0, x=1004).
-    // A 12-unit gap makes the ball visually pass through the rendered paddle.
-    const scaleX = widthRatio / BACKEND_WIDTH
-    gameStateRef.current.player1.position.x = 0
-    gameStateRef.current.player2.position.x = (BACKEND_WIDTH - BACKEND_PADDLE_W) * scaleX
 
     // Connect to WebSocket
     connectWebSocket()

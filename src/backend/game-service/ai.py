@@ -97,7 +97,7 @@ def update_ai_paddle(
             ball_y=session.ball.y,
             ball_vx=session.ball.vx,
             ball_vy=session.ball.vy,
-            ai_paddle_x=session.CANVAS_WIDTH - session.PADDLE_WIDTH,
+            ai_paddle_x=session.PADDLE_X_P2,
         )
         if target_noise > 0:
             raw_target += random.gauss(0, target_noise)

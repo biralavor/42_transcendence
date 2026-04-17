@@ -34,6 +34,8 @@ class GameSession:
     CANVAS_HEIGHT = 512
     PADDLE_WIDTH = 20
     PADDLE_HEIGHT = 100
+    PADDLE_X_P1 = 64   # = 10 frontend units × (1024/160) — matches local game P1 default
+    PADDLE_X_P2 = 928  # = 145 frontend units × (1024/160) — matches local game P2 default
     PADDLE_SPEED = 11.4  # 2 px/tick × (512/90) — matches frontend MAX_PLAYER_VEL in backend coords
     BALL_RADIUS = 8
     INITIAL_BALL_X = CANVAS_WIDTH / 2
@@ -115,22 +117,22 @@ class GameSession:
             self.ball.y,
             self.BALL_RADIUS,
             paddle_y=self.paddles.p1,
-            paddle_x=0.0,
+            paddle_x=self.PADDLE_X_P1,
             paddle_height=self.PADDLE_HEIGHT,
         ):
-            self.ball.x = self.PADDLE_WIDTH + self.BALL_RADIUS
+            self.ball.x = self.PADDLE_X_P1 + self.PADDLE_WIDTH + self.BALL_RADIUS
             self._reflect_ball_off_paddle(self.paddles.p1)
             self.ball.vx = abs(self.ball.vx)
-        
+
         if self._check_paddle_collision(
             self.ball.x,
             self.ball.y,
             self.BALL_RADIUS,
             paddle_y=self.paddles.p2,
-            paddle_x=self.CANVAS_WIDTH - self.PADDLE_WIDTH,
+            paddle_x=self.PADDLE_X_P2,
             paddle_height=self.PADDLE_HEIGHT,
         ):
-            self.ball.x = self.CANVAS_WIDTH - self.PADDLE_WIDTH - self.BALL_RADIUS
+            self.ball.x = self.PADDLE_X_P2 - self.BALL_RADIUS
             self._reflect_ball_off_paddle(self.paddles.p2)
             self.ball.vx = -abs(self.ball.vx)
     
