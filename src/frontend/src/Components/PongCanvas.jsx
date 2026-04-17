@@ -158,7 +158,7 @@ export default function PongCanvas(props)
           );
 
     function loop() {
-      gameLoop(canvasContext, gameStateRef.current, callbacks, themeImagesRef.current);
+      gameLoop(canvasContext, gameStateRef.current, callbacks, themeImagesRef.current, theme);
       loopRef.current = requestAnimationFrame(loop);
     }
 

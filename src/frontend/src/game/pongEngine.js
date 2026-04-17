@@ -96,7 +96,7 @@ export class GameState {
  * @param {GameState} gameState
  * @param {Callbacks} callbacks
  */
-export function gameLoop(canvasContext, gameState, callbacks, themeImages = null) {
+export function gameLoop(canvasContext, gameState, callbacks, themeImages = null, themeKey = '') {
   const time = performance.now();
 
   while (gameState.shouldAddFrame(time)) {
@@ -142,5 +142,5 @@ export function gameLoop(canvasContext, gameState, callbacks, themeImages = null
       // ball bounces into local player / goal
     }
   }
-  render(canvasContext, gameState, callbacks.isKickoff, themeImages);
+  render(canvasContext, gameState, callbacks.isKickoff, themeImages, themeKey);
 }

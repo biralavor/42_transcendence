@@ -76,7 +76,7 @@ export class CanvasGameContext {
  * @param {() => boolean} isKickoff - returns true game is paused after goal
  * @param {{ background: HTMLImageElement|null, ball: HTMLImageElement|null, paddleLeft: HTMLImageElement|null, paddleRight: HTMLImageElement|null }|null} [themeImages]
  */
-export function render(canvasContext, gameState, isKickoff, themeImages = null) {
+export function render(canvasContext, gameState, isKickoff, themeImages = null, themeKey = '') {
   const renderingCanvas = canvasContext.rendering2d;
   const player1 = gameState.player1;
   const player2 = gameState.player2;
@@ -85,6 +85,9 @@ export function render(canvasContext, gameState, isKickoff, themeImages = null) 
 
   const fontSize = canvasContext.widthScale * 16;
   renderingCanvas.reset();
+
+  const isNeon = themeKey.includes('neon');
+  const isNeonPong = themeKey === 'neon-pong';
 
   // Background: image fills canvas, or canvas stays transparent (black by CSS)
   if (themeImages?.background) {
@@ -99,18 +102,48 @@ export function render(canvasContext, gameState, isKickoff, themeImages = null) 
                              widthRatio * canvasContext.widthScale,
                              heightRatio * canvasContext.heightScale);
 
-  renderingCanvas.fillStyle = canvasContext.crtWhite;
-  renderingCanvas.strokeStyle = canvasContext.crtWhite;
+  // Score — neon glow + neon-pong rainbow outline
+  if (isNeon) {
+    renderingCanvas.shadowColor = '#00ffff';
+    renderingCanvas.shadowBlur = 20;
+  }
+  renderingCanvas.fillStyle = isNeonPong ? '#000000' : canvasContext.crtWhite;
   renderingCanvas.lineWidth = 2;
   renderingCanvas.font = `bold ${fontSize}px Bungee, sans-serif`
   renderingCanvas.fillText(`${score.player1}`,
                            35 * canvasContext.widthScale,
                            15 * canvasContext.heightScale, fontSize * 10);
-
   renderingCanvas.fillText(`${score.player2}`,
                            115 * canvasContext.widthScale,
                            15 * canvasContext.heightScale, fontSize * 10);
 
+  if (isNeonPong) {
+    const grad = renderingCanvas.createLinearGradient(0, 0, canvasContext.width, 0);
+    grad.addColorStop(0,    '#ff0000');
+    grad.addColorStop(0.2,  '#ff9900');
+    grad.addColorStop(0.4,  '#ffff00');
+    grad.addColorStop(0.6,  '#00ff00');
+    grad.addColorStop(0.8,  '#0066ff');
+    grad.addColorStop(1,    '#8b00ff');
+    renderingCanvas.strokeStyle = grad;
+    renderingCanvas.lineWidth = 3;
+    renderingCanvas.strokeText(`${score.player1}`,
+                               35 * canvasContext.widthScale,
+                               15 * canvasContext.heightScale, fontSize * 10);
+    renderingCanvas.strokeText(`${score.player2}`,
+                               115 * canvasContext.widthScale,
+                               15 * canvasContext.heightScale, fontSize * 10);
+  }
+
+  if (isNeon) {
+    renderingCanvas.shadowBlur = 0;
+    renderingCanvas.shadowColor = 'transparent';
+  }
+
+  // Border
+  renderingCanvas.fillStyle = canvasContext.crtWhite;
+  renderingCanvas.strokeStyle = canvasContext.crtWhite;
+  renderingCanvas.lineWidth = 2;
   const borderRadius = 8;
   renderingCanvas.beginPath();
   renderingCanvas.roundRect(1, 1,
@@ -119,10 +152,15 @@ export function render(canvasContext, gameState, isKickoff, themeImages = null) 
                             borderRadius);
   renderingCanvas.stroke();
 
+  // Midfield dashed line — neon glow
   const midfieldStripSize = player1.size;
   const midfieldStripXPos =
         ((widthRatio / 2)  - (midfieldStripSize.width / 2))
         * canvasContext.widthScale;
+  if (isNeon) {
+    renderingCanvas.shadowColor = '#00ffff';
+    renderingCanvas.shadowBlur = 12;
+  }
   for (let i = midfieldStripSize.height / 2;
        i < heightRatio ;
        i += 2* midfieldStripSize.height) {
@@ -132,6 +170,10 @@ export function render(canvasContext, gameState, isKickoff, themeImages = null) 
       i  * canvasContext.heightScale,
       midfieldStripSize.width  * canvasContext.widthScale,
       midfieldStripSize.height * canvasContext.heightScale);
+  }
+  if (isNeon) {
+    renderingCanvas.shadowBlur = 0;
+    renderingCanvas.shadowColor = 'transparent';
   }
 
   // Player 1 paddle
@@ -161,12 +203,39 @@ export function render(canvasContext, gameState, isKickoff, themeImages = null) 
   if (isKickoff())
     return;
 
-  // Ball
+  // Ball — per-theme glow overrides
   const bx = ball.position.x * canvasContext.widthScale;
   const by = ball.position.y * canvasContext.heightScale;
   const bw = ball.size.width  * canvasContext.widthScale;
   const bh = ball.size.height * canvasContext.heightScale;
-  if (themeImages?.ball) {
+  if (themeKey === 'neon-pong') {
+    renderingCanvas.shadowColor = '#ff69b4';
+    renderingCanvas.shadowBlur = 20;
+    renderingCanvas.fillStyle = '#ff69b4';
+    renderingCanvas.fillRect(bx, by, bw, bh);
+    renderingCanvas.shadowBlur = 0;
+    renderingCanvas.shadowColor = 'transparent';
+  } else if (themeKey === 'neon-two-paddle') {
+    renderingCanvas.shadowColor = '#00ffff';
+    renderingCanvas.shadowBlur = 20;
+    renderingCanvas.fillStyle = '#001a1a';
+    renderingCanvas.fillRect(bx, by, bw, bh);
+    renderingCanvas.strokeStyle = '#00ffff';
+    renderingCanvas.lineWidth = 2;
+    renderingCanvas.strokeRect(bx, by, bw, bh);
+    renderingCanvas.shadowBlur = 0;
+    renderingCanvas.shadowColor = 'transparent';
+  } else if (themeKey === 'neon-central-paddle') {
+    renderingCanvas.shadowColor = '#00ff41';
+    renderingCanvas.shadowBlur = 20;
+    renderingCanvas.fillStyle = '#001a00';
+    renderingCanvas.fillRect(bx, by, bw, bh);
+    renderingCanvas.strokeStyle = '#00ff41';
+    renderingCanvas.lineWidth = 2;
+    renderingCanvas.strokeRect(bx, by, bw, bh);
+    renderingCanvas.shadowBlur = 0;
+    renderingCanvas.shadowColor = 'transparent';
+  } else if (themeImages?.ball) {
     renderingCanvas.drawImage(themeImages.ball, bx, by, bw, bh);
   } else {
     renderingCanvas.fillStyle = ball.color;

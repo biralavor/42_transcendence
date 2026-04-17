@@ -11,20 +11,21 @@ export default function GameSettings() {
         <p className="game-settings__section-title">Map theme</p>
         <div className="game-settings__themes">
           {Object.entries(THEMES).map(([key, entry]) => (
-            <div key={key}>
-              <button
-                className={`game-settings__theme-btn${theme === key ? ' game-settings__theme-btn--active' : ''}`}
-                onClick={() => setTheme(key)}
-                title={entry.label}
-                aria-pressed={theme === key}
-              >
+            <button
+              key={key}
+              className={`game-settings__theme-row${theme === key ? ' game-settings__theme-row--active' : ''}`}
+              onClick={() => setTheme(key)}
+              title={entry.label}
+              aria-pressed={theme === key}
+            >
+              <div className="game-settings__theme-thumb">
                 {entry.thumbnail
-                  ? <img src={entry.thumbnail} alt={entry.label} />
+                  ? <img src={entry.thumbnail} alt="" />
                   : <div className="game-settings__theme-classic">CLASSIC</div>
                 }
-              </button>
-              <p className="game-settings__theme-label">{entry.label}</p>
-            </div>
+              </div>
+              <span className="game-settings__theme-name">{entry.label}</span>
+            </button>
           ))}
         </div>
       </div>

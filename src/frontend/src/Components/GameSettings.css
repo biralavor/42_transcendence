@@ -9,25 +9,36 @@
 }
 
 .game-settings__themes {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
-  gap: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
 }
 
-.game-settings__theme-btn {
+.game-settings__theme-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
   background: none;
   border: 2px solid transparent;
   border-radius: 6px;
-  padding: 0;
+  padding: 0.25rem 0.5rem 0.25rem 0.25rem;
   cursor: pointer;
-  overflow: hidden;
+  width: 100%;
+  text-align: left;
   transition: border-color 0.15s;
 }
 
-.game-settings__theme-btn:hover  { border-color: var(--crt-white, #f5f5f2); }
-.game-settings__theme-btn--active { border-color: var(--primary, #fbc02d); }
+.game-settings__theme-row:hover    { border-color: var(--crt-white, #f5f5f2); }
+.game-settings__theme-row--active  { border-color: var(--primary, #fbc02d); }
 
-.game-settings__theme-btn img {
+.game-settings__theme-thumb {
+  flex-shrink: 0;
+  width: 80px;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.game-settings__theme-thumb img {
   width: 100%;
   aspect-ratio: 16/9;
   object-fit: cover;
@@ -46,10 +57,10 @@
   letter-spacing: 0.05em;
 }
 
-.game-settings__theme-label {
-  font-size: 0.65rem;
-  text-align: center;
-  padding: 0.2rem 0;
+.game-settings__theme-name {
+  flex: 1;
+  font-size: 0.8rem;
+  color: var(--crt-white, #f5f5f2);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

@@ -214,7 +214,7 @@ function PongCanvasMultiplayer(props) {
       }
 
       // Render the server state using the existing renderer
-      render(canvasContext, gameStateRef.current, () => false, themeImagesRef.current)
+      render(canvasContext, gameStateRef.current, () => false, themeImagesRef.current, theme)
 
       loopRef.current = requestAnimationFrame(renderLoop)
     }
