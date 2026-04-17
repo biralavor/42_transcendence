@@ -1,14 +1,18 @@
 # Note: sys.path is set by main.py (Docker) or test file (host) — not repeated here.
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from uuid import uuid4
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException, Depends
 from jose import jwt
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.config.settings import settings
 from shared.ws.manager import ConnectionManager
-from shared.database import AsyncSessionLocal
+from shared.database import AsyncSessionLocal, get_db
 from shared.logging import ws_logger
 from service.persistence import create_match, finish_match
 from service.game_manager import game_manager
+from service.ai import AI_PLAYER_ID, DIFFICULTY_PARAMS
+from service.schemas import AiGameRequest, AiGameResponse
 from sqlalchemy.exc import SQLAlchemyError
 
 router = APIRouter()
@@ -65,6 +69,40 @@ async def _on_game_over(game_id: str, winner_id: int, score_p1: int, score_p2: i
             "score_p1": score_p1,
             "score_p2": score_p2
         })
+
+
+@router.post("/ai", status_code=201, response_model=AiGameResponse)
+async def start_ai_game(body: AiGameRequest, db: AsyncSession = Depends(get_db)) -> AiGameResponse:
+    """Start an AI game session.
+
+    Creates a match record (player2 = AI_PLAYER_ID), starts the authoritative
+    game loop with imperfection parameters for the chosen difficulty, and
+    returns a game_id the client can use to connect via WS /ws/game/{game_id}.
+    """
+    ai_params = DIFFICULTY_PARAMS[body.difficulty]
+    game_id = f"ai-{uuid4().hex[:12]}"
+
+    try:
+        match = await create_match(db, body.player_id, AI_PLAYER_ID)
+        _match_ids[game_id] = match.id
+    except SQLAlchemyError:
+        raise HTTPException(status_code=500, detail="Failed to create match record")
+
+    try:
+        await game_manager.create_session(
+            game_id=game_id,
+            player1_id=body.player_id,
+            player2_id=AI_PLAYER_ID,
+            broadcast_callback=_broadcast_state,
+            on_game_over_callback=_on_game_over,
+            ai_params=ai_params,
+        )
+    except ValueError:
+        # game_id collision (astronomically unlikely with uuid4, but guard it)
+        _match_ids.pop(game_id, None)
+        raise HTTPException(status_code=500, detail="Game session collision")
+
+    return AiGameResponse(game_id=game_id)
 
 
 @router.websocket("/ws/game/{game_id}")

@@ -65,6 +65,11 @@ class GameSession:
         self.started_at = time.time()
         self.tick_count = 0
         
+        # AI state — only used when this session was created with ai_params
+        self.ai_last_eval_ms: float = 0.0
+        self.ai_target_y: float = self.CANVAS_HEIGHT / 2
+        self.ai_params: dict | None = None
+        
     def get_state_snapshot(self) -> GameStateSnapshot:
         return GameStateSnapshot(
             ball=asdict(self.ball),

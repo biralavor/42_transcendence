@@ -175,7 +175,6 @@ async def test_get_leaderboard_returns_ranked_rows(client):
     resp = await client.get("/leaderboard")
     assert resp.status_code == 200
     data = resp.json()
-    print(data)
     assert len(data['results']) == 3
     assert data['results'][0]["rank"] == 1
     assert data['results'][0]["user_id"] == 5001
@@ -193,7 +192,6 @@ async def test_get_leaderboard_honors_limit_query_param(client):
     assert resp.status_code == 200
     data = resp.json()
     assert len(data['results']) == 2
-
 
 
 @pytest.mark.asyncio
@@ -224,6 +222,7 @@ async def test_get_leaderboard_limit_one_page_one(client):
     assert data['summary']['max_max_streak']['value'] == 21
     assert data['summary']['max_current_streak']['value'] == 21
     assert data['summary']['max_points']['value'] == 63
+
 
 @pytest.mark.asyncio
 async def test_get_leaderboard_limit_one_page_zero_rank_desc(client):
@@ -256,3 +255,49 @@ async def test_get_leaderboard_limit_one_page_zero_rank_desc(client):
     assert data['summary']['max_max_streak']['value'] == 21
     assert data['summary']['max_current_streak']['value'] == 21
     assert data['summary']['max_points']['value'] == 63
+
+
+# --------------------------------------------------------------------------- #
+# POST /ai
+# --------------------------------------------------------------------------- #
+
+@pytest.mark.asyncio
+async def test_start_ai_game_default_difficulty(client):
+    resp = await client.post("/ai", json={"player_id": 42})
+    assert resp.status_code == 201
+    data = resp.json()
+    assert "game_id" in data
+    assert data["game_id"].startswith("ai-")
+
+
+@pytest.mark.asyncio
+async def test_start_ai_game_explicit_difficulty(client):
+    for level in ("easy", "medium", "hard"):
+        resp = await client.post("/ai", json={"player_id": 42, "difficulty": level})
+        assert resp.status_code == 201
+        assert resp.json()["game_id"].startswith("ai-")
+
+
+@pytest.mark.asyncio
+async def test_start_ai_game_invalid_difficulty(client):
+    resp = await client.post("/ai", json={"player_id": 42, "difficulty": "impossible"})
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_start_ai_game_missing_player_id(client):
+    resp = await client.post("/ai", json={"difficulty": "easy"})
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_start_ai_game_creates_match_with_ai_player(client):
+    """The match row for an AI game uses AI_PLAYER_ID (0) as player2."""
+    from service.ai import AI_PLAYER_ID
+    resp = await client.post("/ai", json={"player_id": 5, "difficulty": "hard"})
+    assert resp.status_code == 201
+    game_id = resp.json()["game_id"]
+    matches_resp = await client.get("/matches/5")
+    assert matches_resp.status_code == 200
+    rows = matches_resp.json()
+    assert any(m["player2_id"] == AI_PLAYER_ID for m in rows)
