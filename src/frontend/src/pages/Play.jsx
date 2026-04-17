@@ -1,6 +1,5 @@
 import NavbarComponent from '../Components/Navbar'
 import PongCanvas from '../Components/PongCanvas'
-import GameSettings from '../Components/GameSettings'
 import VsCpuCard from '../Components/VsCpuCard'
 
 const matchModes = [
@@ -87,10 +86,7 @@ export default function Play() {
                       </ul>
                     </div>
 
-                    <div className="arcade-card soft p-3">
-                      <span className="arcade-display mb-2 d-inline-block">Customize</span>
-                      <GameSettings />
-                    </div>
+
                   </div>
                 </div>
               </div>

@@ -104,7 +104,6 @@ export function gameLoop(canvasContext, gameState, callbacks, themeImages = null
     System.playersMovement(gameState, canvasContext, callbacks);
     if (!callbacks.isKickoff()) {
       if (gameState.isLocalDefending || gameState.isLocalCourt) {
-        console.log('local defending')
         const remoteBallPosition = callbacks
               .getRemoteBallPosition(gameState.ball.position.frame);
         let ballAfterColision;
@@ -118,13 +117,11 @@ export function gameLoop(canvasContext, gameState, callbacks, themeImages = null
         const scored = System.goalDetection(gameState, canvasContext);
         if (scored) callbacks.onGoal();
       } else {
-        console.log('remote defending')
         const remoteBallPosition = callbacks
               .getRemoteBallPosition(gameState.ball.position.frame);
         let ballAfterColision;
         if (remoteBallPosition == null) {
-          console.log('skip ball frame')
-          // do not update, keep frame count, frame skip
+            // do not update, keep frame count, frame skip
           ballAfterColision = gameState.ball;
           // TODO check if should freeze game due to lag
           // check gameState frame vs ball frame

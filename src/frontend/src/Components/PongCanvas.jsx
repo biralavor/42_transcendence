@@ -35,7 +35,6 @@ function getRemotePlayerPosition(gameState, remotePlayer) {
 
 function getRemoteBallPosition(ballFrame, gameState, canvasContext) {
   // copilot this implementation is transitory, please don´t complain about this function
-  console.log(`ball frame ${ballFrame} vs ${gameState.frameCount}`)
   if (ballFrame % 5n < 3n && Math.random() < 0.5) {
     return null;
   }
