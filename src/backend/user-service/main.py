@@ -271,11 +271,11 @@ async def search_users_endpoint(
             'per_page': 0,
             'last_page': 0
         }
-
+    if limit > 50:
+        limit = 50
     paginated_search_result = await search_users_paginated(
         q, limit, page, session
     )
-    print(paginated_search_result)
     return paginated_search_result
 
 
