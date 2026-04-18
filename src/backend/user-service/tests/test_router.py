@@ -102,10 +102,10 @@ async def test_search_with_limit_query_one_returns_at_most_one_element(client):
 
 @pytest.mark.asyncio
 async def test_search_with_page_query(client):
-
     limit = 1
+    previous = []
     for page in range(3):
-        resp = await client.get(f"/search?q=test&limit={limit}&page={page}")
+        resp = await client.get(f"/search?q=al&limit={limit}&page={page}")
         assert resp.status_code == 200
         data = resp.json()
         results = data.get('results')
@@ -113,6 +113,9 @@ async def test_search_with_page_query(client):
         assert len(results) == 1
         assert data.get('page') == page
         assert data.get('per_page') == 1
+        username = data.get('results')[0].get('username')
+        assert username not in previous
+        previous.append(username)
 
 
 # @pytest.mark.asyncio
