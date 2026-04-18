@@ -69,11 +69,11 @@ async def test_search_with_search_query_returns_schema(client):
     assert isinstance(data.get('page'), int)
     assert isinstance(data.get('per_page'), int)
     assert isinstance(data.get('last_page'), int)
-    if len(data.get('results')) > 1:
+    if len(data.get('results')) > 0:
            element = data.get('results')[0]
            assert isinstance(element.get('id'), int)
            assert isinstance(element.get('username'), str)
-           assert isinstance(element.get('avalar_url'), (str | None))
+           assert isinstance(element.get('avatar_url'), (str | None))
            assert isinstance(element.get('status'), str)
     else:
         print('WARNING testing with empty database, skiped some assertions')

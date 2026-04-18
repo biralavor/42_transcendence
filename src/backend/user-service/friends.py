@@ -244,4 +244,4 @@ SELECT
         'page': page,
         'offset': offset
     })
-    return result.mappings().one()
+    return dict(result.mappings().one())

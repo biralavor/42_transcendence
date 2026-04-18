@@ -105,4 +105,4 @@ FROM achievements
     result = await session.execute(
         statement, {'user_id': user_id, **achievement}
     )
-    return result.mappings().one_or_none()
+    return dict(result.mappings().one_or_none())

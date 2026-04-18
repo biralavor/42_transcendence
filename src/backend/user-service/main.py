@@ -21,7 +21,7 @@ from service.service import authenticate, refresh_access_token, register_credent
 import service.friends as _friends
 from service.friends import (
     get_friends, get_pending_requests, get_sent_requests,
-    delete_friendship, search_users, search_users_paginated
+    delete_friendship, search_users_paginated
 )
 import service.notifications as _notifications
 from shared.database import get_db
@@ -258,7 +258,7 @@ async def remove_friend(
 async def search_users_endpoint(
         session: SessionDependency,
         q: str = Query(""),
-        limit: int = Query(10, ge=0),
+        limit: int = Query(10, ge=1),
         page: int = Query(0, ge=0),
 ):
     if q is None or q == "":
