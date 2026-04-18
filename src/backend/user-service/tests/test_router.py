@@ -100,6 +100,21 @@ async def test_search_with_limit_query_one_returns_at_most_one_element(client):
     assert data.get('page') == 0
     assert data.get('per_page') == 1
 
+@pytest.mark.asyncio
+async def test_search_with_page_query(client):
+
+    limit = 1
+    for page in range(3):
+        resp = await client.get(f"/search?q=test&limit={limit}&page={page}")
+        assert resp.status_code == 200
+        data = resp.json()
+        results = data.get('results')
+        assert results is not None
+        assert len(results) == 1
+        assert data.get('page') == page
+        assert data.get('per_page') == 1
+
+
 # @pytest.mark.asyncio
 # async def test_get_leaderboard_returns_ranked_rows(client):
 #     resp1 = await client.post("/matches", json={"player1_id": 5001, "player2_id": 5002})
