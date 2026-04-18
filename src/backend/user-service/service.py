@@ -1,20 +1,25 @@
-from fastapi import status, HTTPException
-from service.schemas import Login, LoginResponse, RefreshRequest, RegisterRequest, RegisterResponse, UpdateProfileRequest, MeResponse
-from service.models.credentials import Credentials, Tokens
-from service.models.user import User
+import asyncio
 from datetime import datetime, timedelta, timezone
+
+from fastapi import status, HTTPException
 import bcrypt
 import hashlib
 import secrets
 from jose import jwt, ExpiredSignatureError, JWTError
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from service.models.credentials import Credentials, Tokens
+from service.models.user import User
+from service.schemas import Login, LoginResponse, RefreshRequest, RegisterRequest, RegisterResponse, UpdateProfileRequest, MeResponse
 from shared.config.settings import settings
 
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 15
 REFRESH_TOKEN_EXPIRE_DAYS = 7
+USER_CREATION_RETRY_ATTEMPTS = 3
+USER_CREATION_RETRY_BASE_DELAY_SECONDS = 0.05
 
 
 def create_access_token(data: dict, expires_delta: timedelta):
@@ -154,13 +159,20 @@ async def get_me(token: str, session: AsyncSession) -> MeResponse:
             await session.commit()
             await session.refresh(user)
         except IntegrityError:
-            # Handle race condition: another request may have created the user
-            # or ID collision from deleted users. Refresh to get existing user.
+            # Handle race condition: another request may be creating this user.
+            # Retry after rollback so concurrent commit can become visible.
             await session.rollback()
-            user_row = await session.execute(select(User).where(User.credential_id == credential.id))
-            user = user_row.scalars().first()
+            user = None
+            for attempt in range(USER_CREATION_RETRY_ATTEMPTS):
+                user_row = await session.execute(
+                    select(User).where(User.credential_id == credential.id)
+                )
+                user = user_row.scalars().first()
+                if user is not None:
+                    break
+                delay = USER_CREATION_RETRY_BASE_DELAY_SECONDS * (attempt + 1)
+                await asyncio.sleep(delay)
             if user is None:
-                # If still not found, re-raise the original error
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     detail="Failed to create user"

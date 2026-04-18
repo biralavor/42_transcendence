@@ -2,6 +2,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 
 
+async def reward_friendship_achievement_if_should(
+    requester_id: int, addressee_id: int, session: AsyncSession
+) -> None:
+    """Compatibility hook for friendship acceptance.
+
+    Achievement granting is currently disabled in this branch, but friends.py still
+    calls this hook. Keep it as a no-op to preserve service startup and flow safety.
+    """
+    _ = (requester_id, addressee_id, session)
+    return None
+
+
 # check on friend request accepted?
 async def friend_count(user_id: int, session: AsyncSession) -> int | None:
     statement = text("""

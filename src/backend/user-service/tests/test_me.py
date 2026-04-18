@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy.exc import IntegrityError
 
 from service.main import app
 from service.service import create_access_token
@@ -112,6 +113,56 @@ async def test_get_me_creates_user_on_first_call():
     assert len(created) == 1
     assert created[0].credential_id == cred.id
     assert created[0].username == cred.username
+
+
+@pytest.mark.asyncio
+async def test_get_me_recovers_from_user_creation_race():
+    """If concurrent user creation causes IntegrityError, /auth/me should still recover."""
+    cred = _make_credential()
+    existing_user = _make_user()
+
+    def _result_for(obj):
+        scalars_mock = MagicMock()
+        scalars_mock.first.return_value = obj
+        result_mock = MagicMock()
+        result_mock.scalars.return_value = scalars_mock
+        return result_mock
+
+    # execute calls:
+    # 1=credentials lookup
+    # 2=user lookup miss (triggers create path)
+    # 3=retry lookup immediately after rollback (still not visible)
+    # 4=retry lookup succeeds once concurrent transaction commits
+    session = AsyncMock()
+    session.execute.side_effect = [
+        _result_for(cred),
+        _result_for(None),
+        _result_for(None),
+        _result_for(existing_user),
+    ]
+    session.add = MagicMock()
+    session.refresh = AsyncMock()
+    session.rollback = AsyncMock()
+    session.commit = AsyncMock(
+        side_effect=IntegrityError("insert into users ...", {}, Exception("duplicate"))
+    )
+
+    from shared.database import get_db
+
+    async def _fake_db():
+        yield session
+
+    app.dependency_overrides[get_db] = _fake_db
+
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get("/auth/me", headers={"Authorization": f"Bearer {_valid_token()}"})
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["id"] == existing_user.id
+    session.rollback.assert_awaited_once()
 
 
 @pytest.mark.asyncio

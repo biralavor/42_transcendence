@@ -1056,3 +1056,188 @@ LIMIT 1
     }
 
     return {**ret}
+
+
+async def get_leaderboard_paginated(
+    db: AsyncSession,
+    limit: int = 20,
+    page: int = 0,
+    sort_assoc: list[tuple[str, str]] | None = None,
+) -> dict:
+    """Return paginated leaderboard with streak metadata and summary stats."""
+    per_page = max(int(limit or 20), 1)
+    page_number = max(int(page or 0), 0)
+    sort_assoc = sort_assoc or []
+
+    finished_cond = (Match.status == "finished", Match.finished_at.is_not(None))
+
+    p1 = select(
+        Match.player1_id.label("user_id"),
+        Match.score_p1.label("goals_scored"),
+        Match.score_p2.label("goals_conceded"),
+        case((Match.winner_id == Match.player1_id, 1), else_=0).label("is_win"),
+    ).where(*finished_cond)
+
+    p2 = select(
+        Match.player2_id.label("user_id"),
+        Match.score_p2.label("goals_scored"),
+        Match.score_p1.label("goals_conceded"),
+        case((Match.winner_id == Match.player2_id, 1), else_=0).label("is_win"),
+    ).where(*finished_cond)
+
+    combined = union_all(p1, p2).subquery()
+
+    agg = (
+        select(
+            combined.c.user_id,
+            func.sum(combined.c.is_win).label("wins"),
+            func.sum(1 - combined.c.is_win).label("losses"),
+            func.count(combined.c.user_id).label("total_games"),
+            func.sum(combined.c.goals_scored).label("goals_scored"),
+            func.sum(combined.c.goals_conceded).label("goals_conceded"),
+            (
+                func.sum(combined.c.goals_scored) - func.sum(combined.c.goals_conceded)
+            ).label("goal_difference"),
+            (func.sum(combined.c.is_win) * 3).label("points"),
+        )
+        .group_by(combined.c.user_id)
+        .subquery()
+    )
+
+    users = table(
+        "users",
+        column("id", Integer),
+        column("username", String),
+        column("display_name", String),
+    )
+
+    agg_stmt = (
+        select(
+            agg.c.user_id,
+            agg.c.wins,
+            agg.c.losses,
+            agg.c.total_games,
+            agg.c.goals_scored,
+            agg.c.goals_conceded,
+            agg.c.goal_difference,
+            agg.c.points,
+            users.c.username,
+            users.c.display_name,
+        )
+        .join(users, agg.c.user_id == users.c.id)
+    )
+    agg_rows = [dict(row) for row in (await db.execute(agg_stmt)).mappings().all()]
+
+    streak_stmt = (
+        select(
+            Match.id,
+            Match.player1_id,
+            Match.player2_id,
+            Match.winner_id,
+            Match.finished_at,
+        )
+        .where(*finished_cond)
+        .order_by(Match.finished_at.asc(), Match.id.asc())
+    )
+    streak_rows = (await db.execute(streak_stmt)).mappings().all()
+
+    streak_by_user: dict[int, dict[str, int]] = {}
+    for row in streak_rows:
+        for player_id, won in (
+            (row["player1_id"], row["winner_id"] == row["player1_id"]),
+            (row["player2_id"], row["winner_id"] == row["player2_id"]),
+        ):
+            if player_id is None:
+                continue
+            user_streak = streak_by_user.setdefault(
+                int(player_id), {"current_streak": 0, "max_streak": 0}
+            )
+            user_streak["current_streak"] = (
+                user_streak["current_streak"] + 1 if won else 0
+            )
+            user_streak["max_streak"] = max(
+                user_streak["max_streak"], user_streak["current_streak"]
+            )
+
+    rows: list[dict] = []
+    for row in agg_rows:
+        user_id = int(row["user_id"])
+        streak = streak_by_user.get(user_id, {"current_streak": 0, "max_streak": 0})
+        rows.append(
+            {
+                "user_id": user_id,
+                "display_name": row.get("display_name") or row.get("username") or f"User {user_id}",
+                "wins": int(row["wins"] or 0),
+                "losses": int(row["losses"] or 0),
+                "total_games": int(row["total_games"] or 0),
+                "goals_scored": int(row["goals_scored"] or 0),
+                "goals_conceded": int(row["goals_conceded"] or 0),
+                "goal_difference": int(row["goal_difference"] or 0),
+                "points": int(row["points"] or 0),
+                "max_streak": int(streak["max_streak"]),
+                "current_streak": int(streak["current_streak"]),
+            }
+        )
+
+    rows.sort(
+        key=lambda item: (
+            -item["points"],
+            -item["goal_difference"],
+            -item["goals_scored"],
+            item["user_id"],
+        )
+    )
+    for idx, row in enumerate(rows, start=1):
+        row["rank"] = idx
+
+    sortable_fields = {
+        "rank",
+        "wins",
+        "losses",
+        "points",
+        "user_id",
+        "max_streak",
+        "total_games",
+        "display_name",
+        "goals_scored",
+        "current_streak",
+        "goals_conceded",
+        "goal_difference",
+    }
+    valid_sorts = [
+        (field, direction)
+        for field, direction in sort_assoc
+        if field in sortable_fields and direction in {"ASC", "DESC"}
+    ]
+    if valid_sorts:
+        for field, direction in reversed(valid_sorts):
+            reverse = direction == "DESC"
+            if field == "display_name":
+                rows.sort(key=lambda item: item[field].lower(), reverse=reverse)
+            else:
+                rows.sort(key=lambda item: item[field], reverse=reverse)
+
+    def _summary_item(field: str) -> dict:
+        if not rows:
+            return {"value": 0, "display_name": "No Data"}
+        best = max(rows, key=lambda item: item[field])
+        return {"value": int(best[field]), "display_name": best["display_name"]}
+
+    total = len(rows)
+    last_page = max((total - 1) // per_page, 0) if total else 0
+    start = page_number * per_page
+    end = start + per_page
+    paged_rows = rows[start:end] if start < total else []
+
+    return {
+        "page": page_number,
+        "last_page": last_page,
+        "per_page": per_page,
+        "total": total,
+        "results": paged_rows,
+        "summary": {
+            "max_points": _summary_item("points"),
+            "max_max_streak": _summary_item("max_streak"),
+            "max_current_streak": _summary_item("current_streak"),
+        },
+    }
