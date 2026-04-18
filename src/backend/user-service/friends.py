@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from service.models.friendship import Friendship
 from service.models.user import User
+from service.schemas import SearchResponse
 from service.persistence import reward_friendship_achievement_if_should
 
 async def get_friends(user_id: int, session: AsyncSession) -> list[User]:
@@ -171,10 +172,20 @@ async def search_users(query: str, session: AsyncSession) -> list[User]:
     )
     return result.scalars().all()
 
-async def search_users_paginated(query: str, limit: int, session: AsyncSession) -> list[User]:
-    """Returns up to 10 users whose username contains query (case-insensitive)."""
+async def search_users_paginated(
+        query: str,
+        limit: int,
+        page: int,
+        session: AsyncSession
+) -> SearchResponse:
+    """
+    Returns a paginated result of searching users.
+    """
+    await session.execute(text("CREATE EXTENSION IF NOT EXISTS fuzzystrmatch;"))
+    offset = page * limit
     statement = text("""
-WITH all_users as
+WITH
+all_users AS
 (
     SELECT
       id
@@ -182,20 +193,55 @@ WITH all_users as
       , avatar_url
       , status
     FROM users
+)
+, user_count AS
+(
+    SELECT
+        COUNT(id) AS total
+    FROM users
+)
+, paged_users AS
+(
+    SELECT * FROM all_users
+    ORDER BY
+        username ILIKE CONCAT('%', CONCAT((:query)::text, '%')) DESC
+        , levenshtein(LOWER(username), LOWER((:query))::text, 1, 1, 1) ASC
+    OFFSET (SELECT
+               LEAST(:offset,
+                     GREATEST(0, total - :limit))
+            FROM user_count)
     LIMIT :limit
 )
+, page_stats AS
+(
+    SELECT
+      (table user_count)
+      AS total
+      , LEAST(((:page)::int), (((table user_count) - 1) / :limit))
+      AS page
+      , (:limit)::int
+      AS per_page
+      , (((table user_count) - 1) / :limit)
+      AS last_page
+)
 SELECT
-    0
-    AS total
-    , 0
-    AS page
-    , :limit
-    AS per_page
-    , 0
-    AS last_page
-    , COALESCE((SELECT jsonb_agg(to_jsonb(all_users)) FROM all_users)
+    *
+    , COALESCE((SELECT
+                  jsonb_agg(
+                    to_jsonb(paged_users)
+                    ORDER BY
+                        username ILIKE CONCAT('%', CONCAT((:query)::text, '%')) DESC
+                      , levenshtein(LOWER(username), LOWER((:query))::text, 1, 1, 1) ASC
+                   )
+                FROM paged_users)
                , '[]'::jsonb)
     AS results
+    FROM page_stats
     """)
-    result = await session.execute(statement, {'limit': limit})
+    result = await session.execute(statement, {
+        'query': query,
+        'limit': limit,
+        'page': page,
+        'offset': offset
+    })
     return result.mappings().one()

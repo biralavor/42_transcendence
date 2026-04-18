@@ -2,7 +2,7 @@ from typing import Annotated
 from datetime import datetime, timezone
 import logging
 
-from fastapi import FastAPI, status, Depends, HTTPException
+from fastapi import FastAPI, status, Depends, HTTPException, Query
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -257,8 +257,9 @@ async def remove_friend(
 @app.get("/search" , response_model=SearchResponse)
 async def search_users_endpoint(
         session: SessionDependency,
-        q: str = "",
-        limit: int = 10,
+        q: str = Query(""),
+        limit: int = Query(10, ge=0),
+        page: int = Query(0, ge=0),
 ):
     if q is None or q == "":
         raise HTTPException(status_code=400, detail="missing required query-parameter q on /search")
@@ -271,11 +272,12 @@ async def search_users_endpoint(
             'last_page': 0
         }
 
-    paginated_search_result = await search_users_paginated(q, limit, session)
+    paginated_search_result = await search_users_paginated(
+        q, limit, page, session
+    )
     print(paginated_search_result)
     return paginated_search_result
-    # return {'results': [], 'total': 0, 'page': 0, 'per_page': 0}
-    # return await search_users(q, session)
+
 
 
 @app.post("/game-invite/response", status_code=201)
