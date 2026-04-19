@@ -233,11 +233,12 @@ all_users AS
     SELECT
       (table user_count)
       AS total
-      , LEAST(((:page)::int), (((table user_count) - 1) / :limit))
+      , LEAST(((:page)::int),
+              GREATEST(0, (((table user_count) - 1) / :limit)))
       AS page
       , (:limit)::int
       AS per_page
-      , (((table user_count) - 1) / :limit)
+      , GREATEST(0, (((table user_count) - 1) / :limit))
       AS last_page
 )
 SELECT

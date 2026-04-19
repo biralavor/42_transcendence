@@ -783,9 +783,10 @@ WITH all_matches AS
             FROM user_count)
 )
 SELECT
-    LEAST(:page, (((table user_count) - 1) / :limit))
+    LEAST(:page,
+          GREATEST(0, (((table user_count) - 1) / :limit)))
     AS page
-    , (((table user_count) - 1) / :limit)
+    , GREATEST(0, (((table user_count) - 1) / :limit))
     AS last_page
     , :limit as per_page
     , (table user_count) as total
