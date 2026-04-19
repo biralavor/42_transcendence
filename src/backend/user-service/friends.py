@@ -172,40 +172,61 @@ async def search_users(query: str, session: AsyncSession) -> list[User]:
     )
     return result.scalars().all()
 
+def search_users_order_by_str(sort_assoc: list[tuple[str, str]] | None) -> str | None:
+    if sort_assoc is None:
+        return None
+    valid_columns = [
+        'created_at'
+    ]
+    order_columns = []
+    for (sort_key, order) in sort_assoc:
+        norm_order = 'DESC' if order.upper() == 'DESC' else 'ASC'
+        norm_key = sort_key.lower() if sort_key.lower() in valid_columns else None
+        if norm_key is not None:
+            order_columns.append(f"{norm_key} {norm_order}")
+    result = ', '.join(order_columns) if len(order_columns) > 0 else None
+    return result
+
 async def search_users_paginated(
         query: str,
         limit: int,
         page: int,
+        sort_assoc: list[tuple[str, str]] | None,
         session: AsyncSession
 ) -> SearchResponse:
     """
     Returns a paginated result of searching users.
     """
+    default_order = """
+username ILIKE CONCAT('%', CONCAT((:query)::text, '%')) DESC
+, levenshtein(LOWER(username), LOWER((:query))::text, 1, 1, 1) ASC
+    """
+    query_order = search_users_order_by_str(sort_assoc)
+    query_order = query_order if query_order is not None else default_order
     await session.execute(text("CREATE EXTENSION IF NOT EXISTS fuzzystrmatch;"))
     offset = page * limit
-    statement = text("""
+    statement = text(f"""
 WITH
 all_users AS
 (
-    SELECT
-      id
-      , username
-      , avatar_url
-      , status
-    FROM users
+    SELECT * FROM users
+)
+, filtered_users AS
+(
+    SELECT * FROM all_users
+    WHERE username ILIKE CONCAT('%', CONCAT((:query)::text, '%'))
+      OR levenshtein(LOWER(username), LOWER((:query))::text, 1, 1, 1) < 5
 )
 , user_count AS
 (
     SELECT
         COUNT(id) AS total
-    FROM users
+    FROM filtered_users
 )
 , paged_users AS
 (
-    SELECT * FROM all_users
-    ORDER BY
-        username ILIKE CONCAT('%', CONCAT((:query)::text, '%')) DESC
-        , levenshtein(LOWER(username), LOWER((:query))::text, 1, 1, 1) ASC
+    SELECT * FROM filtered_users
+    ORDER BY {query_order}
     OFFSET (SELECT
                LEAST(:offset,
                      GREATEST(0, total - :limit))
@@ -227,12 +248,14 @@ all_users AS
 SELECT
     *
     , COALESCE((SELECT
-                  jsonb_agg(
-                    to_jsonb(paged_users)
-                    ORDER BY
-                        username ILIKE CONCAT('%', CONCAT((:query)::text, '%')) DESC
-                      , levenshtein(LOWER(username), LOWER((:query))::text, 1, 1, 1) ASC
-                   )
+                  jsonb_agg(jsonb_build_object(
+                     'id' ,id
+                     , 'username'  ,username
+                     , 'display_name'  ,display_name
+                     , 'avatar_url'  ,avatar_url
+                     , 'status'  ,status
+                     , 'created_at'  ,created_at
+                  ) ORDER BY {query_order})
                 FROM paged_users)
                , '[]'::jsonb)
     AS results
@@ -244,4 +267,4 @@ SELECT
         'page': page,
         'offset': offset
     })
-    return dict(result.mappings().one())
+    return SearchResponse.model_validate(dict(result.mappings().one()))

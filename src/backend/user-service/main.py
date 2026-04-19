@@ -260,6 +260,7 @@ async def search_users_endpoint(
         q: str = Query(""),
         limit: int = Query(10, ge=1),
         page: int = Query(0, ge=0),
+        sort: str = Query("")
 ):
     if q is None or q == "":
         raise HTTPException(status_code=400, detail="missing required query-parameter q on /search")
@@ -273,8 +274,16 @@ async def search_users_endpoint(
         }
     if limit > 50:
         limit = 50
+    print(sort)
+    sort_assoc = []
+    for sort_pair in sort.split(','):
+        entry = sort_pair.split(':', maxsplit = 1)
+        if len(entry) == 1:
+            sort_assoc.append((entry[0].strip(), 'ASC'))
+        elif len(entry) == 2:
+            sort_assoc.append((entry[0].strip().lower(), entry[1].strip().upper()))
     paginated_search_result = await search_users_paginated(
-        q, limit, page, session
+        q, limit, page, sort_assoc, session
     )
     return paginated_search_result
 
