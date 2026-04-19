@@ -129,6 +129,7 @@ async def get_me(token: str, session: AsyncSession) -> MeResponse:
     try:
         payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[ALGORITHM])
         username: str = payload.get("sub")
+        credential_id: int = payload.get("credential_id")
         if username is None:
             raise JWTError("missing sub")
     except ExpiredSignatureError as exc:
@@ -141,31 +142,20 @@ async def get_me(token: str, session: AsyncSession) -> MeResponse:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token",
         ) from exc
-    result = await session.execute(select(Credentials).where(Credentials.username == username))
-    credential = result.scalars().first()
-    if credential is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-    user_row = await session.execute(select(User).where(User.credential_id == credential.id))
-    user = user_row.scalars().first()
-    if user is None:
-        user = User(username=credential.username, credential_id=credential.id)
-        session.add(user)
-        try:
-            await session.commit()
-            await session.refresh(user)
-        except IntegrityError:
-            # Handle race condition: another request may have created the user
-            # or ID collision from deleted users. Refresh to get existing user.
-            await session.rollback()
-            user_row = await session.execute(select(User).where(User.credential_id == credential.id))
-            user = user_row.scalars().first()
-            if user is None:
-                # If still not found, re-raise the original error
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="Failed to create user"
-                )
-    return user
+
+    result = await session.execute(
+        select(User).where(User.credential_id == credential_id)
+    )
+    user = result.scalars().first()
+
+    if user:
+        return MeResponse.model_validate(user)
+
+    user = User(username=username, credential_id=credential_id)
+    user = await session.merge(user)
+    await session.commit()
+
+    return MeResponse.model_validate(user)
 
 
 async def update_profile(

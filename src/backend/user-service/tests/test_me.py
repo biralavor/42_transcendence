@@ -52,8 +52,8 @@ async def test_get_me_returns_existing_user():
     """Valid token + existing User row → 200 with user data."""
     cred = _make_credential()
     user = _make_user()
-    # execute calls: 1=credentials, 2=user by credential_id (hit)
-    session = _session_returning(cred, user)
+
+    session = _session_returning(user)
     session.refresh = AsyncMock()
 
     from shared.database import get_db
@@ -77,8 +77,8 @@ async def test_get_me_returns_existing_user():
 async def test_get_me_creates_user_on_first_call():
     """Valid token but no User row yet → User is created and returned."""
     cred = _make_credential()
-    # execute calls: 1=credentials, 2=user by credential_id (miss → create)
-    session = _session_returning(cred, None)
+
+    session = _session_returning(None)
 
     added_objects = []
     session.add = MagicMock(side_effect=added_objects.append)
@@ -90,7 +90,15 @@ async def test_get_me_creates_user_on_first_call():
         obj.status = "offline"
         obj.dark_mode = False
 
+    async def mock_merge(user_obj):
+        user_obj.credential_id = user_obj.credential_id if user_obj.credential_id is not None else 1
+        _apply_db_defaults(user_obj)
+        added_objects.append(user_obj)
+        return user_obj
+
+    session.merge = AsyncMock(side_effect=mock_merge)
     session.refresh = AsyncMock(side_effect=lambda obj: _apply_db_defaults(obj))
+    session.commit = AsyncMock()
 
     from shared.database import get_db
 
