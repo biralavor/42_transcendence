@@ -281,8 +281,8 @@ export default function FriendsSidebar({ userId, username, currentUser, onViewPr
       const user = searchResults.results.find(u => u.id === friendId)
       setSearchResults(prev => {
         return {
+          ...prev,
           results: prev.filter(u => u.id !== friendId),
-          ...prev
         }
       })
 
