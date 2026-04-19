@@ -8,7 +8,7 @@ from httpx import AsyncClient, ASGITransport
 from shared.config.settings import settings
 from shared.database import get_db
 from main import app
-
+import json
 # --------------------------------------------------------------------------- #
 # Shared PostgreSQL engine for all HTTP tests in this module
 # --------------------------------------------------------------------------- #
@@ -20,6 +20,12 @@ _TestSession = async_sessionmaker(_engine, class_=AsyncSession, expire_on_commit
 async def _override_get_db():
     async with _TestSession() as session:
         yield session
+
+@pytest_asyncio.fixture
+async def db():
+    async with _TestSession() as session:
+        yield session
+
 
 
 @pytest_asyncio.fixture
@@ -127,3 +133,31 @@ async def test_search_max_limit(client):
     data = resp.json()
     assert data.get('per_page') == 50
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("query,order,assertion_fun", [
+    ("tesob", "asc", lambda date, previous_date: date >= previous_date),
+    ("al", "desc", lambda date, previous_date: date <= previous_date)
+])
+async def test_search_with_page_sort_created_at(query, order, assertion_fun, client, db):
+    limit = 1
+    previous_dates = []
+    for page in range(3):
+
+        resp = await client.get(f"/search?q={query}&limit={limit}&page={page}&sort=created_at:{order}")
+        assert resp.status_code == 200
+        data = resp.json()
+        print(json.dumps(data, indent=4))
+        results = data.get('results')
+        assert results is not None
+        assert len(results) == limit
+        assert data.get('page') == page
+        assert data.get('per_page') == limit
+        username = data.get('results')[0].get('username')
+        created_at_result = \
+            await db.execute(text("SELECT created_at FROM users WHERE username = :username"),
+                                  {'username': username})
+        date = created_at_result.scalar()
+        if len(previous_dates) > 0:
+            previous_date = previous_dates[-1]
+            assert assertion_fun(date, previous_date)
+        previous_dates.append(date)
