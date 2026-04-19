@@ -143,7 +143,7 @@ async def test_search_with_page_sort_created_at(query, order, assertion_fun, cli
     previous_dates = []
     for page in range(3):
 
-        resp = await client.get(f"/search?q={query}&limit={limit}&page={page}&sort=created_at:{order}")
+        resp = await client.get(f"/search?q={query}&limit={limit}&page={page}&order=created_at:{order}")
         assert resp.status_code == 200
         data = resp.json()
         print(json.dumps(data, indent=4))

@@ -202,7 +202,7 @@ username ILIKE CONCAT('%', CONCAT((:query)::text, '%')) DESC
 , levenshtein(LOWER(username), LOWER((:query))::text, 1, 1, 1) ASC
     """
     query_order = search_users_order_by_str(sort_assoc)
-    query_order = query_order if query_order is not None else default_order
+    query_order = query_order + ', ' + default_order if query_order is not None else default_order
     await session.execute(text("CREATE EXTENSION IF NOT EXISTS fuzzystrmatch;"))
     offset = page * limit
     statement = text(f"""
