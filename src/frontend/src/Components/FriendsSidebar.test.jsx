@@ -235,9 +235,15 @@ describe('FriendsSidebar', () => {
       .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
       .mockResolvedValueOnce(
-        new Response(JSON.stringify([
-          { id: 3, username: 'charlie', display_name: null, status: 'offline', avatar_url: null }
-        ]), { status: 200 })
+        new Response(JSON.stringify({
+          'results': [
+            { id: 3, username: 'charlie', display_name: null, status: 'offline', avatar_url: null }
+          ],
+          'total': 1,
+          'page': 0,
+          'per_page': 1,
+          'last_page': 0
+        }), { status: 200 })
       )
     renderSidebar()
     fireEvent.change(screen.getByPlaceholderText(/search players/i), {

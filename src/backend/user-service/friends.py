@@ -254,7 +254,6 @@ SELECT
                      , 'display_name'  ,display_name
                      , 'avatar_url'  ,avatar_url
                      , 'status'  ,status
-                     , 'created_at'  ,created_at
                   ) ORDER BY {query_order})
                 FROM paged_users)
                , '[]'::jsonb)

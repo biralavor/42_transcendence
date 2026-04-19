@@ -26,8 +26,8 @@ export default function UserProfileModal({ username, userId, currentUserId, onCl
         if (!targetId) {
           const res = await apiCall(`/api/users/search?q=${encodeURIComponent(username)}`)
           if (!res.ok) throw new Error('User not found')
-          const results = await res.json()
-          const match = results.find(u => u.username.toLowerCase() === username.toLowerCase())
+          const pagedResults = await res.json()
+          const match = pagedResults.results.find(u => u.username.toLowerCase() === username.toLowerCase())
           if (!match) throw new Error(`No user "${username}"`)
           targetId = match.id
         }
