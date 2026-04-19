@@ -52,6 +52,7 @@ from service.schemas import (
 )
 from service.ws.router import manager as ws_manager
 from shared.database import get_db
+from shared.util.order import get_sort_assoc_from_order_query
 
 router = APIRouter()
 
@@ -70,13 +71,7 @@ async def leaderboard(
     page: int = Query(0, ge=0),
     order: str = Query('')
 ):
-    sort_assoc = []
-    for sort_pair in order.split(','):
-        entry = sort_pair.split(':', maxsplit = 1)
-        if len(entry) == 1:
-            sort_assoc.append((entry[0].strip(), 'ASC'))
-        elif len(entry) == 2:
-            sort_assoc.append((entry[0].strip().lower(), entry[1].strip().upper()))
+    sort_assoc = get_sort_assoc_from_order_query(order)
     paginated_result = \
         await get_leaderboard_paginated(session, limit, page, sort_assoc)
     return paginated_result

@@ -7,6 +7,7 @@ from service.models.friendship import Friendship
 from service.models.user import User
 from service.schemas import SearchResponse
 from service.persistence import reward_friendship_achievement_if_should
+from shared.util.order import get_order_by_str
 
 async def get_friends(user_id: int, session: AsyncSession) -> list[User]:
     """Returns User objects for all accepted friends of user_id."""
@@ -178,14 +179,8 @@ def search_users_order_by_str(sort_assoc: list[tuple[str, str]] | None) -> str |
     valid_columns = [
         'created_at'
     ]
-    order_columns = []
-    for (sort_key, order) in sort_assoc:
-        norm_order = 'DESC' if order.upper() == 'DESC' else 'ASC'
-        norm_key = sort_key.lower() if sort_key.lower() in valid_columns else None
-        if norm_key is not None:
-            order_columns.append(f"{norm_key} {norm_order}")
-    result = ', '.join(order_columns) if len(order_columns) > 0 else None
-    return result
+    
+    return get_order_by_str(sort_assoc, valid_columns)
 
 async def search_users_paginated(
         query: str,
