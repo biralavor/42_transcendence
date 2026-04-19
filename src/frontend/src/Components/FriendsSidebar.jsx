@@ -17,6 +17,16 @@ import './FriendsSidebar.css'
 const INVITE_TIMEOUT_MS = 60_000
 const DEFAULT_AVATAR = '/avatar_placeholder.jpg'
 
+function emptySearchResult() {
+  return {
+    results: [],
+    total: 0,
+    page: 0,
+    per_page: 0,
+    last_page: 0,
+  }
+}
+
 function dmSlug(a, b) {
   const [lo, hi] = [Number(a), Number(b)].sort((x, y) => x - y)
   return `DM-${lo}-${hi}`
@@ -36,13 +46,7 @@ export default function FriendsSidebar({ userId, username, currentUser, onViewPr
   const [friends, setFriends] = useState([])
   const [requests, setRequests] = useState([])
   const [searchQuery, setSearchQuery] = useState('')
-  const [searchResults, setSearchResults] = useState({
-    results: [],
-    total: 0,
-    page: 0,
-    per_page: 0,
-    last_page: 0,
-  })
+  const [searchResults, setSearchResults] = useState(emptySearchResult())
   const [pendingSent, setPendingSent] = useState([])
   const [outgoingInvite, setOutgoingInvite] = useState(null)
   const [incomingInvite, setIncomingInvite] = useState(null)
@@ -253,18 +257,18 @@ export default function FriendsSidebar({ userId, username, currentUser, onViewPr
     setSearchQuery(q)
     clearTimeout(searchTimer.current)
     if (q.length < 2) {
-      setSearchResults({
-        results: [],
-        total: 0,
-        page: 0,
-        per_page: 0,
-        last_page: 0,
-      })
+      setSearchResults(emptySearchResult())
       return
     }
     searchTimer.current = setTimeout(() => {
       apiCall(`/api/users/search?q=${encodeURIComponent(q)}`)
-        .then(r => { return r.json() })
+        .then(r => {
+          if (!r.ok) {
+            console.error('user search failed')
+            return emptySearchResult()
+          }
+
+          return r.json() })
         .then(pagedSearchResults => { setSearchResults(pagedSearchResults) })
         .catch(console.error)
     }, 300)
