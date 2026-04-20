@@ -35,7 +35,7 @@ async def client():
         app.dependency_overrides[get_db] = _override_get_db
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             yield ac
-        app.dependency_overrides.clear()
+        app.dependency_overrides.pop(get_db, None)
 
 
 @pytest.mark.asyncio
