@@ -48,13 +48,36 @@ async def _on_game_over(game_id: str, winner_id: int, score_p1: int, score_p2: i
         async with AsyncSessionLocal() as db:
             match_id = _match_ids.get(game_id)
             if match_id is not None:
-                await finish_match(
-                    db,
-                    match_id,
-                    winner_id,
-                    score_p1,
-                    score_p2
-                )
+                if winner_id == AI_PLAYER_ID:
+                    # AI has no users row in production, so award_xp would raise
+                    # a FK violation and rollback the whole transaction, leaving
+                    # the match stuck 'ongoing'. Update the row directly instead.
+                    await db.execute(
+                        text(
+                            "UPDATE matches "
+                            "SET status = 'finished', "
+                            "    winner_id = :winner_id, "
+                            "    score_p1 = :score_p1, "
+                            "    score_p2 = :score_p2, "
+                            "    finished_at = NOW() "
+                            "WHERE id = :match_id"
+                        ),
+                        {
+                            "match_id": match_id,
+                            "winner_id": winner_id,
+                            "score_p1": score_p1,
+                            "score_p2": score_p2,
+                        },
+                    )
+                    await db.commit()
+                else:
+                    await finish_match(
+                        db,
+                        match_id,
+                        winner_id,
+                        score_p1,
+                        score_p2
+                    )
     except SQLAlchemyError:
         pass  # best-effort
     finally:
@@ -72,6 +95,9 @@ async def _on_game_over(game_id: str, winner_id: int, score_p1: int, score_p2: i
         })
 
 
+# Colocated with the WS router (rather than service/router.py) because it
+# seeds _match_ids / _setup_sessions and wires _on_game_over / _broadcast_state,
+# all of which live here and are consumed by the WS handler below.
 @router.post("/ai", status_code=201, response_model=AiGameResponse)
 async def start_ai_game(
     body: AiGameRequest,
@@ -99,8 +125,14 @@ async def start_ai_game(
         prefs = row[0] if row and row[0] else {}
         speed_multiplier: float = float(prefs.get("ball_speed_multiplier", 1.0))
         speed_multiplier = max(0.5, min(2.0, speed_multiplier))  # clamp to valid range
-    except Exception:
-        speed_multiplier = 1.0  # best-effort: fall back to default on any DB error
+    except (SQLAlchemyError, ValueError, TypeError, AttributeError) as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(
+            "Failed to load game_preferences for player %s, using default: %s",
+            player_id, e,
+        )
+        speed_multiplier = 1.0
 
     try:
         match = await create_match(db, player_id, AI_PLAYER_ID)
@@ -399,10 +431,15 @@ async def game_websocket(websocket: WebSocket, game_id: str, token: str | None =
             # rollback the whole transaction.
             session = game_manager.get_session(game_id)
             match_id = _match_ids.get(game_id)
+            # session.is_active is flipped to False synchronously when the
+            # game loop detects victory (game_manager.py), before _on_game_over
+            # is scheduled. Skipping when inactive prevents the forfeit write
+            # from racing with — and overwriting — the natural game-over commit.
             if (
                 match_id is not None
                 and session is not None
                 and session.player2_id == AI_PLAYER_ID
+                and session.is_active
             ):
                 try:
                     async with AsyncSessionLocal() as db:
