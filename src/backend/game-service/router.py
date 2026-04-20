@@ -1,10 +1,17 @@
 from typing import Annotated
+from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from jose import ExpiredSignatureError, JWTError, jwt
+from shared.config.settings import settings
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from service.auth import get_current_user_id
-from service.history import get_match_history
+from service.auth import get_current_user_id, get_player_id_or_me
+from service.history import (
+    get_match_history,
+    get_match_history_paginated,
+)
 from service.persistence import (
     InvalidWinner,
     NotTournamentCreator,
@@ -40,6 +47,7 @@ from service.schemas import (
     MatchCreateRequest,
     MatchFinishRequest,
     MatchHistoryItem,
+    MatchHistoryPage,
     MatchResponse,
     TournamentMatchResultRequest,
     StatsResponse,
@@ -80,6 +88,41 @@ async def leaderboard(
 @router.get("/matches/history/{user_id}", response_model=list[MatchHistoryItem])
 async def match_history(user_id: int, session: SessionDependency):
     return await get_match_history(user_id, session)
+
+
+@router.get("/matches/search", response_model=MatchHistoryPage)
+async def match_history(
+        session: SessionDependency,
+        player_id: Annotated[int, Depends(get_player_id_or_me)],
+        date_from: date | None = Query(
+            None,
+            description='Start date in YYYY-MM-DD format'
+        ),
+        date_to: date | None = Query(
+            None,
+            description='End date in YYYY-MM-DD format'
+        ),
+        result: str = Query('all', pattern='^(all|win|loss)$'),
+        order: str = Query(
+            '',
+            description="colname:desc,othercol:asc"
+        ),
+):
+    print(player_id)
+    print(date_to)
+    print(date_from)
+    print(result)
+    print(order)
+    sort_assoc = get_sort_assoc_from_order_query(order)
+    search_for = {
+        'player_id': player_id,
+        'date_from': date_from,
+        'date_to': date_to,
+        'result': result,
+    }
+    return await get_match_history_paginated(
+        search_for, sort_assoc, session
+    )
 
 
 @router.get("/matches/{user_id}", response_model=list[MatchResponse])

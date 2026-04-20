@@ -28,5 +28,5 @@
 
 ### pytest
 - [basico pytest](https://www.youtube.com/watch?v=MjQCvJmc31A)
-- [pytest + debbuger pdb](https://betterstack.com/community/questions/how-to-debug-pytest-with-pdb-breakpoints/)
+- [pytest + debuger pdb](https://betterstack.com/community/questions/how-to-debug-pytest-with-pdb-breakpoints/)
 - [pytest fixtures](https://www.youtube.com/watch?v=MjQCvJmc31A)

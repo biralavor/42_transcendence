@@ -32,3 +32,16 @@ async def get_match_history(user_id: int, session: AsyncSession) -> list[MatchHi
             date=date_str,
         ))
     return items
+
+async def get_match_history_paginated(
+        search_for: dict,
+        sort_assoc: dict[str, str],
+        session: AsyncSession
+) -> list[MatchHistoryItem]:
+    return {
+        'results': [],
+        'total': 0,
+        'page': 0,
+        'per_page': 0,
+        'last_page': 0,
+    }

@@ -50,6 +50,13 @@ class MatchHistoryItem(BaseModel):
     score: str    # e.g. "11-3" (user score first, ASCII hyphen)
     date: str     # finished_at ISO string, "" if null
 
+class MatchHistoryPage(BaseModel):
+    results: list[MatchHistoryItem]
+    total: int
+    page: int
+    per_page: int
+    last_page: int
+
 
 class TournamentCreateRequest(BaseModel):
     name: str
