@@ -79,6 +79,12 @@ class FriendRequestResponse(BaseModel):
     requester_username: Optional[str] = None
     addressee_username: Optional[str] = None
 
+class SearchResponse(BaseModel):
+    results: list[FriendResponse]
+    total: int
+    page: int
+    per_page: int
+    last_page: int
 
 class RefreshRequest(BaseModel):
     refresh_token: str
@@ -86,7 +92,6 @@ class RefreshRequest(BaseModel):
 
 class FriendRequestAction(BaseModel):
     action: Literal["accept", "decline"]
-
 
 class GameInviteResponseRequest(BaseModel):
     """Request to notify the inviter of a declined/accepted game invite.

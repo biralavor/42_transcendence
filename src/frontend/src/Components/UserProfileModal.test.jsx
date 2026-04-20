@@ -56,7 +56,13 @@ describe('UserProfileModal — with data', () => {
     vi.spyOn(global, 'fetch')
       // search call → resolves username to id
       .mockResolvedValueOnce(
-        new Response(JSON.stringify([{ id: 7, username: 'alice' }]), { status: 200 })
+        new Response(JSON.stringify({
+          results: [{ id: 7, username: 'alice' }],
+          total: 1,
+          page: 0,
+          per_page: 1,
+          last_page: 0,
+        }), { status: 200 })
       )
       // profile call
       .mockResolvedValueOnce(
@@ -119,7 +125,13 @@ describe('UserProfileModal — with data', () => {
 
   it('calls friend request endpoint when Add Friend is clicked', async () => {
     vi.spyOn(global, 'fetch')
-      .mockResolvedValueOnce(new Response(JSON.stringify([{ id: 7, username: 'alice' }]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        results: [{ id: 7, username: 'alice' }],
+        total: 1,
+        page: 0,
+        per_page: 1,
+        last_page: 0,
+      }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ display_name: 'Alice', username: 'alice', avatar_url: '/av.jpg' }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
       .mockResolvedValueOnce(new Response(null, { status: 200 })) // friend request
@@ -134,7 +146,13 @@ describe('UserProfileModal — with data', () => {
 
   it('calls block endpoint when Block is clicked', async () => {
     vi.spyOn(global, 'fetch')
-      .mockResolvedValueOnce(new Response(JSON.stringify([{ id: 7, username: 'alice' }]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        results: [{ id: 7, username: 'alice' }],
+        total: 1,
+        page: 0,
+        per_page: 1,
+        last_page: 0,
+      }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ display_name: 'Alice', username: 'alice', avatar_url: '/av.jpg' }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
       .mockResolvedValueOnce(new Response(null, { status: 204 })) // block

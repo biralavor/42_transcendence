@@ -17,6 +17,16 @@ import './FriendsSidebar.css'
 const INVITE_TIMEOUT_MS = 60_000
 const DEFAULT_AVATAR = '/avatar_placeholder.jpg'
 
+function emptySearchResult() {
+  return {
+    results: [],
+    total: 0,
+    page: 0,
+    per_page: 0,
+    last_page: 0,
+  }
+}
+
 function dmSlug(a, b) {
   const [lo, hi] = [Number(a), Number(b)].sort((x, y) => x - y)
   return `DM-${lo}-${hi}`
@@ -36,7 +46,7 @@ export default function FriendsSidebar({ userId, username, currentUser, onViewPr
   const [friends, setFriends] = useState([])
   const [requests, setRequests] = useState([])
   const [searchQuery, setSearchQuery] = useState('')
-  const [searchResults, setSearchResults] = useState([])
+  const [searchResults, setSearchResults] = useState(emptySearchResult())
   const [pendingSent, setPendingSent] = useState([])
   const [outgoingInvite, setOutgoingInvite] = useState(null)
   const [incomingInvite, setIncomingInvite] = useState(null)
@@ -247,13 +257,19 @@ export default function FriendsSidebar({ userId, username, currentUser, onViewPr
     setSearchQuery(q)
     clearTimeout(searchTimer.current)
     if (q.length < 2) {
-      setSearchResults([])
+      setSearchResults(emptySearchResult())
       return
     }
     searchTimer.current = setTimeout(() => {
       apiCall(`/api/users/search?q=${encodeURIComponent(q)}`)
-        .then(r => r.json())
-        .then(data => setSearchResults(Array.isArray(data) ? data : []))
+        .then(r => {
+          if (!r.ok) {
+            console.error('user search failed')
+            return emptySearchResult()
+          }
+
+          return r.json() })
+        .then(pagedSearchResults => { setSearchResults(pagedSearchResults) })
         .catch(console.error)
     }, 300)
   }
@@ -266,8 +282,13 @@ export default function FriendsSidebar({ userId, username, currentUser, onViewPr
         showInviteToast(errorData.detail || 'Could not send friend request.', 'danger')
         return
       }
-      const user = searchResults.find(u => u.id === friendId)
-      setSearchResults(prev => prev.filter(u => u.id !== friendId))
+      const user = searchResults.results.find(u => u.id === friendId)
+      setSearchResults(prev => {
+        return {
+          ...prev,
+          results: prev.results.filter(u => u.id !== friendId),
+        }
+      })
 
       // Refresh sent requests to ensure UI stays in sync with server state
       await fetchFriendsData()
@@ -492,8 +513,7 @@ export default function FriendsSidebar({ userId, username, currentUser, onViewPr
     ...requests.map(r => r.requester_id),
     ...pendingSent.map(p => p.id),
   ])
-  const visibleResults = searchResults.filter(u => !excludedIds.has(u.id))
-
+  const visibleResults = searchResults.results.filter(u => !excludedIds.has(u.id))
   return (
     <>
       <aside className="friends-sidebar arcade-screen">

@@ -2,7 +2,7 @@ from typing import Annotated
 from datetime import datetime, timezone
 import logging
 
-from fastapi import FastAPI, status, Depends, HTTPException
+from fastapi import FastAPI, status, Depends, HTTPException, Query
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,17 +13,19 @@ from service.schemas import (
     ProfileResponse, UpdateProfileRequest, MeResponse,
     FriendResponse, FriendRequestResponse, FriendRequestAction,
     NotificationResponse, GameNotificationRequest, GameInviteResponseRequest,
-    PreferencesResponse, PreferencesUpdateRequest,
+    PreferencesResponse, PreferencesUpdateRequest, SearchResponse
+
 )
 from service.models.user import User
 from service.service import authenticate, refresh_access_token, register_credentials, get_profile, update_profile, get_me
 import service.friends as _friends
 from service.friends import (
     get_friends, get_pending_requests, get_sent_requests,
-    delete_friendship, search_users,
+    delete_friendship, search_users_paginated
 )
 import service.notifications as _notifications
 from shared.database import get_db
+from shared.util.order import get_sort_assoc_from_order_query
 from service.ws.presence_router import router as presence_router
 from service.ws.notification_router import router as notification_router, notification_manager
 
@@ -253,11 +255,32 @@ async def remove_friend(
         raise HTTPException(status_code=404, detail="Friendship not found")
 
 
-@app.get("/search", response_model=list[FriendResponse])
-async def search_users_endpoint(session: SessionDependency, q: str = ""):
+@app.get("/search" , response_model=SearchResponse)
+async def search_users_endpoint(
+        session: SessionDependency,
+        q: str = Query(""),
+        limit: int = Query(10, ge=1),
+        page: int = Query(0, ge=0),
+        order: str = Query("")
+):
+    if q is None or q == "":
+        raise HTTPException(status_code=400, detail="missing required query-parameter q on /search")
     if len(q) < 2:
-        return []
-    return await search_users(q, session)
+        return {
+            'results': [],
+            'total': 0,
+            'page': 0,
+            'per_page': 0,
+            'last_page': 0
+        }
+    if limit > 50:
+        limit = 50
+    sort_assoc = get_sort_assoc_from_order_query(order)
+    paginated_search_result = await search_users_paginated(
+        q, limit, page, sort_assoc, session
+    )
+    return paginated_search_result
+
 
 
 @app.post("/game-invite/response", status_code=201)

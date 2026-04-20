@@ -1,11 +1,13 @@
 # src/backend/user-service/friends.py
 from fastapi import HTTPException
-from sqlalchemy import select, or_, and_
+from sqlalchemy import select, or_, and_, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from service.models.friendship import Friendship
 from service.models.user import User
+from service.schemas import SearchResponse
 from service.persistence import reward_friendship_achievement_if_should
+from shared.util.order import get_order_by_str
 
 async def get_friends(user_id: int, session: AsyncSession) -> list[User]:
     """Returns User objects for all accepted friends of user_id."""
@@ -170,3 +172,94 @@ async def search_users(query: str, session: AsyncSession) -> list[User]:
         select(User).where(User.username.ilike(f"%{query}%")).limit(10)
     )
     return result.scalars().all()
+
+def search_users_order_by_str(sort_assoc: list[tuple[str, str]] | None) -> str | None:
+    if sort_assoc is None:
+        return None
+    valid_columns = [
+        'created_at'
+    ]
+    
+    return get_order_by_str(sort_assoc, valid_columns)
+
+async def search_users_paginated(
+        query: str,
+        limit: int,
+        page: int,
+        sort_assoc: list[tuple[str, str]] | None,
+        session: AsyncSession
+) -> SearchResponse:
+    """
+    Returns a paginated result of searching users.
+    """
+    default_order = """
+username ILIKE CONCAT('%', CONCAT((:query)::text, '%')) DESC
+, levenshtein(LOWER(username), LOWER((:query))::text, 1, 1, 1) ASC
+    """
+    query_order = search_users_order_by_str(sort_assoc)
+    query_order = query_order + ', ' + default_order if query_order is not None else default_order
+    await session.execute(text("CREATE EXTENSION IF NOT EXISTS fuzzystrmatch;"))
+    offset = page * limit
+    statement = text(f"""
+WITH
+all_users AS
+(
+    SELECT * FROM users
+)
+, filtered_users AS
+(
+    SELECT * FROM all_users
+    WHERE username ILIKE CONCAT('%', CONCAT((:query)::text, '%'))
+      OR levenshtein(LOWER(username), LOWER((:query))::text, 1, 1, 1) < 5
+)
+, user_count AS
+(
+    SELECT
+        COUNT(id) AS total
+    FROM filtered_users
+)
+, paged_users AS
+(
+    SELECT * FROM filtered_users
+    ORDER BY {query_order}
+    OFFSET (SELECT
+               LEAST(:offset,
+                     GREATEST(0, total - :limit))
+            FROM user_count)
+    LIMIT :limit
+)
+, page_stats AS
+(
+    SELECT
+      (table user_count)
+      AS total
+      , LEAST(((:page)::int),
+              GREATEST(0, (((table user_count) - 1) / :limit)))
+      AS page
+      , (:limit)::int
+      AS per_page
+      , GREATEST(0, (((table user_count) - 1) / :limit))
+      AS last_page
+)
+SELECT
+    *
+    , COALESCE((SELECT
+                  jsonb_agg(jsonb_build_object(
+                     'id' ,id
+                     , 'username'  ,username
+                     , 'display_name'  ,display_name
+                     , 'avatar_url'  ,avatar_url
+                     , 'status'  ,status
+                  ) ORDER BY {query_order})
+                FROM paged_users)
+               , '[]'::jsonb)
+    AS results
+    FROM page_stats
+    """)
+    result = await session.execute(statement, {
+        'query': query,
+        'limit': limit,
+        'page': page,
+        'offset': offset
+    })
+    return SearchResponse.model_validate(dict(result.mappings().one()))

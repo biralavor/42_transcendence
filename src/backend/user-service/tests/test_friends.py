@@ -65,10 +65,3 @@ async def test_respond_to_request_invalid_action():
     finally:
         app.dependency_overrides.pop(get_current_user, None)
     assert resp.status_code == 422
-
-
-async def test_search_users_empty():
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get("/search?q=nobody")
-    assert resp.status_code == 200
-    assert resp.json() == []

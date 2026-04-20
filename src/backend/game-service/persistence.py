@@ -12,7 +12,7 @@ from service.models.match import Match
 from service.models.tournament import Tournament
 from service.models.tournament_match import TournamentMatch
 from service.models.tournament_participant import TournamentParticipant
-
+from shared.util.order import get_order_by_str
 
 class TournamentNotFound(Exception):
     pass
@@ -530,8 +530,6 @@ async def get_user_matches(db: AsyncSession, user_id: int) -> list[Match]:
     return list(result.scalars().all())
 
 def leaderboard_order_by_str(sort_assoc: list[tuple[str, str]] | None) -> str | None:
-    if sort_assoc is None:
-        return None
     valid_columns = [
         'rank',
         'display_name',
@@ -545,14 +543,7 @@ def leaderboard_order_by_str(sort_assoc: list[tuple[str, str]] | None) -> str | 
         'max_streak',
         'current_streak'
     ]
-    order_columns = []
-    for (sort_key, order) in sort_assoc:
-        norm_order = 'DESC' if order.upper() == 'DESC' else 'ASC'
-        norm_key = sort_key.lower() if sort_key.lower() in valid_columns else None
-        if norm_key is not None:
-            order_columns.append(f"{norm_key} {norm_order}")
-    result = ', '.join(order_columns) if len(order_columns) > 0 else None
-    return result
+    return get_order_by_str(sort_assoc, valid_columns)
 
 
 async def get_leaderboard_paginated(
@@ -792,9 +783,10 @@ WITH all_matches AS
             FROM user_count)
 )
 SELECT
-    LEAST(:page, (((table user_count) - 1) / :limit))
+    LEAST(:page,
+          GREATEST(0, (((table user_count) - 1) / :limit)))
     AS page
-    , (((table user_count) - 1) / :limit)
+    , GREATEST(0, (((table user_count) - 1) / :limit))
     AS last_page
     , :limit as per_page
     , (table user_count) as total
