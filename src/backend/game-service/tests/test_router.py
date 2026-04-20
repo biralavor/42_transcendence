@@ -4,11 +4,14 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sess
 from sqlalchemy.pool import NullPool
 from sqlalchemy import text
 from httpx import AsyncClient, ASGITransport
+from datetime import datetime, timedelta, timezone
 
 from shared.config.settings import settings
 from shared.database import get_db
 from service.auth import get_current_user_id
 from main import app
+from jose import jwt, ExpiredSignatureError, JWTError
+from shared.config.settings import settings
 
 # --------------------------------------------------------------------------- #
 # Shared PostgreSQL engine for all HTTP tests in this module
@@ -413,3 +416,83 @@ async def test_start_ai_game_defaults_speed_when_no_preferences(auth_client):
     assert abs(session.speed_multiplier - 1.0) < 0.001
 
     await game_manager.delete_session(game_id)
+
+    
+def create_fake_access_token(data: dict, expires_delta: timedelta):
+    ALGORITHM = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES = 15
+    REFRESH_TOKEN_EXPIRE_DAYS = 7
+
+    to_encode = data.copy()
+    expire = datetime.now(timezone.utc) + expires_delta
+    to_encode.update({"exp": expire})
+    return jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm=ALGORITHM)
+
+
+@pytest.mark.asyncio
+async def test_matches_search_without_query_parameters_and_no_token_is_bad(client):
+
+    access_token = create_fake_access_token(
+        data={"sub": 'alice', "credential_id": 1},
+        expires_delta=timedelta(minutes=30),
+    )
+    resp = await client.get("/matches/search?")
+    assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_matches_search_with_no_query_parameters_and_valid_token_is_ok(client):
+
+    access_token = create_fake_access_token(
+        data={"sub": 'alice', "credential_id": 1},
+        expires_delta=timedelta(minutes=30),
+    )
+    resp = await client.get("/matches/search", headers={"Authorization": f"Bearer {access_token}"})
+    assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_matches_search_with_query_parameters_and_valid_token_is_ok(client):
+
+    access_token = create_fake_access_token(
+        data={"sub": 'alice', "credential_id": 1},
+        expires_delta=timedelta(minutes=30),
+    )
+    resp = await client.get("/matches/search?player_id=2", headers={"Authorization": f"Bearer {access_token}"})
+    assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_matches_search_with_query_parameters_and_no_token_is_ok(client):
+
+    access_token = create_fake_access_token(
+        data={"sub": 'alice', "credential_id": 1},
+        expires_delta=timedelta(minutes=30),
+    )
+    resp = await client.get("/matches/search?player_id=2", headers={"Authorization": f"Bearer {access_token}"})
+    assert resp.status_code == 200
+
+@pytest.mark.asyncio
+async def test_matches_search_when_ok_returns_schema(client):
+
+    access_token = create_fake_access_token(
+        data={"sub": 'alice', "credential_id": 1},
+        expires_delta=timedelta(minutes=30),
+    )
+    resp = await client.get("/matches/search", headers={"Authorization": f"Bearer {access_token}"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert isinstance(data, dict)
+    assert isinstance(data.get('results'), list)
+    assert isinstance(data.get('total'), int)
+    assert isinstance(data.get('page'), int)
+    assert isinstance(data.get('per_page'), int)
+    assert isinstance(data.get('last_page'), int)
+
+    if len(data.get('results')) > 0:
+        element = data.get('results')[0]
+        assert isinstance(element.get('id'), int)
+        assert isinstance(element.get('opponent_id'), int)
+        assert isinstance(element.get('score'), str)
+        assert isinstance(element.get('date'), str)
+
