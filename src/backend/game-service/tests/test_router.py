@@ -7,6 +7,7 @@ from httpx import AsyncClient, ASGITransport
 
 from shared.config.settings import settings
 from shared.database import get_db
+from service.auth import get_current_user_id
 from main import app
 
 # --------------------------------------------------------------------------- #
@@ -55,6 +56,52 @@ async def client():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
     app.dependency_overrides.clear()
+
+
+def _override_user_id(uid: int):
+    """Return a dependency override that always resolves to the given user ID."""
+    async def _dep():
+        return uid
+    return _dep
+
+
+@pytest_asyncio.fixture
+async def auth_client():
+    """Yield a factory that creates an AsyncClient authenticated as a given user ID."""
+    async with _engine.begin() as conn:
+        await conn.execute(text("TRUNCATE TABLE matches RESTART IDENTITY CASCADE"))
+        test_users = [
+            (5001, "test_alice"), (5002, "test_bob"), (5003, "test_charlie"),
+            (5010, "test_user10"), (5020, "test_user20"), (5030, "test_user30"),
+            (5099, "test_user99"), (5999, "test_user999")
+        ]
+        for uid, name in test_users:
+            existing = await conn.execute(
+                text("SELECT id FROM credentials WHERE username = :u"),
+                {"u": name}
+            )
+            if not existing.fetchone():
+                cid = uid + 10000
+                await conn.execute(
+                    text("INSERT INTO credentials (id, username, password) VALUES (:id, :u, 'fake')"),
+                    {"id": cid, "u": name}
+                )
+                await conn.execute(
+                    text("INSERT INTO users (id, username, credential_id) VALUES (:id, :u, :cid)"),
+                    {"id": uid, "u": name, "cid": cid}
+                )
+
+    from contextlib import asynccontextmanager
+
+    @asynccontextmanager
+    async def _make_client(user_id: int):
+        app.dependency_overrides[get_db] = _override_get_db
+        app.dependency_overrides[get_current_user_id] = _override_user_id(user_id)
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            yield ac
+        app.dependency_overrides.clear()
+
+    yield _make_client
 
 
 # --------------------------------------------------------------------------- #
@@ -175,7 +222,6 @@ async def test_get_leaderboard_returns_ranked_rows(client):
     resp = await client.get("/leaderboard")
     assert resp.status_code == 200
     data = resp.json()
-    print(data)
     assert len(data['results']) == 3
     assert data['results'][0]["rank"] == 1
     assert data['results'][0]["user_id"] == 5001
@@ -193,7 +239,6 @@ async def test_get_leaderboard_honors_limit_query_param(client):
     assert resp.status_code == 200
     data = resp.json()
     assert len(data['results']) == 2
-
 
 
 @pytest.mark.asyncio
@@ -224,6 +269,7 @@ async def test_get_leaderboard_limit_one_page_one(client):
     assert data['summary']['max_max_streak']['value'] == 21
     assert data['summary']['max_current_streak']['value'] == 21
     assert data['summary']['max_points']['value'] == 63
+
 
 @pytest.mark.asyncio
 async def test_get_leaderboard_limit_one_page_zero_rank_desc(client):
@@ -256,3 +302,114 @@ async def test_get_leaderboard_limit_one_page_zero_rank_desc(client):
     assert data['summary']['max_max_streak']['value'] == 21
     assert data['summary']['max_current_streak']['value'] == 21
     assert data['summary']['max_points']['value'] == 63
+
+
+# --------------------------------------------------------------------------- #
+# POST /ai
+# --------------------------------------------------------------------------- #
+
+@pytest.mark.asyncio
+async def test_start_ai_game_default_difficulty(auth_client):
+    async with auth_client(5001) as client:
+        resp = await client.post("/ai", json={})
+        assert resp.status_code == 201
+        data = resp.json()
+        assert "game_id" in data
+        assert data["game_id"].startswith("ai-")
+
+
+@pytest.mark.asyncio
+async def test_start_ai_game_explicit_difficulty(auth_client):
+    async with auth_client(5001) as client:
+        for level in ("easy", "medium", "hard"):
+            resp = await client.post("/ai", json={"difficulty": level})
+            assert resp.status_code == 201
+            assert resp.json()["game_id"].startswith("ai-")
+
+
+@pytest.mark.asyncio
+async def test_start_ai_game_invalid_difficulty(auth_client):
+    async with auth_client(5001) as client:
+        resp = await client.post("/ai", json={"difficulty": "impossible"})
+        assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_start_ai_game_requires_auth(client):
+    """Without authentication the endpoint must reject the request."""
+    resp = await client.post("/ai", json={"difficulty": "easy"})
+    assert resp.status_code in (401, 403)
+
+
+@pytest.mark.asyncio
+async def test_start_ai_game_creates_match_with_ai_player(auth_client):
+    """The match row for an AI game uses AI_PLAYER_ID (0) as player2."""
+    from service.ai import AI_PLAYER_ID
+    async with auth_client(5001) as client:
+        resp = await client.post("/ai", json={"difficulty": "hard"})
+        assert resp.status_code == 201
+        matches_resp = await client.get("/matches/5001")
+        assert matches_resp.status_code == 200
+        rows = matches_resp.json()
+        assert any(m["player2_id"] == AI_PLAYER_ID for m in rows)
+
+
+@pytest.mark.asyncio
+async def test_start_ai_game_uses_ball_speed_from_preferences(auth_client):
+    """When a user has game_preferences set, the session uses their ball_speed_multiplier."""
+    import asyncio
+    from sqlalchemy import text as sqla_text
+    from service.game_manager import game_manager
+    from service.game_session import GameSession
+
+    # Write a game_preferences row for user 5001
+    async with _engine.begin() as conn:
+        await conn.execute(
+            sqla_text(
+                "UPDATE users SET game_preferences = CAST(:prefs AS jsonb) WHERE id = :uid"
+            ),
+            {"prefs": '{"theme": "wood", "ball_speed_multiplier": 1.5}', "uid": 5001},
+        )
+
+    async with auth_client(5001) as client:
+        resp = await client.post("/ai", json={"difficulty": "medium"})
+        assert resp.status_code == 201
+        game_id = resp.json()["game_id"]
+
+    await asyncio.sleep(0.05)  # let the game loop start
+
+    session = game_manager.get_session(game_id)
+    assert session is not None, "game session was not created within timeout"
+    assert abs(session.speed_multiplier - 1.5) < 0.001
+    assert abs(session.ball.vx - GameSession.INITIAL_BALL_VX * 1.5) < 0.1
+
+    await game_manager.delete_session(game_id)
+
+
+@pytest.mark.asyncio
+async def test_start_ai_game_defaults_speed_when_no_preferences(auth_client):
+    """When a user has no game_preferences, the session defaults to speed 1.0."""
+    import asyncio
+    from sqlalchemy import text as sqla_text
+    from service.game_manager import game_manager
+    from service.game_session import GameSession
+
+    # Ensure user 5002 has no preferences
+    async with _engine.begin() as conn:
+        await conn.execute(
+            sqla_text("UPDATE users SET game_preferences = NULL WHERE id = :uid"),
+            {"uid": 5002},
+        )
+
+    async with auth_client(5002) as client:
+        resp = await client.post("/ai", json={"difficulty": "easy"})
+        assert resp.status_code == 201
+        game_id = resp.json()["game_id"]
+
+    await asyncio.sleep(0.05)
+
+    session = game_manager.get_session(game_id)
+    assert session is not None, "game session was not created within timeout"
+    assert abs(session.speed_multiplier - 1.0) < 0.001
+
+    await game_manager.delete_session(game_id)

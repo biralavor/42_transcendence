@@ -1,14 +1,19 @@
 # Note: sys.path is set by main.py (Docker) or test file (host) — not repeated here.
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from uuid import uuid4
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException, Depends
 from jose import jwt
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.config.settings import settings
 from shared.ws.manager import ConnectionManager
-from shared.database import AsyncSessionLocal
+from shared.database import AsyncSessionLocal, get_db
 from shared.logging import ws_logger
 from service.persistence import create_match, finish_match
 from service.game_manager import game_manager
+from service.ai import AI_PLAYER_ID, DIFFICULTY_PARAMS
+from service.auth import get_current_user_id
+from service.schemas import AiGameRequest, AiGameResponse
 from sqlalchemy.exc import SQLAlchemyError
 
 router = APIRouter()
@@ -43,13 +48,36 @@ async def _on_game_over(game_id: str, winner_id: int, score_p1: int, score_p2: i
         async with AsyncSessionLocal() as db:
             match_id = _match_ids.get(game_id)
             if match_id is not None:
-                await finish_match(
-                    db,
-                    match_id,
-                    winner_id,
-                    score_p1,
-                    score_p2
-                )
+                if winner_id == AI_PLAYER_ID:
+                    # AI has no users row in production, so award_xp would raise
+                    # a FK violation and rollback the whole transaction, leaving
+                    # the match stuck 'ongoing'. Update the row directly instead.
+                    await db.execute(
+                        text(
+                            "UPDATE matches "
+                            "SET status = 'finished', "
+                            "    winner_id = :winner_id, "
+                            "    score_p1 = :score_p1, "
+                            "    score_p2 = :score_p2, "
+                            "    finished_at = NOW() "
+                            "WHERE id = :match_id"
+                        ),
+                        {
+                            "match_id": match_id,
+                            "winner_id": winner_id,
+                            "score_p1": score_p1,
+                            "score_p2": score_p2,
+                        },
+                    )
+                    await db.commit()
+                else:
+                    await finish_match(
+                        db,
+                        match_id,
+                        winner_id,
+                        score_p1,
+                        score_p2
+                    )
     except SQLAlchemyError:
         pass  # best-effort
     finally:
@@ -65,6 +93,69 @@ async def _on_game_over(game_id: str, winner_id: int, score_p1: int, score_p2: i
             "score_p1": score_p1,
             "score_p2": score_p2
         })
+
+
+# Colocated with the WS router (rather than service/router.py) because it
+# seeds _match_ids / _setup_sessions and wires _on_game_over / _broadcast_state,
+# all of which live here and are consumed by the WS handler below.
+@router.post("/ai", status_code=201, response_model=AiGameResponse)
+async def start_ai_game(
+    body: AiGameRequest,
+    player_id: int = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+) -> AiGameResponse:
+    """Start an AI game session.
+
+    Creates a match record (player2 = AI_PLAYER_ID), reads the player's
+    game_preferences to get their ball_speed_multiplier, starts the authoritative
+    game loop with imperfection parameters for the chosen difficulty, and
+    returns a game_id the client can use to connect via WS /ws/game/{game_id}.
+    """
+    ai_params = DIFFICULTY_PARAMS[body.difficulty]
+    game_id = f"ai-{uuid4().hex[:12]}"
+
+    # Read ball_speed_multiplier from the player's game_preferences.
+    # Defaults to 1.0 if the user has no preferences row or the column is NULL.
+    try:
+        result = await db.execute(
+            text("SELECT game_preferences FROM users WHERE id = :uid"),
+            {"uid": player_id},
+        )
+        row = result.fetchone()
+        prefs = row[0] if row and row[0] else {}
+        speed_multiplier: float = float(prefs.get("ball_speed_multiplier", 1.0))
+        speed_multiplier = max(0.5, min(2.0, speed_multiplier))  # clamp to valid range
+    except (SQLAlchemyError, ValueError, TypeError, AttributeError) as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(
+            "Failed to load game_preferences for player %s, using default: %s",
+            player_id, e,
+        )
+        speed_multiplier = 1.0
+
+    try:
+        match = await create_match(db, player_id, AI_PLAYER_ID)
+        _match_ids[game_id] = match.id
+    except SQLAlchemyError:
+        raise HTTPException(status_code=500, detail="Failed to create match record")
+
+    try:
+        await game_manager.create_session(
+            game_id=game_id,
+            player1_id=player_id,
+            player2_id=AI_PLAYER_ID,
+            broadcast_callback=_broadcast_state,
+            on_game_over_callback=_on_game_over,
+            ai_params=ai_params,
+            speed_multiplier=speed_multiplier,
+        )
+    except ValueError:
+        # game_id collision (astronomically unlikely with uuid4, but guard it)
+        _match_ids.pop(game_id, None)
+        raise HTTPException(status_code=500, detail="Game session collision")
+
+    return AiGameResponse(game_id=game_id)
 
 
 @router.websocket("/ws/game/{game_id}")
@@ -330,6 +421,49 @@ async def game_websocket(websocket: WebSocket, game_id: str, token: str | None =
         # If this was the last player, end the game
         if remaining == 0:
             logger.info(f"[CLEANUP] Room {game_id} is empty, cleaning up game session")
+
+            # If this is an AI game whose match wasn't already finalized by
+            # the natural game-over callback, record a forfeit with the
+            # current score snapshot and AI as the winner. We update the
+            # matches row directly instead of calling finish_match, because
+            # finish_match awards XP to the winner via an FK-bound user_xp
+            # row — and AI_PLAYER_ID has no users row, so that path would
+            # rollback the whole transaction.
+            session = game_manager.get_session(game_id)
+            match_id = _match_ids.get(game_id)
+            # session.is_active is flipped to False synchronously when the
+            # game loop detects victory (game_manager.py), before _on_game_over
+            # is scheduled. Skipping when inactive prevents the forfeit write
+            # from racing with — and overwriting — the natural game-over commit.
+            if (
+                match_id is not None
+                and session is not None
+                and session.player2_id == AI_PLAYER_ID
+                and session.is_active
+            ):
+                try:
+                    async with AsyncSessionLocal() as db:
+                        await db.execute(
+                            text(
+                                "UPDATE matches "
+                                "SET status = 'finished', "
+                                "    winner_id = :winner_id, "
+                                "    score_p1 = :score_p1, "
+                                "    score_p2 = :score_p2, "
+                                "    finished_at = NOW() "
+                                "WHERE id = :match_id"
+                            ),
+                            {
+                                "match_id": match_id,
+                                "winner_id": AI_PLAYER_ID,
+                                "score_p1": session.score.p1,
+                                "score_p2": session.score.p2,
+                            },
+                        )
+                        await db.commit()
+                except SQLAlchemyError:
+                    pass  # best-effort
+
             await game_manager.delete_session(game_id)
             _setup_sessions.pop(game_id, None)
             _match_ids.pop(game_id, None)

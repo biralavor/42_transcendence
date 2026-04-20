@@ -6,7 +6,18 @@ These functions are intentionally stateless and decoupled from
 a given X coordinate after reflecting off the top/bottom walls.
 """
 
-from game_session import GameSession
+import random
+import time
+
+from service.game_session import GameSession
+
+AI_PLAYER_ID = 0  # sentinel: real user IDs are always > 0
+
+DIFFICULTY_PARAMS: dict[str, dict] = {
+    "easy":   {"error_rate": 0.55, "reaction_delay_ms": 300, "wrong_move_rate": 0.35, "target_noise": 180.0},
+    "medium": {"error_rate": 0.30, "reaction_delay_ms": 150, "wrong_move_rate": 0.15, "target_noise": 100.0},
+    "hard":   {"error_rate": 0.05, "reaction_delay_ms":  30, "wrong_move_rate": 0.00, "target_noise":   0.0},
+}
 
 
 def predict_intercept_y(
@@ -51,3 +62,68 @@ def predict_intercept_y(
     y_unfolded = m if m <= h_prime else period - m
 
     return y_unfolded + r
+
+
+def update_ai_paddle(
+    session: GameSession,
+    error_rate: float = 0.15,
+    reaction_delay_ms: int = 100,
+    wrong_move_rate: float = 0.00,
+    target_noise: float = 0.0,
+) -> None:
+    """Drive the AI paddle (p2) for one tick.
+
+    Four imperfection parameters:
+    - error_rate: probability [0, 1] per tick that the AI makes an error.
+    - reaction_delay_ms: minimum milliseconds between intercept
+      re-evaluations, simulating human reaction time lag.
+    - wrong_move_rate: when an error occurs, probability [0, 1] that the
+      AI moves in a random direction instead of stopping.  Simulates a
+      confused / panicking player rather than a frozen one.
+    - target_noise: standard deviation (pixels) of Gaussian noise added to
+      the computed intercept target, simulating imprecise aim.
+
+    State is stored on ``session``:
+    - session.ai_last_eval_ms  — monotonic timestamp of last re-evaluation
+    - session.ai_target_y      — last computed intercept Y
+    """
+    now_ms = time.monotonic() * 1000
+
+    # Re-evaluate once per reaction interval — this is where error decisions are batched,
+    # preventing per-tick direction flicker caused by high error_rate.
+    if now_ms - session.ai_last_eval_ms >= reaction_delay_ms:
+        raw_target = predict_intercept_y(
+            ball_x=session.ball.x,
+            ball_y=session.ball.y,
+            ball_vx=session.ball.vx,
+            ball_vy=session.ball.vy,
+            ai_paddle_x=session.PADDLE_X_P2,
+        )
+        if target_noise > 0:
+            raw_target += random.gauss(0, target_noise)
+        session.ai_target_y = max(0.0, min(session.CANVAS_HEIGHT, raw_target))
+
+        # Decide error state for this entire interval (not per-tick)
+        if random.random() < error_rate:
+            if wrong_move_rate > 0 and random.random() < wrong_move_rate:
+                session.ai_error_direction = random.choice(["up", "down", "stop"])
+            else:
+                session.ai_error_direction = "stop"
+            session.ai_is_erroring = True
+        else:
+            session.ai_is_erroring = False
+
+        session.ai_last_eval_ms = now_ms
+
+    # Apply current state: hold error direction or track smoothly
+    if session.ai_is_erroring:
+        session.p2_direction = session.ai_error_direction
+        return
+
+    paddle_center = session.paddles.p2 + session.PADDLE_HEIGHT / 2
+    if paddle_center < session.ai_target_y - session.PADDLE_SPEED:
+        session.p2_direction = "down"
+    elif paddle_center > session.ai_target_y + session.PADDLE_SPEED:
+        session.p2_direction = "up"
+    else:
+        session.p2_direction = "stop"

@@ -1,8 +1,15 @@
 import { useRef, useEffect, useState } from 'react'
 import './PongCanvas.css'
 import { GameState } from '../game/pongEngine.js'
-import { CanvasGameContext, render } from '../game/pongRenderer.js';
+import { CanvasGameContext, render, widthRatio, heightRatio } from '../game/pongRenderer.js';
+
+// Backend coordinate space (for normalizing server positions to frontend units)
+const BACKEND_WIDTH = 1024
+const BACKEND_HEIGHT = 512
 import { useAuth } from '../context/authContext'
+import { useGameSettings } from '../context/gameSettingsContext';
+import { THEMES } from '../game/themes';
+import { loadThemeImages } from '../game/themeLoader';
 
 /**
  * PongCanvasMultiplayer - Server-Authoritative Multiplayer Pong
@@ -22,6 +29,8 @@ function PongCanvasMultiplayer(props) {
   const player2Id = props?.player2Id
   const onGameEnd = props?.onGameEnd || (() => { })
   const { auth } = useAuth()
+  const { theme } = useGameSettings()
+  const themeImagesRef = useRef(null)
 
   const canvasRef = useRef(null)
   const keyStateRef = useRef({
@@ -109,23 +118,22 @@ function PongCanvasMultiplayer(props) {
         const message = JSON.parse(event.data)
 
         if (message.type === 'state') {
-          // Receive server state and update game
+          // Receive server state and update game.
+          // Backend uses 1024×512 coords; frontend renderer uses widthRatio×heightRatio.
           if (gameStateRef.current) {
-            // Update ball
             if (message.ball) {
-              gameStateRef.current.ball.position.x = message.ball.x
-              gameStateRef.current.ball.position.y = message.ball.y
-              gameStateRef.current.ball.velocity.x = message.ball.vx
-              gameStateRef.current.ball.velocity.y = message.ball.vy
+              // Backend sends ball CENTER; frontend position is top-left — subtract half size
+              const halfW = gameStateRef.current.ball.size.width / 2
+              const halfH = gameStateRef.current.ball.size.height / 2
+              gameStateRef.current.ball.position.x = message.ball.x * (widthRatio / BACKEND_WIDTH) - halfW
+              gameStateRef.current.ball.position.y = message.ball.y * (heightRatio / BACKEND_HEIGHT) - halfH
             }
 
-            // Update paddles
             if (message.paddles) {
-              gameStateRef.current.player1.position.y = message.paddles.p1
-              gameStateRef.current.player2.position.y = message.paddles.p2
+              gameStateRef.current.player1.position.y = message.paddles.p1 * (heightRatio / BACKEND_HEIGHT)
+              gameStateRef.current.player2.position.y = message.paddles.p2 * (heightRatio / BACKEND_HEIGHT)
             }
 
-            // Update score
             if (message.score) {
               gameStateRef.current.score.player1 = message.score.p1
               gameStateRef.current.score.player2 = message.score.p2
@@ -169,6 +177,12 @@ function PongCanvasMultiplayer(props) {
   }
 
   useEffect(() => {
+    loadThemeImages(THEMES[theme] ?? THEMES.classic)
+      .then(images => { themeImagesRef.current = images; })
+      .catch(() => { themeImagesRef.current = null; });
+  }, [theme]);
+
+  useEffect(() => {
     const canvas = canvasRef.current
     const renderingContext = canvas.getContext('2d')
     updateCanvasDimensions()
@@ -203,7 +217,7 @@ function PongCanvasMultiplayer(props) {
       }
 
       // Render the server state using the existing renderer
-      render(canvasContext, gameStateRef.current, () => false)
+      render(canvasContext, gameStateRef.current, () => false, themeImagesRef.current, theme)
 
       loopRef.current = requestAnimationFrame(renderLoop)
     }

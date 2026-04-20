@@ -1,6 +1,7 @@
 // src/frontend/src/pages/Profile.jsx
 import { useState, useEffect, useRef } from 'react'
 import NavbarComponent from '../Components/Navbar'
+import GameSettings from '../Components/GameSettings'
 import { getAvatarFilter } from '../utils/avatarFilter'
 import { apiCall, apiJson } from '../utils/apiClient'
 import './Profile.css'
@@ -133,7 +134,7 @@ export default function Profile() {
   const handleSave = async (e) => {
     e.preventDefault()
     try {
-      const resp = await apiJson(`/api/users/profile/${userId}`, {
+      await apiJson(`/api/users/profile/${userId}`, {
         method: 'PUT',
         body: JSON.stringify({
           display_name: profile.displayName,
@@ -141,7 +142,6 @@ export default function Profile() {
           dark_mode: profile.darkMode,
         }),
       })
-      if (!resp.ok) throw new Error('Save failed')
       setSaveStatus('Profile updated successfully!')
       clearTimeout(saveStatusTimer.current)
       saveStatusTimer.current = setTimeout(() => setSaveStatus(''), 3000)
@@ -256,6 +256,7 @@ export default function Profile() {
                 </div>
                 <div className="profile-preferences">
                   <h2 className="profile-section-title">Preferences</h2>
+                  <GameSettings />
                   <div className="profile-preference-item form-check arcade-form-check">
                     <input
                       className="form-check-input"

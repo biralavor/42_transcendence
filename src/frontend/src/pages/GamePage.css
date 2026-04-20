@@ -3,7 +3,6 @@
 .game-page {
   width: 100%;
   height: calc(100vh - var(--nav-height)); /* Subtract navbar height */
-  margin-top: var(--nav-height);
   display: flex;
   flex-direction: column;
   align-items: center;

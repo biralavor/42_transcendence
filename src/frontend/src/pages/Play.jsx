@@ -1,5 +1,6 @@
 import NavbarComponent from '../Components/Navbar'
 import PongCanvas from '../Components/PongCanvas'
+import VsCpuCard from '../Components/VsCpuCard'
 
 const matchModes = [
   {
@@ -66,7 +67,7 @@ export default function Play() {
                 </div>
 
                 <div className="col-12 col-xl-4">
-                  <div className="h-100 d-flex flex-column justify-content-between">
+                  <div className="h-100 d-flex flex-column justify-content-between gap-3">
                     <div>
                       <h2 className="arcade-section-title mb-3">Live board</h2>
                       <p className="arcade-copy mb-3">
@@ -75,7 +76,7 @@ export default function Play() {
                       </p>
                     </div>
 
-                    <div className="arcade-card p-3">
+                    <div className="arcade-card p-3 mb-3">
                       <span className="arcade-display mb-2 d-inline-block">Current focus</span>
                       <ul className="arcade-list mb-0">
                         <li>Game invite entry points</li>
@@ -84,12 +85,17 @@ export default function Play() {
                         <li>Backend websocket integration</li>
                       </ul>
                     </div>
+
+
                   </div>
                 </div>
               </div>
             </div>
 
             <div id="match-modes" className="row g-4">
+              <div className="col-12 col-md-6 col-xl-4" key="vs-cpu">
+                <VsCpuCard />
+              </div>
               {matchModes.map((mode) => (
                 <div className="col-12 col-md-6 col-xl-4" key={mode.title}>
                   <article className="arcade-card h-100 p-4">

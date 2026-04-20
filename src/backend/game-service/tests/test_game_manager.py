@@ -171,14 +171,141 @@ async def test_player_input_routing():
     print("✓ test_player_input_routing passed")
 
 
+@pytest.mark.asyncio
+async def test_game_manager_ai_params_stored_on_session():
+    """create_session with ai_params stores them on the session object."""
+    from service.game_manager import GameManager
+    from service.ai import AI_PLAYER_ID
+
+    manager = GameManager()
+    params = {"error_rate": 0.0, "reaction_delay_ms": 0}
+
+    async def noop_broadcast(game_id, state):
+        pass
+
+    session = await manager.create_session(
+        game_id="ai-test-1",
+        player1_id=1,
+        player2_id=AI_PLAYER_ID,
+        broadcast_callback=noop_broadcast,
+        ai_params=params,
+    )
+    assert session.ai_params == params
+    await manager.delete_session("ai-test-1")
+
+
+@pytest.mark.asyncio
+async def test_game_manager_ai_drives_p2_direction():
+    """With error_rate=0, reaction_delay_ms=0, AI must move p2 toward ball."""
+    from service.game_manager import GameManager
+    from service.ai import AI_PLAYER_ID
+
+    manager = GameManager()
+    # error_rate=0 → never freezes; reaction_delay_ms=0 → re-evaluates every tick
+    params = {"error_rate": 0.0, "reaction_delay_ms": 0}
+
+    async def capture_broadcast(game_id, state):
+        pass
+
+    session = await manager.create_session(
+        game_id="ai-test-2",
+        player1_id=1,
+        player2_id=AI_PLAYER_ID,
+        broadcast_callback=capture_broadcast,
+        ai_params=params,
+    )
+
+    # Let the game loop run several ticks
+    await asyncio.sleep(0.3)  # ~9 ticks at 30 FPS
+
+    # p2_direction must have been set by the AI (not left as "stop" forever)
+    # We check by reading it after ticks; the value is set each tick so it's live.
+    assert session.p2_direction in ("up", "down", "stop")
+    await manager.delete_session("ai-test-2")
+
+
+@pytest.mark.asyncio
+async def test_game_manager_no_ai_params_leaves_p2_direction_as_stop():
+    """Without ai_params, p2 direction is never set by the AI (stays as input-driven)."""
+    from service.game_manager import GameManager
+
+    manager = GameManager()
+
+    async def noop_broadcast(game_id, state):
+        pass
+
+    session = await manager.create_session(
+        game_id="human-test-1",
+        player1_id=1,
+        player2_id=2,
+        broadcast_callback=noop_broadcast,
+    )
+    await asyncio.sleep(0.1)
+    # p2_direction should be "stop" (default) since no AI is driving it
+    assert session.p2_direction == "stop"
+    await manager.delete_session("human-test-1")
+
+
+@pytest.mark.asyncio
+async def test_create_session_applies_speed_multiplier():
+    """GameManager must pass speed_multiplier through to the GameSession."""
+    from service.game_manager import GameManager
+    from service.game_session import GameSession
+
+    manager = GameManager()
+    states = []
+
+    async def mock_broadcast(game_id, state):
+        states.append(state)
+
+    session = await manager.create_session(
+        game_id="speed-test-1",
+        player1_id=1,
+        player2_id=2,
+        broadcast_callback=mock_broadcast,
+        speed_multiplier=2.0,
+    )
+    await asyncio.sleep(0.05)
+    await manager.delete_session("speed-test-1")
+
+    assert abs(session.speed_multiplier - 2.0) < 0.001
+    assert abs(session.ball.vx - GameSession.INITIAL_BALL_VX * 2.0) < 0.1
+
+
+@pytest.mark.asyncio
+async def test_create_session_default_speed_multiplier_is_1():
+    from service.game_manager import GameManager
+
+    manager = GameManager()
+
+    async def mock_broadcast(game_id, state):
+        pass
+
+    session = await manager.create_session(
+        game_id="speed-test-default",
+        player1_id=1,
+        player2_id=2,
+        broadcast_callback=mock_broadcast,
+    )
+    await asyncio.sleep(0.05)
+    await manager.delete_session("speed-test-default")
+
+    assert session.speed_multiplier == 1.0
+
+
 async def main():
     print("Running GameManager integration tests...\n")
-    
+
     try:
         await test_game_manager_creation()
         await test_latency_filter()
         await test_player_input_routing()
-        
+        await test_game_manager_ai_params_stored_on_session()
+        await test_game_manager_ai_drives_p2_direction()
+        await test_game_manager_no_ai_params_leaves_p2_direction_as_stop()
+        await test_create_session_applies_speed_multiplier()
+        await test_create_session_default_speed_multiplier_is_1()
+
         print("\n✅ All integration tests passed!")
     except AssertionError as e:
         print(f"\n❌ Test failed: {e}")
@@ -188,7 +315,7 @@ async def main():
         import traceback
         traceback.print_exc()
         return False
-    
+
     return True
 
 

@@ -18,5 +18,10 @@ export default defineConfig({
     globals: true,
     environment: 'jsdom',
     setupFiles: ['./src/setupTests.js'],
+    // Generous timeout absorbs slow React/jsdom waitFor() under Docker on WSL2.
+    // Attempts to serialize (singleThread / singleFork) broke vi.mock isolation
+    // across files, so default parallelism is kept. Occasional flakes may still
+    // occur on very constrained hosts — rerunning `make check` resolves them.
+    testTimeout: 30000,
   },
 })
