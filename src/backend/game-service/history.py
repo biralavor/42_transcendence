@@ -3,7 +3,7 @@ from sqlalchemy import select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from service.models.match import Match
-from service.schemas import MatchHistoryItem
+from service.schemas import MatchHistoryItem, MatchHistoryPage
 
 
 async def get_match_history(user_id: int, session: AsyncSession) -> list[MatchHistoryItem]:
@@ -37,11 +37,14 @@ async def get_match_history_paginated(
         search_for: dict,
         sort_assoc: dict[str, str],
         session: AsyncSession
-) -> list[MatchHistoryItem]:
-    return {
+) -> MatchHistoryPage:
+
+    page = {
         'results': [],
         'total': 0,
         'page': 0,
         'per_page': 0,
         'last_page': 0,
     }
+
+    return MatchHistoryPage.model_validate(page)

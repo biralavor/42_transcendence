@@ -10,8 +10,7 @@ from shared.config.settings import settings
 from shared.database import get_db
 from service.auth import get_current_user_id
 from main import app
-from jose import jwt, ExpiredSignatureError, JWTError
-from shared.config.settings import settings
+from jose import jwt
 
 # --------------------------------------------------------------------------- #
 # Shared PostgreSQL engine for all HTTP tests in this module
@@ -452,7 +451,7 @@ async def test_matches_search_with_no_query_parameters_and_valid_token_is_ok(cli
 
 
 @pytest.mark.asyncio
-async def test_matches_search_with_query_parameters_and_valid_token_is_ok(client):
+async def test_matches_search_with_player_id_query_parameters_and_valid_token_is_ok(client):
 
     access_token = create_fake_access_token(
         data={"sub": 'alice', "credential_id": 1},
@@ -463,13 +462,13 @@ async def test_matches_search_with_query_parameters_and_valid_token_is_ok(client
 
 
 @pytest.mark.asyncio
-async def test_matches_search_with_query_parameters_and_no_token_is_ok(client):
+async def test_matches_search_with_player_id_query_parameters_and_no_token_is_ok(client):
 
     access_token = create_fake_access_token(
         data={"sub": 'alice', "credential_id": 1},
         expires_delta=timedelta(minutes=30),
     )
-    resp = await client.get("/matches/search?player_id=2", headers={"Authorization": f"Bearer {access_token}"})
+    resp = await client.get("/matches/search?player_id=2")
     assert resp.status_code == 200
 
 @pytest.mark.asyncio

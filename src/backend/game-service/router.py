@@ -3,8 +3,6 @@ from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from jose import ExpiredSignatureError, JWTError, jwt
-from shared.config.settings import settings
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from service.auth import get_current_user_id, get_player_id_or_me
@@ -91,7 +89,7 @@ async def match_history(user_id: int, session: SessionDependency):
 
 
 @router.get("/matches/search", response_model=MatchHistoryPage)
-async def match_history(
+async def match_history_search(
         session: SessionDependency,
         player_id: Annotated[int, Depends(get_player_id_or_me)],
         date_from: date | None = Query(
@@ -107,7 +105,7 @@ async def match_history(
             '',
             description="colname:desc,othercol:asc"
         ),
-):
+) -> MatchHistoryPage:
     print(player_id)
     print(date_to)
     print(date_from)

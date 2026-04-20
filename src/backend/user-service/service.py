@@ -132,6 +132,8 @@ async def get_me(token: str, session: AsyncSession) -> MeResponse:
         credential_id: int = payload.get("credential_id")
         if username is None:
             raise JWTError("missing sub")
+        elif credential_id is None:
+            raise JWTError("missing credential_id")
     except ExpiredSignatureError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -154,7 +156,7 @@ async def get_me(token: str, session: AsyncSession) -> MeResponse:
     user = User(username=username, credential_id=credential_id)
     user = await session.merge(user)
     await session.commit()
-
+    await session.refresh(user)
     return MeResponse.model_validate(user)
 
 

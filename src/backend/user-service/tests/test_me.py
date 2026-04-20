@@ -44,7 +44,7 @@ def _session_returning(*call_results):
 
 
 def _valid_token(username: str = "alice") -> str:
-    return create_access_token({"sub": username}, expires_delta=timedelta(minutes=30))
+    return create_access_token({"sub": username, "credential_id": 1 }, expires_delta=timedelta(minutes=30))
 
 
 @pytest.mark.asyncio
