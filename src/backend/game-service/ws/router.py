@@ -389,6 +389,44 @@ async def game_websocket(websocket: WebSocket, game_id: str, token: str | None =
         # If this was the last player, end the game
         if remaining == 0:
             logger.info(f"[CLEANUP] Room {game_id} is empty, cleaning up game session")
+
+            # If this is an AI game whose match wasn't already finalized by
+            # the natural game-over callback, record a forfeit with the
+            # current score snapshot and AI as the winner. We update the
+            # matches row directly instead of calling finish_match, because
+            # finish_match awards XP to the winner via an FK-bound user_xp
+            # row — and AI_PLAYER_ID has no users row, so that path would
+            # rollback the whole transaction.
+            session = game_manager.get_session(game_id)
+            match_id = _match_ids.get(game_id)
+            if (
+                match_id is not None
+                and session is not None
+                and session.player2_id == AI_PLAYER_ID
+            ):
+                try:
+                    async with AsyncSessionLocal() as db:
+                        await db.execute(
+                            text(
+                                "UPDATE matches "
+                                "SET status = 'finished', "
+                                "    winner_id = :winner_id, "
+                                "    score_p1 = :score_p1, "
+                                "    score_p2 = :score_p2, "
+                                "    finished_at = NOW() "
+                                "WHERE id = :match_id"
+                            ),
+                            {
+                                "match_id": match_id,
+                                "winner_id": AI_PLAYER_ID,
+                                "score_p1": session.score.p1,
+                                "score_p2": session.score.p2,
+                            },
+                        )
+                        await db.commit()
+                except SQLAlchemyError:
+                    pass  # best-effort
+
             await game_manager.delete_session(game_id)
             _setup_sessions.pop(game_id, None)
             _match_ids.pop(game_id, None)
