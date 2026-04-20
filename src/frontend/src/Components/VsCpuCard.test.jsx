@@ -38,7 +38,7 @@ describe('VsCpuCard', () => {
     expect(screen.queryByText(/confirm/i)).not.toBeInTheDocument()
   })
 
-  it('Confirm calls GET /auth/me then POST /ai with player_id and difficulty', async () => {
+  it('Confirm calls GET /auth/me then POST /ai with difficulty', async () => {
     apiJson.mockResolvedValueOnce({ id: 42, username: 'bira' })
     apiJson.mockResolvedValueOnce({ game_id: 'abc-123' })
     render(<VsCpuCard />)
@@ -48,7 +48,7 @@ describe('VsCpuCard', () => {
     expect(apiJson).toHaveBeenNthCalledWith(1, '/api/users/auth/me')
     expect(apiJson).toHaveBeenNthCalledWith(2, '/api/game/ai', {
       method: 'POST',
-      body: JSON.stringify({ player_id: 42, difficulty: 'medium' }),
+      body: JSON.stringify({ difficulty: 'medium' }),
     })
   })
 
@@ -93,7 +93,7 @@ describe('VsCpuCard', () => {
     fireEvent.click(screen.getByRole('button', { name: /confirm/i }))
     await waitFor(() => expect(apiJson).toHaveBeenNthCalledWith(2, '/api/game/ai', {
       method: 'POST',
-      body: JSON.stringify({ player_id: 42, difficulty: 'easy' }),
+      body: JSON.stringify({ difficulty: 'easy' }),
     }))
   })
 })

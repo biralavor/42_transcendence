@@ -20,7 +20,7 @@ export default function VsCpuCard() {
       if (!me?.id) throw new Error('Not authenticated')
       const { game_id } = await apiJson('/api/game/ai', {
         method: 'POST',
-        body: JSON.stringify({ player_id: me.id, difficulty }),
+        body: JSON.stringify({ difficulty }),
       })
       navigate(`/game/${game_id}`, {
         state: { player1_id: me.id, player2_id: 0 },

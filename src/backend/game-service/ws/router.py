@@ -12,6 +12,7 @@ from shared.logging import ws_logger
 from service.persistence import create_match, finish_match
 from service.game_manager import game_manager
 from service.ai import AI_PLAYER_ID, DIFFICULTY_PARAMS
+from service.auth import get_current_user_id
 from service.schemas import AiGameRequest, AiGameResponse
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -72,7 +73,11 @@ async def _on_game_over(game_id: str, winner_id: int, score_p1: int, score_p2: i
 
 
 @router.post("/ai", status_code=201, response_model=AiGameResponse)
-async def start_ai_game(body: AiGameRequest, db: AsyncSession = Depends(get_db)) -> AiGameResponse:
+async def start_ai_game(
+    body: AiGameRequest,
+    player_id: int = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+) -> AiGameResponse:
     """Start an AI game session.
 
     Creates a match record (player2 = AI_PLAYER_ID), reads the player's
@@ -88,7 +93,7 @@ async def start_ai_game(body: AiGameRequest, db: AsyncSession = Depends(get_db))
     try:
         result = await db.execute(
             text("SELECT game_preferences FROM users WHERE id = :uid"),
-            {"uid": body.player_id},
+            {"uid": player_id},
         )
         row = result.fetchone()
         prefs = row[0] if row and row[0] else {}
@@ -98,7 +103,7 @@ async def start_ai_game(body: AiGameRequest, db: AsyncSession = Depends(get_db))
         speed_multiplier = 1.0  # best-effort: fall back to default on any DB error
 
     try:
-        match = await create_match(db, body.player_id, AI_PLAYER_ID)
+        match = await create_match(db, player_id, AI_PLAYER_ID)
         _match_ids[game_id] = match.id
     except SQLAlchemyError:
         raise HTTPException(status_code=500, detail="Failed to create match record")
@@ -106,7 +111,7 @@ async def start_ai_game(body: AiGameRequest, db: AsyncSession = Depends(get_db))
     try:
         await game_manager.create_session(
             game_id=game_id,
-            player1_id=body.player_id,
+            player1_id=player_id,
             player2_id=AI_PLAYER_ID,
             broadcast_callback=_broadcast_state,
             on_game_over_callback=_on_game_over,

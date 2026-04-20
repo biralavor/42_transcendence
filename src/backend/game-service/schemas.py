@@ -133,7 +133,6 @@ class LeaderboardResponse(BaseModel):
 
 # AI Game
 class AiGameRequest(BaseModel):
-    player_id: int
     difficulty: Literal["easy", "medium", "hard"] = "medium"
 
 

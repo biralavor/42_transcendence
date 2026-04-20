@@ -46,11 +46,6 @@ async def test_get_preferences_returns_stored_values():
 @pytest.mark.asyncio
 async def test_patch_preferences_returns_updated_values():
     user = _make_user()
-    # After commit/refresh, game_preferences reflects the written value
-    # Since mock session's refresh is a no-op, we simulate by setting on the object
-    async def _fake_current_user():
-        return user
-
     app.dependency_overrides[get_current_user] = lambda: user
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         resp = await ac.patch("/preferences", json={"theme": "neon-pong", "ball_speed_multiplier": 0.75})

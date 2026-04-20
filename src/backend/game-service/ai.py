@@ -14,8 +14,8 @@ from service.game_session import GameSession
 AI_PLAYER_ID = 0  # sentinel: real user IDs are always > 0
 
 DIFFICULTY_PARAMS: dict[str, dict] = {
-    "easy":   {"error_rate": 0.85, "reaction_delay_ms": 400, "wrong_move_rate": 0.60, "target_noise": 300.0},
-    "medium": {"error_rate": 0.82, "reaction_delay_ms": 250, "wrong_move_rate": 0.55, "target_noise": 220.0},
+    "easy":   {"error_rate": 0.55, "reaction_delay_ms": 300, "wrong_move_rate": 0.35, "target_noise": 180.0},
+    "medium": {"error_rate": 0.30, "reaction_delay_ms": 150, "wrong_move_rate": 0.15, "target_noise": 100.0},
     "hard":   {"error_rate": 0.05, "reaction_delay_ms":  30, "wrong_move_rate": 0.00, "target_noise":   0.0},
 }
 

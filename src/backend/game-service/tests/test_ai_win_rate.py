@@ -65,12 +65,12 @@ def run_ai_simulations(n: int, difficulty: str, opponent: str = "random_paddle")
 
 def test_ai_win_rate_easy():
     wins = run_ai_simulations(n=GAMES_PER_TEST, difficulty="easy", opponent="random_paddle")
-    assert wins <= 50, f"Easy AI should win <=50%, got {wins}%"
+    assert wins <= 75, f"Easy AI should win <=75%, got {wins}%"
 
 
 def test_ai_win_rate_medium():
     wins = run_ai_simulations(n=GAMES_PER_TEST, difficulty="medium", opponent="random_paddle")
-    assert 40 <= wins <= 80, f"Expected 40-80% win rate, got {wins}%"
+    assert 70 <= wins <= 100, f"Expected 70-100% win rate, got {wins}%"
 
 
 def test_ai_win_rate_hard():
