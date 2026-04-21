@@ -11,7 +11,7 @@ from shared.database import get_db
 from service.auth import get_current_user_id
 from main import app
 from jose import jwt
-
+import json
 # --------------------------------------------------------------------------- #
 # Shared PostgreSQL engine for all HTTP tests in this module
 # --------------------------------------------------------------------------- #
@@ -25,11 +25,9 @@ async def _override_get_db():
         yield session
 
 
-@pytest_asyncio.fixture
+@pytest_asyncio.fixture()
 async def client():
     async with _engine.begin() as conn:
-        # Only truncate match-specific tables, NOT users/credentials (seeded data)
-        await conn.execute(text("TRUNCATE TABLE matches RESTART IDENTITY CASCADE"))
         
         # Create isolated test credentials with high IDs to avoid conflicts with seeded users
         test_users = [
@@ -71,7 +69,7 @@ def _override_user_id(uid: int):
 async def auth_client():
     """Yield a factory that creates an AsyncClient authenticated as a given user ID."""
     async with _engine.begin() as conn:
-        await conn.execute(text("TRUNCATE TABLE matches RESTART IDENTITY CASCADE"))
+
         test_users = [
             (5001, "test_alice"), (5002, "test_bob"), (5003, "test_charlie"),
             (5010, "test_user10"), (5020, "test_user20"), (5030, "test_user30"),
@@ -224,10 +222,10 @@ async def test_get_leaderboard_returns_ranked_rows(client):
     resp = await client.get("/leaderboard")
     assert resp.status_code == 200
     data = resp.json()
-    assert len(data['results']) == 3
+    assert len(data['results']) == 8
     assert data['results'][0]["rank"] == 1
     assert data['results'][0]["user_id"] == 5001
-    assert data['results'][0]["points"] == 3
+    assert data['results'][0]["points"] == 9
 
 
 @pytest.mark.asyncio
@@ -258,19 +256,19 @@ async def test_get_leaderboard_limit_one_page_one(client):
     data = resp.json()
     assert data['page'] == 1
     assert data['per_page'] == 1
-    assert data['last_page'] == 7
-    assert data['total'] == 8
+    assert data['last_page'] == 11
+    assert data['total'] == 12
     results = data['results']
     assert len(results) == 1
     assert results[0]['rank'] == 2
     assert results[0]['max_streak'] == 21
     assert results[0]['current_streak'] == 21
-    assert results[0]['total_games'] == 27
-    assert results[0]['wins'] == 21
+    assert results[0]['total_games'] == 28
+    assert results[0]['wins'] == 22
     assert results[0]['losses'] == 6
     assert data['summary']['max_max_streak']['value'] == 21
     assert data['summary']['max_current_streak']['value'] == 21
-    assert data['summary']['max_points']['value'] == 63
+    assert data['summary']['max_points']['value'] == 72
 
 
 @pytest.mark.asyncio
@@ -289,21 +287,21 @@ async def test_get_leaderboard_limit_one_page_zero_rank_desc(client):
 
     assert data['page'] == 0
     assert data['per_page'] == 1
-    assert data['last_page'] == 7
-    assert data['total'] == 8
+    assert data['last_page'] == 11
+    assert data['total'] == 12
     results = data['results']
     assert len(results) == 1
-    assert results[0]['rank'] == 8
+    assert results[0]['rank'] == 11
     assert results[0]['wins'] == 0
-    assert results[0]['losses'] == 9
+    assert results[0]['losses'] == 21
     assert results[0]['current_streak'] == 0
     assert results[0]['max_streak'] == 0
     assert results[0]['goals_scored'] == 0
-    assert results[0]['goals_conceded'] == 9
-    assert results[0]['goal_difference'] == -9
+    assert results[0]['goals_conceded'] == 27
+    assert results[0]['goal_difference'] == -27
     assert data['summary']['max_max_streak']['value'] == 21
     assert data['summary']['max_current_streak']['value'] == 21
-    assert data['summary']['max_points']['value'] == 63
+    assert data['summary']['max_points']['value'] == 135
 
 
 # --------------------------------------------------------------------------- #
@@ -432,7 +430,7 @@ def create_fake_access_token(data: dict, expires_delta: timedelta):
 async def test_matches_search_without_query_parameters_and_no_token_is_bad(client):
 
     access_token = create_fake_access_token(
-        data={"sub": 'alice', "credential_id": 1},
+        data={"sub": 'test_alice', "credential_id": 15001},
         expires_delta=timedelta(minutes=30),
     )
     resp = await client.get("/matches/search?")
@@ -443,7 +441,7 @@ async def test_matches_search_without_query_parameters_and_no_token_is_bad(clien
 async def test_matches_search_with_no_query_parameters_and_valid_token_is_ok(client):
 
     access_token = create_fake_access_token(
-        data={"sub": 'alice', "credential_id": 1},
+        data={"sub": 'test_alice', "credential_id": 15001},
         expires_delta=timedelta(minutes=30),
     )
     resp = await client.get("/matches/search", headers={"Authorization": f"Bearer {access_token}"})
@@ -454,7 +452,7 @@ async def test_matches_search_with_no_query_parameters_and_valid_token_is_ok(cli
 async def test_matches_search_with_player_id_query_parameters_and_valid_token_is_ok(client):
 
     access_token = create_fake_access_token(
-        data={"sub": 'alice', "credential_id": 1},
+        data={"sub": 'test_alice', "credential_id": 15001},
         expires_delta=timedelta(minutes=30),
     )
     resp = await client.get("/matches/search?player_id=2", headers={"Authorization": f"Bearer {access_token}"})
@@ -464,10 +462,6 @@ async def test_matches_search_with_player_id_query_parameters_and_valid_token_is
 @pytest.mark.asyncio
 async def test_matches_search_with_player_id_query_parameters_and_no_token_is_ok(client):
 
-    access_token = create_fake_access_token(
-        data={"sub": 'alice', "credential_id": 1},
-        expires_delta=timedelta(minutes=30),
-    )
     resp = await client.get("/matches/search?player_id=2")
     assert resp.status_code == 200
 
@@ -475,7 +469,7 @@ async def test_matches_search_with_player_id_query_parameters_and_no_token_is_ok
 async def test_matches_search_when_ok_returns_schema(client):
 
     access_token = create_fake_access_token(
-        data={"sub": 'alice', "credential_id": 1},
+        data={"sub": 'test_alice', "credential_id": 15001},
         expires_delta=timedelta(minutes=30),
     )
     resp = await client.get("/matches/search", headers={"Authorization": f"Bearer {access_token}"})
@@ -494,4 +488,21 @@ async def test_matches_search_when_ok_returns_schema(client):
         assert isinstance(element.get('opponent_id'), int)
         assert isinstance(element.get('score'), str)
         assert isinstance(element.get('date'), str)
+
+@pytest.mark.asyncio
+async def test_matches_search_with_limit_query_parameter_respect_limit(client):
+
+    access_token = create_fake_access_token(
+        data={"sub": 'test_alice', "credential_id": 15001},
+        expires_delta=timedelta(minutes=30),
+    )
+    resp = await client.get("/matches/search?limit=1", headers={"Authorization": f"Bearer {access_token}"})
+    assert resp.status_code == 200
+    data = resp.json()
+    print(json.dumps(data, indent=4))
+
+    assert data.get('page') == 0
+    assert data.get('per_page') == 1
+    results = data.get('results')
+    assert len(results) == 1
 
