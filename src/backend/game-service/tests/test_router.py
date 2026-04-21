@@ -24,6 +24,11 @@ async def _override_get_db():
     async with _TestSession() as session:
         yield session
 
+@pytest_asyncio.fixture()
+async def session():
+    async with _TestSession() as session:
+        yield session
+
 
 @pytest_asyncio.fixture()
 async def client():
@@ -539,4 +544,75 @@ async def test_matches_search_with_result_query_parameter_respect_result(result_
     for pong_match in results:
         result = pong_match['result']
         assert result == result_query.capitalize()
+
+
+@pytest.mark.asyncio
+async def test_matches_search_with_date_from_query_parameter_respect_date(client, session):
+
+    player_id = 5001
+    statement = text("""
+SELECT DISTINCT finished_at FROM matches
+WHERE (player1_id = (:player_id)::int OR player2_id = :player_id)
+    AND status = 'finished'
+    ORDER BY finished_at ASC
+    """)
+    query_result = await session.execute(statement, {
+        'player_id': player_id
+    })
+    data = [d['finished_at'] for d in query_result.mappings().all()]
+
+    assert len(data) > 2
+
+    from urllib.parse import quote_plus
+    date_str = quote_plus(data[1].isoformat())
+
+    resp_no_filter = await client.get(f"/matches/search?player_id=5001&limit=50&page=0&order=date:asc")
+    assert resp_no_filter.status_code == 200
+    data_no_filter = resp_no_filter.json()
+    unfiltered_results = data_no_filter.get('results')
+    assert len(unfiltered_results) > 2
+
+    resp_filtered = await client.get(f"/matches/search?player_id=5001&limit=50&page=0&date_from={date_str}&order=date:asc")
+    assert resp_filtered.status_code == 200
+    data_date_from_filter = resp_filtered.json()
+    filtered_results = data_date_from_filter.get('results')
+    assert len(unfiltered_results) >= 1
+
+    assert filtered_results[0]['date'] \
+        > unfiltered_results[0]['date']
+
+@pytest.mark.asyncio
+async def test_matches_search_with_date_to_query_parameter_respect_date(client, session):
+
+    player_id = 5001
+    statement = text("""
+SELECT DISTINCT finished_at FROM matches
+WHERE (player1_id = (:player_id)::int OR player2_id = :player_id)
+    AND status = 'finished'
+    ORDER BY finished_at DESC
+    """)
+    query_result = await session.execute(statement, {
+        'player_id': player_id
+    })
+    data = [d['finished_at'] for d in query_result.mappings().all()]
+
+    assert len(data) > 2
+
+    from urllib.parse import quote_plus
+    date_str = quote_plus(data[1].isoformat())
+
+    resp_no_filter = await client.get(f"/matches/search?player_id=5001&limit=50&page=0")
+    assert resp_no_filter.status_code == 200
+    data_no_filter = resp_no_filter.json()
+    unfiltered_results = data_no_filter.get('results')
+    assert len(unfiltered_results) > 2
+
+    resp_filtered = await client.get(f"/matches/search?player_id=5001&limit=50&page=0&date_to={date_str}")
+    assert resp_filtered.status_code == 200
+    data_date_to_filter = resp_filtered.json()
+    filtered_results = data_date_to_filter.get('results')
+    assert len(unfiltered_results) >= 1
+
+    assert filtered_results[-1]['date'] \
+        < unfiltered_results[-1]['date']
 
