@@ -499,10 +499,44 @@ async def test_matches_search_with_limit_query_parameter_respect_limit(client):
     resp = await client.get("/matches/search?limit=1", headers={"Authorization": f"Bearer {access_token}"})
     assert resp.status_code == 200
     data = resp.json()
-    print(json.dumps(data, indent=4))
 
     assert data.get('page') == 0
     assert data.get('per_page') == 1
     results = data.get('results')
     assert len(results) == 1
+
+@pytest.mark.asyncio
+async def test_matches_search_with_page_query_parameter_respect_page(client):
+
+    access_token = create_fake_access_token(
+        data={"sub": 'test_alice', "credential_id": 15001},
+        expires_delta=timedelta(minutes=30),
+    )
+    for page in range(3):
+        resp = await client.get(f"/matches/search?limit=1&page={page}", headers={"Authorization": f"Bearer {access_token}"})
+        assert resp.status_code == 200
+        data = resp.json()
+
+        assert data.get('page') == page
+        assert data.get('per_page') == 1
+        results = data.get('results')
+        assert len(results) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("result_query", [
+    ("win"),
+    ("loss")
+])
+async def test_matches_search_with_result_query_parameter_respect_result(result_query, client):
+
+    resp = await client.get(f"/matches/search?player_id=5001&limit=3&page=0&result={result_query}")
+    assert resp.status_code == 200
+    data = resp.json()
+
+    results = data.get('results')
+    assert len(results) > 0
+    for pong_match in results:
+        result = pong_match['result']
+        assert result == result_query.upper()
 

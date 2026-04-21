@@ -37,7 +37,6 @@ async def get_player_id_or_me(
     Returns player_id if provided.
     If not provided, requires authentication and returns current_user_id.
     """
-    print('get_player_id_or_me top: ', player_id, credentials)
     if player_id is not None:
         return player_id
 
