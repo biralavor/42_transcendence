@@ -51,25 +51,14 @@ def match_history_filter_str(search_for: dict) -> str | None:
         result = search_for['result'].lower()
         if result in ['win', 'loss']:
             filters.append(f"result = '{result.capitalize()}'")
-
-
-
-
-
-    # date_from = search_for['date_from']
-    # date_to = search_for['date_to']
-    # if date_from is not None and date_to is not None:
-    #     filters.append(f'finished_at BETWEEN {date_from} AND {date_to}')
-    # elif date_from is not None:
-    #     filters.append(f'finished_at > {date_from}')
-    # elif date_to is not None:
-    #     filters.append(f'finished_at < {date_to}')
-
-
-
-
-
-
+    date_from = search_for['date_from']
+    date_to = search_for['date_to']
+    if date_from is not None and date_to is not None:
+        filters.append(f"finished_at BETWEEN '{date_from}'::timestamp AND '{date_to}'::timestamp")
+    elif date_from is not None:
+        filters.append(f"finished_at > '{date_from}'::timestamp")
+    elif date_to is not None:
+        filters.append(f"finished_at < '{date_to}'::timestamp")
     query_filter_str = '\n\tAND '.join(filters)
     return query_filter_str
 
@@ -83,10 +72,12 @@ async def get_match_history_paginated(
     offset = page * limit
 
     default_query_order = """
-    id
+    date DESC
     """
     query_order = match_history_order_by_str(sort_assoc)
-    query_order = query_order if query_order is not None else default_query_order
+
+    query_order = query_order + ', ' + default_query_order \
+        if query_order is not None else default_query_order
     query_filter = match_history_filter_str(search_for)
     statement = text(f"""
 WITH all_finished_matches AS
@@ -136,6 +127,7 @@ WITH all_finished_matches AS
 (
     SELECT * FROM all_player_matches
     WHERE {query_filter}
+    ORDER BY {query_order}
 )
 , matches_count AS
 (
@@ -147,7 +139,6 @@ WITH all_finished_matches AS
 , paged_matches AS
 (
     SELECT * FROM filtered_matches
-    ORDER BY {query_order}
     OFFSET (SELECT
                LEAST(:offset,
                      GREATEST(0, (table matches_count) - :limit))
@@ -191,6 +182,9 @@ SELECT
             'page': page
         }
     )
-    page = result.mappings().one_or_none()
+    page_player_match_results = \
+        result.mappings().one_or_none()
 
-    return MatchHistoryPage.model_validate(page)
+    return MatchHistoryPage.model_validate(
+        page_player_match_results
+    )
