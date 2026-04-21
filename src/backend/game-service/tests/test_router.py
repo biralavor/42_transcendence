@@ -433,11 +433,6 @@ def create_fake_access_token(data: dict, expires_delta: timedelta):
 
 @pytest.mark.asyncio
 async def test_matches_search_without_query_parameters_and_no_token_is_bad(client):
-
-    access_token = create_fake_access_token(
-        data={"sub": 'test_alice', "credential_id": 15001},
-        expires_delta=timedelta(minutes=30),
-    )
     resp = await client.get("/matches/search?")
     assert resp.status_code == 400
 

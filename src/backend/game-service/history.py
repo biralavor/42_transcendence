@@ -64,7 +64,7 @@ def match_history_filter_str(search_for: dict) -> str | None:
 
 async def get_match_history_paginated(
         search_for: dict,
-        sort_assoc: dict[str, str],
+        sort_assoc: list[tuple[str, str]],
         session: AsyncSession
 ) -> MatchHistoryPage:
     page = search_for['page'] or 0

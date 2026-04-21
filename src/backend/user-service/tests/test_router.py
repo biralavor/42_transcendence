@@ -80,7 +80,7 @@ async def test_search_with_search_query_returns_schema(client):
            element = data.get('results')[0]
            assert isinstance(element.get('id'), int)
            assert isinstance(element.get('username'), str)
-           assert isinstance(element.get('avalar_url'), (str, type(None)))
+           assert isinstance(element.get('avatar_url'), (str, type(None)))
            assert isinstance(element.get('status'), str)
 
     else:
