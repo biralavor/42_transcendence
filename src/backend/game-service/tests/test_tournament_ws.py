@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from starlette.testclient import TestClient
@@ -32,21 +33,52 @@ class _FakeSession:
         return _FakeExecuteResult((user_id,) if user_id is not None else None)
 
 
+class _NoopSession:
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+
 @pytest.fixture(autouse=True)
 def clear_ws_state():
+    for task in list(ws_router._waiting_room_timeout_tasks.values()):
+        if task is not None and not task.done():
+            task.cancel()
+    for task in list(ws_router._tournament_ready_timeout_tasks.values()):
+        if task is not None and not task.done():
+            task.cancel()
+
     ws_router._setup_sessions.clear()
     ws_router._match_ids.clear()
     ws_router._waiting_room_ready.clear()
     ws_router._waiting_room_players.clear()
     ws_router._tournament_ready.clear()
     ws_router._tournament_waiting_rooms.clear()
+    ws_router._waiting_room_tournament_context.clear()
+    ws_router._waiting_room_timeout_tasks.clear()
+    ws_router._waiting_room_timeout_deadline.clear()
+    ws_router._tournament_ready_timeout_tasks.clear()
     yield
+
+    for task in list(ws_router._waiting_room_timeout_tasks.values()):
+        if task is not None and not task.done():
+            task.cancel()
+    for task in list(ws_router._tournament_ready_timeout_tasks.values()):
+        if task is not None and not task.done():
+            task.cancel()
+
     ws_router._setup_sessions.clear()
     ws_router._match_ids.clear()
     ws_router._waiting_room_ready.clear()
     ws_router._waiting_room_players.clear()
     ws_router._tournament_ready.clear()
     ws_router._tournament_waiting_rooms.clear()
+    ws_router._waiting_room_tournament_context.clear()
+    ws_router._waiting_room_timeout_tasks.clear()
+    ws_router._waiting_room_timeout_deadline.clear()
+    ws_router._tournament_ready_timeout_tasks.clear()
 
 
 @pytest.fixture
@@ -156,3 +188,103 @@ def test_tournament_websocket_rejects_non_participant(monkeypatch, seeded_tourna
             f"/ws/tournament/{seeded_tournament['tournament_id']}?token={non_participant_token}"
         ):
             pass
+
+
+@pytest.mark.asyncio
+async def test_tournament_ready_timeout_marks_wo_winner(monkeypatch, seeded_tournament):
+    tournament_id = seeded_tournament["tournament_id"]
+    tournament_match_id = seeded_tournament["tournament_match_id"]
+    player1_id = seeded_tournament["player1_id"]
+    player2_id = seeded_tournament["player2_id"]
+    ready_key = (tournament_id, tournament_match_id)
+    ws_router._tournament_ready[ready_key] = {player1_id}
+
+    match_row = SimpleNamespace(
+        id=tournament_match_id,
+        status="in_progress",
+        player1_id=player1_id,
+        player2_id=player2_id,
+    )
+
+    async def fake_get_tournament_with_participants(_db, _tournament_id):
+        return SimpleNamespace(id=tournament_id), [], [match_row]
+
+    recorded_winner = {"value": None}
+
+    async def fake_record_timeout_result(*, db, tournament_id, tournament_match_id, winner_id):
+        recorded_winner["value"] = winner_id
+        return SimpleNamespace(id=tournament_id), False, []
+
+    async def fake_sleep(_seconds):
+        return None
+
+    monkeypatch.setattr(ws_router, "READY_TIMEOUT_SECONDS", 0)
+    monkeypatch.setattr(ws_router, "AsyncSessionLocal", lambda: _NoopSession())
+    monkeypatch.setattr(ws_router, "get_tournament_with_participants", fake_get_tournament_with_participants)
+    monkeypatch.setattr(ws_router, "record_tournament_match_timeout_result", fake_record_timeout_result)
+    monkeypatch.setattr(ws_router, "sync_tournament_ready_timeouts", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(ws_router.asyncio, "sleep", fake_sleep)
+    broadcast_mock = AsyncMock()
+    monkeypatch.setattr(ws_router.manager, "broadcast", broadcast_mock)
+
+    await ws_router._handle_tournament_ready_timeout(tournament_id, tournament_match_id)
+
+    assert recorded_winner["value"] == player1_id
+    room_id = f"tournament_{tournament_id}"
+    timeout_payload = next(
+        call.args[1]
+        for call in broadcast_mock.await_args_list
+        if call.args[0] == room_id and call.args[1].get("type") == "match_ready_timeout"
+    )
+    assert timeout_payload["winner_id"] == player1_id
+    assert ready_key not in ws_router._tournament_ready
+
+
+@pytest.mark.asyncio
+async def test_tournament_ready_timeout_with_no_ready_players(monkeypatch, seeded_tournament):
+    tournament_id = seeded_tournament["tournament_id"]
+    tournament_match_id = seeded_tournament["tournament_match_id"]
+    player1_id = seeded_tournament["player1_id"]
+    player2_id = seeded_tournament["player2_id"]
+    ready_key = (tournament_id, tournament_match_id)
+    ws_router._tournament_ready[ready_key] = set()
+
+    match_row = SimpleNamespace(
+        id=tournament_match_id,
+        status="in_progress",
+        player1_id=player1_id,
+        player2_id=player2_id,
+    )
+
+    async def fake_get_tournament_with_participants(_db, _tournament_id):
+        return SimpleNamespace(id=tournament_id), [], [match_row]
+
+    recorded_winner = {"value": 999}
+
+    async def fake_record_timeout_result(*, db, tournament_id, tournament_match_id, winner_id):
+        recorded_winner["value"] = winner_id
+        return SimpleNamespace(id=tournament_id), False, []
+
+    async def fake_sleep(_seconds):
+        return None
+
+    monkeypatch.setattr(ws_router, "READY_TIMEOUT_SECONDS", 0)
+    monkeypatch.setattr(ws_router, "AsyncSessionLocal", lambda: _NoopSession())
+    monkeypatch.setattr(ws_router, "get_tournament_with_participants", fake_get_tournament_with_participants)
+    monkeypatch.setattr(ws_router, "record_tournament_match_timeout_result", fake_record_timeout_result)
+    monkeypatch.setattr(ws_router, "sync_tournament_ready_timeouts", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(ws_router.asyncio, "sleep", fake_sleep)
+    broadcast_mock = AsyncMock()
+    monkeypatch.setattr(ws_router.manager, "broadcast", broadcast_mock)
+
+    await ws_router._handle_tournament_ready_timeout(tournament_id, tournament_match_id)
+
+    assert recorded_winner["value"] is None
+    room_id = f"tournament_{tournament_id}"
+    timeout_payload = next(
+        call.args[1]
+        for call in broadcast_mock.await_args_list
+        if call.args[0] == room_id and call.args[1].get("type") == "match_ready_timeout"
+    )
+    assert timeout_payload["winner_id"] is None
+    assert ready_key not in ws_router._tournament_ready

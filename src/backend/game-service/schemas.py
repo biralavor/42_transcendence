@@ -82,6 +82,7 @@ class TournamentMatchResponse(BaseModel):
     status: str
     score_p1: int = 0
     score_p2: int = 0
+    started_at: datetime | None = None
 
 
 class TournamentDetailResponse(BaseModel):

@@ -51,7 +51,10 @@ from service.schemas import (
     TournamentParticipantResponse,
     LeaderboardResponse
 )
-from service.ws.router import manager as ws_manager
+from service.ws.router import (
+    manager as ws_manager,
+    sync_tournament_ready_timeouts,
+)
 from shared.database import get_db
 from shared.util.order import get_sort_assoc_from_order_query
 
@@ -193,6 +196,11 @@ async def leave_tournament_endpoint(
     except TournamentNotParticipant:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User is not a participant in this tournament")
 
+    await ws_manager.broadcast(
+        f"tournament_{tournament_id}",
+        {"type": "tournament_updated", "tournament_id": tournament_id},
+    )
+
 
 @router.post("/tournaments/{tournament_id}/withdraw", response_model=TournamentDetailResponse)
 async def withdraw_tournament_endpoint(
@@ -223,6 +231,7 @@ async def withdraw_tournament_endpoint(
 
     result = await get_tournament_with_participants(session, tournament_id)
     tournament, participants, matches = result
+    sync_tournament_ready_timeouts(tournament_id, matches)
 
     await _notify_match_available(token, tournament_id, newly_assigned)
     if tournament_complete:
@@ -271,6 +280,11 @@ async def join_tournament_endpoint(
         )
 
     result = await get_tournament_with_participants(session, tournament_id)
+    await ws_manager.broadcast(
+        f"tournament_{tournament_id}",
+        {"type": "tournament_updated", "tournament_id": tournament_id},
+    )
+
     if result is not None:
         tournament, participants, _ = result
         if tournament.status == "open" and len(participants) == tournament.max_participants:
@@ -303,6 +317,7 @@ async def start_tournament_endpoint(
 
     result = await get_tournament_with_participants(session, tournament_id)
     tournament, participants, current_matches = result
+    sync_tournament_ready_timeouts(tournament_id, current_matches)
 
     await ws_manager.broadcast(
         f"tournament_{tournament_id}",
@@ -349,6 +364,7 @@ async def record_tournament_match_result_endpoint(
 
     result = await get_tournament_with_participants(session, tournament_id)
     tournament, participants, matches = result
+    sync_tournament_ready_timeouts(tournament_id, matches)
 
     await _notify_match_available(token, tournament_id, newly_assigned)
     if tournament_complete:

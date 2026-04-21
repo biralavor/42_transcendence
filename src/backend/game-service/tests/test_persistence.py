@@ -19,6 +19,7 @@ from persistence import (
     get_user_matches,
     get_user_stats,
     join_tournament,
+    record_tournament_match_timeout_result,
     record_tournament_match_result,
     start_tournament,
 )
@@ -34,6 +35,23 @@ async def db():
                 "tournaments, matches RESTART IDENTITY CASCADE"
             )
         )
+        # Keep persistence tests independent from module execution order.
+        # Some tests award XP and require winner user_ids to exist.
+        for uid in (1, 2, 3, 42, 50, 51, 99):
+            await conn.execute(
+                text(
+                    "INSERT INTO credentials (id, username, password) "
+                    "VALUES (:id, :username, 'x') ON CONFLICT (id) DO NOTHING"
+                ),
+                {"id": uid, "username": f"persist_user_{uid}"},
+            )
+            await conn.execute(
+                text(
+                    "INSERT INTO users (id, username, credential_id) "
+                    "VALUES (:id, :username, :cid) ON CONFLICT (id) DO NOTHING"
+                ),
+                {"id": uid, "username": f"persist_user_{uid}", "cid": uid},
+            )
     Session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     async with Session() as session:
         yield session
@@ -205,15 +223,16 @@ async def test_get_leaderboard_orders_by_points_then_goal_difference(db):
 async def test_record_match_result_marks_finished_and_no_advance_when_round_incomplete(db):
     tournament, r1 = await _setup_tournament(db, 4)
     first = r1[0]
-    _, complete = await record_tournament_match_result(
+    _, complete, newly_assigned = await record_tournament_match_result(
         db, tournament.id, first.match_id, winner_id=first.player1_id
     )
     assert complete is False
+    assert newly_assigned == []
     _, _, all_matches = await get_tournament_with_participants(db, tournament.id)
     finished = [m for m in all_matches if m.status == "finished"]
     assert len(finished) == 1
     assert finished[0].winner_id == first.player1_id
-    # No new round yet
+    # Round-robin stays in a single round.
     assert all(m.round == 1 for m in all_matches)
 
 
@@ -232,53 +251,75 @@ async def test_record_match_result_persists_scores_on_match_row(db):
 
 
 @pytest.mark.asyncio
-async def test_record_match_result_advances_to_next_round_when_round_complete(db):
+async def test_record_match_result_assigns_new_pending_matches_when_players_become_available(db):
     tournament, r1 = await _setup_tournament(db, 4)
-    winners = [m.player1_id for m in r1]
-    for m in r1:
-        await record_tournament_match_result(db, tournament.id, m.match_id, m.player1_id)
+    active = [m for m in r1 if m.status == "in_progress"]
+    assert len(active) == 2
+
+    any_newly_assigned = False
+    for m in active:
+        _, _, newly_assigned = await record_tournament_match_result(
+            db, tournament.id, m.match_id, m.player1_id
+        )
+        any_newly_assigned = any_newly_assigned or bool(newly_assigned)
+
+    assert any_newly_assigned is True
 
     _, _, all_matches = await get_tournament_with_participants(db, tournament.id)
-    round2 = [m for m in all_matches if m.round == 2]
-    assert len(round2) == 1
-    assert {round2[0].player1_id, round2[0].player2_id} == set(winners)
-    assert round2[0].status == "pending"
+    assert len(all_matches) == 6
+    assert all(m.round == 1 for m in all_matches)
+    assert len([m for m in all_matches if m.status == "finished"]) == 2
+    assert len([m for m in all_matches if m.status == "in_progress"]) == 2
 
 
 @pytest.mark.asyncio
 async def test_record_match_result_completes_tournament_on_final(db):
-    tournament, r1 = await _setup_tournament(db, 4)
-    for m in r1:
-        await record_tournament_match_result(db, tournament.id, m.match_id, m.player1_id)
-    _, _, all_matches = await get_tournament_with_participants(db, tournament.id)
-    final = next(m for m in all_matches if m.round == 2)
-    _, complete = await record_tournament_match_result(
-        db, tournament.id, final.match_id, winner_id=final.player1_id
-    )
+    tournament, _ = await _setup_tournament(db, 4)
+
+    complete = False
+    safety = 0
+    while not complete and safety < 20:
+        safety += 1
+        _, _, all_matches = await get_tournament_with_participants(db, tournament.id)
+        active = [m for m in all_matches if m.status == "in_progress"]
+        assert active, "Expected at least one in_progress match before completion"
+        current = active[0]
+        _, complete, _ = await record_tournament_match_result(
+            db, tournament.id, current.match_id, winner_id=current.player1_id
+        )
+
+    assert safety < 20
     assert complete is True
-    t, _, _ = await get_tournament_with_participants(db, tournament.id)
+    t, _, all_matches = await get_tournament_with_participants(db, tournament.id)
     assert t.status == "complete"
+    assert len(all_matches) == 6
+    assert all(m.status == "finished" for m in all_matches)
 
 
 @pytest.mark.asyncio
-async def test_record_match_result_8_player_full_bracket(db):
-    tournament, r1 = await _setup_tournament(db, 8)
-    for m in r1:
-        await record_tournament_match_result(db, tournament.id, m.match_id, m.player1_id)
-    _, _, all_matches = await get_tournament_with_participants(db, tournament.id)
-    r2 = [m for m in all_matches if m.round == 2]
-    assert len(r2) == 2
-    for m in r2:
-        await record_tournament_match_result(db, tournament.id, m.match_id, m.player1_id)
-    _, _, all_matches = await get_tournament_with_participants(db, tournament.id)
-    r3 = [m for m in all_matches if m.round == 3]
-    assert len(r3) == 1
-    _, complete = await record_tournament_match_result(
-        db, tournament.id, r3[0].match_id, winner_id=r3[0].player1_id
-    )
+async def test_record_match_result_8_player_round_robin_completes(db):
+    tournament, seeded = await _setup_tournament(db, 8)
+    assert len(seeded) == 28
+    assert all(m.round == 1 for m in seeded)
+
+    complete = False
+    safety = 0
+    while not complete and safety < 80:
+        safety += 1
+        _, _, all_matches = await get_tournament_with_participants(db, tournament.id)
+        active = [m for m in all_matches if m.status == "in_progress"]
+        assert active, "Expected in_progress matches while tournament is not complete"
+        current = active[0]
+        _, complete, _ = await record_tournament_match_result(
+            db, tournament.id, current.match_id, winner_id=current.player1_id
+        )
+
+    assert safety < 80
     assert complete is True
-    t, _, _ = await get_tournament_with_participants(db, tournament.id)
+    t, _, all_matches = await get_tournament_with_participants(db, tournament.id)
     assert t.status == "complete"
+    assert len(all_matches) == 28
+    assert all(m.status == "finished" for m in all_matches)
 
 
 @pytest.mark.asyncio
@@ -308,6 +349,48 @@ async def test_record_match_result_match_not_in_tournament(db):
     other = await create_match(db, player1_id=50, player2_id=51)
     with pytest.raises(TournamentMatchNotFound):
         await record_tournament_match_result(db, tournament.id, other.id, winner_id=50)
+
+
+@pytest.mark.asyncio
+async def test_record_tournament_match_timeout_result_marks_wo_winner(db):
+    tournament, seeded = await _setup_tournament(db, 4)
+    active = next(m for m in seeded if m.status == "in_progress")
+
+    _, complete, _ = await record_tournament_match_timeout_result(
+        db=db,
+        tournament_id=tournament.id,
+        tournament_match_id=active.id,
+        winner_id=active.player1_id,
+    )
+    assert complete is False
+
+    _, _, matches = await get_tournament_with_participants(db, tournament.id)
+    updated = next(m for m in matches if m.id == active.id)
+    assert updated.status == "finished"
+    assert updated.winner_id == active.player1_id
+    assert updated.score_p1 == 1
+    assert updated.score_p2 == 0
+
+
+@pytest.mark.asyncio
+async def test_record_tournament_match_timeout_result_with_no_winner(db):
+    tournament, seeded = await _setup_tournament(db, 4)
+    active = next(m for m in seeded if m.status == "in_progress")
+
+    _, complete, _ = await record_tournament_match_timeout_result(
+        db=db,
+        tournament_id=tournament.id,
+        tournament_match_id=active.id,
+        winner_id=None,
+    )
+    assert complete is False
+
+    _, _, matches = await get_tournament_with_participants(db, tournament.id)
+    updated = next(m for m in matches if m.id == active.id)
+    assert updated.status == "finished"
+    assert updated.winner_id is None
+    assert updated.score_p1 == 0
+    assert updated.score_p2 == 0
 
 
 @pytest.mark.asyncio

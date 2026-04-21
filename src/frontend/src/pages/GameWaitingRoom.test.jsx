@@ -75,6 +75,8 @@ function renderWithRouter(roomId = '123', locationState = {}) {
         <MemoryRouter initialEntries={[{ pathname: `/game/waiting/${roomId}` }]}>
             <Routes>
                 <Route path="/game/waiting/:roomId" element={<GameWaitingRoom />} />
+                <Route path="/play" element={<div>Play page</div>} />
+                <Route path="/tournaments/:id" element={<div>Tournament page</div>} />
             </Routes>
         </MemoryRouter>
     )
@@ -414,6 +416,60 @@ describe('GameWaitingRoom - Ready Message Sync', () => {
                 const playerCards = screen.getAllByText(/Player (one|two)/i).map(el => el.closest('article'))
                 const mariaCard = playerCards.find(card => card?.textContent.includes('maria'))
                 expect(mariaCard?.textContent).toMatch(/Waiting for ready/)
+            })
+        })
+
+        it('should redirect to tournament page on ready timeout WO', async () => {
+            const location = {
+                state: {
+                    opponent: { id: 5, username: 'maria' },
+                    currentUser: { id: 4, username: 'joao' },
+                    tournamentId: 77,
+                },
+            }
+
+            renderWithRouter('invite-4-5-123', location.state)
+
+            act(() => {
+                wsConnectHandler.onOpen?.()
+            })
+
+            act(() => {
+                wsConnectHandler.onMessage?.({
+                    type: 'ready_timeout',
+                    winner_id: 4,
+                    tournament_id: 77,
+                })
+            })
+
+            await waitFor(() => {
+                expect(screen.getByText('Tournament page')).toBeInTheDocument()
+            })
+        })
+
+        it('should redirect to play page on ready timeout without tournament context', async () => {
+            const location = {
+                state: {
+                    opponent: { id: 5, username: 'maria' },
+                    currentUser: { id: 4, username: 'joao' },
+                },
+            }
+
+            renderWithRouter('invite-4-5-123', location.state)
+
+            act(() => {
+                wsConnectHandler.onOpen?.()
+            })
+
+            act(() => {
+                wsConnectHandler.onMessage?.({
+                    type: 'ready_timeout',
+                    winner_id: null,
+                })
+            })
+
+            await waitFor(() => {
+                expect(screen.getByText('Play page')).toBeInTheDocument()
             })
         })
     })

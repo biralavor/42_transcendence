@@ -7,6 +7,7 @@ import { useAuth } from '../context/authContext'
 import wsLogger from '../utils/wsLogger'
 
 const DEFAULT_AVATAR = '/avatar_placeholder.jpg'
+const READY_TIMEOUT_SECONDS = 90
 
 function normalizePlayer(player, fallback) {
   return {
@@ -50,6 +51,51 @@ export default function GameWaitingRoom() {
   const [systemMessage, setSystemMessage] = useState('Waiting for both players to get ready.')
   const [gameStartReceived, setGameStartReceived] = useState(false)
   const [resolvedUserId, setResolvedUserId] = useState(null)
+  const [readyDeadlineTs, setReadyDeadlineTs] = useState(null)
+  const [readySecondsLeft, setReadySecondsLeft] = useState(READY_TIMEOUT_SECONDS)
+
+  const formatCountdown = (seconds) => {
+    const clamped = Math.max(0, Number(seconds) || 0)
+    const mins = String(Math.floor(clamped / 60)).padStart(2, '0')
+    const secs = String(clamped % 60).padStart(2, '0')
+    return `${mins}:${secs}`
+  }
+
+  const normalizeDeadlineSeconds = (value) => {
+    const num = Number(value)
+    if (!Number.isFinite(num)) return null
+    return num > 1e12 ? num / 1000 : num
+  }
+
+  const resolvedSelfId = useMemo(() => {
+    const fromState = currentUser.id !== 'local-player' ? currentUser.id : null
+    const fallback = fromState ?? resolvedUserId ?? auth?.user?.id
+    const numeric = Number(fallback)
+    return Number.isInteger(numeric) ? numeric : null
+  }, [currentUser.id, resolvedUserId, auth?.user?.id])
+
+  const [canonicalPlayer1Id, canonicalPlayer2Id] = useMemo(() => {
+    const stateP1 = Number(location.state?.player1_id)
+    const stateP2 = Number(location.state?.player2_id)
+
+    if (Number.isInteger(stateP1) && Number.isInteger(stateP2)) {
+      return [stateP1, stateP2]
+    }
+
+    const opponentNumericId = Number(opponent.id)
+    if (Number.isInteger(resolvedSelfId) && Number.isInteger(opponentNumericId)) {
+      return resolvedSelfId <= opponentNumericId
+        ? [resolvedSelfId, opponentNumericId]
+        : [opponentNumericId, resolvedSelfId]
+    }
+
+    return [null, null]
+  }, [location.state?.player1_id, location.state?.player2_id, opponent.id, resolvedSelfId])
+
+  const existingMatchId = useMemo(() => {
+    const matchId = Number(location.state?.matchId ?? location.state?.match_id)
+    return Number.isInteger(matchId) ? matchId : null
+  }, [location.state?.matchId, location.state?.match_id])
 
   useEffect(() => {
     const scheme = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
@@ -63,6 +109,7 @@ export default function GameWaitingRoom() {
       onOpen: () => {
         setConnected(true)
         setSystemMessage('Connected to waiting room. Ready up when you are set.')
+        setReadyDeadlineTs((prev) => prev ?? (Date.now() / 1000 + READY_TIMEOUT_SECONDS))
         wsLogger.connection(roomId, 'open', {
           currentUser: currentUser.id,
           opponent: opponent.id,
@@ -137,8 +184,39 @@ export default function GameWaitingRoom() {
           if (isOpponent) setOpponentReady(false)
         }
 
+        if (data.type === 'waiting_room_status') {
+          const serverDeadline = normalizeDeadlineSeconds(data.timeout_deadline)
+          setReadyDeadlineTs(serverDeadline ?? (Date.now() / 1000 + READY_TIMEOUT_SECONDS))
+
+          const readyUsers = Array.isArray(data.ready_users)
+            ? data.ready_users.map((id) => String(id))
+            : []
+          if (currentUserId && readyUsers.includes(currentUserId)) setCurrentReady(true)
+          if (opponentUserId && readyUsers.includes(opponentUserId)) setOpponentReady(true)
+        }
+
         if (data.type === 'cancel_waiting_room' || data.type === 'game_cancelled') {
-          navigate('/play')
+          const targetTournamentId = Number(data.tournament_id ?? location.state?.tournamentId)
+          if (Number.isInteger(targetTournamentId)) {
+            navigate(`/tournaments/${targetTournamentId}`, { replace: true })
+          } else {
+            navigate('/play', { replace: true })
+          }
+        }
+
+        if (data.type === 'ready_timeout') {
+          setReadySecondsLeft(0)
+          if (data.winner_id != null) {
+            setSystemMessage('Ready timeout reached. Match resolved by WO.')
+          } else {
+            setSystemMessage('Ready timeout reached. No player ready, no winner.')
+          }
+          const targetTournamentId = Number(data.tournament_id ?? location.state?.tournamentId)
+          if (Number.isInteger(targetTournamentId)) {
+            navigate(`/tournaments/${targetTournamentId}`, { replace: true })
+          } else {
+            navigate('/play', { replace: true })
+          }
         }
 
         if (data.type === 'game_start') {
@@ -148,9 +226,14 @@ export default function GameWaitingRoom() {
 
           // Navigate to the actual game
           navigate(`/game/${roomId}`, {
+            replace: true,
             state: {
+              ...location.state,
               currentUser,
               opponent,
+              player1_id: data.player1_id ?? canonicalPlayer1Id,
+              player2_id: data.player2_id ?? canonicalPlayer2Id,
+              matchId: data.match_id ?? existingMatchId,
             }
           })
         }
@@ -160,7 +243,17 @@ export default function GameWaitingRoom() {
     wsRef.current = ws
 
     return () => ws.close()
-  }, [roomId, currentUser.id, opponent.id, navigate, auth?.access_token])
+  }, [
+    roomId,
+    currentUser.id,
+    opponent.id,
+    navigate,
+    auth?.access_token,
+    location.state,
+    canonicalPlayer1Id,
+    canonicalPlayer2Id,
+    existingMatchId,
+  ])
 
   // Fetch user ID from stable source (/auth/me) if location.state was lost (hard refresh/direct nav)
   useEffect(() => {
@@ -204,6 +297,19 @@ export default function GameWaitingRoom() {
   }, [currentUser.id, auth?.access_token])
 
   useEffect(() => {
+    if (!readyDeadlineTs) return
+
+    const updateCountdown = () => {
+      const remaining = Math.max(0, Math.ceil(readyDeadlineTs - Date.now() / 1000))
+      setReadySecondsLeft(remaining)
+    }
+
+    updateCountdown()
+    const timer = setInterval(updateCountdown, 1000)
+    return () => clearInterval(timer)
+  }, [readyDeadlineTs])
+
+  useEffect(() => {
     if (currentReady && opponentReady && !gameStartReceived) {
       setSystemMessage('Both players are ready. Waiting for backend game_start event...')
       // End the flow once both players are ready
@@ -223,11 +329,16 @@ export default function GameWaitingRoom() {
 
     // Use actual user ID from navigation state, resolved user ID (from /auth/me on hard refresh), or auth context
     // NOTE: JWT credential_id is Credentials.id, NOT Users.id — must use real user ID for ID matching
-    const actualUserId = (currentUser.id !== 'local-player' ? currentUser.id : null) || resolvedUserId || auth?.user?.id
+    const actualUserId = resolvedSelfId
 
-    if (!actualUserId || actualUserId === 'local-player') {
+    if (!Number.isInteger(actualUserId)) {
       console.warn('[GameWaitingRoom] Cannot send ready: missing valid user ID. Tried: location.state, /auth/me, auth context')
       setSystemMessage('Error: User identification failed. Please navigate from a game invite.')
+      return
+    }
+
+    if (!Number.isInteger(canonicalPlayer1Id) || !Number.isInteger(canonicalPlayer2Id)) {
+      setSystemMessage('Missing player ids for this room. Please re-open from the invite.')
       return
     }
 
@@ -236,6 +347,9 @@ export default function GameWaitingRoom() {
       room_id: roomId,
       user_id: actualUserId,
       username: currentUser.username,
+      player1_id: canonicalPlayer1Id,
+      player2_id: canonicalPlayer2Id,
+      match_id: existingMatchId,
     }
 
     // Debug: log the actual user ID and context
@@ -268,9 +382,9 @@ export default function GameWaitingRoom() {
   function handleCancel() {
     // Use actual user ID from navigation state, resolved user ID (from /auth/me on hard refresh), or auth context
     // NOTE: JWT credential_id is Credentials.id, NOT Users.id — must use real user ID for consistency
-    const actualUserId = (currentUser.id !== 'local-player' ? currentUser.id : null) || resolvedUserId || auth?.user?.id
+    const actualUserId = resolvedSelfId
 
-    if (!actualUserId || actualUserId === 'local-player') {
+    if (!Number.isInteger(actualUserId)) {
       console.warn('[GameWaitingRoom] Cannot send cancel: missing valid user ID. Tried: location.state, /auth/me, auth context')
       navigate('/play')
       return
@@ -281,6 +395,9 @@ export default function GameWaitingRoom() {
       room_id: roomId,
       user_id: actualUserId,
       username: currentUser.username,
+      player1_id: canonicalPlayer1Id,
+      player2_id: canonicalPlayer2Id,
+      match_id: existingMatchId,
     }
 
     wsLogger.send(roomId, cancelPayload)
@@ -348,6 +465,9 @@ export default function GameWaitingRoom() {
 
             <div className="game-room-status">
               <p className="game-room-status-text">{systemMessage}</p>
+              <p className="game-room-status-text">
+                Ready timeout in: {formatCountdown(readySecondsLeft)}
+              </p>
               <div className="game-room-checks">
                 <span className={`game-room-check ${currentReady ? 'done' : ''}`}>
                   You: {currentReady ? 'READY' : 'PENDING'}

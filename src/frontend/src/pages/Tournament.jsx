@@ -1,10 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import NavbarComponent from '../Components/Navbar'
 import { apiCall, apiJson } from '../utils/apiClient'
 import { useAuth } from '../context/authContext'
 import { createWsClient } from '../utils/wsClient'
 import './Tournament.css'
+
+const READY_TIMEOUT_SECONDS = 90
+const TOURNAMENT_SYNC_INTERVAL_MS = 3000
 
 export default function Tournament() {
   const { id: tournamentId } = useParams()
@@ -19,8 +22,110 @@ export default function Tournament() {
   const [profiles, setProfiles] = useState({})
   const [currentUser, setCurrentUser] = useState(null)
   const [readyByMatch, setReadyByMatch] = useState({})
+  const [wsConnected, setWsConnected] = useState(false)
+  const [readyError, setReadyError] = useState('')
+  const [nowMs, setNowMs] = useState(Date.now())
 
   const wsRef = useRef(null)
+  const currentUserRef = useRef(null)
+  const profilesRef = useRef({})
+  const pendingMatchStartRef = useRef(null)
+
+  const formatCountdown = useCallback((seconds) => {
+    const clamped = Math.max(0, Number(seconds) || 0)
+    const mins = String(Math.floor(clamped / 60)).padStart(2, '0')
+    const secs = String(clamped % 60).padStart(2, '0')
+    return `${mins}:${secs}`
+  }, [])
+
+  const fetchProfilesByIds = useCallback(async (userIds) => {
+    const uniqueIds = [...new Set(
+      userIds
+        .map((uid) => Number(uid))
+        .filter((uid) => Number.isFinite(uid)),
+    )]
+
+    const profileEntries = {}
+
+    await Promise.all(
+      uniqueIds.map(async (uid) => {
+        try {
+          const res = await apiCall(`/api/users/profile/${uid}`)
+          if (!res.ok) throw new Error('Profile fetch failed')
+          const p = await res.json()
+          profileEntries[uid] = {
+            username: p.display_name || p.username || `User ${uid}`,
+            avatarUrl: p.avatar_url || '/avatar_placeholder.jpg',
+          }
+        } catch {
+          profileEntries[uid] = {
+            username: `User ${uid}`,
+            avatarUrl: '/avatar_placeholder.jpg',
+          }
+        }
+      }),
+    )
+
+    return profileEntries
+  }, [])
+
+  const collectTournamentUserIds = useCallback((data) => {
+    const ids = new Set()
+
+    if (Array.isArray(data?.participants)) {
+      data.participants.forEach((p) => {
+        if (p?.user_id != null) ids.add(Number(p.user_id))
+      })
+    }
+
+    if (Array.isArray(data?.matches)) {
+      data.matches.forEach((m) => {
+        if (m?.player1_id != null) ids.add(Number(m.player1_id))
+        if (m?.player2_id != null) ids.add(Number(m.player2_id))
+        if (m?.winner_id != null) ids.add(Number(m.winner_id))
+      })
+    }
+
+    return [...ids]
+  }, [])
+
+  const refreshTournament = useCallback(async ({ showLoading = false } = {}) => {
+    if (!tournamentId) return
+
+    if (showLoading) {
+      setLoading(true)
+      setError('')
+    }
+
+    try {
+      const resp = await apiCall(`/api/game/tournaments/${tournamentId}`)
+      if (!resp.ok) {
+        if (resp.status === 404) throw new Error('Tournament not found')
+        throw new Error('Failed to load tournament')
+      }
+
+      const freshData = await resp.json()
+      setTournament(freshData)
+      setStartError('')
+
+      const ids = collectTournamentUserIds(freshData)
+      const knownProfiles = profilesRef.current || {}
+      const missingIds = ids.filter((uid) => !knownProfiles[uid])
+
+      if (missingIds.length > 0) {
+        const newEntries = await fetchProfilesByIds(missingIds)
+        setProfiles((prev) => ({ ...prev, ...newEntries }))
+      }
+    } catch (err) {
+      if (showLoading) {
+        setError(err.message)
+      }
+    } finally {
+      if (showLoading) {
+        setLoading(false)
+      }
+    }
+  }, [tournamentId, collectTournamentUserIds, fetchProfilesByIds])
 
   const isCreator = useMemo(() => {
     return currentUser && tournament && Number(currentUser.id) === Number(tournament.creator_id)
@@ -117,6 +222,65 @@ export default function Tournament() {
   }, [tournament, profiles])
 
   useEffect(() => {
+    currentUserRef.current = currentUser
+  }, [currentUser])
+
+  useEffect(() => {
+    profilesRef.current = profiles
+  }, [profiles])
+
+  useEffect(() => {
+    const timer = setInterval(() => setNowMs(Date.now()), 1000)
+    return () => clearInterval(timer)
+  }, [])
+
+  const handleMatchStart = useCallback((data) => {
+    const me = currentUserRef.current
+    if (!me) {
+      pendingMatchStartRef.current = data
+      return
+    }
+
+    const meId = Number(me.id)
+    const player1Id = Number(data.player1_id)
+    const player2Id = Number(data.player2_id)
+    const isMyMatch = meId === player1Id || meId === player2Id
+    if (!isMyMatch) return
+
+    const opponentId = meId === player1Id ? player2Id : player1Id
+    const latestProfiles = profilesRef.current || {}
+    const opponentProfile = latestProfiles[opponentId] || {}
+
+    navigate(`/game/waiting/${data.game_room_id}`, {
+      replace: true,
+      state: {
+        currentUser: {
+          id: me.id,
+          username: me.username,
+          avatarUrl: latestProfiles[me.id]?.avatarUrl || '/avatar_placeholder.jpg',
+        },
+        opponent: {
+          id: opponentId,
+          username: opponentProfile.username || `User ${opponentId}`,
+          avatarUrl: opponentProfile.avatarUrl || '/avatar_placeholder.jpg',
+        },
+        player1_id: player1Id,
+        player2_id: player2Id,
+        matchId: Number(data.match_id),
+        tournamentId: Number(tournamentId),
+        tournamentMatchId: Number(data.tournament_match_id),
+      },
+    })
+    pendingMatchStartRef.current = null
+  }, [navigate, tournamentId])
+
+  useEffect(() => {
+    if (pendingMatchStartRef.current && currentUser) {
+      handleMatchStart(pendingMatchStartRef.current)
+    }
+  }, [currentUser, handleMatchStart])
+
+  useEffect(() => {
     let cancelled = false
 
     async function loadMe() {
@@ -142,59 +306,31 @@ export default function Tournament() {
   }, [auth?.access_token])
 
   useEffect(() => {
-    if (!tournamentId) return
-    let cancelled = false
+    void refreshTournament({ showLoading: true })
+  }, [refreshTournament])
 
-    async function fetchTournament() {
-      setLoading(true)
-      setError('')
+  useEffect(() => {
+    if (!tournamentId || !auth?.access_token) return
 
-      try {
-        const resp = await apiCall(`/api/game/tournaments/${tournamentId}`)
-        if (!resp.ok) {
-          if (resp.status === 404) throw new Error('Tournament not found')
-          throw new Error('Failed to load tournament')
-        }
+    const syncTournament = () => {
+      if (tournament?.status !== 'open' && tournament?.status !== 'in_progress') return
+      void refreshTournament()
+    }
 
-        const data = await resp.json()
-        if (cancelled) return
-        setTournament(data)
-
-        const uniqueUserIds = [...new Set(data.participants.map((p) => p.user_id))]
-        const profileEntries = {}
-
-        await Promise.all(
-          uniqueUserIds.map(async (uid) => {
-            try {
-              const res = await apiCall(`/api/users/profile/${uid}`)
-              if (!res.ok) throw new Error('Profile fetch failed')
-              const p = await res.json()
-              profileEntries[uid] = {
-                username: p.display_name || p.username || `User ${uid}`,
-                avatarUrl: p.avatar_url || '/avatar_placeholder.jpg',
-              }
-            } catch {
-              profileEntries[uid] = {
-                username: `User ${uid}`,
-                avatarUrl: '/avatar_placeholder.jpg',
-              }
-            }
-          }),
-        )
-
-        if (!cancelled) setProfiles(profileEntries)
-      } catch (err) {
-        if (!cancelled) setError(err.message)
-      } finally {
-        if (!cancelled) setLoading(false)
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        syncTournament()
       }
     }
 
-    fetchTournament()
+    const intervalId = setInterval(syncTournament, TOURNAMENT_SYNC_INTERVAL_MS)
+    document.addEventListener('visibilitychange', onVisibilityChange)
+
     return () => {
-      cancelled = true
+      clearInterval(intervalId)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
     }
-  }, [tournamentId])
+  }, [tournamentId, auth?.access_token, tournament?.status, refreshTournament])
 
   useEffect(() => {
     if (!tournamentId || !auth?.access_token) return
@@ -204,10 +340,14 @@ export default function Tournament() {
 
     const ws = createWsClient(url, {
       onOpen: () => {
+        setWsConnected(true)
+        setReadyByMatch({})
+        setReadyError('')
         console.log(`[Tournament WS] connected: ${tournamentId}`)
       },
 
       onClose: () => {
+        setWsConnected(false)
         console.log(`[Tournament WS] disconnected: ${tournamentId}`)
       },
 
@@ -242,42 +382,21 @@ export default function Tournament() {
           return
         }
 
+        if (type === 'match_ready_timeout') {
+          setReadyByMatch((prev) => ({
+            ...prev,
+            [data.match_id]: {},
+          }))
+          if (data.winner_id != null) {
+            setReadyError('Ready timeout: match resolved by WO.')
+          } else {
+            setReadyError('Ready timeout: no player ready, no winner assigned.')
+          }
+          return
+        }
+
         if (type === 'match_start') {
-          if (!currentUser) return
-
-          const isMyMatch =
-            Number(currentUser.id) === Number(data.player1_id) ||
-            Number(currentUser.id) === Number(data.player2_id)
-
-          if (!isMyMatch) return
-
-          const opponentId =
-            Number(currentUser.id) === Number(data.player1_id)
-              ? Number(data.player2_id)
-              : Number(data.player1_id)
-
-          const opponentProfile = profiles[opponentId] || {}
-
-          navigate(`/game/waiting/${data.game_room_id}`, {
-            replace: true,
-            state: {
-              currentUser: {
-                id: currentUser.id,
-                username: currentUser.username,
-                avatarUrl: profiles[currentUser.id]?.avatarUrl || '/avatar_placeholder.jpg',
-              },
-              opponent: {
-                id: opponentId,
-                username: opponentProfile.username || `User ${opponentId}`,
-                avatarUrl: opponentProfile.avatarUrl || '/avatar_placeholder.jpg',
-              },
-              player1_id: Number(data.player1_id),
-              player2_id: Number(data.player2_id),
-              matchId: Number(data.match_id),
-              tournamentId: Number(tournamentId),
-              tournamentMatchId: Number(data.tournament_match_id),
-            },
-          })
+          handleMatchStart(data)
           return
         }
 
@@ -285,50 +404,17 @@ export default function Tournament() {
           return
         }
 
-        try {
-          const resp = await apiCall(`/api/game/tournaments/${tournamentId}`)
-          if (!resp.ok) return
-
-          const freshData = await resp.json()
-          setTournament(freshData)
-          setStartError('')
-
-          const ids = [...new Set(freshData.participants.map((p) => p.user_id))]
-          const newEntries = {}
-
-          await Promise.all(
-            ids.map(async (uid) => {
-              try {
-                const res = await apiCall(`/api/users/profile/${uid}`)
-                if (!res.ok) throw new Error('Profile fetch failed')
-                const p = await res.json()
-
-                newEntries[uid] = {
-                  username: p.display_name || p.username || `User ${uid}`,
-                  avatarUrl: p.avatar_url || '/avatar_placeholder.jpg',
-                }
-              } catch {
-                newEntries[uid] = {
-                  username: `User ${uid}`,
-                  avatarUrl: '/avatar_placeholder.jpg',
-                }
-              }
-            }),
-          )
-
-          setProfiles((prev) => ({ ...prev, ...newEntries }))
-        } catch {
-          // ignore websocket refresh errors
-        }
+        await refreshTournament()
       },
     })
 
     wsRef.current = ws
 
     return () => {
+      setWsConnected(false)
       ws.close()
     }
-  }, [tournamentId, auth?.access_token, currentUser, navigate, profiles])
+  }, [tournamentId, auth?.access_token, handleMatchStart, refreshTournament])
 
   async function handleStartTournament() {
     if (!tournamentId || !canStart) return
@@ -388,7 +474,12 @@ export default function Tournament() {
 
   function handleReadyForMatch(match) {
     if (!wsRef.current || !match?.id) return
+    if (!wsConnected) {
+      setReadyError('Connection is syncing. Please wait a second and try ready again.')
+      return
+    }
 
+    setReadyError('')
     wsRef.current.send({
       type: 'ready',
       match_id: Number(match.id),
@@ -410,6 +501,9 @@ export default function Tournament() {
     const p1 = player1_id != null ? profiles[player1_id] : null
     const p2 = player2_id != null ? profiles[player2_id] : null
     const winner = winner_id != null ? profiles[winner_id] : null
+    const p1Label = p1?.username || (player1_id != null ? `User ${player1_id}` : 'TBD')
+    const p2Label = p2?.username || (player2_id != null ? `User ${player2_id}` : 'TBD')
+    const winnerLabel = winner?.username || (winner_id != null ? `User ${winner_id}` : 'Unknown')
 
     const isCurrentUsersMatch =
       currentUser &&
@@ -423,6 +517,16 @@ export default function Tournament() {
       Number(currentUser?.id) === Number(player1_id) ? player2_id : player1_id
 
     const opponentIsReady = Boolean(readyByMatch[match.id]?.[opponentId])
+    let readyButtonLabel = 'Ready for Match'
+    if (currentUserReady) readyButtonLabel = 'Ready locked'
+    else if (!wsConnected) readyButtonLabel = 'Reconnecting...'
+    const parsedStartedAt = match?.started_at ? Date.parse(match.started_at) : NaN
+    const readySecondsLeft = Number.isFinite(parsedStartedAt)
+      ? Math.max(0, READY_TIMEOUT_SECONDS - Math.floor((nowMs - parsedStartedAt) / 1000))
+      : null
+    const readyCountdownLabel = readySecondsLeft == null
+      ? null
+      : formatCountdown(readySecondsLeft)
 
     return (
       <div
@@ -435,7 +539,7 @@ export default function Tournament() {
             alt="player1 avatar"
             className="tournament-avatar"
           />
-          <span className="tournament-player-name">{p1?.username || 'TBD'}</span>
+          <span className="tournament-player-name">{p1Label}</span>
         </div>
 
         <div className="tournament-vs">vs</div>
@@ -446,8 +550,14 @@ export default function Tournament() {
             alt="player2 avatar"
             className="tournament-avatar"
           />
-          <span className="tournament-player-name">{p2?.username || 'TBD'}</span>
+          <span className="tournament-player-name">{p2Label}</span>
         </div>
+
+        {status === 'in_progress' && readyCountdownLabel && (
+          <div className="arcade-copy mt-2">
+            Ready timeout in: {readyCountdownLabel}
+          </div>
+        )}
 
         {isCurrentUsersMatch && (
           <div className="mt-3 d-flex flex-column gap-2">
@@ -455,9 +565,9 @@ export default function Tournament() {
               type="button"
               className="arcade-btn arcade-btn-primary"
               onClick={() => handleReadyForMatch(match)}
-              disabled={currentUserReady}
+              disabled={currentUserReady || !wsConnected}
             >
-              {currentUserReady ? 'Ready locked' : 'Ready for Match'}
+              {readyButtonLabel}
             </button>
 
             {opponentIsReady && (
@@ -468,7 +578,7 @@ export default function Tournament() {
 
         {status === 'finished' && (
           <div className="tournament-winner">
-            Winner: <strong>{winner?.username || 'Unknown'}</strong>
+            Winner: <strong>{winnerLabel}</strong>
           </div>
         )}
       </div>
@@ -571,6 +681,12 @@ export default function Tournament() {
             {startError && (
               <div className="alert alert-danger mb-4" role="alert">
                 {startError}
+              </div>
+            )}
+
+            {readyError && (
+              <div className="alert alert-warning mb-4" role="alert">
+                {readyError}
               </div>
             )}
 
