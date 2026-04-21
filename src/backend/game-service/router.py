@@ -1,5 +1,5 @@
 from typing import Annotated
-from datetime import date
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -92,11 +92,11 @@ async def match_history(user_id: int, session: SessionDependency):
 async def match_history_search(
         session: SessionDependency,
         player_id: Annotated[int, Depends(get_player_id_or_me)],
-        date_from: date | None = Query(
+        date_from: datetime | None = Query(
             None,
             description='Start date in YYYY-MM-DD format'
         ),
-        date_to: date | None = Query(
+        date_to: datetime | None = Query(
             None,
             description='End date in YYYY-MM-DD format'
         ),
@@ -105,18 +105,19 @@ async def match_history_search(
             '',
             description="colname:desc,othercol:asc"
         ),
+        limit: int = Query(10, ge=1),
+        page: int = Query(0, ge=0)
 ) -> MatchHistoryPage:
-    print(player_id)
-    print(date_to)
-    print(date_from)
-    print(result)
-    print(order)
+    if limit > 50:
+        limit = 50
     sort_assoc = get_sort_assoc_from_order_query(order)
     search_for = {
         'player_id': player_id,
         'date_from': date_from,
         'date_to': date_to,
         'result': result,
+        'limit': limit,
+        'page': page,
     }
     return await get_match_history_paginated(
         search_for, sort_assoc, session

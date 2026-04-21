@@ -1,10 +1,10 @@
 # src/backend/game-service/history.py
-from sqlalchemy import select, or_
+from sqlalchemy import select, or_, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from service.models.match import Match
 from service.schemas import MatchHistoryItem, MatchHistoryPage
-
+from shared.util.order import get_order_by_str
 
 async def get_match_history(user_id: int, session: AsyncSession) -> list[MatchHistoryItem]:
     result = await session.execute(
@@ -33,18 +33,130 @@ async def get_match_history(user_id: int, session: AsyncSession) -> list[MatchHi
         ))
     return items
 
+
+
+
+def match_history_order_by_str(sort_assoc: list[tuple[str, str]] | None) -> str | None:
+    valid_columns = [
+        'date',
+        'result'
+    ]
+    return get_order_by_str(sort_assoc, valid_columns)
+
+
+
+
 async def get_match_history_paginated(
         search_for: dict,
         sort_assoc: dict[str, str],
         session: AsyncSession
 ) -> MatchHistoryPage:
+    page = search_for['page'] or 0
+    limit = search_for['limit'] or 10
+    offset = page * limit
+    default_query_order = """
+    id
+    """
+    query_order = match_history_order_by_str(sort_assoc)
+    query_order = query_order if query_order is not None else default_query_order
+    statement = text(f"""
+WITH all_finished_matches AS
+(
+    SELECT
+        *
+    FROM matches
+    WHERE status IS NOT NULL AND status = 'finished'
+)
 
-    page = {
-        'results': [],
-        'total': 0,
-        'page': 0,
-        'per_page': 0,
-        'last_page': 0,
-    }
+,all_player_matches AS
+(
+    SELECT
+        *
+        , CASE WHEN player1_id = :player_id
+                   THEN player1_id
+               WHEN player2_id = :player_id
+                   THEN player2_id
+          END
+        AS player_id
+        , CASE WHEN NOT player1_id = :player_id
+                   THEN player1_id
+               WHEN NOT player2_id = :player_id
+                   THEN player2_id
+          END
+        AS opponent_id
+        , CASE WHEN player1_id = :player_id
+                   THEN CONCAT(CONCAT(score_p1, '-'), score_p2)
+               WHEN player2_id = :player_id
+                   THEN CONCAT(CONCAT(score_p2, '-'), score_p1)
+          END
+        AS score
+        , CASE WHEN winner_id = :player_id
+                   THEN 'WIN'
+                   ELSE 'LOSS'
+          END
+        AS result
+        , finished_at::timestamp
+        AS date
+
+    FROM all_finished_matches
+    WHERE
+        player1_id = (:player_id)::int
+        OR player2_id = (:player_id)::int
+)
+, matches_count AS
+(
+    SELECT
+        count(*) AS total_matches
+    FROM all_player_matches
+)
+
+, paged_matches AS
+(
+    SELECT * FROM all_player_matches
+    ORDER BY {query_order}
+    OFFSET (SELECT
+               LEAST(:offset,
+                     GREATEST(0, (table matches_count) - :limit))
+            FROM matches_count)
+    LIMIT :limit
+)
+, page_stats AS
+(
+    SELECT
+      (table matches_count)
+      AS total
+      , LEAST(((:page)::int),
+              GREATEST(0, (((table matches_count) - 1) / :limit)))
+      AS page
+      , (:limit)::int
+      AS per_page
+      , GREATEST(0, (((table matches_count) - 1) / :limit))
+      AS last_page
+)
+SELECT
+    *
+    , COALESCE((SELECT
+                  jsonb_agg(jsonb_build_object(
+                     'id' ,player_id
+                     , 'opponent_id'  ,opponent_id
+                     , 'score'  ,score
+                     , 'result' , result
+                     , 'date'  ,date
+                  ) ORDER BY {query_order})
+                FROM paged_matches)
+               , '[]'::jsonb)
+    AS results
+    FROM page_stats
+    """)
+
+    result = await session.execute(
+        statement, {
+            'player_id': search_for['player_id'],
+            'offset': offset,
+            'limit': limit,
+            'page': page
+        }
+    )
+    page = result.mappings().one_or_none()
 
     return MatchHistoryPage.model_validate(page)
