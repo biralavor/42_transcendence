@@ -44,7 +44,34 @@ def match_history_order_by_str(sort_assoc: list[tuple[str, str]] | None) -> str 
     return get_order_by_str(sort_assoc, valid_columns)
 
 
+def match_history_filter_str(search_for: dict) -> str | None:
+    # include an always true clause so filter str is not empty
+    filters = ['1 = 1']
+    if search_for['result'] is not None:
+        result = search_for['result'].lower()
+        if result in ['win', 'loss']:
+            filters.append(f"result = '{result.capitalize()}'")
 
+
+
+
+
+    # date_from = search_for['date_from']
+    # date_to = search_for['date_to']
+    # if date_from is not None and date_to is not None:
+    #     filters.append(f'finished_at BETWEEN {date_from} AND {date_to}')
+    # elif date_from is not None:
+    #     filters.append(f'finished_at > {date_from}')
+    # elif date_to is not None:
+    #     filters.append(f'finished_at < {date_to}')
+
+
+
+
+
+
+    query_filter_str = '\n\tAND '.join(filters)
+    return query_filter_str
 
 async def get_match_history_paginated(
         search_for: dict,
@@ -54,11 +81,13 @@ async def get_match_history_paginated(
     page = search_for['page'] or 0
     limit = search_for['limit'] or 10
     offset = page * limit
+
     default_query_order = """
     id
     """
     query_order = match_history_order_by_str(sort_assoc)
     query_order = query_order if query_order is not None else default_query_order
+    query_filter = match_history_filter_str(search_for)
     statement = text(f"""
 WITH all_finished_matches AS
 (
@@ -91,8 +120,8 @@ WITH all_finished_matches AS
           END
         AS score
         , CASE WHEN winner_id = :player_id
-                   THEN 'WIN'
-                   ELSE 'LOSS'
+                   THEN 'Win'
+                   ELSE 'Loss'
           END
         AS result
         , finished_at::timestamp
@@ -103,16 +132,21 @@ WITH all_finished_matches AS
         player1_id = (:player_id)::int
         OR player2_id = (:player_id)::int
 )
+, filtered_matches AS
+(
+    SELECT * FROM all_player_matches
+    WHERE {query_filter}
+)
 , matches_count AS
 (
     SELECT
         count(*) AS total_matches
-    FROM all_player_matches
+    FROM filtered_matches
 )
 
 , paged_matches AS
 (
-    SELECT * FROM all_player_matches
+    SELECT * FROM filtered_matches
     ORDER BY {query_order}
     OFFSET (SELECT
                LEAST(:offset,

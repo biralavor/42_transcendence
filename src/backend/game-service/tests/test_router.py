@@ -538,5 +538,5 @@ async def test_matches_search_with_result_query_parameter_respect_result(result_
     assert len(results) > 0
     for pong_match in results:
         result = pong_match['result']
-        assert result == result_query.upper()
+        assert result == result_query.capitalize()
 
