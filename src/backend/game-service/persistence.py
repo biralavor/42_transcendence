@@ -903,7 +903,7 @@ async def get_leaderboard(db: AsyncSession, limit: int = 20) -> list[dict]:
             agg.c.points,
             users.c.username,
         )
-        .join(users, agg.c.user_id == users.c.id)
+        .outerjoin(users, agg.c.user_id == users.c.id)
         .order_by(
             agg.c.points.desc(),
             agg.c.goal_difference.desc(),
@@ -1124,7 +1124,7 @@ async def get_leaderboard_paginated(
             users.c.username,
             users.c.display_name,
         )
-        .join(users, agg.c.user_id == users.c.id)
+        .outerjoin(users, agg.c.user_id == users.c.id)
     )
     agg_rows = [dict(row) for row in (await db.execute(agg_stmt)).mappings().all()]
 
