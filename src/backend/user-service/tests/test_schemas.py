@@ -26,6 +26,8 @@ class TestNotificationTypes:
             "game_invite_timeout",
             "unread_chat",
             "match_result",
+            "user_achievement",
+            "game_achievement"
         }
         # NOTIFICATION_TYPES is a Literal, so __args__ contains the values
         actual_types = set(NOTIFICATION_TYPES.__args__)

@@ -126,6 +126,8 @@ NOTIFICATION_TYPES = Literal[
     "game_invite_timeout",
     "unread_chat",
     "match_result",
+    "user_achievement",
+    "game_achievement"
 ]
 
 
