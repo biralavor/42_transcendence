@@ -125,7 +125,7 @@ async def get_profile(user_id: int, session: AsyncSession) -> User | None:
     return result.scalars().first()
 
 
-async def get_me(token: str, session: AsyncSession) -> MeResponse:
+async def get_me(token: str, session: AsyncSession) -> User:
     try:
         payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[ALGORITHM])
         username: str = payload.get("sub")
@@ -151,13 +151,19 @@ async def get_me(token: str, session: AsyncSession) -> MeResponse:
     user = result.scalars().first()
 
     if user:
-        return MeResponse.model_validate(user)
+        return user
 
     user = User(username=username, credential_id=credential_id)
-    user = await session.merge(user)
-    await session.commit()
-    await session.refresh(user)
-    return MeResponse.model_validate(user)
+    try:
+        user = await session.merge(user)
+        await session.commit()
+        await session.refresh(user)
+        return user
+    except IntegrityError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="User was created concurrently, failed to retrieve user data"
+        )
 
 
 async def update_profile(
