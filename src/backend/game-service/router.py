@@ -94,11 +94,11 @@ async def match_history_search(
         player_id: Annotated[int, Depends(get_player_id_or_me)],
         date_from: datetime | None = Query(
             None,
-            description='Start date in YYYY-MM-DD format'
+            description='Start datetime in ISO 8601 format'
         ),
         date_to: datetime | None = Query(
             None,
-            description='End date in YYYY-MM-DD format'
+            description='End datetime in ISO 8601 format'
         ),
         result: str = Query('all', pattern='^(all|win|loss)$'),
         order: str = Query(

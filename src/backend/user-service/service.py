@@ -160,6 +160,7 @@ async def get_me(token: str, session: AsyncSession) -> User:
         await session.refresh(user)
         return user
     except IntegrityError:
+        await session.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="User was created concurrently, failed to retrieve user data"

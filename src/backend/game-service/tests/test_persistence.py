@@ -62,8 +62,8 @@ async def _setup_tournament(db, max_participants: int):
     await db.flush()
 
     tournament = await create_tournament(db, name="t", creator_id=6001, max_participants=max_participants)
-    # Note: create_tournament() already adds creator (uid=1) as a participant
-    # So we only need to add remaining participants (2 through max_participants)
+    # Note: create_tournament() already adds creator (uid=6001) as a participant
+    # So we only need to add remaining participants (6002 through max_participants)
     for uid in range(6002, 6000 + max_participants + 1):
         await join_tournament(db, tournament.id, uid)
     _, matches = await start_tournament(db, tournament.id, user_id=6001)
