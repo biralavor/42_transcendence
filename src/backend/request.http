@@ -135,6 +135,6 @@ GET https://localhost:8443/api/game/leaderboard?limit=4&page=1&order=wins:desc,d
 GET https://localhost:8443/api/game/matches/history/5099 HTTP/1.1
 
 ##
-GET https://localhost:8443/api/game/matches/search?player_id=5099&limit=1&page=10 HTTP/1.1
+GET https://localhost:8443/api/game/matches/history?player_id=1&limit=1&page=10 
 
 

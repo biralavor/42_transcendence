@@ -123,6 +123,19 @@ WITH all_finished_matches AS
         player1_id = (:player_id)::int
         OR player2_id = (:player_id)::int
 )
+, summary AS
+(
+    SELECT
+        (:player_id)::int
+        AS player_id
+        , COUNT(*) FILTER(WHERE winner_id = :player_id)
+        AS wins
+        , COUNT(*) FILTER(WHERE NOT winner_id = :player_id)
+        AS losses
+        , COUNT(*)
+        AS total_matches
+    FROM all_player_matches
+)
 , filtered_matches AS
 (
     SELECT * FROM all_player_matches
@@ -171,6 +184,8 @@ SELECT
                 FROM paged_matches)
                , '[]'::jsonb)
     AS results
+    , (SELECT to_jsonb(summary) FROM summary)
+    AS summary
     FROM page_stats
     """)
 
