@@ -253,6 +253,7 @@ async def test_get_leaderboard_honors_limit_query_param(client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.timeout(120)
 async def test_get_leaderboard_limit_one_page_one(client):
     for user_id1 in [5001, 5001, 5002, 5003, 5001, 5020, 5030, 5030, 5030]:
         for user_id2 in [5001, 5002, 5003, 5010, 5020, 5030, 5099, 5999]:
@@ -283,6 +284,7 @@ async def test_get_leaderboard_limit_one_page_one(client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.timeout(120)
 async def test_get_leaderboard_limit_one_page_zero_rank_desc(client):
     for user_id1 in [5001, 5001, 5002, 5003, 5001, 5020, 5030, 5030, 5030]:
         for user_id2 in [5001, 5002, 5003, 5010, 5020, 5030, 5099, 5999]:
