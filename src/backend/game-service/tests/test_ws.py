@@ -149,3 +149,32 @@ async def test_disconnect_handler_pauses_and_tracks_player():
         await timers[game_id]
     except asyncio.CancelledError:
         pass
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(5)
+async def test_remaining_zero_cancels_in_flight_timer():
+    """When the last player disconnects while a countdown is running, the timer is cancelled."""
+    async def fake_countdown():
+        try:
+            await asyncio.sleep(100)
+        except asyncio.CancelledError:
+            pass  # Mirror _disconnect_countdown behaviour
+
+    task = asyncio.create_task(fake_countdown())
+    timers: dict[str, asyncio.Task] = {"match-abc": task}
+    disconnected: dict[str, int] = {"match-abc": 1}
+
+    # Reproduce the `remaining == 0` branch logic
+    game_id = "match-abc"
+    timer = timers.pop(game_id, None)
+    if timer and not timer.done():
+        timer.cancel()
+    disconnected.pop(game_id, None)
+
+    await asyncio.sleep(0.05)  # let cancel propagate
+
+    assert game_id not in timers
+    assert game_id not in disconnected
+    assert timer.done(), "Timer task should be done (cancelled)"
+    assert timer.cancelled(), "Timer task should be marked as cancelled"

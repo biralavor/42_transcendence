@@ -87,11 +87,17 @@ async def _on_game_over(game_id: str, winner_id: int, score_p1: int, score_p2: i
     except SQLAlchemyError:
         pass  # best-effort
     finally:
+        # Cancel any in-flight disconnect countdown before cleanup
+        _disc_timer = _disconnect_timers.pop(game_id, None)
+        if _disc_timer and not _disc_timer.done():
+            _disc_timer.cancel()
+        _disconnected_players.pop(game_id, None)
+
         # Clean up memory
         await game_manager.delete_session(game_id)
         _setup_sessions.pop(game_id, None)
         _match_ids.pop(game_id, None)
-        
+
         # Broadcast the game over event authoritatively
         await manager.broadcast(game_id, {
             "type": "game_over",
