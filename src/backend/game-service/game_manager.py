@@ -79,7 +79,17 @@ class GameManager:
             session.p1_direction = direction
         elif player_id == session.player2_id:
             session.p2_direction = direction
-    
+
+    def pause_session(self, game_id: str) -> None:
+        session = self._sessions.get(game_id)
+        if session:
+            session.is_paused = True
+
+    def resume_session(self, game_id: str) -> None:
+        session = self._sessions.get(game_id)
+        if session:
+            session.is_paused = False
+
     async def _run_game_loop(self, game_id: str) -> None:
         session = self.get_session(game_id)
         if not session:
@@ -92,30 +102,31 @@ class GameManager:
         next_tick = loop.time() + tick_interval
         try:
             while session.is_active:
-                if session.ai_params is not None:
-                    update_ai_paddle(session, **session.ai_params)
-                session.tick()
-                state_snapshot = session.get_state_snapshot()
-                await broadcast_callback(game_id, asdict(state_snapshot))
-                
-                has_winner, winner_id = session.check_victory()
-                if has_winner:
-                    # Game over - mark session as inactive
-                    session.is_active = False
-                    
-                    # Trigger the server-driven game over callback
-                    game_over_cb = self._game_over_callbacks.get(game_id)
-                    if game_over_cb:
-                        asyncio.create_task(
-                            game_over_cb(game_id, winner_id, session.score.p1, session.score.p2)
-                        )
-                    break
-                
+                if not session.is_paused:
+                    if session.ai_params is not None:
+                        update_ai_paddle(session, **session.ai_params)
+                    session.tick()
+                    state_snapshot = session.get_state_snapshot()
+                    await broadcast_callback(game_id, asdict(state_snapshot))
+
+                    has_winner, winner_id = session.check_victory()
+                    if has_winner:
+                        # Game over - mark session as inactive
+                        session.is_active = False
+
+                        # Trigger the server-driven game over callback
+                        game_over_cb = self._game_over_callbacks.get(game_id)
+                        if game_over_cb:
+                            asyncio.create_task(
+                                game_over_cb(game_id, winner_id, session.score.p1, session.score.p2)
+                            )
+                        break
+
                 now = loop.time()
                 sleep_time = max(0.0, next_tick - now)
                 await asyncio.sleep(sleep_time)
                 next_tick += tick_interval
-        
+
         except asyncio.CancelledError:
             pass
         except Exception as e:
