@@ -5,11 +5,6 @@ WORKDIR /app
 COPY --chown=appuser:appgroup src/backend/game-service/requirements.txt ./service-requirements.txt
 RUN pip install --no-cache-dir -r service-requirements.txt
 
-COPY --chown=appuser:appgroup src/backend/game-service/requirements-test.txt ./service-requirements-test.txt
-RUN sed -i 's/pytest==9.0.3' ./service-requirements-test.txt && \
-    sed -i '/^httpx==/d' ./service-requirements-test.txt && \
-    pip install --no-cache-dir -r service-requirements-test.txt
-
 COPY --chown=appuser:appgroup src/backend/shared/ /app/shared/
 COPY --chown=appuser:appgroup src/backend/game-service/ /app/service/
 
