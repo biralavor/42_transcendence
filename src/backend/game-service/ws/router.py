@@ -97,6 +97,7 @@ async def _on_game_over(game_id: str, winner_id: int, score_p1: int, score_p2: i
         await game_manager.delete_session(game_id)
         _setup_sessions.pop(game_id, None)
         _match_ids.pop(game_id, None)
+        _player_ready.pop(game_id, None)
 
         # Broadcast the game over event authoritatively
         await manager.broadcast(game_id, {
@@ -543,14 +544,17 @@ async def game_websocket(websocket: WebSocket, game_id: str, token: str | None =
                 setup = _setup_sessions.get(game_id)
                 if setup:
                     p1, p2 = setup
-                    winner_id = p2 if player_id == p1 else p1
-                    game_manager.pause_session(game_id)
-                    _disconnected_players[game_id] = player_id
-                    timer = asyncio.create_task(
-                        _disconnect_countdown(game_id, winner_id)
-                    )
-                    _disconnect_timers[game_id] = timer
-                    logger.info(
-                        f"[DISCONNECT] Player {player_id} left {game_id}. "
-                        f"30s countdown started. Forfeit winner if timeout: {winner_id}"
-                    )
+                    if player_id not in (p1, p2):
+                        pass  # intruder — not a game participant, skip countdown
+                    else:
+                        winner_id = p2 if player_id == p1 else p1
+                        game_manager.pause_session(game_id)
+                        _disconnected_players[game_id] = player_id
+                        timer = asyncio.create_task(
+                            _disconnect_countdown(game_id, winner_id)
+                        )
+                        _disconnect_timers[game_id] = timer
+                        logger.info(
+                            f"[DISCONNECT] Player {player_id} left {game_id}. "
+                            f"30s countdown started. Forfeit winner if timeout: {winner_id}"
+                        )
