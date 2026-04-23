@@ -287,7 +287,31 @@ async def game_websocket(websocket: WebSocket, game_id: str, token: str | None =
         state='open',
         metadata={'token_valid': token is not None, 'active_connections': active_in_room}
     )
-    
+
+    # Reconnect detection: player rejoining during the 30-second disconnect window
+    if game_id in _disconnected_players and _disconnected_players[game_id] == player_id:
+        timer = _disconnect_timers.pop(game_id, None)
+        if timer and not timer.done():
+            timer.cancel()
+        _disconnected_players.pop(game_id, None)
+
+        game_manager.resume_session(game_id)
+
+        session = game_manager.get_session(game_id)
+        if session:
+            snapshot = session.get_state_snapshot()
+            await websocket.send_json({
+                "type": "state",
+                **asdict(snapshot),
+            })
+
+        await manager.broadcast(game_id, {"type": "opponent_reconnected"})
+
+        logger.info(
+            f"[RECONNECT] Player {player_id} reconnected to {game_id}. "
+            "Countdown cancelled, game resumed."
+        )
+
     try:
         while True:
             # Start flow timing

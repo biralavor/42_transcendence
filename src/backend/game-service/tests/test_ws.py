@@ -178,3 +178,78 @@ async def test_remaining_zero_cancels_in_flight_timer():
     assert game_id not in disconnected
     assert timer.done(), "Timer task should be done (cancelled)"
     assert timer.cancelled(), "Timer task should be marked as cancelled"
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(5)
+async def test_reconnect_cancels_timer_resumes_and_sends_snapshot():
+    """Reconnecting player cancels countdown, resumes game, gets snapshot, other player notified."""
+    game_id = "match-xyz"
+    player_id = 1
+
+    timer_handled_cancel = []
+
+    async def fake_long_task():
+        try:
+            await asyncio.sleep(100)
+        except asyncio.CancelledError:
+            timer_handled_cancel.append(True)
+
+    task = asyncio.create_task(fake_long_task())
+    await asyncio.sleep(0)  # yield so fake_long_task reaches its first suspension point
+    disconnected: dict[str, int] = {game_id: player_id}
+    timers: dict[str, asyncio.Task] = {game_id: task}
+
+    resumed: list[str] = []
+    snapshot_msgs: list[dict] = []
+    broadcasts: list[dict] = []
+
+    mock_session = MagicMock()
+    snap = MagicMock()
+    snap.ball = {"x": 512.0, "y": 256.0, "vx": 25.6, "vy": 0.0}
+    snap.paddles = {"p1": 206.0, "p2": 206.0}
+    snap.score = {"p1": 2, "p2": 3}
+    mock_session.get_state_snapshot.return_value = snap
+
+    mock_gm = MagicMock()
+    mock_gm.get_session.return_value = mock_session
+    mock_gm.resume_session.side_effect = lambda gid: resumed.append(gid)
+
+    mock_ws = AsyncMock()
+    mock_ws.send_json = AsyncMock(side_effect=lambda msg: snapshot_msgs.append(msg))
+
+    mock_mgr = AsyncMock()
+    mock_mgr.broadcast = AsyncMock(side_effect=lambda gid, msg: broadcasts.append(msg))
+
+    # Reproduce the reconnect block from ws/router.py
+    if game_id in disconnected and disconnected[game_id] == player_id:
+        t = timers.pop(game_id, None)
+        if t and not t.done():
+            t.cancel()
+        disconnected.pop(game_id, None)
+
+        mock_gm.resume_session(game_id)
+
+        session = mock_gm.get_session(game_id)
+        if session:
+            s = session.get_state_snapshot()
+            await mock_ws.send_json({
+                "type": "state",
+                "ball": s.ball,
+                "paddles": s.paddles,
+                "score": s.score,
+            })
+
+        await mock_mgr.broadcast(game_id, {"type": "opponent_reconnected"})
+
+    await asyncio.sleep(0.05)
+
+    assert game_id not in disconnected
+    assert game_id not in timers
+    assert resumed == [game_id]
+    assert len(snapshot_msgs) == 1
+    assert snapshot_msgs[0]["type"] == "state"
+    assert "ball" in snapshot_msgs[0]
+    assert len(broadcasts) == 1
+    assert broadcasts[0] == {"type": "opponent_reconnected"}
+    assert timer_handled_cancel, "Countdown task should have caught CancelledError"
