@@ -69,10 +69,10 @@ export default function GameWaitingRoom() {
 
   const resolvedSelfId = useMemo(() => {
     const fromState = currentUser.id !== 'local-player' ? currentUser.id : null
-    const fallback = fromState ?? resolvedUserId ?? auth?.user?.id
+    const fallback = fromState ?? resolvedUserId
     const numeric = Number(fallback)
     return Number.isInteger(numeric) ? numeric : null
-  }, [currentUser.id, resolvedUserId, auth?.user?.id])
+  }, [currentUser.id, resolvedUserId])
 
   const [canonicalPlayer1Id, canonicalPlayer2Id] = useMemo(() => {
     const stateP1 = Number(location.state?.player1_id)
