@@ -2,7 +2,7 @@ from typing import Annotated
 from datetime import datetime, timezone
 import logging
 
-from fastapi import FastAPI, status, Depends, HTTPException, Query
+from fastapi import FastAPI, status, Depends, HTTPException, Query, UploadFile, File
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,6 +18,7 @@ from service.schemas import (
 )
 from service.models.user import User
 from service.service import authenticate, refresh_access_token, register_credentials, get_profile, update_profile, get_me
+import service.avatar as _avatar
 import service.friends as _friends
 from service.friends import (
     get_friends, get_pending_requests, get_sent_requests,
@@ -128,6 +129,24 @@ async def update_preferences(
         theme=prefs["theme"],
         ball_speed_multiplier=prefs["ball_speed_multiplier"],
     )
+
+
+@app.post("/users/avatar", status_code=200)
+async def upload_avatar(
+    session: SessionDependency,
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    return await _avatar.save_avatar(current_user, file, session)
+
+
+@app.delete("/users/avatar", status_code=204)
+async def delete_avatar(
+    session: SessionDependency,
+    current_user: User = Depends(get_current_user),
+):
+    await _avatar.clear_avatar(current_user, session)
+    return Response(status_code=204)
 
 
 # TODO(auth): friend endpoints must check JWT identity before modifying
