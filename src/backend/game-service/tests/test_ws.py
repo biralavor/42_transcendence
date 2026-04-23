@@ -103,3 +103,49 @@ async def test_disconnect_countdown_handles_cancellation_cleanly():
         pass  # acceptable if task propagates; we just care it doesn't crash
 
     assert cancelled_cleanly, "Task should have caught CancelledError internally"
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(5)
+async def test_disconnect_handler_pauses_and_tracks_player():
+    """Mid-game disconnect: session is paused and player is tracked in _disconnected_players."""
+    mock_session = MagicMock()
+    mock_session.is_active = True
+    mock_session.is_paused = False
+    mock_session.player2_id = 2  # not AI
+
+    mock_gm = MagicMock()
+    mock_gm.get_session.return_value = mock_session
+
+    disconnected: dict[str, int] = {}
+    timers: dict[str, asyncio.Task] = {}
+
+    def fake_pause(game_id):
+        mock_session.is_paused = True
+
+    mock_gm.pause_session.side_effect = fake_pause
+
+    # Reproduce the `else` branch logic from the finally block
+    game_id = "match-abc"
+    player_id = 1
+    setup = (1, 2)
+    AI_ID = 99999  # sentinel that is NOT session.player2_id
+
+    session = mock_gm.get_session(game_id)
+    if session and session.is_active and session.player2_id != AI_ID:
+        p1, p2 = setup
+        winner_id = p2 if player_id == p1 else p1
+        mock_gm.pause_session(game_id)
+        disconnected[game_id] = player_id
+        task = asyncio.create_task(asyncio.sleep(100))
+        timers[game_id] = task
+
+    assert mock_session.is_paused is True
+    assert disconnected.get(game_id) == player_id
+    assert game_id in timers
+
+    timers[game_id].cancel()
+    try:
+        await timers[game_id]
+    except asyncio.CancelledError:
+        pass

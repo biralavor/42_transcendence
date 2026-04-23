@@ -446,31 +446,26 @@ async def game_websocket(websocket: WebSocket, game_id: str, token: str | None =
         pass
     
     finally:
-        # Clean up on disconnect
         manager.disconnect(game_id, websocket)
-        
+
         import logging
         logger = logging.getLogger(__name__)
         remaining = manager.active_connections(game_id)
-        logger.info(f"[CLEANUP] Player {player_id} removed from room {game_id}. Remaining: {remaining}")
-        
-        # If this was the last player, end the game
-        if remaining == 0:
-            logger.info(f"[CLEANUP] Room {game_id} is empty, cleaning up game session")
+        logger.info(
+            f"[CLEANUP] Player {player_id} removed from room {game_id}. "
+            f"Remaining: {remaining}"
+        )
 
-            # If this is an AI game whose match wasn't already finalized by
-            # the natural game-over callback, record a forfeit with the
-            # current score snapshot and AI as the winner. We update the
-            # matches row directly instead of calling finish_match, because
-            # finish_match awards XP to the winner via an FK-bound user_xp
-            # row — and AI_PLAYER_ID has no users row, so that path would
-            # rollback the whole transaction.
+        if remaining == 0:
+            # Last player gone — cancel any pending countdown, then full cleanup
+            timer = _disconnect_timers.pop(game_id, None)
+            if timer and not timer.done():
+                timer.cancel()
+            _disconnected_players.pop(game_id, None)
+
+            # AI forfeit: if the human left an AI game before natural game-over
             session = game_manager.get_session(game_id)
             match_id = _match_ids.get(game_id)
-            # session.is_active is flipped to False synchronously when the
-            # game loop detects victory (game_manager.py), before _on_game_over
-            # is scheduled. Skipping when inactive prevents the forfeit write
-            # from racing with — and overwriting — the natural game-over commit.
             if (
                 match_id is not None
                 and session is not None
@@ -498,9 +493,28 @@ async def game_websocket(websocket: WebSocket, game_id: str, token: str | None =
                         )
                         await db.commit()
                 except SQLAlchemyError:
-                    pass  # best-effort
+                    pass
 
             await game_manager.delete_session(game_id)
             _setup_sessions.pop(game_id, None)
             _match_ids.pop(game_id, None)
             _player_ready.pop(game_id, None)
+
+        else:
+            # One player still connected — pause and start countdown for remote games only
+            session = game_manager.get_session(game_id)
+            if session and session.is_active and session.player2_id != AI_PLAYER_ID:
+                setup = _setup_sessions.get(game_id)
+                if setup:
+                    p1, p2 = setup
+                    winner_id = p2 if player_id == p1 else p1
+                    game_manager.pause_session(game_id)
+                    _disconnected_players[game_id] = player_id
+                    timer = asyncio.create_task(
+                        _disconnect_countdown(game_id, winner_id)
+                    )
+                    _disconnect_timers[game_id] = timer
+                    logger.info(
+                        f"[DISCONNECT] Player {player_id} left {game_id}. "
+                        f"30s countdown started. Forfeit winner if timeout: {winner_id}"
+                    )
