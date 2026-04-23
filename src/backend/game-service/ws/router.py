@@ -1,5 +1,7 @@
 # Note: sys.path is set by main.py (Docker) or test file (host) — not repeated here.
+import asyncio
 from uuid import uuid4
+from dataclasses import asdict
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException, Depends
 from jose import jwt
 from sqlalchemy import text
@@ -25,6 +27,10 @@ _setup_sessions: dict[str, tuple[int, int]] = {}
 _match_ids: dict[str, int] = {}
 # Maps game_id (str) → {player_id: ready_bool} for waiting-room ready tracking
 _player_ready: dict[str, dict[int, bool]] = {}
+# Maps game_id → player_id who disconnected mid-game (waiting to reconnect or time out)
+_disconnected_players: dict[str, int] = {}
+# Maps game_id → asyncio Task running the disconnect countdown
+_disconnect_timers: dict[str, asyncio.Task] = {}
 
 
 async def _broadcast_state(game_id: str, state_snapshot: dict) -> None:
@@ -98,6 +104,30 @@ async def _on_game_over(game_id: str, winner_id: int, score_p1: int, score_p2: i
 # Colocated with the WS router (rather than service/router.py) because it
 # seeds _match_ids / _setup_sessions and wires _on_game_over / _broadcast_state,
 # all of which live here and are consumed by the WS handler below.
+
+
+async def _disconnect_countdown(game_id: str, winner_id: int) -> None:
+    """Broadcast a countdown and award forfeit win if the player doesn't reconnect."""
+    try:
+        for seconds_left in range(30, 0, -1):
+            await manager.broadcast(game_id, {
+                "type": "opponent_disconnected",
+                "seconds_left": seconds_left,
+            })
+            await asyncio.sleep(1.0)
+
+        # Timeout expired: award forfeit win to the still-connected player
+        session = game_manager.get_session(game_id)
+        if session and session.is_active:
+            await _on_game_over(game_id, winner_id, session.score.p1, session.score.p2)
+    except asyncio.CancelledError:
+        pass  # Reconnect cancelled the timer — normal path, do nothing
+    finally:
+        # Clean up whether we timed out, were cancelled, or errored
+        _disconnected_players.pop(game_id, None)
+        _disconnect_timers.pop(game_id, None)
+
+
 @router.post("/ai", status_code=201, response_model=AiGameResponse)
 async def start_ai_game(
     body: AiGameRequest,
