@@ -384,6 +384,6 @@
 | Minor Gaming | Spectator | 1 | ❌ |
 | Major DevOps | Microservices | 2 | ✅ |
 | Minor DataAnalytics (Export/Import) | 1 | ❌ |
-| **Total** | - | **28** | 25% (19/28) |
+| **Total** | - | **28** | 67.9% (19/28) |
 
 > Minimum required: **14 points**. Target: **16–18 points**. This plan targets **28** — buffer for anything that doesn't fully pass evaluation.
