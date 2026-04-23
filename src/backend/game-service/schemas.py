@@ -44,7 +44,8 @@ class TournamentMatchResultRequest(BaseModel):
 
 
 class MatchHistoryItem(BaseModel):
-    id: int
+    match_id: int
+    player_id: int
     opponent_id: int
     result: str   # "Win" | "Loss"
     score: str    # e.g. "11-3" (user score first, ASCII hyphen)

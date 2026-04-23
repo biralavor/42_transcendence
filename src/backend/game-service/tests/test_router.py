@@ -484,7 +484,8 @@ async def test_matches_history_when_ok_returns_schema(client):
 
     if len(data.get('results')) > 0:
         element = data.get('results')[0]
-        assert isinstance(element.get('id'), int)
+        assert isinstance(element.get('match_id'), int)
+        assert isinstance(element.get('player_id'), int)
         assert isinstance(element.get('opponent_id'), int)
         assert isinstance(element.get('score'), str)
         assert isinstance(element.get('date'), str)

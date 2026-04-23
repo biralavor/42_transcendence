@@ -92,6 +92,8 @@ WITH all_finished_matches AS
 (
     SELECT
         *
+        , id
+        AS match_id
         , CASE WHEN player1_id = :player_id
                    THEN player1_id
                WHEN player2_id = :player_id
@@ -126,6 +128,7 @@ WITH all_finished_matches AS
 , summary AS
 (
     SELECT
+
         (:player_id)::int
         AS player_id
         , COUNT(*) FILTER(WHERE winner_id = :player_id)
@@ -175,7 +178,8 @@ SELECT
     *
     , COALESCE((SELECT
                   jsonb_agg(jsonb_build_object(
-                     'id' ,player_id
+                     'match_id' ,match_id
+                     , 'player_id' ,player_id
                      , 'opponent_id'  ,opponent_id
                      , 'score'  ,score
                      , 'result' , result
