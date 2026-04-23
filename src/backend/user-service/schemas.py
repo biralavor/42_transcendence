@@ -115,28 +115,6 @@ class GameInviteResponseRequest(BaseModel):
         return v
 
 
-class GameInviteResponseRequest(BaseModel):
-    """Request to notify the inviter of a declined/accepted game invite.
-    
-    Sent by User B after declining/accepting a game invite from User A.
-    Creates a notification for User A.
-    
-    Note: Validation in endpoint also ensures to_user_id != current_user.id
-    to prevent self-targeting.
-    """
-    to_user_id: int
-    status: Literal["declined", "accepted", "timeout"]
-    room_id: str | None = None  # Game room ID (only for accepted responses)
-    
-    @field_validator('to_user_id')
-    @classmethod
-    def validate_to_user_id(cls, v: int) -> int:
-        """Ensure to_user_id is a positive integer."""
-        if v <= 0:
-            raise ValueError('to_user_id must be a positive integer')
-        return v
-
-
 # Allowed notification types — centralized here to enforce consistency
 # If adding new types, update both here AND frontend type checks
 NOTIFICATION_TYPES = Literal[
