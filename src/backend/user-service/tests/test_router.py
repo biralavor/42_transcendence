@@ -76,7 +76,7 @@ async def test_search_with_search_query_returns_schema(client):
     assert isinstance(data.get('page'), int)
     assert isinstance(data.get('per_page'), int)
     assert isinstance(data.get('last_page'), int)
-    if len(data.get('results')) > 1:
+    if len(data.get('results')) > 0:
            element = data.get('results')[0]
            assert isinstance(element.get('id'), int)
            assert isinstance(element.get('username'), str)
