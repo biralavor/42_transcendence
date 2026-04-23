@@ -184,7 +184,6 @@ SELECT
     )
     page_player_match_results = \
         result.mappings().one_or_none()
-
     return MatchHistoryPage.model_validate(
         page_player_match_results
     )

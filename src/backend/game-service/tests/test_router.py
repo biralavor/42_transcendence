@@ -432,47 +432,47 @@ def create_fake_access_token(data: dict, expires_delta: timedelta):
 
 
 @pytest.mark.asyncio
-async def test_matches_search_without_query_parameters_and_no_token_is_bad(client):
-    resp = await client.get("/matches/search?")
+async def test_matches_history_without_query_parameters_and_no_token_is_bad(client):
+    resp = await client.get("/matches/history?")
     assert resp.status_code == 400
 
 
 @pytest.mark.asyncio
-async def test_matches_search_with_no_query_parameters_and_valid_token_is_ok(client):
+async def test_matches_history_with_no_query_parameters_and_valid_token_is_ok(client):
 
     access_token = create_fake_access_token(
         data={"sub": 'test_alice', "credential_id": 15001},
         expires_delta=timedelta(minutes=30),
     )
-    resp = await client.get("/matches/search", headers={"Authorization": f"Bearer {access_token}"})
+    resp = await client.get("/matches/history", headers={"Authorization": f"Bearer {access_token}"})
     assert resp.status_code == 200
 
 
 @pytest.mark.asyncio
-async def test_matches_search_with_player_id_query_parameters_and_valid_token_is_ok(client):
+async def test_matches_history_with_player_id_query_parameters_and_valid_token_is_ok(client):
 
     access_token = create_fake_access_token(
         data={"sub": 'test_alice', "credential_id": 15001},
         expires_delta=timedelta(minutes=30),
     )
-    resp = await client.get("/matches/search?player_id=2", headers={"Authorization": f"Bearer {access_token}"})
+    resp = await client.get("/matches/history?player_id=2", headers={"Authorization": f"Bearer {access_token}"})
     assert resp.status_code == 200
 
 
 @pytest.mark.asyncio
-async def test_matches_search_with_player_id_query_parameters_and_no_token_is_ok(client):
+async def test_matches_history_with_player_id_query_parameters_and_no_token_is_ok(client):
 
-    resp = await client.get("/matches/search?player_id=2")
+    resp = await client.get("/matches/history?player_id=2")
     assert resp.status_code == 200
 
 @pytest.mark.asyncio
-async def test_matches_search_when_ok_returns_schema(client):
+async def test_matches_history_when_ok_returns_schema(client):
 
     access_token = create_fake_access_token(
         data={"sub": 'test_alice', "credential_id": 15001},
         expires_delta=timedelta(minutes=30),
     )
-    resp = await client.get("/matches/search", headers={"Authorization": f"Bearer {access_token}"})
+    resp = await client.get("/matches/history", headers={"Authorization": f"Bearer {access_token}"})
     assert resp.status_code == 200
     data = resp.json()
     assert isinstance(data, dict)
@@ -490,13 +490,13 @@ async def test_matches_search_when_ok_returns_schema(client):
         assert isinstance(element.get('date'), str)
 
 @pytest.mark.asyncio
-async def test_matches_search_with_limit_query_parameter_respect_limit(client):
+async def test_matches_history_with_limit_query_parameter_respect_limit(client):
 
     access_token = create_fake_access_token(
         data={"sub": 'test_alice', "credential_id": 15001},
         expires_delta=timedelta(minutes=30),
     )
-    resp = await client.get("/matches/search?limit=1", headers={"Authorization": f"Bearer {access_token}"})
+    resp = await client.get("/matches/history?limit=1", headers={"Authorization": f"Bearer {access_token}"})
     assert resp.status_code == 200
     data = resp.json()
 
@@ -506,14 +506,14 @@ async def test_matches_search_with_limit_query_parameter_respect_limit(client):
     assert len(results) == 1
 
 @pytest.mark.asyncio
-async def test_matches_search_with_page_query_parameter_respect_page(client):
+async def test_matches_history_with_page_query_parameter_respect_page(client):
 
     access_token = create_fake_access_token(
         data={"sub": 'test_alice', "credential_id": 15001},
         expires_delta=timedelta(minutes=30),
     )
     for page in range(3):
-        resp = await client.get(f"/matches/search?limit=1&page={page}", headers={"Authorization": f"Bearer {access_token}"})
+        resp = await client.get(f"/matches/history?limit=1&page={page}", headers={"Authorization": f"Bearer {access_token}"})
         assert resp.status_code == 200
         data = resp.json()
 
@@ -528,9 +528,9 @@ async def test_matches_search_with_page_query_parameter_respect_page(client):
     ("win"),
     ("loss")
 ])
-async def test_matches_search_with_result_query_parameter_respect_result(result_query, client):
+async def test_matches_history_with_result_query_parameter_respect_result(result_query, client):
 
-    resp = await client.get(f"/matches/search?player_id=5001&limit=3&page=0&result={result_query}")
+    resp = await client.get(f"/matches/history?player_id=5001&limit=3&page=0&result={result_query}")
     assert resp.status_code == 200
     data = resp.json()
 
@@ -542,7 +542,7 @@ async def test_matches_search_with_result_query_parameter_respect_result(result_
 
 
 @pytest.mark.asyncio
-async def test_matches_search_with_date_from_query_parameter_respect_date(client, session):
+async def test_matches_history_with_date_from_query_parameter_respect_date(client, session):
 
     player_id = 5001
     statement = text("""
@@ -561,13 +561,13 @@ WHERE (player1_id = (:player_id)::int OR player2_id = :player_id)
     from urllib.parse import quote_plus
     date_str = quote_plus(data[1].isoformat())
 
-    resp_no_filter = await client.get(f"/matches/search?player_id=5001&limit=50&page=0&order=date:asc")
+    resp_no_filter = await client.get(f"/matches/history?player_id=5001&limit=50&page=0&order=date:asc")
     assert resp_no_filter.status_code == 200
     data_no_filter = resp_no_filter.json()
     unfiltered_results = data_no_filter.get('results')
     assert len(unfiltered_results) > 2
 
-    resp_filtered = await client.get(f"/matches/search?player_id=5001&limit=50&page=0&date_from={date_str}&order=date:asc")
+    resp_filtered = await client.get(f"/matches/history?player_id=5001&limit=50&page=0&date_from={date_str}&order=date:asc")
     assert resp_filtered.status_code == 200
     data_date_from_filter = resp_filtered.json()
     filtered_results = data_date_from_filter.get('results')
@@ -577,7 +577,7 @@ WHERE (player1_id = (:player_id)::int OR player2_id = :player_id)
         > unfiltered_results[0]['date']
 
 @pytest.mark.asyncio
-async def test_matches_search_with_date_to_query_parameter_respect_date(client, session):
+async def test_matches_history_with_date_to_query_parameter_respect_date(client, session):
 
     player_id = 5001
     statement = text("""
@@ -596,13 +596,13 @@ WHERE (player1_id = (:player_id)::int OR player2_id = :player_id)
     from urllib.parse import quote_plus
     date_str = quote_plus(data[1].isoformat())
 
-    resp_no_filter = await client.get(f"/matches/search?player_id=5001&limit=50&page=0")
+    resp_no_filter = await client.get(f"/matches/history?player_id=5001&limit=50&page=0")
     assert resp_no_filter.status_code == 200
     data_no_filter = resp_no_filter.json()
     unfiltered_results = data_no_filter.get('results')
     assert len(unfiltered_results) > 2
 
-    resp_filtered = await client.get(f"/matches/search?player_id=5001&limit=50&page=0&date_to={date_str}")
+    resp_filtered = await client.get(f"/matches/history?player_id=5001&limit=50&page=0&date_to={date_str}")
     assert resp_filtered.status_code == 200
     data_date_to_filter = resp_filtered.json()
     filtered_results = data_date_to_filter.get('results')

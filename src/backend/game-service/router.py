@@ -83,12 +83,7 @@ async def leaderboard(
     return paginated_result
 
 
-@router.get("/matches/history/{user_id}", response_model=list[MatchHistoryItem])
-async def match_history(user_id: int, session: SessionDependency):
-    return await get_match_history(user_id, session)
-
-
-@router.get("/matches/search", response_model=MatchHistoryPage)
+@router.get("/matches/history", response_model=MatchHistoryPage)
 async def match_history_search(
         session: SessionDependency,
         player_id: Annotated[int, Depends(get_player_id_or_me)],
