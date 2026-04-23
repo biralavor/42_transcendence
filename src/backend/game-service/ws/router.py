@@ -119,7 +119,13 @@ async def _disconnect_countdown(game_id: str, winner_id: int) -> None:
         # Timeout expired: award forfeit win to the still-connected player
         session = game_manager.get_session(game_id)
         if session and session.is_active:
-            await _on_game_over(game_id, winner_id, session.score.p1, session.score.p2)
+            try:
+                await _on_game_over(game_id, winner_id, session.score.p1, session.score.p2)
+            except Exception:
+                import logging
+                logging.getLogger(__name__).exception(
+                    "[DISCONNECT_COUNTDOWN] _on_game_over failed for %s", game_id
+                )
     except asyncio.CancelledError:
         pass  # Reconnect cancelled the timer — normal path, do nothing
     finally:
