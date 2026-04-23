@@ -135,7 +135,10 @@ async def _disconnect_countdown(game_id: str, winner_id: int) -> None:
     except asyncio.CancelledError:
         pass  # Reconnect cancelled the timer — normal path, do nothing
     finally:
-        # Clean up whether we timed out, were cancelled, or errored
+        # Clean up whether we timed out, were cancelled, or errored.
+        # The reconnect path in game_websocket may have already popped these keys —
+        # .pop(..., None) is idempotent so double-pop is safe. This finally block
+        # must not do anything beyond these two pops to avoid undoing reconnect state.
         _disconnected_players.pop(game_id, None)
         _disconnect_timers.pop(game_id, None)
 
@@ -305,6 +308,9 @@ async def game_websocket(websocket: WebSocket, game_id: str, token: str | None =
                 **asdict(snapshot),
             })
 
+        # Broadcast to all (including the reconnecting player). Both players
+        # benefit: the reconnecting player can show "connection restored" and
+        # the surviving player can hide the countdown UI.
         await manager.broadcast(game_id, {"type": "opponent_reconnected"})
 
         logger.info(
