@@ -131,7 +131,7 @@ async def update_preferences(
     )
 
 
-@app.post("/users/avatar", status_code=200)
+@app.post("/avatar", status_code=200)
 async def upload_avatar(
     session: SessionDependency,
     file: UploadFile = File(...),
@@ -140,7 +140,7 @@ async def upload_avatar(
     return await _avatar.save_avatar(current_user, file, session)
 
 
-@app.delete("/users/avatar", status_code=204)
+@app.delete("/avatar", status_code=204)
 async def delete_avatar(
     session: SessionDependency,
     current_user: User = Depends(get_current_user),

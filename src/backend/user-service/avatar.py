@@ -1,3 +1,4 @@
+import asyncio
 from pathlib import Path
 
 from fastapi import HTTPException, UploadFile, status
@@ -24,12 +25,16 @@ def _magic_matches(ext: str, data: bytes) -> bool:
     return False
 
 
-def _remove_existing(user_id: int) -> None:
+def _remove_existing(user_id: int, keep: Path | None = None) -> None:
     for path in AVATAR_DIR.glob(f"{user_id}.*"):
+        if keep is not None and path == keep:
+            continue
         try:
             path.unlink()
         except FileNotFoundError:
             pass
+
+
 
 
 async def save_avatar(user: User, file: UploadFile, session: AsyncSession) -> dict:
@@ -53,20 +58,50 @@ async def save_avatar(user: User, file: UploadFile, session: AsyncSession) -> di
             detail="File content does not match declared image type",
         )
 
-    AVATAR_DIR.mkdir(parents=True, exist_ok=True)
-    _remove_existing(user.id)
+    await asyncio.to_thread(AVATAR_DIR.mkdir, parents=True, exist_ok=True)
 
+    # Write to a sidecar path that does NOT match the "{user_id}.*" glob,
+    # so it survives _remove_existing and is only promoted once commit succeeds.
+    tmp_path = AVATAR_DIR / f".tmp_{user.id}_{ext}"
     final_path = AVATAR_DIR / f"{user.id}.{ext}"
-    tmp_path = AVATAR_DIR / f"{user.id}.{ext}.tmp"
-    tmp_path.write_bytes(data)
-    tmp_path.replace(final_path)
+    await asyncio.to_thread(tmp_path.write_bytes, data)
 
+    previous_url = user.avatar_url
     user.avatar_url = f"/uploads/avatars/{user.id}.{ext}"
-    await session.commit()
+    try:
+        await session.commit()
+    except Exception as exc:
+        user.avatar_url = previous_url
+        try:
+            await session.rollback()
+        except Exception:
+            pass
+        await asyncio.to_thread(tmp_path.unlink, missing_ok=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to save avatar",
+        ) from exc
+
+    # Commit succeeded — make the file visible, then clean up prior-extension leftovers.
+    await asyncio.to_thread(tmp_path.replace, final_path)
+    await asyncio.to_thread(_remove_existing, user.id, final_path)
     return {"avatar_url": user.avatar_url}
 
 
 async def clear_avatar(user: User, session: AsyncSession) -> None:
-    _remove_existing(user.id)
+    previous_url = user.avatar_url
     user.avatar_url = None
-    await session.commit()
+    try:
+        await session.commit()
+    except Exception as exc:
+        user.avatar_url = previous_url
+        try:
+            await session.rollback()
+        except Exception:
+            pass
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to clear avatar",
+        ) from exc
+
+    await asyncio.to_thread(_remove_existing, user.id)

@@ -32,7 +32,7 @@ async def test_upload_avatar_jpeg_happy_path(avatar_dir):
     app.dependency_overrides[get_current_user] = lambda: user
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         resp = await ac.post(
-            "/users/avatar",
+            "/avatar",
             files={"file": ("photo.jpg", JPEG_BYTES, "image/jpeg")},
         )
     assert resp.status_code == 200
@@ -48,7 +48,7 @@ async def test_upload_avatar_png_and_webp(avatar_dir):
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         resp = await ac.post(
-            "/users/avatar",
+            "/avatar",
             files={"file": ("pic.png", PNG_BYTES, "image/png")},
         )
     assert resp.status_code == 200
@@ -56,7 +56,7 @@ async def test_upload_avatar_png_and_webp(avatar_dir):
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         resp = await ac.post(
-            "/users/avatar",
+            "/avatar",
             files={"file": ("pic.webp", WEBP_BYTES, "image/webp")},
         )
     assert resp.status_code == 200
@@ -71,7 +71,7 @@ async def test_upload_avatar_rejects_unsupported_mime(avatar_dir):
     app.dependency_overrides[get_current_user] = lambda: user
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         resp = await ac.post(
-            "/users/avatar",
+            "/avatar",
             files={"file": ("note.txt", b"not an image", "text/plain")},
         )
     assert resp.status_code == 415
@@ -83,7 +83,7 @@ async def test_upload_avatar_rejects_mismatched_magic_bytes(avatar_dir):
     app.dependency_overrides[get_current_user] = lambda: user
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         resp = await ac.post(
-            "/users/avatar",
+            "/avatar",
             files={"file": ("fake.png", JPEG_BYTES, "image/png")},
         )
     assert resp.status_code == 415
@@ -96,7 +96,7 @@ async def test_upload_avatar_rejects_oversize(avatar_dir):
     oversize = b"\xFF\xD8\xFF" + b"\x00" * (2 * 1024 * 1024 + 1)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         resp = await ac.post(
-            "/users/avatar",
+            "/avatar",
             files={"file": ("big.jpg", oversize, "image/jpeg")},
         )
     assert resp.status_code == 413
@@ -109,7 +109,7 @@ async def test_delete_avatar_removes_file_and_clears_url(avatar_dir):
     (avatar_dir / f"{user.id}.jpg").write_bytes(b"anything")
     app.dependency_overrides[get_current_user] = lambda: user
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        resp = await ac.delete("/users/avatar")
+        resp = await ac.delete("/avatar")
     assert resp.status_code == 204
     assert not (avatar_dir / f"{user.id}.jpg").exists()
     assert user.avatar_url is None
@@ -120,9 +120,43 @@ async def test_delete_avatar_idempotent_when_no_file(avatar_dir):
     user = _make_user()
     app.dependency_overrides[get_current_user] = lambda: user
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        resp = await ac.delete("/users/avatar")
+        resp = await ac.delete("/avatar")
     assert resp.status_code == 204
     assert user.avatar_url is None
+
+
+@pytest.mark.asyncio
+async def test_upload_avatar_rolls_back_on_commit_failure(avatar_dir, mock_db_session):
+    user = _make_user()
+    mock_db_session.commit.side_effect = RuntimeError("db down")
+    app.dependency_overrides[get_current_user] = lambda: user
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        resp = await ac.post(
+            "/avatar",
+            files={"file": ("photo.jpg", JPEG_BYTES, "image/jpeg")},
+        )
+    assert resp.status_code == 500
+    # No avatar artefacts left behind, avatar_url not mutated, rollback called.
+    assert list(avatar_dir.iterdir()) == []
+    assert user.avatar_url is None
+    mock_db_session.rollback.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_delete_avatar_rolls_back_on_commit_failure(avatar_dir, mock_db_session):
+    user = _make_user()
+    user.avatar_url = f"/uploads/avatars/{user.id}.jpg"
+    file_path = avatar_dir / f"{user.id}.jpg"
+    file_path.write_bytes(b"keep me")
+    mock_db_session.commit.side_effect = RuntimeError("db down")
+    app.dependency_overrides[get_current_user] = lambda: user
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        resp = await ac.delete("/avatar")
+    assert resp.status_code == 500
+    # File stays, avatar_url unchanged, rollback called.
+    assert file_path.exists()
+    assert user.avatar_url == f"/uploads/avatars/{user.id}.jpg"
+    mock_db_session.rollback.assert_awaited()
 
 
 @pytest.mark.asyncio
@@ -130,9 +164,9 @@ async def test_avatar_endpoints_require_auth(avatar_dir):
     app.dependency_overrides.pop(get_current_user, None)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         post_resp = await ac.post(
-            "/users/avatar",
+            "/avatar",
             files={"file": ("x.jpg", JPEG_BYTES, "image/jpeg")},
         )
-        delete_resp = await ac.delete("/users/avatar")
+        delete_resp = await ac.delete("/avatar")
     assert post_resp.status_code in (401, 403)
     assert delete_resp.status_code in (401, 403)
