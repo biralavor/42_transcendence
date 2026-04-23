@@ -340,6 +340,7 @@ async def test_resume_session_restarts_broadcasts():
         broadcast_callback=mock_broadcast,
     )
     await asyncio.sleep(0.1)
+    assert len(states) > 0, "Must have broadcasts before pausing"
 
     manager.pause_session("resume-test")
     states.clear()
