@@ -368,22 +368,22 @@
 | Minor Web | Frontend Framework | 1 | ✅ |
 | Minor Web | Backend Framework | 1 | ✅ |
 | Minor Web | ORM | 1 | ✅ |
-| Minor Web | Search | 1 | ❌ |
+| Minor Web | Search | 1 | ✅ |
 | Minor Web | Upload | 1 | ❌ |
 | Minor Web | Notifications | 1 | ✅ |
 | Minor Accessibility | Browser Compat. | 1 | ❌ |
 | Major UserMgmt | Standard Auth | 2 | ✅ |
 | Minor UserMgmt | Stats | 1 | ❌ |
 | Minor UserMgmt | Activity Analytics | 1 | ❌ |
-| Major AI | AI Opponent | 2 | ❌ |
+| Major AI | AI Opponent | 2 | ✅ |
 | Major Gaming & UX | Web-Based Game | 2 | ✅ |
 | Major Gaming & UX | Remote Players | 2 | ❌ |
-| Minor Gaming | Tournament | 1 | ❌ |
-| Minor Gaming | Customization | 1 | ❌ |
+| Minor Gaming | Tournament | 1 | ✅ |
+| Minor Gaming | Customization | 1 | ✅ |
 | Minor Gaming | Gamification | 1 | ❌ |
 | Minor Gaming | Spectator | 1 | ❌ |
 | Major DevOps | Microservices | 2 | ✅ |
 | Minor DataAnalytics (Export/Import) | 1 | ❌ |
-| **Total** | - | **28** | 25% (7/28) |
+| **Total** | - | **28** | 25% (19/28) |
 
 > Minimum required: **14 points**. Target: **16–18 points**. This plan targets **28** — buffer for anything that doesn't fully pass evaluation.
