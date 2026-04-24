@@ -58,51 +58,98 @@ def test_ws_games_are_isolated():
 
 @pytest.mark.asyncio
 @pytest.mark.timeout(5)
-async def test_disconnect_countdown_broadcasts_once_per_second():
-    """Countdown sends opponent_disconnected with descending seconds_left."""
+async def test_disconnect_countdown_broadcasts_sequence_and_forfeits(monkeypatch):
+    """_disconnect_countdown broadcasts descending seconds_left then calls _on_game_over."""
+    import ws.router as router_module
+    from ws.router import _disconnect_countdown
+
     broadcasts = []
-    mock_manager = AsyncMock()
-    mock_manager.broadcast = AsyncMock(side_effect=lambda gid, msg: broadcasts.append(msg))
+    on_game_over_calls = []
 
-    # Fast version: 3 steps at 0.05s each instead of 30 × 1s
-    async def fast_countdown(game_id, steps=3):
-        for seconds_left in range(steps, 0, -1):
-            await mock_manager.broadcast(game_id, {
-                "type": "opponent_disconnected",
-                "seconds_left": seconds_left,
-            })
-            await asyncio.sleep(0.05)
+    monkeypatch.setattr(router_module, "DISCONNECT_GRACE_SECONDS", 3)
+    monkeypatch.setattr(asyncio, "sleep", AsyncMock(return_value=None))
+    monkeypatch.setattr(
+        router_module.manager, "broadcast",
+        AsyncMock(side_effect=lambda gid, msg: broadcasts.append(msg)),
+    )
+    monkeypatch.setattr(router_module.manager, "active_connections", MagicMock(return_value=1))
 
-    await fast_countdown("g1")
+    mock_session = MagicMock()
+    mock_session.is_active = True
+    mock_session.score.p1 = 5
+    mock_session.score.p2 = 3
+    monkeypatch.setattr(router_module.game_manager, "get_session", MagicMock(return_value=mock_session))
+
+    async def mock_on_game_over(game_id, winner_id, score_p1, score_p2):
+        on_game_over_calls.append((game_id, winner_id, score_p1, score_p2))
+    monkeypatch.setattr(router_module, "_on_game_over", mock_on_game_over)
+
+    await _disconnect_countdown("game-x", winner_id=2)
 
     assert len(broadcasts) == 3
     assert broadcasts[0] == {"type": "opponent_disconnected", "seconds_left": 3}
     assert broadcasts[1] == {"type": "opponent_disconnected", "seconds_left": 2}
     assert broadcasts[2] == {"type": "opponent_disconnected", "seconds_left": 1}
+    assert on_game_over_calls == [("game-x", 2, 5, 3)]
 
 
 @pytest.mark.asyncio
 @pytest.mark.timeout(5)
-async def test_disconnect_countdown_handles_cancellation_cleanly():
-    """Cancelling the countdown task does not propagate CancelledError."""
-    cancelled_cleanly = []
+async def test_disconnect_countdown_no_forfeit_when_no_connections(monkeypatch):
+    """_disconnect_countdown must not call _on_game_over when active_connections == 0."""
+    import ws.router as router_module
+    from ws.router import _disconnect_countdown
 
-    async def fake_countdown():
-        try:
-            await asyncio.sleep(100)
-        except asyncio.CancelledError:
-            cancelled_cleanly.append(True)
-            # must NOT re-raise — mirror _disconnect_countdown behaviour
+    on_game_over_calls = []
 
-    task = asyncio.create_task(fake_countdown())
-    await asyncio.sleep(0.05)
+    monkeypatch.setattr(router_module, "DISCONNECT_GRACE_SECONDS", 3)
+    monkeypatch.setattr(asyncio, "sleep", AsyncMock(return_value=None))
+    monkeypatch.setattr(router_module.manager, "broadcast", AsyncMock())
+    monkeypatch.setattr(router_module.manager, "active_connections", MagicMock(return_value=0))
+
+    mock_session = MagicMock()
+    mock_session.is_active = True
+    monkeypatch.setattr(router_module.game_manager, "get_session", MagicMock(return_value=mock_session))
+
+    async def mock_on_game_over(*args):
+        on_game_over_calls.append(args)
+    monkeypatch.setattr(router_module, "_on_game_over", mock_on_game_over)
+
+    await _disconnect_countdown("game-x", winner_id=2)
+
+    assert on_game_over_calls == [], "_on_game_over must not fire when nobody is connected"
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(5)
+async def test_disconnect_countdown_handles_cancellation_cleanly(monkeypatch):
+    """Cancelling _disconnect_countdown mid-countdown does not propagate CancelledError."""
+    import ws.router as router_module
+    from ws.router import _disconnect_countdown
+
+    on_game_over_calls = []
+    first_sleep_reached = asyncio.Event()
+
+    async def blocking_sleep(_duration):
+        first_sleep_reached.set()
+        await asyncio.Event().wait()  # blocks until CancelledError from task.cancel()
+
+    monkeypatch.setattr(router_module, "DISCONNECT_GRACE_SECONDS", 30)
+    monkeypatch.setattr(asyncio, "sleep", blocking_sleep)
+    monkeypatch.setattr(router_module.manager, "broadcast", AsyncMock())
+
+    async def mock_on_game_over(*args):
+        on_game_over_calls.append(args)
+    monkeypatch.setattr(router_module, "_on_game_over", mock_on_game_over)
+
+    task = asyncio.create_task(_disconnect_countdown("game-x", winner_id=2))
+    await first_sleep_reached.wait()  # countdown is now suspended inside blocking_sleep
     task.cancel()
-    try:
-        await task
-    except asyncio.CancelledError:
-        pass  # acceptable if task propagates; we just care it doesn't crash
+    await task  # must NOT raise — _disconnect_countdown swallows CancelledError internally
 
-    assert cancelled_cleanly, "Task should have caught CancelledError internally"
+    assert task.done(), "task must be done"
+    assert not task.cancelled(), "_disconnect_countdown must swallow CancelledError, not re-raise it"
+    assert on_game_over_calls == [], "_on_game_over must not be called when countdown is cancelled"
 
 
 @pytest.mark.asyncio
