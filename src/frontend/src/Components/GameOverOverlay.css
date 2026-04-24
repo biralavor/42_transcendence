@@ -1,0 +1,90 @@
+/* ── Overlay backdrop ── */
+.game-over-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.75);
+  z-index: 100;
+}
+
+/* ── Panel ── */
+.game-over-panel {
+  background: var(--color-surface, #1a1a2e);
+  border: 2px solid var(--color-accent, #e94560);
+  border-radius: 8px;
+  padding: 2.5rem 3rem;
+  text-align: center;
+  min-width: 320px;
+  color: var(--color-text, #fff);
+}
+
+/* ── Headline ── */
+.game-over-headline {
+  font-size: 2.5rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.game-over-headline--won  { color: #4ade80; }
+.game-over-headline--lost { color: #f87171; }
+
+.game-over-winner-name {
+  font-size: 1.1rem;
+  opacity: 0.75;
+  margin-bottom: 1rem;
+}
+
+/* ── Score ── */
+.game-over-score {
+  display: flex;
+  justify-content: center;
+  gap: 1.5rem;
+  font-size: 1.25rem;
+  margin-bottom: 2rem;
+}
+
+.game-over-separator {
+  opacity: 0.5;
+}
+
+/* ── Buttons ── */
+.game-over-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.game-over-btn {
+  min-width: 130px;
+}
+
+/* ── Flying emoji animation ── */
+@keyframes flyUp {
+  0%   { transform: translateY(0)     scale(1);   opacity: 1; }
+  100% { transform: translateY(-60vh) scale(1.3); opacity: 0; }
+}
+
+@keyframes flyDown {
+  0%   { transform: translateY(0)    scale(1);   opacity: 1; }
+  100% { transform: translateY(40vh) scale(0.7); opacity: 0; }
+}
+
+.flying-emoji {
+  /* position: fixed is intentional — emojis fill the full viewport, not the canvas */
+  position: fixed;
+  bottom: 10vh;
+  pointer-events: none;
+  animation: flyUp 2.2s ease-out forwards;
+  z-index: 9999;
+}
+
+.flying-emoji--sad {
+  bottom: auto;
+  top: 10vh;
+  animation-name: flyDown;
+}
