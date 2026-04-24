@@ -39,6 +39,7 @@ services:
     volumes:
       - ./src/backend/user-service:/app/service
       - ./src/backend/shared:/app/shared
+      - avatars_data:/app/uploads/avatars
     networks:
       - transcendence_network
     depends_on:
@@ -142,6 +143,8 @@ services:
     ports:
       - "8080:80"
       - "8443:443"
+    volumes:
+      - avatars_data:/var/www/uploads/avatars:ro
     networks:
       - transcendence_network
     depends_on:
@@ -153,6 +156,7 @@ services:
 
 volumes:
   db_data:
+  avatars_data:
 
 networks:
   transcendence_network:
