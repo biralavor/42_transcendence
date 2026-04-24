@@ -66,6 +66,7 @@ async def test_search_with_search_query_returns_schema(client):
     assert isinstance(data.get('per_page'), int)
     assert isinstance(data.get('last_page'), int)
 
+
     resp = await client.get("/search?q=abc")
     assert resp.status_code == 200
     data = resp.json()
@@ -81,8 +82,9 @@ async def test_search_with_search_query_returns_schema(client):
            assert isinstance(element.get('username'), str)
            assert isinstance(element.get('avatar_url'), (str, type(None)))
            assert isinstance(element.get('status'), str)
+
     else:
-        print('WARNING testing with empty database, skiped some assertions')
+        print('WARNING testing with empty database, skipped some assertions')
 
 @pytest.mark.asyncio
 async def test_search_with_limit_query_one_returns_at_most_one_element(client):

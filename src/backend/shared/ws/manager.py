@@ -36,7 +36,7 @@ class ConnectionManager:
             except Exception as e:
                 logger.warning(f"Failed to send to client in room {room_id}: {e}")
                 self.disconnect(room_id, ws)
-        
+
         # Signal event registry if callback provided (event-driven delivery)
         if self._signal_callback:
             try:

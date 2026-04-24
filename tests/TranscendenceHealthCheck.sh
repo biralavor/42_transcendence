@@ -809,9 +809,9 @@ if container_running game-service; then
 
     _alice_id="${alice_id:-1}"
     history_body=$(docker exec game-service wget -q -O - \
-        "http://127.0.0.1:${_GPORT}/matches/history/${_alice_id}" 2>/dev/null || echo "")
-    if echo "$history_body" | grep -qE '^\['; then
-        pass "Match history endpoint returns a JSON array for alice"
+			  "http://127.0.0.1:${_GPORT}/matches/history?player_id=${_alice_id}" 2>/dev/null || echo "")
+    if echo "$history_body" | grep -qE '^\{\"results\":\['; then
+        pass "Match history endpoint returns a paginated result object for alice"
     else
         fail "Match history endpoint failed for alice (got: '${history_body:0:120}')"
     fi
@@ -826,7 +826,7 @@ if container_running game-service; then
 
     # Each match must include result and score fields
     fields_ok=$(echo "$history_body" | python3 -c \
-        "import sys,json; d=json.load(sys.stdin); print('ok' if d and 'result' in d[0] and 'score' in d[0] else 'fail')" \
+        "import sys,json; d=json.load(sys.stdin); print('ok' if d and d['results'] and 'result' in d['results'][0] and 'score' in d['results'][0] else 'fail')" \
         2>/dev/null || echo "fail")
     if [[ "$fields_ok" == "ok" ]]; then
         pass "Match history entries contain 'result' and 'score' fields"

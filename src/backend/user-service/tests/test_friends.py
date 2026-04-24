@@ -3,8 +3,9 @@ from unittest.mock import MagicMock
 
 from httpx import AsyncClient, ASGITransport
 from service.main import app, get_current_user
+import pytest
 
-
+@pytest.mark.asyncio
 async def test_list_friends_empty_for_unknown_user():
     fake_user = MagicMock()
     fake_user.id = 9999
@@ -17,7 +18,7 @@ async def test_list_friends_empty_for_unknown_user():
     assert resp.status_code == 200
     assert resp.json() == []
 
-
+@pytest.mark.asyncio
 async def test_list_requests_empty_for_unknown_user():
     fake_user = MagicMock()
     fake_user.id = 9999
@@ -30,7 +31,7 @@ async def test_list_requests_empty_for_unknown_user():
     assert resp.status_code == 200
     assert resp.json() == []
 
-
+@pytest.mark.asyncio
 async def test_remove_friend_not_found():
     fake_user = MagicMock()
     fake_user.id = 9999
@@ -42,7 +43,7 @@ async def test_remove_friend_not_found():
         app.dependency_overrides.pop(get_current_user, None)
     assert resp.status_code == 404
 
-
+@pytest.mark.asyncio
 async def test_respond_to_request_not_found():
     fake_user = MagicMock()
     fake_user.id = 9999
@@ -54,7 +55,7 @@ async def test_respond_to_request_not_found():
         app.dependency_overrides.pop(get_current_user, None)
     assert resp.status_code == 404
 
-
+@pytest.mark.asyncio
 async def test_respond_to_request_invalid_action():
     fake_user = MagicMock()
     fake_user.id = 9999
