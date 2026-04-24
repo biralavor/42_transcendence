@@ -201,14 +201,22 @@ async def test_disconnect_handler_pauses_and_tracks_player():
 @pytest.mark.asyncio
 @pytest.mark.timeout(5)
 async def test_remaining_zero_cancels_in_flight_timer():
-    """When the last player disconnects while a countdown is running, the timer is cancelled."""
+    """When the last player disconnects while a countdown is running, the timer stops.
+
+    _disconnect_countdown swallows CancelledError, so the task finishes normally
+    (done=True, cancelled=False) — not in the asyncio "cancelled" state.
+    """
     async def fake_countdown():
         try:
             await asyncio.sleep(100)
         except asyncio.CancelledError:
-            pass  # Mirror _disconnect_countdown behaviour
+            pass  # mirrors _disconnect_countdown: swallows CancelledError
 
     task = asyncio.create_task(fake_countdown())
+    # Yield to the event loop so the task reaches asyncio.sleep(100) —
+    # mirroring production where _disconnect_countdown is mid-execution when cancelled.
+    await asyncio.sleep(0)
+
     timers: dict[str, asyncio.Task] = {"match-abc": task}
     disconnected: dict[str, int] = {"match-abc": 1}
 
@@ -219,12 +227,12 @@ async def test_remaining_zero_cancels_in_flight_timer():
         timer.cancel()
     disconnected.pop(game_id, None)
 
-    await asyncio.sleep(0.05)  # let cancel propagate
+    await asyncio.sleep(0.05)  # let cancel propagate and task finish
 
     assert game_id not in timers
     assert game_id not in disconnected
-    assert timer.done(), "Timer task should be done (cancelled)"
-    assert timer.cancelled(), "Timer task should be marked as cancelled"
+    assert timer.done(), "Task must be done after cancellation"
+    assert not timer.cancelled(), "Task swallows CancelledError so it finishes normally, not in cancelled state"
 
 
 @pytest.mark.asyncio

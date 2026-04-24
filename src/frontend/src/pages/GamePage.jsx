@@ -108,7 +108,7 @@ export default function GamePage() {
         room_id: newRoomId,
         from_user_id: currentUser.id,
         from_username: currentUser.username,
-        from_avatar_url: currentUser.avatar_url ?? null,
+        from_avatar_url: currentUser.avatarUrl || currentUser.avatar_url || null,
         to_user_id: opponent.id,
         to_username: opponent.username,
         expires_at: expiresAt,

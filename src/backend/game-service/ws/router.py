@@ -541,8 +541,11 @@ async def _on_game_over(game_id: str, winner_id: int, score_p1: int, score_p2: i
     finally:
         # Cancel any in-flight disconnect countdown and await its completion so the
         # countdown coroutine fully exits before we proceed with cleanup.
+        # Guard: _on_game_over may be called *from* the countdown task itself
+        # (via _disconnect_countdown → _on_game_over), so skip cancel/await when
+        # _disc_timer is the current task to avoid a circular await deadlock.
         _disc_timer = _disconnect_timers.pop(game_id, None)
-        if _disc_timer and not _disc_timer.done():
+        if _disc_timer and not _disc_timer.done() and _disc_timer is not asyncio.current_task():
             _disc_timer.cancel()
             try:
                 await asyncio.shield(_disc_timer)

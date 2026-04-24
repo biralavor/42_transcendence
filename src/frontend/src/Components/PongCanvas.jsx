@@ -95,10 +95,16 @@ export default function PongCanvas(props)
     if (player1 >= WIN_SCORE) {
       cancelAnimationFrame(loopRef.current)
       clearTimeout(goalTimerRef.current)
+      goalTimerRef.current = null
+      kickoffRef.current = false
+      setShowGoal(false)
       props.onGameEnd?.({ winner: 'p1', score_p1: player1, score_p2: player2 })
     } else if (player2 >= WIN_SCORE) {
       cancelAnimationFrame(loopRef.current)
       clearTimeout(goalTimerRef.current)
+      goalTimerRef.current = null
+      kickoffRef.current = false
+      setShowGoal(false)
       props.onGameEnd?.({ winner: 'p2', score_p1: player1, score_p2: player2 })
     }
   }
