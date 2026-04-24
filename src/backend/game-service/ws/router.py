@@ -32,6 +32,8 @@ _disconnected_players: dict[str, int] = {}
 # Maps game_id → asyncio Task running the disconnect countdown
 _disconnect_timers: dict[str, asyncio.Task] = {}
 
+DISCONNECT_GRACE_SECONDS = 30
+
 
 async def _broadcast_state(game_id: str, state_snapshot: dict) -> None:
     """Broadcast game state to both clients in a session.
@@ -87,10 +89,15 @@ async def _on_game_over(game_id: str, winner_id: int, score_p1: int, score_p2: i
     except SQLAlchemyError:
         pass  # best-effort
     finally:
-        # Cancel any in-flight disconnect countdown before cleanup
+        # Cancel any in-flight disconnect countdown and await its completion so the
+        # countdown coroutine fully exits before we proceed with cleanup.
         _disc_timer = _disconnect_timers.pop(game_id, None)
         if _disc_timer and not _disc_timer.done():
             _disc_timer.cancel()
+            try:
+                await asyncio.shield(_disc_timer)
+            except (asyncio.CancelledError, Exception):
+                pass
         _disconnected_players.pop(game_id, None)
 
         # Clean up memory
@@ -116,16 +123,18 @@ async def _on_game_over(game_id: str, winner_id: int, score_p1: int, score_p2: i
 async def _disconnect_countdown(game_id: str, winner_id: int) -> None:
     """Broadcast a countdown and award forfeit win if the player doesn't reconnect."""
     try:
-        for seconds_left in range(30, 0, -1):
+        for seconds_left in range(DISCONNECT_GRACE_SECONDS, 0, -1):
             await manager.broadcast(game_id, {
                 "type": "opponent_disconnected",
                 "seconds_left": seconds_left,
             })
             await asyncio.sleep(1.0)
 
-        # Timeout expired: award forfeit win to the still-connected player
+        # Timeout expired: award forfeit win to the still-connected player.
+        # Guard against the race where both players disconnect near the end of the
+        # countdown — active_connections(game_id) == 0 means nobody is present.
         session = game_manager.get_session(game_id)
-        if session and session.is_active:
+        if session and session.is_active and manager.active_connections(game_id) > 0:
             try:
                 await _on_game_over(game_id, winner_id, session.score.p1, session.score.p2)
             except Exception:
@@ -292,11 +301,15 @@ async def game_websocket(websocket: WebSocket, game_id: str, token: str | None =
         metadata={'token_valid': token is not None, 'active_connections': active_in_room}
     )
 
-    # Reconnect detection: player rejoining during the 30-second disconnect window
+    # Reconnect detection: player rejoining during the disconnect grace window
     if game_id in _disconnected_players and _disconnected_players[game_id] == player_id:
         timer = _disconnect_timers.pop(game_id, None)
         if timer and not timer.done():
             timer.cancel()
+            try:
+                await asyncio.shield(timer)
+            except (asyncio.CancelledError, Exception):
+                pass
         _disconnected_players.pop(game_id, None)
 
         game_manager.resume_session(game_id)
@@ -498,6 +511,10 @@ async def game_websocket(websocket: WebSocket, game_id: str, token: str | None =
             timer = _disconnect_timers.pop(game_id, None)
             if timer and not timer.done():
                 timer.cancel()
+                try:
+                    await asyncio.shield(timer)
+                except (asyncio.CancelledError, Exception):
+                    pass
             _disconnected_players.pop(game_id, None)
 
             # AI forfeit: if the human left an AI game before natural game-over
@@ -556,5 +573,5 @@ async def game_websocket(websocket: WebSocket, game_id: str, token: str | None =
                         _disconnect_timers[game_id] = timer
                         logger.info(
                             f"[DISCONNECT] Player {player_id} left {game_id}. "
-                            f"30s countdown started. Forfeit winner if timeout: {winner_id}"
+                            f"{DISCONNECT_GRACE_SECONDS}s countdown started. Forfeit winner if timeout: {winner_id}"
                         )
