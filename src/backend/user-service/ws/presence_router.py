@@ -17,6 +17,7 @@ from service.ws.event_registry import presence_event_registry
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+presence_manager.set_signal_callback(presence_event_registry.signal_event)
 
 SessionDep = Annotated[AsyncSession, Depends(get_db)]
 

@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from 'react'
 import NavbarComponent from '../Components/Navbar'
 import GameSettings from '../Components/GameSettings'
 import { getAvatarFilter } from '../utils/avatarFilter'
-import { apiCall, apiJson } from '../utils/apiClient'
+import { apiCall } from '../utils/apiClient'
 import './Profile.css'
 import FriendsSidebar from '../Components/FriendsSidebar'
 import { useAuth } from '../context/authContext'
@@ -53,11 +53,27 @@ function sanitizeAvatarUrl(rawUrl) {
   return placeholder
 }
 
+function emptyHistory(){
+  return {
+    results: [],
+    summary: {
+      player_id: 0,
+      wins: 0,
+      losses: 0,
+      total_matches: 0
+    },
+    total: 0,
+    page: 0,
+    per_page: 0,
+    last_page: 0,
+  }
+}
+
 export default function Profile() {
   const { auth } = useAuth()
   const [userId, setUserId] = useState(null)
   const [profile, setProfile] = useState(null)
-  const [history, setHistory] = useState([])
+  const [paginatedHistory, setPaginatedHistory] = useState(emptyHistory())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [saveStatus, setSaveStatus] = useState('')
@@ -90,7 +106,7 @@ export default function Profile() {
             if (!r.ok) throw new Error(`Profile fetch failed: ${r.status}`)
             return r.json()
           }),
-          apiCall(`/api/game/matches/history/${id}`, { signal }).then(r => {
+          apiCall(`/api/game/matches/history?player_id=${id}`, { signal }).then(r => {
             if (!r.ok) throw new Error(`History fetch failed: ${r.status}`)
             return r.json()
           }),
@@ -106,7 +122,7 @@ export default function Profile() {
           status: profileData.status,
           createdAt: profileData.created_at,
         })
-        setHistory(historyData)
+        setPaginatedHistory(historyData)
       })
       .catch(err => {
         if (err.name !== 'AbortError') setError(err.message)
@@ -134,14 +150,16 @@ export default function Profile() {
   const handleSave = async (e) => {
     e.preventDefault()
     try {
-      await apiJson(`/api/users/profile/${userId}`, {
+      const response = await apiCall(`/api/users/profile/${userId}`, {
         method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           display_name: profile.displayName,
           bio: profile.bio,
           dark_mode: profile.darkMode,
         }),
       })
+      if (!response.ok) throw new Error('Save failed')
       setSaveStatus('Profile updated successfully!')
       clearTimeout(saveStatusTimer.current)
       saveStatusTimer.current = setTimeout(() => setSaveStatus(''), 3000)
@@ -152,8 +170,8 @@ export default function Profile() {
     }
   }
 
-  const wins = history.filter(m => m.result === 'Win').length
-  const matches = history.length
+  const wins = paginatedHistory.summary.wins
+  const matches = paginatedHistory.summary.total_matches
 
   if (loading) return (
     <div className="arcade-shell">
@@ -278,7 +296,7 @@ export default function Profile() {
 
               <div className="profile-history">
                 <h2 className="profile-section-title">Match history</h2>
-                {history.length === 0 ? (
+                {paginatedHistory.total === 0 ? (
                   <p style={{ color: 'var(--metal-silver)', fontFamily: 'VT323, monospace' }}>
                     No matches yet.
                   </p>
@@ -290,8 +308,8 @@ export default function Profile() {
                       <div className="history-col">Result</div>
                       <div className="history-col">Score</div>
                     </div>
-                    {history.map((match) => (
-                      <div className="history-row" key={match.id}>
+                    {paginatedHistory.results.map((match) => (
+                      <div className="history-row" key={match.match_id}>
                         <div className="history-col history-opponent">Player #{match.opponent_id}</div>
                         <div className="history-col history-date">
                           {match.date ? new Date(match.date).toLocaleDateString() : '—'}

@@ -99,7 +99,6 @@ export default function App() {
           )}
         />
 
-        { }
         <Route path="/tournaments/:id" element={<Tournament />} />
 
         {/* Tournaments list and creation - authenticated users only */}

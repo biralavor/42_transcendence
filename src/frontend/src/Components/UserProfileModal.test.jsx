@@ -74,7 +74,36 @@ describe('UserProfileModal — with data', () => {
       // history call
       .mockResolvedValueOnce(
         new Response(
-          JSON.stringify([{ id: 1, result: 'Win' }, { id: 2, result: 'Loss' }]),
+          JSON.stringify(
+            {
+              "results": [
+                {
+                  "id": 1,
+                  "opponent_id": 99,
+                  "result": "Win",
+                  "score": "3-0",
+                  "date": "2026-04-23T02:09:02.687892"
+                },
+                {
+                  "id": 1,
+                  "opponent_id": 99,
+                  "result": "Loss",
+                  "score": "0-3",
+                  "date": "2026-05-23T02:09:02.687892"
+                }
+              ],
+              "summary": {
+                "player_id": 1,
+                "wins": 1,
+                "losses": 1,
+                "total_matches": 2
+              },
+              "total": 2,
+              "page": 0,
+              "per_page": 1,
+              "last_page": 0
+            }
+          ),
           { status: 200 }
         )
       )

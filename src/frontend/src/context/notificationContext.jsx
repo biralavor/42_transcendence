@@ -188,7 +188,6 @@ export function NotificationProvider({ children }) {
     useEffect(() => {
         if (!userId) return
 
-        let pollInterval = null
         let pollTimeoutId = null
         let failureCount = 0
 
@@ -219,8 +218,6 @@ export function NotificationProvider({ children }) {
             if (document.hidden) {
                 // Pause polling when hidden
                 if (pollTimeoutId) clearTimeout(pollTimeoutId)
-                if (pollInterval) clearInterval(pollInterval)
-                pollInterval = null
                 pollTimeoutId = null
             } else if (shouldPoll()) {
                 // Resume polling when visible and WS is disconnected
@@ -237,7 +234,6 @@ export function NotificationProvider({ children }) {
 
         return () => {
             document.removeEventListener('visibilitychange', handleVisibilityChange)
-            if (pollInterval) clearInterval(pollInterval)
             if (pollTimeoutId) clearTimeout(pollTimeoutId)
         }
     }, [userId, fetchNotifications])

@@ -1,0 +1,799 @@
+
+=== Container Status ===
+[PASS] Container 'db' is running
+[PASS] Container 'user-service' is running
+[PASS] Container 'game-service' is running
+[PASS] Container 'chat-service' is running
+[PASS] Container 'frontend' is running
+[PASS] Container 'nginx' is running
+[PASS] Container 'adminer' is running
+
+=== Restart Policy ===
+[PASS] db restart policy: unless-stopped
+[PASS] user-service restart policy: unless-stopped
+[PASS] game-service restart policy: unless-stopped
+[PASS] chat-service restart policy: unless-stopped
+[PASS] frontend restart policy: unless-stopped
+[PASS] nginx restart policy: unless-stopped
+[PASS] adminer restart policy: unless-stopped
+
+=== nginx TLS (port 8443) ===
+[PASS] TLS protocol tls1_2 accepted
+[PASS] TLS protocol tls1_3 accepted
+[PASS] TLS protocol tls1 correctly rejected
+[PASS] TLS protocol tls1_1 correctly rejected
+
+=== HTTPS Response ===
+[PASS] nginx responds on https://localhost:8443/ (HTTP 200)
+
+=== Port Exposure ===
+[PASS] Port 8443 is exposed (nginx HTTPS)
+[PASS] Port 8080 is exposed (nginx HTTP redirect)
+[PASS] Port 3000 is NOT exposed to the host
+[PASS] Port 5432 is NOT exposed to the host
+
+=== Domain Resolution ===
+[PASS] localhost resolves to 127.0.0.1
+
+=== Docker Network ===
+[PASS] Docker network found: transcendence_network
+[PASS] db is connected to transcendence_network
+[PASS] user-service is connected to transcendence_network
+[PASS] game-service is connected to transcendence_network
+[PASS] chat-service is connected to transcendence_network
+[PASS] frontend is connected to transcendence_network
+[PASS] nginx is connected to transcendence_network
+[PASS] adminer is connected to transcendence_network
+[PASS] No container uses 'network: host'
+
+=== PostgreSQL Health ===
+[PASS] PostgreSQL is accepting connections (pg_isready)
+[PASS] PostgreSQL port 5432 is NOT exposed to the host
+[PASS] PostgreSQL 'users' table exists in transcendence_db
+
+=== Backend Health ===
+[PASS] user-service /health returns {"status":"ok"}
+[PASS] game-service /health returns {"status":"ok"}
+[PASS] chat-service /health returns {"status":"ok"}
+
+=== Frontend Response ===
+[PASS] Frontend responds with HTML on port 3000
+
+=== nginx Proxy Routes ===
+[PASS] nginx proxies https://localhost:8443/ → frontend (HTML response)
+[PASS] nginx proxies /api/users/health → user-service
+[PASS] nginx proxies /api/game/health → game-service
+[PASS] nginx proxies /api/chat/health → chat-service
+
+=== Named Volume ===
+[PASS] Named volume 'db_data' exists
+[PASS] db container uses a Docker named volume (not a bind mount)
+
+=== Dockerfile Safety ===
+[PASS] database/Dockerfile: no :latest tag
+[PASS] database/Dockerfile: FROM uses a pinned version tag
+[PASS] database/Dockerfile: no obvious hardcoded credentials
+[PASS] database/Dockerfile: no forbidden loop patterns
+[PASS] backend-base/Dockerfile: no :latest tag
+[PASS] backend-base/Dockerfile: FROM uses a pinned version tag
+[PASS] backend-base/Dockerfile: no obvious hardcoded credentials
+[PASS] backend-base/Dockerfile: no forbidden loop patterns
+[PASS] user-service/Dockerfile: no :latest tag
+[PASS] user-service/Dockerfile: FROM uses local base image 'backend-base' (no registry tag required)
+[PASS] user-service/Dockerfile: no obvious hardcoded credentials
+[PASS] user-service/Dockerfile: no forbidden loop patterns
+[PASS] game-service/Dockerfile: no :latest tag
+[PASS] game-service/Dockerfile: FROM uses local base image 'backend-base' (no registry tag required)
+[PASS] game-service/Dockerfile: no obvious hardcoded credentials
+[PASS] game-service/Dockerfile: no forbidden loop patterns
+[PASS] chat-service/Dockerfile: no :latest tag
+[PASS] chat-service/Dockerfile: FROM uses local base image 'backend-base' (no registry tag required)
+[PASS] chat-service/Dockerfile: no obvious hardcoded credentials
+[PASS] chat-service/Dockerfile: no forbidden loop patterns
+[PASS] frontend/Dockerfile: no :latest tag
+[PASS] frontend/Dockerfile: FROM uses a pinned version tag
+[PASS] frontend/Dockerfile: no obvious hardcoded credentials
+[PASS] frontend/Dockerfile: no forbidden loop patterns
+[PASS] nginx/Dockerfile: no :latest tag
+[PASS] nginx/Dockerfile: FROM uses a pinned version tag
+[PASS] nginx/Dockerfile: no obvious hardcoded credentials
+[PASS] nginx/Dockerfile: no forbidden loop patterns
+
+=== docker-compose.yml Safety ===
+[PASS] docker-compose.yml: no forbidden network directives
+[PASS] docker-compose.yml: no :latest tag
+[PASS] docker-compose.yml has a network definition
+[PASS] docker-compose.yml has a volume definition
+
+=== Secrets & Repository Structure ===
+[PASS] .env exists at repository root
+[PASS] .env: DB_HOST is set
+[PASS] .env: DB_PORT is set
+[PASS] .env: DB_USER is set
+[PASS] .env: DB_PASSWORD is set
+[PASS] .env: DB_NAME is set
+[PASS] .env: USER_SERVICE_PORT is set
+[PASS] .env: GAME_SERVICE_PORT is set
+[PASS] .env: CHAT_SERVICE_PORT is set
+[PASS] .env: FRONTEND_PORT is set
+[PASS] .env: DOMAIN is set
+[PASS] .env is NOT tracked by git
+[PASS] docker-compose.yml exists at repository root
+[PASS] Makefile exists at repository root
+[PASS] .env.example exists at repository root
+[PASS] Dockerfile exists and non-empty: services/database/
+[PASS] Dockerfile exists and non-empty: services/backend-base/
+[PASS] Dockerfile exists and non-empty: services/user-service/
+[PASS] Dockerfile exists and non-empty: services/game-service/
+[PASS] Dockerfile exists and non-empty: services/chat-service/
+[PASS] Dockerfile exists and non-empty: services/frontend/
+[PASS] Dockerfile exists and non-empty: services/nginx/
+
+=== WebSocket Connectivity ===
+[PASS] WebSocket handshake accepted: /api/chat/ws/chat/healthcheck (101)
+[PASS] WebSocket handshake accepted: /api/game/ws/game/healthcheck (101)
+
+=== Chat Message Suite ===
+[PASS] Chat: single-client message round-trip
+[PASS] Chat: two-client broadcast (A sends, B receives)
+[PASS] Chat: remaining client survives peer disconnect
+
+=== Chat History Persistence Suite ===
+[PASS] Chat history: sent message is persisted to DB
+[PASS] Chat history: pre-inserted messages delivered on connect
+[PASS] Chat history: all 20 messages delivered (default limit 50 > 20)
+[PASS] Chat history: room isolation — history does not leak across rooms
+[PASS] Chat history: new room slug auto-creates chat_rooms row
+[PASS] Chat history: messages delivered oldest-first
+[PASS] Chat history: fresh room sends no history frames on connect
+
+=== DB Schema Validation ===
+[PASS] DB table 'users' exists
+[PASS] DB table 'credentials' exists
+[PASS] DB table 'friendships' exists
+[PASS] DB table 'matches' exists
+[PASS] DB table 'chat_rooms' exists
+[PASS] DB table 'messages' exists
+[PASS] DB table 'tokens' exists
+[PASS] DB 'friendships' table has CHECK constraint
+[PASS] DB 'matches.winner_id' column exists
+[PASS] DB 'matches.score_p1' column exists
+[PASS] DB 'matches.score_p2' column exists
+[PASS] DB 'matches.status' column exists
+[PASS] DB 'matches.started_at' column exists
+[PASS] DB 'matches.finished_at' column exists
+
+=== User Service API Suite ===
+[PASS] User login response includes access_token
+[PASS] User profile endpoint returns username
+[PASS] User search endpoint returns results for 'alice'
+[PASS] Friends list endpoint returns a JSON array for alice
+[PASS] Friend requests endpoint returns a JSON array for alice
+[PASS] Sent friend requests endpoint returns a JSON array for alice
+[INFO] Duplicate friend request returned 'server' (409 expected; may vary if already accepted)
+
+=== Game Service Match History Suite ===
+[PASS] Match history endpoint returns a JSON array for alice
+[PASS] Match history for alice contains at least 3 seeded matches (got 8)
+[PASS] Match history entries contain 'result' and 'score' fields
+
+=== User Service Unit Tests ===
+[PASS] test_login_returns_tokens_without_user_id
+[PASS] test_subsequent_login_updates_token_not_duplicates
+[PASS] test_login_does_not_create_user_row
+[PASS] test_login_token_contains_identity_claims
+[PASS] test_list_friends_empty_for_unknown_user
+[PASS] test_list_requests_empty_for_unknown_user
+[FAIL] test_remove_friend_not_found
+[FAIL] test_respond_to_request_not_found
+[PASS] test_respond_to_request_invalid_action
+[PASS] test_search_users_empty
+[PASS] test_game_invite_response_valid_accepted
+[PASS] test_game_invite_response_valid_declined
+[PASS] test_game_invite_response_valid_timeout
+[PASS] test_game_invite_response_self_targeting_returns_400
+[PASS] test_game_invite_response_broadcasts_notification
+[PASS] test_game_invite_response_zero_to_user_id_returns_422
+[PASS] test_game_invite_response_negative_to_user_id_returns_422
+[PASS] test_game_invite_response_invalid_status_returns_422
+[PASS] test_game_invite_response_missing_auth_returns_403
+[PASS] test_game_invite_response_room_id_included_only_for_accepted
+[FAIL] test_game_invite_returns_204
+[FAIL] test_game_invite_injects_from_user_id_from_jwt
+[FAIL] test_game_invite_broadcasts_to_recipient_room
+[FAIL] test_game_invite_response_returns_204
+[FAIL] test_game_invite_timeout_returns_204
+[PASS] test_game_invite_invalid_type_returns_422
+[PASS] test_game_invite_missing_auth_returns_403
+[PASS] test_get_me_returns_existing_user
+[PASS] test_get_me_creates_user_on_first_call
+[PASS] test_get_me_returns_401_for_expired_token
+[FAIL] test_deliver_game_notification_message_too_long
+[FAIL] test_deliver_game_notification_typical_message
+[FAIL] test_add_friend_notification_validation_failure_doesnt_fail_request
+[FAIL] test_respond_to_friend_request_notification_validation_failure
+[PASS] test_max_notification_message_length_is_256
+[PASS] test_game_invite_messages_fit_in_limit
+[PASS] test_friend_request_messages_fit_in_limit
+[PASS] test_message_with_very_long_username_fits
+[PASS] test_message_at_exactly_256_characters
+[PASS] test_create_notification_message_too_long
+[PASS] test_create_notification_message_empty
+[PASS] test_create_notification_message_at_limit
+[PASS] test_create_notification_typical_messages
+[PASS] test_max_notification_message_length_constant
+[PASS] test_typical_message_lengths
+[PASS] test_missing_token_closes_4001
+[PASS] test_invalid_token_closes_4001
+[PASS] test_get_me_error_closes_4001
+[PASS] test_wrong_user_id_closes_4003
+[PASS] test_connect_then_disconnect_does_not_raise
+[PASS] test_list_notifications_returns_empty_list
+[PASS] test_list_notifications_returns_items
+[PASS] test_read_all_returns_204
+[PASS] test_mark_read_returns_updated_notification
+[PASS] test_mark_read_not_owned_returns_404
+[PASS] test_delete_notification_returns_204
+[PASS] test_delete_notification_not_owned_returns_404
+[FAIL] test_create_notification_adds_row_and_returns_it
+[PASS] test_add_friend_broadcasts_notification
+[PASS] test_game_invite_broadcasts_and_notifies
+[PASS] test_missing_token_closes_4001
+[PASS] test_invalid_token_closes_4001
+[PASS] test_get_me_error_closes_4001
+[PASS] test_connect_no_friends_online_no_broadcast
+[PASS] test_friend_receives_online_event_on_connect
+[PASS] test_friend_receives_offline_event_on_disconnect
+[PASS] test_get_profile_not_found
+[PASS] test_update_profile_not_found
+[PASS] test_refresh_success_returns_new_tokens
+[PASS] test_refresh_rotates_token_hash
+[PASS] test_refresh_invalid_token_returns_401
+[PASS] test_refresh_expired_token_returns_401
+[PASS] test_refresh_missing_credential_returns_401
+[PASS] test_refresh_access_token_exp_matches_access_window
+[PASS] test_refresh_token_expiry_matches_refresh_window
+[PASS] test_notification_types_defined
+[PASS] test_notification_response_valid_type_game_invite
+[PASS] test_notification_response_valid_type_friend_request
+[PASS] test_notification_response_valid_type_unread_chat
+[PASS] test_notification_response_rejects_invalid_type
+[PASS] test_notification_response_rejects_typo_type
+[PASS] test_notification_response_rejects_empty_type
+[PASS] test_notification_response_all_valid_types
+[PASS] test_game_invite_valid
+[FAIL] test_game_invite_response_accepted
+[FAIL] test_game_invite_response_declined
+[PASS] test_game_invite_response_timeout
+[PASS] test_game_notification_rejects_non_game_type
+[PASS] test_game_notification_rejects_zero_to_user_id
+[PASS] test_game_notification_rejects_negative_to_user_id
+[PASS] test_game_notification_accepts_positive_to_user_id
+[FAIL] test_game_notification_status_accepts_valid_values
+[PASS] test_game_notification_status_rejects_invalid_values
+[PASS] test_game_notification_optional_fields
+[PASS] test_notification_message_length_valid
+[PASS] test_notification_message_length_constant
+[PASS] test_notification_message_typical_lengths
+[PASS] test_game_invite_response_valid_accepted
+[PASS] test_game_invite_response_valid_declined
+[PASS] test_game_invite_response_valid_timeout
+[PASS] test_game_invite_response_accepts_no_room_id
+[PASS] test_game_invite_response_rejects_zero_to_user_id
+[PASS] test_game_invite_response_rejects_negative_to_user_id
+[PASS] test_game_invite_response_accepts_positive_to_user_ids
+[PASS] test_game_invite_response_rejects_invalid_status
+[PASS] test_send_friend_request_broadcasts_notification
+[PASS] test_send_friend_request_creates_notification_for_addressee
+[PASS] test_accept_friend_request_broadcasts_notification
+[PASS] test_decline_friend_request_does_not_broadcast
+[PASS] test_game_invite_persists_notification_row
+[FAIL] test_game_invite_response_persists_with_correct_type
+[FAIL] FAILED
+[FAIL] FAILED
+[FAIL] FAILED
+[FAIL] FAILED
+[FAIL] FAILED
+[FAIL] FAILED
+[FAIL] FAILED
+[FAIL] FAILED
+[FAIL] FAILED
+[FAIL] FAILED
+[FAIL] FAILED
+[FAIL] FAILED
+[FAIL] FAILED
+[FAIL] FAILED
+[FAIL] FAILED
+[FAIL] FAILED
+FAILED service/tests/test_game_invites.py::test_game_invite_returns_204 - Typ...
+FAILED service/tests/test_game_invites.py::test_game_invite_injects_from_user_id_from_jwt
+FAILED service/tests/test_game_invites.py::test_game_invite_broadcasts_to_recipient_room
+FAILED service/tests/test_game_invites.py::test_game_invite_response_returns_204
+FAILED service/tests/test_game_invites.py::test_game_invite_timeout_returns_204
+FAILED service/tests/test_notification_endpoints.py::test_deliver_game_notification_message_too_long
+FAILED service/tests/test_notification_endpoints.py::test_deliver_game_notification_typical_message
+FAILED service/tests/test_notification_endpoints.py::test_add_friend_notification_validation_failure_doesnt_fail_request
+FAILED service/tests/test_notification_endpoints.py::test_respond_to_friend_request_notification_validation_failure
+FAILED service/tests/test_notifications.py::test_create_notification_adds_row_and_returns_it
+FAILED service/tests/test_schemas.py::TestGameNotificationRequestValidation::test_game_invite_response_accepted
+FAILED service/tests/test_schemas.py::TestGameNotificationRequestValidation::test_game_invite_response_declined
+FAILED service/tests/test_schemas.py::TestGameNotificationRequestValidation::test_game_notification_status_accepts_valid_values
+FAILED service/tests/test_ws_push.py::test_game_invite_response_persists_with_correct_type
+================== 16 failed, 95 passed, 7 warnings in 3.10s ===================
+
+=== Game Service Unit Tests ===
+[PASS] test_straight_shot_returns_ball_y
+[PASS] test_diagonal_no_bounce
+[PASS] test_single_top_wall_bounce
+[PASS] test_single_bottom_wall_bounce
+[PASS] test_multiple_bounces
+[PASS] test_ball_moving_away_returns_current_y
+[PASS] test_zero_vx_returns_clamped_current_y
+[PASS] test_clamp_when_current_y_outside_range
+[PASS] test_result_always_within_valid_range[50--3]
+[PASS] test_result_always_within_valid_range[300-4]
+[PASS] test_result_always_within_valid_range[256-9]
+[PASS] test_result_always_within_valid_range[10-6]
+[PASS] test_game_manager_creation
+[PASS] test_latency_filter
+[PASS] test_player_input_routing
+[PASS] test_game_session_creation
+[PASS] test_paddle_movement
+[PASS] test_ball_movement
+[PASS] test_game_tick
+[PASS] test_scoring
+[PASS] test_state_snapshot
+[PASS] test_history_empty_for_unknown_user
+[PASS] test_create_match_inserts_row
+[PASS] test_get_match_returns_row
+[PASS] test_get_match_returns_none_for_unknown_id
+[PASS] test_finish_match_updates_row
+[PASS] test_finish_match_returns_none_for_unknown_id
+[PASS] test_get_user_stats_empty
+[PASS] test_get_user_stats_counts_correctly
+[PASS] test_get_user_stats_excludes_ongoing_matches
+[PASS] test_get_user_matches_returns_newest_first
+[PASS] test_get_user_matches_returns_empty_for_unknown_user
+[PASS] test_get_user_stats_counts_goals_as_player2
+[PASS] test_get_leaderboard_orders_by_points_then_goal_difference
+[FAIL] test_record_match_result_marks_finished_and_no_advance_when_round_incomplete
+[FAIL] test_record_match_result_persists_scores_on_match_row
+[FAIL] test_record_match_result_advances_to_next_round_when_round_complete
+[FAIL] test_record_match_result_completes_tournament_on_final
+[FAIL] test_record_match_result_8_player_full_bracket
+[FAIL] test_record_match_result_invalid_winner
+[FAIL] test_record_match_result_already_finished
+[PASS] test_record_match_result_unknown_tournament
+[FAIL] test_record_match_result_match_not_in_tournament
+[PASS] test_get_leaderboard_applies_limit
+[PASS] test_start_match_returns_201
+[PASS] test_finish_match_returns_updated
+[PASS] test_finish_match_404_for_unknown_id
+[PASS] test_finish_match_409_if_already_finished
+[PASS] test_get_stats_empty_for_new_user
+[PASS] test_get_stats_reflects_finished_matches
+[PASS] test_get_matches_empty_for_new_user
+[PASS] test_get_matches_returns_both_sides
+[PASS] test_get_leaderboard_returns_ranked_rows
+[PASS] test_get_leaderboard_honors_limit_query_param
+[FAIL] test_ws_healthcheck_one_shot
+[FAIL] test_ws_healthcheck_access_denied_invalid_token
+[FAIL] test_ws_game_requires_token_for_non_healthcheck
+[FAIL] FAILED
+[FAIL] FAILED
+[FAIL] FAILED
+[FAIL] FAILED
+[FAIL] FAILED
+[FAIL] FAILED
+[FAIL] FAILED
+[FAIL] FAILED
+[FAIL] FAILED
+[FAIL] FAILED
+[FAIL] FAILED
+
+/usr/local/lib/python3.12/site-packages/starlette/testclient.py:170: WebSocketDisconnect
+=========================== short test summary info ============================
+FAILED service/tests/test_persistence.py::test_record_match_result_marks_finished_and_no_advance_when_round_incomplete
+FAILED service/tests/test_persistence.py::test_record_match_result_persists_scores_on_match_row
+FAILED service/tests/test_persistence.py::test_record_match_result_advances_to_next_round_when_round_complete
+FAILED service/tests/test_persistence.py::test_record_match_result_completes_tournament_on_final
+FAILED service/tests/test_persistence.py::test_record_match_result_8_player_full_bracket
+FAILED service/tests/test_persistence.py::test_record_match_result_invalid_winner
+FAILED service/tests/test_persistence.py::test_record_match_result_already_finished
+FAILED service/tests/test_persistence.py::test_record_match_result_match_not_in_tournament
+FAILED service/tests/test_ws.py::test_ws_healthcheck_one_shot - starlette.web...
+FAILED service/tests/test_ws.py::test_ws_healthcheck_access_denied_invalid_token
+FAILED service/tests/test_ws.py::test_ws_game_requires_token_for_non_healthcheck
+=================== 11 failed, 46 passed, 1 skipped in 6.49s ===================
+
+=== Chat Service Unit Tests ===
+[PASS] test_get_or_create_room_creates_row
+[PASS] test_get_or_create_room_is_idempotent
+[PASS] test_save_message_inserts_row
+[PASS] test_get_room_history_returns_oldest_first
+[PASS] test_get_room_history_respects_limit
+[PASS] test_get_room_history_returns_empty_for_unknown_room
+[PASS] test_block_user_creates_row
+[PASS] test_block_is_one_directional
+[PASS] test_block_user_is_idempotent
+[PASS] test_unblock_user_removes_row
+[PASS] test_unblock_nonexistent_raises_404
+[PASS] test_get_blocked_ids_returns_set
+[PASS] test_get_blocked_ids_empty_when_none
+[PASS] test_get_or_create_dm_room_uses_sorted_ids
+[PASS] test_get_or_create_dm_room_is_idempotent
+[PASS] test_post_dm_returns_room_name
+[PASS] test_post_dm_self_returns_400
+[PASS] test_post_block_returns_204
+[PASS] test_delete_block_returns_204
+[PASS] test_get_blocked_returns_list
+[PASS] test_endpoints_require_auth
+[PASS] test_get_room_active_returns_count
+[PASS] test_get_room_active_zero_when_empty
+[PASS] test_get_room_active_requires_auth
+[PASS] test_get_room_active_non_participant_gets_403
+[PASS] test_get_room_active_non_dm_slug_gets_403
+[PASS] test_create_general_room_creates_row
+[PASS] test_create_general_room_saves_system_message
+[PASS] test_create_general_room_rejects_duplicate
+[PASS] test_create_general_room_rejects_invalid_name
+[PASS] test_list_live_rooms_returns_active_only
+[PASS] test_list_live_rooms_excludes_dm_rooms
+[PASS] test_post_rooms_returns_201
+[PASS] test_post_rooms_returns_409_on_duplicate
+[PASS] test_get_rooms_returns_list
+[PASS] test_rooms_endpoints_require_auth
+
+=== Frontend Unit Tests ===
+[PASS] src/utils/gameInviteChannel.test.js > createGameChannelClient > builds a wss:// URL under /api/users/ws/notifications/{userId} 13ms
+[PASS] src/utils/gameInviteChannel.test.js > createGameChannelClient > builds a ws:// URL when protocol is http: 4ms
+[PASS] src/utils/gameInviteChannel.test.js > createGameChannelClient > omits the token query param when token is falsy 1ms
+[PASS] src/utils/gameInviteChannel.test.js > createGameChannelClient > forwards the handlers object to createWsClient 3ms
+[PASS] src/utils/gameInviteChannel.test.js > getGameChannelIdForUser > returns the userId as-is 1ms
+[PASS] src/utils/gameInviteChannel.test.js > sendGameChannelMessage > calls apiCall with POST to /api/users/game-invites 1ms
+[PASS] src/utils/gameInviteChannel.test.js > sendGameChannelMessage > throws when the server returns a non-OK status 5ms
+[PASS] src/utils/gameInviteChannel.test.js > sendGameChannelMessage > ignores the _channelId param and applies options (kept for call-site compat) 1ms
+[PASS] src/utils/gameInviteChannel.test.js > buildInviteRoomId > produces invite-{min}-{max}-{timestamp} format 1ms
+[PASS] src/utils/gameInviteChannel.test.js > buildInviteRoomId > is symmetric — same two users always produce the same ordered prefix 1ms
+[PASS] src/utils/gameInviteChannel.test.js > normalizeInviteUser > returns defaults for null input 1ms
+[PASS] src/utils/gameInviteChannel.test.js > normalizeInviteUser > prefers avatarUrl over avatar_url 0ms
+[PASS] src/utils/gameInviteChannel.test.js > normalizeInviteUser > falls back to avatar_url when avatarUrl is absent 0ms
+[PASS] src/utils/gameInviteChannel.test.js > isInviteExpired > returns true for a timestamp in the past 1ms
+[PASS] src/utils/gameInviteChannel.test.js > isInviteExpired > returns false for a timestamp in the future 0ms
+[PASS] src/utils/gameInviteChannel.test.js > isInviteExpired > returns false for non-numeric input 0ms
+[PASS] src/utils/jwtUtils.test.js > jwtUtils > decodeJWT > should decode a valid JWT 5ms
+[PASS] src/utils/jwtUtils.test.js > jwtUtils > decodeJWT > should return null for invalid token format 14ms
+[PASS] src/utils/jwtUtils.test.js > jwtUtils > decodeJWT > should return null for null/undefined token 1ms
+[PASS] src/utils/jwtUtils.test.js > jwtUtils > decodeJWT > should return null for non-string token 0ms
+[PASS] src/utils/jwtUtils.test.js > jwtUtils > decodeJWT > should handle malformed base64 payload 1ms
+[PASS] src/utils/jwtUtils.test.js > jwtUtils > decodeJWT > should handle non-JSON payload 6ms
+[PASS] src/utils/jwtUtils.test.js > jwtUtils > getTokenExpiry > should return expiry in milliseconds 4ms
+[PASS] src/utils/jwtUtils.test.js > jwtUtils > getTokenExpiry > should return null for invalid token 1ms
+[PASS] src/utils/jwtUtils.test.js > jwtUtils > getTokenExpiry > should return null if exp claim missing 1ms
+[PASS] src/utils/jwtUtils.test.js > jwtUtils > getTokenExpiry > should return null if exp is not a number 3ms
+[PASS] src/utils/jwtUtils.test.js > jwtUtils > getTimeUntilExpiry > should return positive milliseconds for future expiry 1ms
+[PASS] src/utils/jwtUtils.test.js > jwtUtils > getTimeUntilExpiry > should return negative milliseconds for past expiry 0ms
+[PASS] src/utils/jwtUtils.test.js > jwtUtils > getTimeUntilExpiry > should return null for invalid token 1ms
+[PASS] src/utils/jwtUtils.test.js > jwtUtils > isTokenValid > should return true for unexpired token 5ms
+[PASS] src/utils/jwtUtils.test.js > jwtUtils > isTokenValid > should return false for expired token 0ms
+[PASS] src/utils/jwtUtils.test.js > jwtUtils > isTokenValid > should return false for invalid token 1ms
+[PASS] src/utils/jwtUtils.test.js > jwtUtils > isTokenValid > should return false if exp is missing 4ms
+[PASS] src/utils/jwtUtils.test.js > jwtUtils > willTokenExpireSoon > should return true if token expires within 30s (default) 0ms
+[PASS] src/utils/jwtUtils.test.js > jwtUtils > willTokenExpireSoon > should return false if token expires after 30s (default) 0ms
+[PASS] src/utils/jwtUtils.test.js > jwtUtils > willTokenExpireSoon > should return false if token is already expired 0ms
+[PASS] src/utils/jwtUtils.test.js > jwtUtils > willTokenExpireSoon > should support custom time frame 0ms
+[PASS] src/utils/jwtUtils.test.js > jwtUtils > willTokenExpireSoon > should return false for invalid token 1ms
+[PASS] src/utils/jwtUtils.test.js > jwtUtils > getTokenUsername > should extract username from sub claim 0ms
+[PASS] src/utils/jwtUtils.test.js > jwtUtils > getTokenUsername > should return null if sub is missing 0ms
+[PASS] src/utils/jwtUtils.test.js > jwtUtils > getTokenUsername > should return null for invalid token 0ms
+[PASS] src/utils/jwtUtils.test.js > jwtUtils > getTokenClaims > should return full payload 0ms
+[PASS] src/utils/jwtUtils.test.js > jwtUtils > getTokenClaims > should return null for invalid token 1ms
+[PASS] src/utils/jwtUtils.test.js > jwtUtils > edge cases > should handle base64url padding correctly 0ms
+[PASS] src/utils/jwtUtils.test.js > jwtUtils > edge cases > should handle tokens with many claims 7ms
+[PASS] src/utils/jwtUtils.test.js > jwtUtils > edge cases > should handle tokens expiring exactly now 0ms
+[PASS] src/utils/apiClient.test.js > apiClient > apiCall > should make a successful GET request 22ms
+[PASS] src/utils/apiClient.test.js > apiClient > apiCall > should add Authorization header with stored token 1ms
+[PASS] src/utils/apiClient.test.js > apiClient > apiCall > should not add Authorization header if no token stored 1ms
+[PASS] src/utils/apiClient.test.js > apiClient > apiCall > should merge custom headers with Authorization header 1ms
+[PASS] src/utils/apiClient.test.js > apiClient > apiCall > should handle POST request with body 1ms
+[PASS] src/utils/apiClient.test.js > apiClient > apiCall > should handle 401 and attempt token refresh 11ms
+[PASS] src/utils/apiClient.test.js > apiClient > apiCall > should logout if refresh fails 39ms
+[PASS] src/utils/apiClient.test.js > apiClient > apiCall > should handle refresh endpoint returning invalid data 9ms
+[PASS] src/utils/apiClient.test.js > apiClient > apiCall > should prevent concurrent token refreshes 13ms
+[PASS] src/utils/apiClient.test.js > apiClient > apiCall > should handle network errors 1ms
+[PASS] src/game/pongSystem.test.js > System.goalDetection > awards player2 a point when ball exits the left boundary 10ms
+[PASS] src/game/pongSystem.test.js > System.goalDetection > awards player1 a point when ball exits the right boundary 1ms
+[PASS] src/game/pongSystem.test.js > System.goalDetection > resets ball to center after a left goal 0ms
+[PASS] src/game/pongSystem.test.js > System.goalDetection > resets ball to center after a right goal 3ms
+[PASS] src/game/pongSystem.test.js > System.goalDetection > resets ball velocity to initial after a left goal 1ms
+[PASS] src/game/pongSystem.test.js > System.goalDetection > resets ball velocity to initial after a right goal 1ms
+[PASS] src/game/pongSystem.test.js > System.goalDetection > does nothing when ball is in play 0ms
+[PASS] src/game/pongSystem.test.js > System.goalDetection > accumulates score across multiple goals 0ms
+[PASS] src/utils/apiClient.test.js > apiClient > apiCall > should pass through non-401 error responses 6ms
+[PASS] src/utils/apiClient.test.js > apiClient > apiCall > should handle empty refresh_token in storage 6ms
+[PASS] src/utils/apiClient.test.js > apiClient > apiJson > should return parsed JSON response 2ms
+[PASS] src/utils/apiClient.test.js > apiClient > apiJson > should set Content-Type header for JSON 1ms
+[PASS] src/utils/apiClient.test.js > apiClient > apiJson > should throw on non-ok response 1ms
+[PASS] src/utils/apiClient.test.js > apiClient > apiJson > should throw with HTTP status if no detail in response 1ms
+[PASS] src/utils/apiClient.test.js > apiClient > apiJson > should handle non-JSON error response 1ms
+[PASS] src/utils/apiClient.test.js > apiClient > apiJson > should merge custom headers with Content-Type (not overwrite) 1ms
+[PASS] src/utils/apiClient.test.js > apiClient > apiJson > should allow custom headers to override default headers 1ms
+[PASS] src/utils/apiClient.test.js > apiClient > manualRefreshToken > should refresh token on demand 2ms
+[PASS] src/utils/apiClient.test.js > apiClient > manualRefreshToken > should return null if refresh fails 1ms
+[PASS] src/utils/apiClient.test.js > apiClient > getStoredAuthData > should return stored auth 5ms
+[PASS] src/utils/apiClient.test.js > apiClient > getStoredAuthData > should preserve storageType (remember-me) when refreshing from localStorage 2ms
+[PASS] src/utils/apiClient.test.js > apiClient > getStoredAuthData > should preserve storageType when refreshing from sessionStorage 2ms
+[PASS] src/context/presenceContext.test.jsx > PresenceContext > does not open WebSocket when unauthenticated 20ms
+[PASS] src/context/presenceContext.test.jsx > PresenceContext > opens WebSocket to /api/users/ws/presence with token when authenticated 3ms
+[PASS] src/context/presenceContext.test.jsx > PresenceContext > updates presenceMap when presence event is received 5ms
+[PASS] src/context/presenceContext.test.jsx > PresenceContext > updates presenceMap to offline on disconnect event 3ms
+[PASS] src/context/presenceContext.test.jsx > PresenceContext > ignores events with type other than presence 2ms
+[PASS] src/context/presenceContext.test.jsx > PresenceContext > ignores malformed JSON without throwing 2ms
+[PASS] src/context/presenceContext.test.jsx > PresenceContext > closes WebSocket on unmount 2ms
+[PASS] src/context/unreadContext.test.jsx > UnreadContext > starts with zero unread 20ms
+[PASS] src/context/unreadContext.test.jsx > UnreadContext > increments count when new_dm message arrives 7ms
+[PASS] src/context/unreadContext.test.jsx > UnreadContext > accumulates multiple messages 4ms
+[PASS] src/context/notificationContext.test.jsx > NotificationContext > does not open WS when unauthenticated 32ms
+[PASS] src/context/notificationContext.test.jsx > NotificationContext > fetches userId from /api/users/auth/me when token is present 18ms
+[PASS] src/Components/LobbyPanel.test.jsx > LobbyPanel > fetches rooms on mount and renders the list 75ms
+[PASS] src/Components/LobbyPanel.test.jsx > LobbyPanel > shows empty state when no rooms are live 14ms
+[PASS] src/Components/InactivityWarning.test.jsx > InactivityWarning > should render the modal with correct remaining time 66ms
+[PASS] src/Components/InactivityWarning.test.jsx > InactivityWarning > should update remaining time every second 12ms
+[PASS] src/Components/InactivityWarning.test.jsx > InactivityWarning > should call onStayLoggedIn when Stay Logged In is clicked 10ms
+[PASS] src/Components/InactivityWarning.test.jsx > InactivityWarning > should call onLogoutNow when Log Out Now is clicked 10ms
+[PASS] src/Components/NotificationPanel.test.jsx > NotificationPanel > renders all notification messages 45ms
+[PASS] src/Components/NotificationPanel.test.jsx > NotificationPanel > displays datetime for each notification 7ms
+[PASS] src/context/gameInviteContext.test.jsx > gameInviteContext > Context Provider > should provide useGameInvite hook 26ms
+[PASS] src/context/gameInviteContext.test.jsx > gameInviteContext > Context Provider > should initialize with null activeInvite 3ms
+[PASS] src/context/gameInviteContext.test.jsx > gameInviteContext > setGameInvite > should set the active invite 6ms
+[PASS] src/context/gameInviteContext.test.jsx > gameInviteContext > clearGameInvite > should set activeInvite to null 4ms
+[PASS] src/context/gameInviteContext.test.jsx > gameInviteContext > respondToInvite > should send POST request to /api/users/game-invite/response with accepted status 13ms
+[PASS] src/context/gameInviteContext.test.jsx > gameInviteContext > respondToInvite > should send POST request with declined status 6ms
+[PASS] src/context/gameInviteContext.test.jsx > gameInviteContext > respondToInvite > should call onNavigate callback when accepting 9ms
+[PASS] src/context/gameInviteContext.test.jsx > gameInviteContext > respondToInvite > should not call onNavigate when declining 5ms
+[PASS] src/context/gameInviteContext.test.jsx > gameInviteContext > respondToInvite > should mark notification as read if notificationId is present 8ms
+[PASS] src/context/gameInviteContext.test.jsx > gameInviteContext > respondToInvite > should clear activeInvite after responding 8ms
+[PASS] src/context/gameInviteContext.test.jsx > gameInviteContext > respondToInvite > should do nothing if activeInvite is null 6ms
+[PASS] src/context/authContext.test.jsx > AuthProvider — hydration > isAuthReady becomes true after mount 16ms
+[PASS] src/context/authContext.test.jsx > AuthProvider — hydration > isAuthenticated is false when storage is empty on mount 3ms
+[PASS] src/context/authContext.test.jsx > AuthProvider — hydration > isAuthenticated is true when sessionStorage has valid tokens on mount 5ms
+[PASS] src/context/authContext.test.jsx > AuthProvider — hydration > isAuthenticated is true when localStorage has valid tokens on mount 3ms
+[PASS] src/context/authContext.test.jsx > AuthProvider — login > login() sets isAuthenticated to true and saves to sessionStorage by default 3ms
+[PASS] src/context/authContext.test.jsx > AuthProvider — login > login(data, true) saves to localStorage and clears sessionStorage 3ms
+[PASS] src/context/authContext.test.jsx > AuthProvider — logout > logout() sets isAuthenticated to false and clears both storages 3ms
+[PASS] src/context/authContext.test.jsx > useAuth > throws when used outside AuthProvider 25ms
+[PASS] src/context/authContext.test.jsx > AuthProvider — Expiry Timer > should set up expiry timer when token is logged in 15ms
+[PASS] src/context/authContext.test.jsx > AuthProvider — Expiry Timer > should attempt refresh when timer fires 16ms
+[PASS] src/context/authContext.test.jsx > AuthProvider — Expiry Timer > should logout if token is already expired 7ms
+[PASS] src/context/unreadContext.test.jsx > UnreadContext > clearUnread resets count to 0 75ms
+[PASS] src/context/unreadContext.test.jsx > UnreadContext > does not increment when room is active 19ms
+[PASS] src/context/unreadContext.test.jsx > UnreadContext > records sender name from from_username field 5ms
+[PASS] src/context/unreadContext.test.jsx > UnreadContext > clearUnread also removes the sender name 12ms
+[PASS] src/context/unreadContext.test.jsx > UnreadContext > clearUnread is a no-op when slug is not present 14ms
+[PASS] src/context/unreadContext.test.jsx > UnreadContext > throws when used outside provider 24ms
+[PASS] src/context/gameInviteContext.test.jsx > gameInviteContext > respondToInvite > should log error and not call onNavigate on failed response 6ms
+[PASS] src/context/gameInviteContext.test.jsx > gameInviteContext > respondToInvite > should handle network errors gracefully 4ms
+[PASS] src/context/gameInviteContext.test.jsx > gameInviteContext > Authentication > should use apiCall which includes authentication headers 8ms
+[PASS] src/Components/InactivityWarning.test.jsx > InactivityWarning > should have proper dialog role and accessible name 10ms
+[PASS] src/Components/InactivityWarning.test.jsx > InactivityWarning > should have accessible name via aria-labelledby 4ms
+[PASS] src/Components/InactivityWarning.test.jsx > InactivityWarning > should call onStayLoggedIn when Escape key is pressed 8ms
+[PASS] src/Components/InactivityWarning.test.jsx > InactivityWarning > should not trigger onStayLoggedIn for other keys 5ms
+[PASS] src/Components/InactivityWarning.test.jsx > InactivityWarning > should focus Stay Logged In button on render (autoFocus) 8ms
+[PASS] src/Components/InactivityWarning.test.jsx > InactivityWarning > should have descriptive aria-labels on buttons 20ms
+[PASS] src/Components/InactivityWarning.test.jsx > InactivityWarning > should display Escape key hint to users 18ms
+[PASS] src/Components/InactivityWarning.test.jsx > InactivityWarning > should clean up event listener on unmount 9ms
+[PASS] src/context/authContext.test.jsx > AuthProvider — Expiry Timer > should logout if refresh fails 13ms
+[PASS] src/context/authContext.test.jsx > AuthProvider — Expiry Timer > should clear timer when token is cleared (logout) 9ms
+[PASS] src/context/authContext.test.jsx > AuthProvider — Expiry Timer > should not throw if no token on initial mount 5ms
+[PASS] src/context/authContext.test.jsx > AuthProvider — Expiry Timer > should refresh immediately when token is near-expiry (< 30s remaining) 7ms
+[PASS] src/context/authContext.test.jsx > AuthProvider — Expiry Timer > should handle edge case: token expires in 1 second 7ms
+[PASS] src/context/authContext.test.jsx > AuthProvider — Expiry Timer > should preserve remember-me (localStorage) during proactive refresh 10ms
+[PASS] src/context/authContext.test.jsx > AuthProvider — Expiry Timer > should preserve non-remember-me (sessionStorage) during proactive refresh 8ms
+[PASS] src/context/notificationContext.test.jsx > NotificationContext > ignores stale /auth/me response when token changes before it resolves 67ms
+[PASS] src/context/notificationContext.test.jsx > NotificationContext > opens WS to correct URL containing user_id and token after /auth/me resolves 54ms
+[PASS] src/Components/NotificationPanel.test.jsx > NotificationPanel > unread items have notif-panel__item--unread class 58ms
+[PASS] src/Components/NotificationPanel.test.jsx > NotificationPanel > clicking an unread notification calls markRead with its id 28ms
+[PASS] src/Components/NotificationPanel.test.jsx > NotificationPanel > clicking a read notification does NOT call markRead 13ms
+[PASS] src/Components/NotificationPanel.test.jsx > NotificationPanel > clicking a DM notification calls markRead with DM ID 8ms
+[PASS] src/Components/NotificationPanel.test.jsx > NotificationPanel > "Mark all as read" button calls markAllRead 22ms
+[PASS] src/Components/NotificationPanel.test.jsx > NotificationPanel > calls fetchNotifications on mount 9ms
+[PASS] src/Components/NotificationPanel.test.jsx > NotificationPanel > unread items are focusable (tabIndex=0) 15ms
+[PASS] src/Components/FriendsSidebar.test.jsx > FriendsSidebar > renders search input 78ms
+[PASS] src/Components/Navbar.test.jsx > Navbar — bell and DM badge > shows bell button when authenticated 152ms
+[PASS] src/Components/Navbar.test.jsx > Navbar — bell and DM badge > does not show bell button when unauthenticated 19ms
+[PASS] src/Components/Navbar.test.jsx > Navbar — bell and DM badge > hides bell badge when unreadCount is 0 12ms
+[PASS] src/Components/Navbar.test.jsx > Navbar — bell and DM badge > shows bell badge with correct count when unreadCount > 0 14ms
+[PASS] src/Components/Navbar.test.jsx > Navbar — bell and DM badge > bell badge sums system notifications and DM unreads 17ms
+[PASS] src/Components/Navbar.test.jsx > Navbar — bell and DM badge > bell badge shows DM count alone when no system notifications 12ms
+[PASS] src/Components/Navbar.test.jsx > Navbar — bell and DM badge > hides bell badge when both system and DM unreads are 0 4ms
+[PASS] src/Components/NotificationPanel.test.jsx > NotificationPanel > pressing Enter on an unread item calls markRead 14ms
+[PASS] src/Components/NotificationPanel.test.jsx > NotificationPanel > pressing Space on an unread item calls markRead 11ms
+[PASS] src/Components/NotificationPanel.test.jsx > NotificationPanel > pressing other keys does not call markRead 8ms
+[PASS] src/Components/NotificationPanel.test.jsx > NotificationPanel > shows empty state when notifications list is empty 7ms
+[PASS] src/Components/NotificationPanel.test.jsx > NotificationPanel > navigates to /chat/{room_slug} when clicking DM notification 9ms
+[PASS] src/Components/UserProfileModal.test.jsx > UserProfileModal > renders modal backdrop 126ms
+[PASS] src/Components/UserProfileModal.test.jsx > UserProfileModal > renders close button 31ms
+[PASS] src/Components/UserProfileModal.test.jsx > UserProfileModal > calls onClose when close button is clicked 21ms
+[PASS] src/Components/UserProfileModal.test.jsx > UserProfileModal — with data > displays display name after loading 27ms
+[PASS] src/Components/UserProfileModal.test.jsx > UserProfileModal — with data > displays @username 13ms
+[PASS] src/pages/Login.test.jsx > Login page > renders username and password fields 84ms
+[PASS] src/Components/Navbar.test.jsx > Navbar — bell and DM badge > opens NotificationPanel on bell click 22ms
+[PASS] src/Components/Navbar.test.jsx > Navbar — bell and DM badge > closes NotificationPanel when onClose fires 30ms
+[PASS] src/Components/Navbar.test.jsx > Navbar — bell and DM badge > does not show DM badge on Chat link (bell is the sole unread indicator) 12ms
+[PASS] src/context/notificationContext.test.jsx > NotificationContext > increments unreadCount on type=notification frame 56ms
+[PASS] src/context/notificationContext.test.jsx > NotificationContext > marks suppressed game_invite as read=true so totalUnreadCount is not incremented 54ms
+[PASS] src/pages/Chat.test.jsx > Chat page > shows chat view when joined via navigation state 117ms
+[PASS] src/pages/Chat.test.jsx > Chat page > direct URL access without nav state waits for auth before showing room 6ms
+[PASS] src/Components/GameInviteModal.test.jsx > GameInviteModal - Incoming Invites (Global) > Incoming Invites - Rendering on Any Page > should render game_invite modal when incoming invite received 149ms
+[PASS] src/Components/RegisterForm.test.jsx > RegisterForm > renders username, password, confirmPassword fields and checkboxes 100ms
+[PASS] src/Components/FriendsSidebar.test.jsx > FriendsSidebar > shows friends section heading 89ms
+[PASS] src/Components/FriendsSidebar.test.jsx > FriendsSidebar > shows no friends message when list is empty 17ms
+[PASS] src/Components/LobbyPanel.test.jsx > LobbyPanel > calls onEnter with room name when a room button is clicked 190ms
+[PASS] src/Components/LobbyPanel.test.jsx > LobbyPanel > shows the create form in both compact and full modes 21ms
+[PASS] src/Components/LobbyPanel.test.jsx > LobbyPanel > shows the create form in full mode 11ms
+[PASS] src/Components/LobbyPanel.test.jsx > LobbyPanel > creates a room and calls onEnter on 201 38ms
+[PASS] src/Components/LobbyPanel.test.jsx > LobbyPanel > shows duplicate error message on 409 31ms
+[PASS] src/Components/LobbyPanel.test.jsx > LobbyPanel > shows invalid name error message on 400 29ms
+[PASS] src/Components/UserProfileModal.test.jsx > UserProfileModal — with data > shows win count 15ms
+[PASS] src/Components/UserProfileModal.test.jsx > UserProfileModal — with data > shows match count 18ms
+[PASS] src/Components/UserProfileModal.test.jsx > UserProfileModal — with data > shows Chat button 62ms
+[PASS] src/context/notificationContext.test.jsx > NotificationContext > inserts game_invite as read=false and increments badge when invite UI is NOT visible 58ms
+[PASS] src/context/notificationContext.test.jsx > NotificationContext > caps notification list at 20 entries on WS insert 56ms
+[PASS] src/pages/Chat.test.jsx > Chat page > send button is disabled when not yet connected 114ms
+[PASS] src/pages/Chat.test.jsx > Chat page > send button is enabled after connection opens 35ms
+[PASS] src/pages/Chat.test.jsx > Chat page > send() calls ws.send with content and sender name 45ms
+[PASS] src/Components/RegisterForm.test.jsx > RegisterForm > shows error when passwords do not match 166ms
+[PASS] src/Components/RegisterForm.test.jsx > RegisterForm > shows error when terms checkbox is not accepted 54ms
+[PASS] src/pages/Login.test.jsx > Login page > submit button is enabled by default and disabled while submitting 150ms
+[PASS] src/pages/Login.test.jsx > Login page > sends username and password in request body 94ms
+[PASS] src/Components/FriendsSidebar.test.jsx > FriendsSidebar > shows avatar image for each friend 103ms
+[PASS] src/Components/FriendsSidebar.test.jsx > FriendsSidebar > falls back to placeholder when avatar_url is null 30ms
+[PASS] src/Components/FriendsSidebar.test.jsx > FriendsSidebar > shows friend with chat button when list has entries 40ms
+[PASS] src/Components/UserProfileModal.test.jsx > UserProfileModal — with data > calls onChat when Chat button is clicked 40ms
+[PASS] src/Components/UserProfileModal.test.jsx > UserProfileModal — with data > shows Add Friend button 36ms
+[PASS] src/Components/UserProfileModal.test.jsx > UserProfileModal — with data > shows Block button 30ms
+[PASS] src/context/notificationContext.test.jsx > NotificationContext > dedupes by id: re-inserting the same id does not create duplicates 58ms
+[PASS] src/context/notificationContext.test.jsx > NotificationContext > ignores frames with type !== notification 55ms
+[PASS] src/pages/Chat.test.jsx > Chat page > received messages appear in the list 23ms
+[PASS] src/pages/Chat.test.jsx > Chat page > renders FriendsSidebar alongside the chat panel 14ms
+[PASS] src/pages/Chat.test.jsx > Chat page > shows profile modal when sender name is clicked 38ms
+[PASS] src/Components/UserProfileModal.test.jsx > UserProfileModal — with data > calls friend request endpoint when Add Friend is clicked 46ms
+[PASS] src/Components/UserProfileModal.test.jsx > UserProfileModal — with data > calls block endpoint when Block is clicked 27ms
+[PASS] src/Components/UserProfileModal.test.jsx > UserProfileModal — userId provided directly > skips search when userId is provided and shows profile 7ms
+[PASS] src/Components/GameInviteModal.test.jsx > GameInviteModal - Incoming Invites (Global) > Incoming Invites - Rendering on Any Page > should have Accept and Decline buttons for incoming invites 231ms
+[PASS] src/pages/Login.test.jsx > Login page > stores tokens in sessionStorage on success (rememberMe unchecked) 49ms
+[PASS] src/pages/Login.test.jsx > Login page > shows error alert on 401 66ms
+[PASS] src/Components/RegisterForm.test.jsx > RegisterForm > shows error when privacy checkbox is not accepted 55ms
+[PASS] src/Components/RegisterForm.test.jsx > RegisterForm > submit button is disabled while submitting 47ms
+[PASS] src/Components/RegisterForm.test.jsx > RegisterForm > sends correct payload to /api/users/auth/register 44ms
+[PASS] src/pages/Chat.test.jsx > Chat page > closes profile modal when onClose is called 61ms
+[PASS] src/pages/Chat.test.jsx > Chat page > shows full LobbyPanel when no roomId in URL 10ms
+[PASS] src/pages/Chat.test.jsx > Chat page > shows compact LobbySidebar alongside chat when in a room 8ms
+[PASS] src/pages/Chat.test.jsx > Chat page > shows ← Lobby link when inside a room 14ms
+[PASS] src/pages/Chat.test.jsx > Chat page > does not show ← Lobby link on the lobby view 10ms
+[PASS] src/Components/FriendsSidebar.test.jsx > FriendsSidebar > chat button navigates to canonical DM slug (lower id first) 100ms
+[PASS] src/context/notificationContext.test.jsx > NotificationContext > clears notifications when access_token becomes null (logout) 56ms
+[PASS] src/context/notificationContext.test.jsx > NotificationContext > closes WS on unmount 55ms
+[PASS] src/context/notificationContext.test.jsx > NotificationContext > includes DM pseudo-notifications from unreadCounts 7ms
+[PASS] src/context/notificationContext.test.jsx > NotificationContext > DM pseudo-notification created_at is stable across recomputes 6ms
+[PASS] src/context/notificationContext.test.jsx > NotificationContext > DM message includes sender name when dmSenders has an entry for the slug 3ms
+[PASS] src/context/notificationContext.test.jsx > NotificationContext > DM message omits sender name when dmSenders has no entry for the slug 3ms
+[PASS] src/context/notificationContext.test.jsx > NotificationContext > clears DM unread counts when markAllRead is called 53ms
+[PASS] src/Components/GameInviteModal.test.jsx > GameInviteModal - Incoming Invites (Global) > Incoming Invites - Rendering on Any Page > should extract room_id from invite message 134ms
+[PASS] src/Components/RegisterForm.test.jsx > RegisterForm > shows success message on 201 37ms
+[PASS] src/Components/RegisterForm.test.jsx > RegisterForm > calls login() and redirects to /profile after auto-login succeeds 46ms
+[PASS] src/Components/RegisterForm.test.jsx > RegisterForm > shows error on failed registration (e.g. 409 conflict) 48ms
+[PASS] src/Components/FriendsSidebar.test.jsx > FriendsSidebar > chat button produces same DM slug regardless of which user initiates 80ms
+[PASS] src/Components/FriendsSidebar.test.jsx > FriendsSidebar > accept PUT includes Authorization header 29ms
+[PASS] src/Components/FriendsSidebar.test.jsx > FriendsSidebar > accept button calls PUT /requests/{id} with action accept 26ms
+[PASS] src/Components/FriendsSidebar.test.jsx > FriendsSidebar > decline button calls PUT /requests/{id} with action decline 21ms
+[PASS] src/context/authStorage.test.js > getStoredAuth > returns null when both storages are empty 3ms
+[PASS] src/context/authStorage.test.js > getStoredAuth > returns session tokens when sessionStorage has all three keys 2ms
+[PASS] src/context/authStorage.test.js > getStoredAuth > falls back to localStorage when sessionStorage is empty 1ms
+[PASS] src/context/authStorage.test.js > getStoredAuth > prefers sessionStorage over localStorage when both have tokens 1ms
+[PASS] src/context/authStorage.test.js > saveAuth > writes to sessionStorage and clears localStorage when rememberMe is false 1ms
+[PASS] src/context/authStorage.test.js > saveAuth > writes to localStorage and clears sessionStorage when rememberMe is true 1ms
+[PASS] src/context/authStorage.test.js > clearAuth > removes all three keys from both storages 1ms
+[PASS] src/pages/Login.test.jsx > Login page > shows generic error alert on non-JSON error body (e.g. 502) 49ms
+[PASS] src/pages/Login.test.jsx > Login page > shows connection error alert when fetch throws 37ms
+[PASS] src/pages/Login.test.jsx > Login page > redirects to /profile on successful login 42ms
+[PASS] src/pages/Login.test.jsx > Login page > stores tokens in localStorage when rememberMe is checked 68ms
+[PASS] src/Components/RegisterForm.test.jsx > RegisterForm > shows error on non-JSON error body (e.g. 502) 27ms
+[PASS] src/Components/RegisterForm.test.jsx > RegisterForm > shows connection error when fetch throws 25ms
+[PASS] src/game/pongEngine.test.js > gameLoop > calls onGoal when the ball exits a boundary 4ms
+[PASS] src/game/pongEngine.test.js > gameLoop > does not call onGoal when ball is in play 1ms
+[PASS] src/game/pongEngine.test.js > gameLoop > skips physics and onGoal when isPaused returns true 0ms
+[PASS] src/game/pongEngine.test.js > gameLoop > still calls render when paused 0ms
+[PASS] src/Components/GameInviteModal.test.jsx > GameInviteModal - Incoming Invites (Global) > Incoming Invites - Accept/Decline Functionality > should navigate to game waiting room when Accept clicked 124ms
+[PASS] src/utils/wsClient.test.js > createWsClient > calls onOpen when connection opens 4ms
+[PASS] src/utils/wsClient.test.js > createWsClient > calls onMessage with parsed JSON 3ms
+[PASS] src/utils/wsClient.test.js > createWsClient > send() serializes data as JSON 1ms
+[PASS] src/utils/wsClient.test.js > createWsClient > close() stops reconnect attempts 3ms
+[PASS] src/utils/wsClient.test.js > createWsClient > close() cancels a reconnect timer already scheduled before close() was called 1ms
+[PASS] src/utils/wsClient.test.js > createWsClient > reconnects automatically on unexpected close 1ms
+[PASS] src/Components/GameInviteModal.test.jsx > GameInviteModal - Incoming Invites (Global) > Incoming Invites - Accept/Decline Functionality > should send correct data when Accept clicked 113ms
+[PASS] src/utils/avatarFilter.test.js > getAvatarFilter > returns a CSS filter string 1ms
+[PASS] src/utils/avatarFilter.test.js > getAvatarFilter > produces different filters for different IDs 0ms
+[PASS] src/utils/avatarFilter.test.js > getAvatarFilter > hue is always in [0, 359] 2ms
+[PASS] src/utils/avatarFilter.test.js > getAvatarFilter > saturation is always in [100, 179] 2ms
+[PASS] src/utils/inactivityTracker.test.js > inactivityTracker > should trigger warning callback at warning threshold 5ms
+[PASS] src/utils/inactivityTracker.test.js > inactivityTracker > should trigger logout callback at logout threshold 1ms
+[PASS] src/utils/inactivityTracker.test.js > inactivityTracker > should not reset warning state on passive reset 1ms
+[PASS] src/utils/inactivityTracker.test.js > inactivityTracker > should properly calculate time until logout 1ms
+[PASS] src/Components/PrivateRoute.test.jsx > PrivateRoute > shows loading state when auth is not ready 31ms
+[PASS] src/Components/PrivateRoute.test.jsx > PrivateRoute > shows auth-required when ready but not authenticated 4ms
+[PASS] src/Components/PrivateRoute.test.jsx > PrivateRoute > renders children when ready and authenticated 3ms
+[PASS] src/Components/GameInviteModal.test.jsx > GameInviteModal - Incoming Invites (Global) > Incoming Invites - Accept/Decline Functionality > should mark notification as read when Accept clicked 110ms
+[PASS] src/Components/FriendsSidebar.test.jsx > FriendsSidebar > shows search results when query is entered 311ms
+[PASS] src/Components/FriendsSidebar.test.jsx > FriendsSidebar > shows online dot when presenceMap says online 11ms
+[PASS] src/Components/FriendsSidebar.test.jsx > FriendsSidebar > presenceMap online overrides REST offline status 5ms
+[PASS] src/Components/FriendsSidebar.test.jsx > FriendsSidebar > avatar has online border class when presenceMap says online 8ms
+[PASS] src/Components/FriendsSidebar.test.jsx > FriendsSidebar > falls back to REST status when presenceMap is empty (e.g. after WS disconnect) 7ms
+[PASS] src/Components/FriendsSidebar.test.jsx > FriendsSidebar > calls onViewProfile with friend username and id when friend username is clicked 8ms
+[PASS] src/Components/FriendsSidebar.test.jsx > FriendsSidebar > renders friend username as plain text when onViewProfile is not provided 5ms
+[PASS] src/Components/FriendsSidebar.test.jsx > FriendsSidebar > shows offline modal when friend is not in DM room 15ms
+[PASS] src/Components/FriendsSidebar.test.jsx > FriendsSidebar > Open Chat button navigates to DM room and closes modal 18ms
+[PASS] src/Components/FriendsSidebar.test.jsx > FriendsSidebar > Cancel button closes modal without navigating 16ms
+[PASS] src/Components/GameInviteModal.test.jsx > GameInviteModal - Incoming Invites (Global) > Incoming Invites - Accept/Decline Functionality > should not navigate if no room_id in invite 111ms
+[PASS] src/Components/FriendsSidebar.test.jsx > FriendsSidebar > navigates immediately when friend is already in DM room 60ms
+[PASS] src/Components/FriendsSidebar.test.jsx > FriendsSidebar > backdrop click closes the offline modal without navigating 22ms
+[PASS] src/Components/FriendsSidebar.test.jsx > FriendsSidebar > Escape key closes the offline modal without navigating 13ms
+[PASS] src/Components/GameInviteModal.test.jsx > GameInviteModal - Incoming Invites (Global) > Incoming Invites - Accept/Decline Functionality > should close modal when Decline clicked 112ms
+[PASS] src/Components/FriendsSidebar.test.jsx > FriendsSidebar > navigates immediately when active endpoint call fails (network error) 61ms
+[PASS] src/Components/FriendsSidebar.test.jsx > FriendsSidebar > navigates immediately when active endpoint returns non-2xx (fail-open) 62ms
+[PASS] src/Components/FriendsSidebar.test.jsx > FriendsSidebar — unread badge > shows unread badge count on friend row 13ms
+[PASS] src/Components/GameInviteModal.test.jsx > GameInviteModal - Incoming Invites (Global) > Incoming Invites - Accept/Decline Functionality > should mark notification as read when Decline clicked 108ms
+[PASS] src/Components/FriendsSidebar.test.jsx > FriendsSidebar — unread badge > calls clearUnread when Chat button is clicked and friend is in room 60ms
+[PASS] src/Components/FriendsSidebar.test.jsx > FriendsSidebar — unread badge > does NOT call clearUnread when offline modal is shown and user cancels 18ms
+[PASS] src/Components/FriendsSidebar.test.jsx > FriendsSidebar — unread badge > calls clearUnread when Open Chat is clicked in the offline modal 14ms
+[PASS] src/Components/FriendsSidebar.test.jsx > FriendsSidebar — setInviteVisible cleanup > calls setInviteVisible(false) on unmount so suppression does not persist 2ms
+[PASS] src/Components/GameInviteModal.test.jsx > GameInviteModal - Incoming Invites (Global) > Sender Info Extraction > should extract from_user_id from notification 105ms
+[PASS] src/Components/GameInviteModal.test.jsx > GameInviteModal - Incoming Invites (Global) > Sender Info Extraction > should extract username from message text 104ms
+[PASS] src/Components/GameInviteModal.test.jsx > GameInviteModal - Incoming Invites (Global) > Sender Info Extraction > should fallback to from_user_id if username parse fails 106ms
+[PASS] src/Components/GameInviteModal.test.jsx > GameInviteModal - Incoming Invites (Global) > Modal Persistence Across Page Navigation > should persist modal state when notifications array changes 110ms
+[PASS] src/Components/GameInviteModal.test.jsx > GameInviteModal - Incoming Invites (Global) > Modal Persistence Across Page Navigation > should process only unread game_invite notifications 109ms
+[PASS] src/Components/GameInviteModal.test.jsx > GameInviteModal - Incoming Invites (Global) > Invite-Specific UI > should show "Match Invite" title for game_invite type 106ms
+[PASS] src/Components/GameInviteModal.test.jsx > GameInviteModal - Incoming Invites (Global) > Invite-Specific UI > should display invite message text 106ms
+[PASS] src/Components/GameInviteModal.test.jsx > GameInviteModal - Incoming Invites (Global) > Invite-Specific UI > should have proper accessibility attributes for invite modal 109ms
+[PASS] src/Components/GameInviteModal.test.jsx > GameInviteModal - Response Notifications > Rendering > should not render when there are no notifications 2ms
+[PASS] src/Components/GameInviteModal.test.jsx > GameInviteModal - Response Notifications > Rendering > should render response notification modal 106ms
+[PASS] src/Components/GameInviteModal.test.jsx > GameInviteModal - Response Notifications > Rendering > should show OK button for response notifications 110ms
+[PASS] src/Components/GameInviteModal.test.jsx > GameInviteModal - Response Notifications > OK Button Interactions > should mark notification as read when OK clicked 110ms
+[PASS] src/Components/GameInviteModal.test.jsx > GameInviteModal - Response Notifications > OK Button Interactions > should close modal when OK clicked 111ms
+[PASS] src/Components/GameInviteModal.test.jsx > GameInviteModal - Response Notifications > Auto-Dismiss Behavior > should NOT auto-dismiss response notifications (requires manual OK click) 1ms
+[PASS] src/Components/GameInviteModal.test.jsx > GameInviteModal - Response Notifications > Accessibility > should render modal with both title and message 106ms
+[PASS] src/Components/GameInviteModal.test.jsx > GameInviteModal - Response Notifications > Accessibility > should have OK button accessible 105ms
+[PASS] src/Components/GameInviteModal.test.jsx > GameInviteModal - Response Notifications > Multiple Notifications > should show only unread notifications 106ms
+
+══════════════════════════════════════════════════════════════
+  SUITE RESULTS
+──────────────────────────────────────────────────────────────
+  [PASS]  Container Status                              pass:7   fail:0
+  [PASS]  Restart Policy                                pass:7   fail:0
+  [PASS]  nginx TLS (port 8443)                         pass:4   fail:0
+  [PASS]  HTTPS Response                                pass:1   fail:0
+  [PASS]  Port Exposure                                 pass:4   fail:0
+  [PASS]  Domain Resolution                             pass:1   fail:0
+  [PASS]  Docker Network                                pass:9   fail:0
+  [PASS]  PostgreSQL Health                             pass:3   fail:0
+  [PASS]  Backend Health                                pass:3   fail:0
+  [PASS]  Frontend Response                             pass:1   fail:0
+  [PASS]  nginx Proxy Routes                            pass:4   fail:0
+  [PASS]  Named Volume                                  pass:2   fail:0
+  [PASS]  Dockerfile Safety                             pass:28  fail:0
+  [PASS]  docker-compose.yml Safety                     pass:4   fail:0
+  [PASS]  Secrets & Repository Structure                pass:22  fail:0
+  [PASS]  WebSocket Connectivity                        pass:2   fail:0
+  [PASS]  Chat Message Suite                            pass:3   fail:0
+  [PASS]  Chat History Persistence Suite                pass:7   fail:0
+  [PASS]  DB Schema Validation                          pass:14  fail:0
+  [PASS]  User Service API Suite                        pass:6   fail:0
+  [PASS]  Game Service Match History Suite              pass:3   fail:0
+  [FAIL]  User Service Unit Tests            pass:95  fail:32
+  [FAIL]  Game Service Unit Tests            pass:46  fail:22
+  [PASS]  Chat Service Unit Tests                       pass:36  fail:0
+  [PASS]  Frontend Unit Tests                           pass:319 fail:0
+──────────────────────────────────────────────────────────────
+  TOTAL      PASSED: 631  FAILED: 54 
+══════════════════════════════════════════════════════════════
+54 mandatory check(s) failed. Review the output above.
