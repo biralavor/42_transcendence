@@ -156,11 +156,7 @@ async def withdraw_tournament(
     db: AsyncSession,
     tournament_id: int,
     user_id: int,
-) -> tuple[Tournament, bool]:
-    """User withdraws from a tournament in progress.
-    
-    Returns (tournament, tournament_complete).
-    """
+) -> tuple[Tournament, bool, list[TournamentMatch]]:
     result = await db.execute(
         select(Tournament).where(Tournament.id == tournament_id).with_for_update()
     )
@@ -183,25 +179,52 @@ async def withdraw_tournament(
     if participant is None:
         raise TournamentNotParticipant()
 
+    affected_matches_result = await db.execute(
+        select(TournamentMatch)
+        .where(
+            TournamentMatch.tournament_id == tournament_id,
+            or_(
+                TournamentMatch.player1_id == user_id,
+                TournamentMatch.player2_id == user_id,
+            ),
+        )
+        .order_by(TournamentMatch.position.asc(), TournamentMatch.id.asc())
+    )
+    affected_matches = list(affected_matches_result.scalars().all())
+
+    for tournament_match in affected_matches:
+        await _award_tournament_forfeit(db, tournament_match, user_id)
+
+    other_participants_result = await db.execute(
+        select(TournamentParticipant)
+        .where(
+            TournamentParticipant.tournament_id == tournament_id,
+            TournamentParticipant.user_id != user_id,
+        )
+        .order_by(TournamentParticipant.joined_at.asc())
+    )
+    other_participants = list(other_participants_result.scalars().all())
+
     await db.delete(participant)
     await db.flush()
-    
-    # Check if tournament should be marked complete
-    # (all remaining participants are no longer actively playing)
-    remaining_participants_result = await db.execute(
-        select(TournamentParticipant).where(
-            TournamentParticipant.tournament_id == tournament_id
-        )
+
+    if tournament.creator_id == user_id and other_participants:
+        tournament.creator_id = other_participants[0].user_id
+
+    newly_assigned = await _assign_available_tournament_matches(db, tournament_id)
+
+    all_matches_result = await db.execute(
+        select(TournamentMatch).where(TournamentMatch.tournament_id == tournament_id)
     )
-    remaining_participants = list(remaining_participants_result.scalars().all())
-    
-    tournament_complete = False
-    if not remaining_participants:
+    all_matches = list(all_matches_result.scalars().all())
+
+    tournament_complete = all(match.status == "finished" for match in all_matches)
+    if tournament_complete:
         tournament.status = "complete"
-        tournament_complete = True
-    
+
     await db.commit()
-    return tournament, tournament_complete
+    await db.refresh(tournament)
+    return tournament, tournament_complete, newly_assigned
 
 async def create_tournament(
     db: AsyncSession, name: str, creator_id: int, max_participants: int
@@ -236,14 +259,28 @@ async def get_tournament_with_participants(
     tournament = result.scalars().first()
     if tournament is None:
         return None
+
     participants_result = await db.execute(
-        select(TournamentParticipant).where(TournamentParticipant.tournament_id == tournament_id)
+        select(TournamentParticipant).where(
+            TournamentParticipant.tournament_id == tournament_id
+        )
     )
     participants = list(participants_result.scalars().all())
+
     matches_result = await db.execute(
-        select(TournamentMatch).where(TournamentMatch.tournament_id == tournament_id)
+        select(TournamentMatch, Match.score_p1, Match.score_p2, Match.started_at)
+        .outerjoin(Match, Match.id == TournamentMatch.match_id)
+        .where(TournamentMatch.tournament_id == tournament_id)
     )
-    matches = list(matches_result.scalars().all())
+    rows = matches_result.all()
+
+    matches = []
+    for tm, score_p1, score_p2, started_at in rows:
+        tm.score_p1 = score_p1 or 0
+        tm.score_p2 = score_p2 or 0
+        tm.started_at = started_at
+        matches.append(tm)
+
     return tournament, participants, matches
 
 async def list_tournaments(db: AsyncSession) -> list[Tournament]:
@@ -322,6 +359,107 @@ async def join_tournament(
     return participant
 
 
+def _build_round_robin_pairs(user_ids: list[int]) -> list[tuple[int, int]]:
+    pairs: list[tuple[int, int]] = []
+
+    for i in range(len(user_ids)):
+        for j in range(i + 1, len(user_ids)):
+            pairs.append((user_ids[i], user_ids[j]))
+
+    return pairs
+
+
+async def _assign_available_tournament_matches(
+    db: AsyncSession,
+    tournament_id: int,
+) -> list[TournamentMatch]:
+    result = await db.execute(
+        select(TournamentMatch)
+        .where(TournamentMatch.tournament_id == tournament_id)
+        .order_by(TournamentMatch.position.asc(), TournamentMatch.id.asc())
+    )
+    tournament_matches = list(result.scalars().all())
+
+    busy_player_ids: set[int] = set()
+    for tm in tournament_matches:
+        if tm.status != "in_progress":
+            continue
+        if tm.player1_id is not None:
+            busy_player_ids.add(tm.player1_id)
+        if tm.player2_id is not None:
+            busy_player_ids.add(tm.player2_id)
+
+    newly_assigned: list[TournamentMatch] = []
+
+    for tm in tournament_matches:
+        if tm.status != "pending":
+            continue
+
+        if tm.player1_id is None or tm.player2_id is None:
+            continue
+
+        if tm.player1_id in busy_player_ids or tm.player2_id in busy_player_ids:
+            continue
+
+        match = Match(
+            player1_id=tm.player1_id,
+            player2_id=tm.player2_id,
+            status="ongoing",
+            started_at=datetime.now(timezone.utc),
+        )
+        db.add(match)
+        await db.flush()
+
+        tm.match_id = match.id
+        tm.status = "in_progress"
+
+        busy_player_ids.add(tm.player1_id)
+        busy_player_ids.add(tm.player2_id)
+        newly_assigned.append(tm)
+
+    return newly_assigned
+
+
+async def _award_tournament_forfeit(
+    db: AsyncSession,
+    tournament_match: TournamentMatch,
+    withdrawn_user_id: int,
+) -> None:
+    if tournament_match.status == "finished":
+        return
+
+    if tournament_match.player1_id == withdrawn_user_id:
+        opponent_id = tournament_match.player2_id
+    elif tournament_match.player2_id == withdrawn_user_id:
+        opponent_id = tournament_match.player1_id
+    else:
+        return
+
+    tournament_match.winner_id = opponent_id
+    tournament_match.status = "finished"
+
+    if tournament_match.match_id is None:
+        return
+
+    match_result = await db.execute(
+        select(Match).where(Match.id == tournament_match.match_id)
+    )
+    match = match_result.scalars().first()
+    if match is None:
+        return
+
+    match.winner_id = opponent_id
+    if opponent_id == match.player1_id:
+        match.score_p1 = 1
+        match.score_p2 = 0
+    else:
+        match.score_p1 = 0
+        match.score_p2 = 1
+
+    match.status = "finished"
+    match.finished_at = datetime.now(timezone.utc)
+
+
 async def start_tournament(
     db: AsyncSession, tournament_id: int, user_id: int
 ) -> tuple[Tournament, list[TournamentMatch]]:
@@ -345,41 +483,38 @@ async def start_tournament(
     if len(participants) != tournament.max_participants:
         raise TournamentNotEnoughParticipants()
 
-    random.shuffle(participants)
+    user_ids = [p.user_id for p in participants]
+    random.shuffle(user_ids)
 
-    tournament_matches: list[TournamentMatch] = []
-    num_matches = tournament.max_participants // 2
-    for i in range(num_matches):
-        p1 = participants[i * 2]
-        p2 = participants[i * 2 + 1]
+    pairings = _build_round_robin_pairs(user_ids)
 
-        match = Match(
-            player1_id=p1.user_id,
-            player2_id=p2.user_id,
-            status="ongoing",
-            started_at=datetime.now(timezone.utc),
-        )
-        db.add(match)
-        await db.flush()
-
+    for position, (player1_id, player2_id) in enumerate(pairings):
         tm = TournamentMatch(
             tournament_id=tournament_id,
-            match_id=match.id,
+            match_id=None,
             round=1,
-            position=i,
-            player1_id=p1.user_id,
-            player2_id=p2.user_id,
+            position=position,
+            player1_id=player1_id,
+            player2_id=player2_id,
+            winner_id=None,
             status="pending",
         )
         db.add(tm)
-        tournament_matches.append(tm)
 
     tournament.status = "in_progress"
+    await db.flush()
+    await _assign_available_tournament_matches(db, tournament_id)
     await db.commit()
-    for tm in tournament_matches:
-        await db.refresh(tm)
+
+    refreshed_result = await db.execute(
+        select(TournamentMatch)
+        .where(TournamentMatch.tournament_id == tournament_id)
+        .order_by(TournamentMatch.position.asc(), TournamentMatch.id.asc())
+    )
+    refreshed_matches = list(refreshed_result.scalars().all())
+
     await db.refresh(tournament)
-    return tournament, tournament_matches
+    return tournament, refreshed_matches
 
 
 async def finish_match(
@@ -408,10 +543,10 @@ async def record_tournament_match_result(
     winner_id: int,
     score_p1: int = 0,
     score_p2: int = 0,
-) -> tuple[Tournament, bool]:
+) -> tuple[Tournament, bool, list[TournamentMatch]]:
     """Record the winner of a tournament match and advance the bracket.
 
-    Returns (tournament, tournament_complete).
+    Returns (tournament, tournament_complete, newly_assigned).
     """
     result = await db.execute(
         select(Tournament).where(Tournament.id == tournament_id).with_for_update()
@@ -447,48 +582,100 @@ async def record_tournament_match_result(
         match.finished_at = datetime.now(timezone.utc)
     await db.flush()
     await award_xp(winner_id, 100, db)
-    current_round = tm.round
-    round_result = await db.execute(
-        select(TournamentMatch)
-        .where(
-            TournamentMatch.tournament_id == tournament_id,
-            TournamentMatch.round == current_round,
-        )
-        .order_by(TournamentMatch.position)
-    )
-    round_matches = list(round_result.scalars().all())
 
-    tournament_complete = False
-    if all(rm.status == "finished" for rm in round_matches):
-        if len(round_matches) == 1:
-            tournament.status = "complete"
-            tournament_complete = True
-        else:
-            for i in range(len(round_matches) // 2):
-                w1 = round_matches[i * 2].winner_id
-                w2 = round_matches[i * 2 + 1].winner_id
-                new_match = Match(
-                    player1_id=w1,
-                    player2_id=w2,
-                    status="ongoing",
-                    started_at=datetime.now(timezone.utc),
-                )
-                db.add(new_match)
-                await db.flush()
-                new_tm = TournamentMatch(
-                    tournament_id=tournament_id,
-                    match_id=new_match.id,
-                    round=current_round + 1,
-                    position=i,
-                    player1_id=w1,
-                    player2_id=w2,
-                    status="pending",
-                )
-                db.add(new_tm)
+    newly_assigned = await _assign_available_tournament_matches(db, tournament_id)
+
+    all_matches_result = await db.execute(
+        select(TournamentMatch).where(TournamentMatch.tournament_id == tournament_id)
+    )
+    all_matches = list(all_matches_result.scalars().all())
+    tournament_complete = all(
+        tournament_match.status == "finished"
+        for tournament_match in all_matches
+    )
+    if tournament_complete:
+        tournament.status = "complete"
 
     await db.commit()
     await db.refresh(tournament)
-    return tournament, tournament_complete
+    return tournament, tournament_complete, newly_assigned
+
+
+async def record_tournament_match_timeout_result(
+    db: AsyncSession,
+    tournament_id: int,
+    tournament_match_id: int,
+    winner_id: int | None,
+) -> tuple[Tournament, bool, list[TournamentMatch]]:
+    """
+    Resolve a tournament match by ready-timeout.
+
+    winner_id semantics:
+    - int: winner by WO
+    - None: no winner (both absent or no ready)
+    """
+    result = await db.execute(
+        select(Tournament).where(Tournament.id == tournament_id).with_for_update()
+    )
+    tournament = result.scalars().first()
+    if tournament is None:
+        raise TournamentNotFound()
+
+    tm_result = await db.execute(
+        select(TournamentMatch).where(
+            TournamentMatch.tournament_id == tournament_id,
+            TournamentMatch.id == tournament_match_id,
+        )
+    )
+    tm = tm_result.scalars().first()
+    if tm is None:
+        raise TournamentMatchNotFound()
+    if tm.status == "finished":
+        raise TournamentMatchAlreadyFinished()
+    if winner_id is not None and winner_id not in (tm.player1_id, tm.player2_id):
+        raise InvalidWinner()
+
+    tm.winner_id = winner_id
+    tm.status = "finished"
+
+    if tm.match_id is not None:
+        match_result = await db.execute(select(Match).where(Match.id == tm.match_id))
+        match = match_result.scalars().first()
+        if match is not None:
+            match.winner_id = winner_id
+            if winner_id is None:
+                match.score_p1 = 0
+                match.score_p2 = 0
+            elif winner_id == tm.player1_id:
+                match.score_p1 = 1
+                match.score_p2 = 0
+            else:
+                match.score_p1 = 0
+                match.score_p2 = 1
+            match.status = "finished"
+            match.finished_at = datetime.now(timezone.utc)
+
+    await db.flush()
+
+    if winner_id is not None:
+        await award_xp(winner_id, 100, db)
+
+    newly_assigned = await _assign_available_tournament_matches(db, tournament_id)
+
+    all_matches_result = await db.execute(
+        select(TournamentMatch).where(TournamentMatch.tournament_id == tournament_id)
+    )
+    all_matches = list(all_matches_result.scalars().all())
+    tournament_complete = all(
+        tournament_match.status == "finished"
+        for tournament_match in all_matches
+    )
+    if tournament_complete:
+        tournament.status = "complete"
+
+    await db.commit()
+    await db.refresh(tournament)
+    return tournament, tournament_complete, newly_assigned
 
 
 async def get_match(db: AsyncSession, match_id: int) -> Match | None:
@@ -886,7 +1073,7 @@ async def get_leaderboard(db: AsyncSession, limit: int = 20) -> list[dict]:
             agg.c.points,
             users.c.username,
         )
-        .join(users, agg.c.user_id == users.c.id)
+        .outerjoin(users, agg.c.user_id == users.c.id)
         .order_by(
             agg.c.points.desc(),
             agg.c.goal_difference.desc(),
@@ -903,7 +1090,6 @@ async def get_leaderboard(db: AsyncSession, limit: int = 20) -> list[dict]:
         {**row, "rank": rank}
         for rank, row in enumerate(result.mappings().all(), start=1)
     ]
-
 
 async def award_xp(user_id: int, amount: int, session: AsyncSession):
     """ caller should commit session"""
@@ -1040,3 +1226,188 @@ LIMIT 1
     }
 
     return {**ret}
+
+
+# async def get_leaderboard_paginated(
+#     db: AsyncSession,
+#     limit: int = 20,
+#     page: int = 0,
+#     sort_assoc: list[tuple[str, str]] | None = None,
+# ) -> dict:
+#     """Return paginated leaderboard with streak metadata and summary stats."""
+#     per_page = max(int(limit or 20), 1)
+#     page_number = max(int(page or 0), 0)
+#     sort_assoc = sort_assoc or []
+
+#     finished_cond = (Match.status == "finished", Match.finished_at.is_not(None))
+
+#     p1 = select(
+#         Match.player1_id.label("user_id"),
+#         Match.score_p1.label("goals_scored"),
+#         Match.score_p2.label("goals_conceded"),
+#         case((Match.winner_id == Match.player1_id, 1), else_=0).label("is_win"),
+#     ).where(*finished_cond)
+
+#     p2 = select(
+#         Match.player2_id.label("user_id"),
+#         Match.score_p2.label("goals_scored"),
+#         Match.score_p1.label("goals_conceded"),
+#         case((Match.winner_id == Match.player2_id, 1), else_=0).label("is_win"),
+#     ).where(*finished_cond)
+
+#     combined = union_all(p1, p2).subquery()
+
+#     agg = (
+#         select(
+#             combined.c.user_id,
+#             func.sum(combined.c.is_win).label("wins"),
+#             func.sum(1 - combined.c.is_win).label("losses"),
+#             func.count(combined.c.user_id).label("total_games"),
+#             func.sum(combined.c.goals_scored).label("goals_scored"),
+#             func.sum(combined.c.goals_conceded).label("goals_conceded"),
+#             (
+#                 func.sum(combined.c.goals_scored) - func.sum(combined.c.goals_conceded)
+#             ).label("goal_difference"),
+#             (func.sum(combined.c.is_win) * 3).label("points"),
+#         )
+#         .group_by(combined.c.user_id)
+#         .subquery()
+#     )
+
+#     users = table(
+#         "users",
+#         column("id", Integer),
+#         column("username", String),
+#         column("display_name", String),
+#     )
+
+#     agg_stmt = (
+#         select(
+#             agg.c.user_id,
+#             agg.c.wins,
+#             agg.c.losses,
+#             agg.c.total_games,
+#             agg.c.goals_scored,
+#             agg.c.goals_conceded,
+#             agg.c.goal_difference,
+#             agg.c.points,
+#             users.c.username,
+#             users.c.display_name,
+#         )
+#         .outerjoin(users, agg.c.user_id == users.c.id)
+#     )
+#     agg_rows = [dict(row) for row in (await db.execute(agg_stmt)).mappings().all()]
+
+#     streak_stmt = (
+#         select(
+#             Match.id,
+#             Match.player1_id,
+#             Match.player2_id,
+#             Match.winner_id,
+#             Match.finished_at,
+#         )
+#         .where(*finished_cond)
+#         .order_by(Match.finished_at.asc(), Match.id.asc())
+#     )
+#     streak_rows = (await db.execute(streak_stmt)).mappings().all()
+
+#     streak_by_user: dict[int, dict[str, int]] = {}
+#     for row in streak_rows:
+#         for player_id, won in (
+#             (row["player1_id"], row["winner_id"] == row["player1_id"]),
+#             (row["player2_id"], row["winner_id"] == row["player2_id"]),
+#         ):
+#             if player_id is None:
+#                 continue
+#             user_streak = streak_by_user.setdefault(
+#                 int(player_id), {"current_streak": 0, "max_streak": 0}
+#             )
+#             user_streak["current_streak"] = (
+#                 user_streak["current_streak"] + 1 if won else 0
+#             )
+#             user_streak["max_streak"] = max(
+#                 user_streak["max_streak"], user_streak["current_streak"]
+#             )
+
+#     rows: list[dict] = []
+#     for row in agg_rows:
+#         user_id = int(row["user_id"])
+#         streak = streak_by_user.get(user_id, {"current_streak": 0, "max_streak": 0})
+#         rows.append(
+#             {
+#                 "user_id": user_id,
+#                 "display_name": row.get("display_name") or row.get("username") or f"User {user_id}",
+#                 "wins": int(row["wins"] or 0),
+#                 "losses": int(row["losses"] or 0),
+#                 "total_games": int(row["total_games"] or 0),
+#                 "goals_scored": int(row["goals_scored"] or 0),
+#                 "goals_conceded": int(row["goals_conceded"] or 0),
+#                 "goal_difference": int(row["goal_difference"] or 0),
+#                 "points": int(row["points"] or 0),
+#                 "max_streak": int(streak["max_streak"]),
+#                 "current_streak": int(streak["current_streak"]),
+#             }
+#         )
+
+#     rows.sort(
+#         key=lambda item: (
+#             -item["points"],
+#             -item["goal_difference"],
+#             -item["goals_scored"],
+#             item["user_id"],
+#         )
+#     )
+#     for idx, row in enumerate(rows, start=1):
+#         row["rank"] = idx
+
+#     sortable_fields = {
+#         "rank",
+#         "wins",
+#         "losses",
+#         "points",
+#         "user_id",
+#         "max_streak",
+#         "total_games",
+#         "display_name",
+#         "goals_scored",
+#         "current_streak",
+#         "goals_conceded",
+#         "goal_difference",
+#     }
+#     valid_sorts = [
+#         (field, direction)
+#         for field, direction in sort_assoc
+#         if field in sortable_fields and direction in {"ASC", "DESC"}
+#     ]
+#     if valid_sorts:
+#         for field, direction in reversed(valid_sorts):
+#             reverse = direction == "DESC"
+#             if field == "display_name":
+#                 rows.sort(key=lambda item: item[field].lower(), reverse=reverse)
+#             else:
+#                 rows.sort(key=lambda item: item[field], reverse=reverse)
+
+#     def _summary_item(field: str) -> dict:
+#         if not rows:
+#             return {"value": 0, "display_name": "No Data"}
+#         best = max(rows, key=lambda item: item[field])
+#         return {"value": int(best[field]), "display_name": best["display_name"]}
+
+#     total = len(rows)
+#     last_page = max((total - 1) // per_page, 0) if total else 0
+#     start = page_number * per_page
+#     end = start + per_page
+#     paged_rows = rows[start:end] if start < total else []
+
+#     return {
+#         "page": page_number,
+#         "last_page": last_page,
+#         "per_page": per_page,
+#         "total": total,
+#         "results": paged_rows,
+#         "summary": {
+#             "max_points": _summary_item("points"),
+#             "max_max_streak": _summary_item("max_streak"),
+#             "max_current_streak": _summary_item("current_streak"),
+#         },
+#     }

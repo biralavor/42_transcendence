@@ -1,38 +1,21 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 
+
 async def reward_friendship_achievement_if_should(
-        requester_id, addressee_id, session
-):
-    print('requester_id', requester_id, 'addressee_id', addressee_id)
-    friendship_brekpoints = [1, 3, 5, 11, 21, 42, 77, 111, 450, 987]
+    requester_id: int, addressee_id: int, session: AsyncSession
+) -> None:
+    """Compatibility hook for friendship acceptance.
 
-    requester_friendship_count = \
-        ((await friend_count(requester_id, session)) or 0)
-    addressee_friendship_count = \
-        ((await friend_count(addressee_id, session)) or 0)
+    Achievement granting is currently disabled in this branch, but friends.py still
+    calls this hook. Keep it as a no-op to preserve service startup and flow safety.
+    """
+    _ = (requester_id, addressee_id, session)
+    return None
 
-    if requester_friendship_count in friendship_brekpoints:
-        achievement = {
-            "a_key": f'friend{requester_friendship_count}',
-            "a_name": f'{requester_friendship_count} mates',
-            "a_desc": f'You Have {requester_friendship_count} mates around here',
-            "a_icon": f'--#{requester_friendship_count}#--'
-        }
-        await insert_user_achievement(
-            requester_id, achievement, session)
-    if addressee_friendship_count in friendship_brekpoints:
-        achievement = {
-            "a_key": f'friend{addressee_friendship_count}',
-            "a_name": f'{addressee_friendship_count} mates',
-            "a_desc": f'You Have {addressee_friendship_count} mates around here',
-            "a_icon": f'--#{addressee_friendship_count}#--'
-        }
-        await insert_user_achievement(
-            addressee_id, achievement, session)
 
+# check on friend request accepted?
 async def friend_count(user_id: int, session: AsyncSession) -> int | None:
-
     statement = text("""
 WITH requested AS
 (
@@ -67,8 +50,6 @@ LIMIT 1
     )
     result_scalar: int | None = result.scalar_one_or_none()
     return result_scalar
-
-
 async def insert_user_achievement(
         user_id: int, achievement: dict[str,str], session: AsyncSession):
     """ caller should commit session"""

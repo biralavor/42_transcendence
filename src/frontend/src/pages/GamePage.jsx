@@ -10,13 +10,6 @@ import {
   sendGameChannelMessage,
 } from '../utils/gameInviteChannel'
 
-/**
- * GamePage - Multiplayer Pong Game with Server-Authoritative Logic
- *
- * This page is reached after both players are ready in GameWaitingRoom.
- * It renders the game canvas connected to the backend game-service.
- * On game end, shows GameOverOverlay instead of navigating away immediately.
- */
 export default function GamePage() {
   const { roomId } = useParams()
   const navigate = useNavigate()
@@ -47,6 +40,8 @@ export default function GamePage() {
 
   const tournamentId = location.state?.tournamentId
   const tournamentMatchId = location.state?.tournamentMatchId
+  // matchId supports both old (matchId) and new (tournamentMatchId) navigation state shapes
+  const matchId = location.state?.matchId ?? tournamentMatchId
   const difficulty = location.state?.difficulty ?? 'medium'
 
   const [gameOverResult, setGameOverResult] = useState(null)
@@ -64,10 +59,10 @@ export default function GamePage() {
   }
 
   async function handleGameEnd(result) {
-    if (tournamentId && tournamentMatchId && !submittingRef.current) {
+    if (tournamentId && matchId && !submittingRef.current) {
       submittingRef.current = true
       try {
-        await apiJson(`/api/game/tournaments/${tournamentId}/matches/${tournamentMatchId}/result`, {
+        await apiJson(`/api/game/tournaments/${tournamentId}/matches/${matchId}/result`, {
           method: 'POST',
           body: JSON.stringify(result),
         })
@@ -154,29 +149,40 @@ export default function GamePage() {
   return (
     <>
       <NavbarComponent />
-      <main className="game-page" style={{ position: 'relative' }}>
-        <PongCanvasMultiplayer
-          key={roomId}
-          gameId={roomId}
-          player1Id={player1Id}
-          player2Id={player2Id}
-          onGameEnd={handleGameEnd}
-        />
-        {gameOverResult && (
-          <GameOverOverlay
-            winnerName={p1Name}
-            scoreP1={scoreP1}
-            scoreP2={scoreP2}
-            p1Name={p1Name}
-            p2Name={p2Name}
-            isCurrentUserWinner={isCurrentUserWinner}
-            isTournamentGame={Boolean(tournamentId)}
-            onPlayAgain={handlePlayAgain}
-            onClose={handleClose}
-            onViewBracket={handleViewBracket}
-            onNextTurn={handleNextTurn}
-          />
-        )}
+      <main className="arcade-content game-page">
+        <section className="arcade-screen game-page-screen">
+          <div className="arcade-panel game-page-panel">
+            <div className="game-page-header">
+              <span className="arcade-display game-page-kicker">Live Match</span>
+              <h1 className="arcade-title game-page-title">Pong Arena</h1>
+            </div>
+
+            <div className="game-page-canvas-shell" style={{ position: 'relative' }}>
+              <PongCanvasMultiplayer
+                key={roomId}
+                gameId={roomId}
+                player1Id={player1Id}
+                player2Id={player2Id}
+                onGameEnd={handleGameEnd}
+              />
+              {gameOverResult && (
+                <GameOverOverlay
+                  winnerName={p1Name}
+                  scoreP1={scoreP1}
+                  scoreP2={scoreP2}
+                  p1Name={p1Name}
+                  p2Name={p2Name}
+                  isCurrentUserWinner={isCurrentUserWinner}
+                  isTournamentGame={Boolean(tournamentId)}
+                  onPlayAgain={handlePlayAgain}
+                  onClose={handleClose}
+                  onViewBracket={handleViewBracket}
+                  onNextTurn={handleNextTurn}
+                />
+              )}
+            </div>
+          </div>
+        </section>
       </main>
     </>
   )

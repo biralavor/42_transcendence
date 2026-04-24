@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Dict, Set
+from typing import TYPE_CHECKING, Awaitable, Callable, Dict, Optional, Set
 
 if TYPE_CHECKING:
     from fastapi import WebSocket
@@ -9,11 +9,19 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+SignalCallback = Callable[[str], Awaitable[None]]
+
+
 class PresenceManager:
     """Tracks active WebSocket connections per user_id for presence broadcast."""
 
-    def __init__(self) -> None:
+    def __init__(self, signal_callback: Optional[SignalCallback] = None) -> None:
         self._users: Dict[int, Set[WebSocket]] = {}
+        self._signal_callback = signal_callback
+
+    def set_signal_callback(self, signal_callback: Optional[SignalCallback]) -> None:
+        """Inject a service-owned callback used to wake presence listeners."""
+        self._signal_callback = signal_callback
 
     async def connect(self, user_id: int, ws: "WebSocket") -> None:
         await ws.accept()
@@ -34,15 +42,12 @@ class PresenceManager:
                 await ws.send_json(message)
             except Exception:
                 self.disconnect(user_id, ws)
-        
-        # Signal handlers that data is ready (event-driven delivery)
-        # Try to signal presence_event_registry if available (graceful fallback)
-        try:
-            from service.ws.event_registry import presence_event_registry
-            await presence_event_registry.signal_event(str(user_id))
-        except (ImportError, AttributeError, Exception) as e:
-            # Non-blocking: signaling is best-effort, don't fail broadcast
-            pass
+
+        if self._signal_callback is not None:
+            try:
+                await self._signal_callback(str(user_id))
+            except Exception:
+                logger.debug("Presence signal callback failed for user %s", user_id, exc_info=True)
 
 
 presence_manager = PresenceManager()
