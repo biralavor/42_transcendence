@@ -79,7 +79,7 @@
   position: fixed;
   bottom: 10vh;
   pointer-events: none;
-  animation: flyUp 2.2s ease-out forwards;
+  animation: flyUp 3s ease-out forwards;
   z-index: 9999;
 }
 

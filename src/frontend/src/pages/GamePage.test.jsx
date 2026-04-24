@@ -93,6 +93,16 @@ describe('GamePage game over overlay', () => {
     expect(apiJson).toHaveBeenCalledWith('/api/users/profile/2')
   })
 
+  it('skips profile fetch for player2 in AI games (player2Id === 0)', async () => {
+    apiJson.mockResolvedValue({ id: 1, username: 'alice', display_name: 'Alice' })
+    const aiState = { player1_id: 1, player2_id: 0, difficulty: 'medium', gameType: 'ai',
+      currentUser: { id: 1, username: 'Alice', avatar_url: null } }
+    renderGamePage(aiState)
+    await act(async () => {})
+    expect(apiJson).toHaveBeenCalledWith('/api/users/profile/1')
+    expect(apiJson).not.toHaveBeenCalledWith('/api/users/profile/0')
+  })
+
   it('falls back to display_name, then username when display_name is absent', async () => {
     apiJson.mockImplementation((url) => {
       if (url.includes('/profile/1')) return Promise.resolve({ id: 1, username: 'alice', display_name: null })

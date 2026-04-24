@@ -4,7 +4,8 @@ import './GameOverOverlay.css'
 const victoryEmojiList = ['😊', '🎉', '🔥', '🚀', '✨', '💖', '🌈', '🍪']
 const defeatEmojiList  = ['😢', '😭', '💀', '💩', '🥀', '👎', '💣', '👀']
 
-// Must match the CSS animation-duration on .flying-emoji (flyUp / flyDown)
+// Matches the CSS animation-duration on .flying-emoji (flyUp / flyDown: 3s).
+// Controls both the spawn-stagger window and the post-animation removal delay.
 const EMOJI_ANIM_MS = 3000
 // How many times the emoji list is repeated per burst (1 = one pass, 2 = double, etc.)
 const EMOJI_BURST_REPEAT = 2
@@ -25,16 +26,18 @@ function spawnEmojiBurst(emojiList, extraClass) {
   // Spread emojis evenly across the full animation window so the last one
   // spawns just as the first finishes, giving a continuous one-by-one effect.
   const interval = Math.floor(EMOJI_ANIM_MS / expandedList.length)
-  const timers = []
+  const spawnTimers = []
+  const createdEls = []
   expandedList.forEach((emoji, i) => {
     const t = setTimeout(() => {
       const el = createFlyingEmoji(emoji, extraClass)
-      const remove = setTimeout(() => el.remove(), EMOJI_ANIM_MS + 500)
-      timers.push(remove)
+      createdEls.push(el)
+      // Removal timer is intentionally not tracked — cleanup handles it via createdEls
+      setTimeout(() => el.remove(), EMOJI_ANIM_MS + 500)
     }, i * interval)
-    timers.push(t)
+    spawnTimers.push(t)
   })
-  return timers
+  return { spawnTimers, createdEls }
 }
 
 export default function GameOverOverlay({
@@ -54,12 +57,16 @@ export default function GameOverOverlay({
 
   useEffect(() => {
     panelRef.current?.focus()
-    let timers = []
+    let spawnTimers = []
+    let createdEls = []
     if (isCurrentUserWinner === true)
-      timers = spawnEmojiBurst(victoryEmojiList, null)
+      ({ spawnTimers, createdEls } = spawnEmojiBurst(victoryEmojiList, null))
     else if (isCurrentUserWinner === false)
-      timers = spawnEmojiBurst(defeatEmojiList, 'flying-emoji--sad')
-    return () => timers.forEach(clearTimeout)
+      ({ spawnTimers, createdEls } = spawnEmojiBurst(defeatEmojiList, 'flying-emoji--sad'))
+    return () => {
+      spawnTimers.forEach(clearTimeout)   // cancel pending spawns
+      createdEls.forEach(el => el.remove()) // immediately remove any already-created nodes
+    }
   // isCurrentUserWinner is intentionally read once at mount — burst fires only on appearance
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])

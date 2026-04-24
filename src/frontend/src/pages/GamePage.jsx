@@ -38,7 +38,7 @@ export default function GamePage() {
         .then(p => setP1Name(p.display_name ?? p.username))
         .catch(() => {})
     }
-    if (player2Id != null) {
+    if (player2Id != null && !isAiGame) {
       apiJson(`/api/users/profile/${player2Id}`)
         .then(p => setP2Name(p.display_name ?? p.username))
         .catch(() => {})
