@@ -32,27 +32,27 @@ async def client_and_user(monkeypatch):
         await conn.execute(
             text(
                 "TRUNCATE TABLE tournament_matches, tournament_participants, "
-                "tournaments, matches, users, credentials RESTART IDENTITY CASCADE"
+                "tournaments, matches RESTART IDENTITY CASCADE"
             )
         )
-        for uid in range(1, 10):
-            cid = uid + 10000
+        for uid in range(7001, 7010):
+            cid = uid + 4000
             await conn.execute(
                 text(
-                    "INSERT INTO credentials (id, username, password) "
-                    "VALUES (:id, :username, 'fake')"
+                    "INSERT INTO credentials (id, username, password)"
+                    "VALUES (:id, :username, 'fake') ON CONFLICT DO NOTHING"
                 ),
                 {"id": cid, "username": f"cred_{uid}"},
             )
             await conn.execute(
                 text(
                     "INSERT INTO users (id, username, credential_id) "
-                    "VALUES (:id, :username, :cid)"
+                    "VALUES (:id, :username, :cid) ON CONFLICT DO NOTHING"
                 ),
                 {"id": uid, "username": f"user{uid}", "cid": cid},
             )
 
-    current = {"id": 1}
+    current = {"id": 7001}
 
     async def _override_current_user_id():
         return current["id"]
@@ -99,15 +99,15 @@ async def test_create_tournament_returns_201_and_join_link(client_and_user):
 async def test_creator_is_auto_registered_and_detail_returns_participants(client_and_user):
     client, _ = client_and_user
     create = await client.post("/tournaments", json={"name": "Cup", "max_participants": 4})
-    tournament_id = create.json()["id"]
-
+    body = create.json()
+    tournament_id = body["id"]
     detail = await client.get(f"/tournaments/{tournament_id}")
     assert detail.status_code == 200
     data = detail.json()
-    assert data["creator_id"] == 1
+    assert data["creator_id"] == 7001
     assert data["status"] == "open"
     assert len(data["participants"]) == 1
-    assert data["participants"][0]["user_id"] == 1
+    assert data["participants"][0]["user_id"] == 7001
 
 
 @pytest.mark.asyncio
@@ -116,7 +116,7 @@ async def test_join_tournament_adds_participants(client_and_user):
     create = await client.post("/tournaments", json={"name": "Cup", "max_participants": 4})
     tournament_id = create.json()["id"]
 
-    for uid in (2, 3, 4):
+    for uid in (7002, 7003, 7004):
         current["id"] = uid
         join = await client.post(f"/tournaments/{tournament_id}/join")
         assert join.status_code == 201
@@ -124,7 +124,7 @@ async def test_join_tournament_adds_participants(client_and_user):
     detail = await client.get(f"/tournaments/{tournament_id}")
     assert detail.status_code == 200
     data = detail.json()
-    assert sorted(p["user_id"] for p in data["participants"]) == [1, 2, 3, 4]
+    assert sorted(p["user_id"] for p in data["participants"]) == [7001, 7002, 7003, 7004]
 
 
 @pytest.mark.asyncio
@@ -142,12 +142,12 @@ async def test_user_cannot_create_second_active_tournament(client_and_user):
 async def test_user_cannot_join_another_active_tournament(client_and_user):
     client, current = client_and_user
 
-    current["id"] = 1
+    current["id"] = 7001
     t1 = (await client.post("/tournaments", json={"name": "Cup A", "max_participants": 4})).json()["id"]
-    current["id"] = 2
+    current["id"] = 7002
     _ = (await client.post("/tournaments", json={"name": "Cup B", "max_participants": 4})).json()["id"]
 
-    current["id"] = 2
+    current["id"] = 7002
     join = await client.post(f"/tournaments/{t1}/join")
     assert join.status_code == 409
     assert "active tournament" in join.json()["detail"]
@@ -162,16 +162,16 @@ async def test_start_tournament_requires_full_slots_and_creator(client_and_user)
     not_full = await client.post(f"/tournaments/{tournament_id}/start")
     assert not_full.status_code == 409
 
-    for uid in (2, 3, 4):
+    for uid in (7002, 7003, 7004):
         current["id"] = uid
         joined = await client.post(f"/tournaments/{tournament_id}/join")
         assert joined.status_code == 201
 
-    current["id"] = 2
+    current["id"] = 7002
     not_creator = await client.post(f"/tournaments/{tournament_id}/start")
     assert not_creator.status_code == 403
 
-    current["id"] = 1
+    current["id"] = 7001
     start = await client.post(f"/tournaments/{tournament_id}/start")
     assert start.status_code == 200
     data = start.json()
@@ -184,12 +184,12 @@ async def test_start_tournament_requires_full_slots_and_creator(client_and_user)
 async def test_record_tournament_result_endpoint_persists_scores(client_and_user):
     client, current = client_and_user
     tournament_id = (await client.post("/tournaments", json={"name": "Cup", "max_participants": 4})).json()["id"]
-    for uid in (2, 3, 4):
+    for uid in (7002, 7003, 7004):
         current["id"] = uid
         joined = await client.post(f"/tournaments/{tournament_id}/join")
         assert joined.status_code == 201
 
-    current["id"] = 1
+    current["id"] = 7001
     started = await client.post(f"/tournaments/{tournament_id}/start")
     assert started.status_code == 200
     active_match = next(m for m in started.json()["matches"] if m["status"] == "in_progress")
@@ -216,17 +216,17 @@ async def test_leave_open_tournament_removes_participant(client_and_user):
     client, current = client_and_user
     tournament_id = (await client.post("/tournaments", json={"name": "Cup", "max_participants": 4})).json()["id"]
 
-    current["id"] = 2
+    current["id"] = 7002
     joined = await client.post(f"/tournaments/{tournament_id}/join")
     assert joined.status_code == 201
 
     leave = await client.post(f"/tournaments/{tournament_id}/leave")
     assert leave.status_code == 204
 
-    current["id"] = 1
+    current["id"] = 7001
     detail = await client.get(f"/tournaments/{tournament_id}")
     participants = sorted(p["user_id"] for p in detail.json()["participants"])
-    assert participants == [1]
+    assert participants == [7001]
 
 
 @pytest.mark.asyncio
@@ -234,11 +234,11 @@ async def test_delete_open_tournament_requires_creator(client_and_user):
     client, current = client_and_user
     tournament_id = (await client.post("/tournaments", json={"name": "Cup", "max_participants": 4})).json()["id"]
 
-    current["id"] = 2
+    current["id"] = 7002
     forbidden = await client.delete(f"/tournaments/{tournament_id}")
     assert forbidden.status_code == 403
 
-    current["id"] = 1
+    current["id"] = 7001
     deleted = await client.delete(f"/tournaments/{tournament_id}")
     assert deleted.status_code == 204
 
@@ -250,12 +250,12 @@ async def test_delete_open_tournament_requires_creator(client_and_user):
 async def test_withdraw_in_progress_tournament_marks_progress_and_keeps_tournament_accessible(client_and_user):
     client, current = client_and_user
     tournament_id = (await client.post("/tournaments", json={"name": "Cup", "max_participants": 4})).json()["id"]
-    for uid in (2, 3, 4):
+    for uid in (7002, 7003, 7004):
         current["id"] = uid
         joined = await client.post(f"/tournaments/{tournament_id}/join")
         assert joined.status_code == 201
 
-    current["id"] = 1
+    current["id"] = 7001
     started = await client.post(f"/tournaments/{tournament_id}/start")
     assert started.status_code == 200
     active_match = next(m for m in started.json()["matches"] if m["status"] == "in_progress")

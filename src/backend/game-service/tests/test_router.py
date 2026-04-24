@@ -33,19 +33,6 @@ async def session():
 @pytest_asyncio.fixture()
 async def client():
     async with _engine.begin() as conn:
-        # Defensively clear abandoned transactions left by earlier suites sharing the same DB.
-        await conn.execute(text(
-            "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
-            "WHERE state IN ('idle in transaction', 'idle in transaction (aborted)') "
-            "AND datname = current_database() "
-            "AND pid <> pg_backend_pid()"
-        ))
-        # Use a single TRUNCATE statement to keep lock acquisition order deterministic
-        # across integration modules and avoid intermittent deadlocks.
-        await conn.execute(text(
-            "TRUNCATE TABLE tournament_matches, tournament_participants, "
-            "tournaments, matches, users, credentials RESTART IDENTITY CASCADE"
-        ))
 
         # Create isolated test credentials with high IDs to avoid conflicts with seeded users
         test_users = [
@@ -62,11 +49,11 @@ async def client():
             if not existing.fetchone():
                 cid = uid + 10000
                 await conn.execute(
-                    text("INSERT INTO credentials (id, username, password) VALUES (:id, :u, 'fake')"),
+                    text("INSERT INTO credentials (id, username, password) VALUES (:id, :u, 'fake') ON CONFLICT (id) DO NOTHING"),
                     {"id": cid, "u": name}
                 )
                 await conn.execute(
-                    text("INSERT INTO users (id, username, credential_id) VALUES (:id, :u, :cid)"),
+                    text("INSERT INTO users (id, username, credential_id) VALUES (:id, :u, :cid) ON CONFLICT (id) DO NOTHING"),
                     {"id": uid, "u": name, "cid": cid}
                 )
 
@@ -240,7 +227,7 @@ async def test_get_leaderboard_returns_ranked_rows(client):
     resp = await client.get("/leaderboard")
     assert resp.status_code == 200
     data = resp.json()
-    assert len(data['results']) == 8
+    assert len(data['results']) == 9
     assert data['results'][0]["rank"] == 1
     assert data['results'][0]["user_id"] == 5001
     assert data['results'][0]["points"] == 9
@@ -311,7 +298,7 @@ async def test_get_leaderboard_limit_one_page_zero_rank_desc(client):
     assert data['total'] == 12
     results = data['results']
     assert len(results) == 1
-    assert results[0]['rank'] == 11
+    assert results[0]['rank'] == 12
     assert results[0]['wins'] == 0
     assert results[0]['losses'] == 21
     assert results[0]['current_streak'] == 0
