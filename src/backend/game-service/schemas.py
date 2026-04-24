@@ -44,11 +44,26 @@ class TournamentMatchResultRequest(BaseModel):
 
 
 class MatchHistoryItem(BaseModel):
-    id: int
+    match_id: int
+    player_id: int
     opponent_id: int
     result: str   # "Win" | "Loss"
     score: str    # e.g. "11-3" (user score first, ASCII hyphen)
     date: str     # finished_at ISO string, "" if null
+
+class MatchHistorySummary(BaseModel):
+    player_id: int
+    wins: int
+    losses: int
+    total_matches: int
+
+class MatchHistoryPage(BaseModel):
+    results: list[MatchHistoryItem]
+    summary: MatchHistorySummary
+    total: int
+    page: int
+    per_page: int
+    last_page: int
 
 
 class TournamentCreateRequest(BaseModel):

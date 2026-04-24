@@ -35,14 +35,15 @@ export default function UserProfileModal({ username, userId, currentUserId, onCl
         if (cancelled) return
         setResolvedId(targetId)
 
-        const [profileRes, historyRes] = await Promise.all([
+        const [profileRes, paginatedHistoryRes] = await Promise.all([
           apiCall(`/api/users/profile/${targetId}`),
-          apiCall(`/api/game/matches/history/${targetId}`),
+          apiCall(`/api/game/matches/history?player_id=${targetId}&limit=1`),
         ])
 
         if (!profileRes.ok) throw new Error('Failed to load profile')
         const profileData = await profileRes.json()
-        const historyData = historyRes.ok ? await historyRes.json() : []
+        const historyData = paginatedHistoryRes.ok ? await paginatedHistoryRes.json() : null;
+
 
         if (cancelled) return
         setProfile({
@@ -50,8 +51,12 @@ export default function UserProfileModal({ username, userId, currentUserId, onCl
           username: profileData.username,
           avatarUrl: profileData.avatar_url ?? DEFAULT_AVATAR,
         })
-        setWins(historyData.filter(m => m.result === 'Win').length)
-        setMatches(historyData.length)
+        if (historyData != null && historyData.summary != null) {
+          const wins = historyData.summary.wins
+          const matchesTotal = historyData.summary.total_matches
+          setWins(wins)
+          setMatches(matchesTotal)
+        }
       } catch (err) {
         if (!cancelled) setError(err.message)
       } finally {

@@ -1,11 +1,15 @@
 from typing import Annotated
+from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from service.auth import get_current_token, get_current_user_id
-from service.history import get_match_history
+from service.auth import get_current_user_id, get_player_id_or_me, get_current_token
+from service.history import (
+    get_match_history,
+    get_match_history_paginated,
+)
 from service.notifications import send_tournament_notification
+
 from service.persistence import (
     InvalidWinner,
     NotTournamentCreator,
@@ -41,6 +45,7 @@ from service.schemas import (
     MatchCreateRequest,
     MatchFinishRequest,
     MatchHistoryItem,
+    MatchHistoryPage,
     MatchResponse,
     StatsResponse,
     TournamentCreateRequest,
@@ -122,9 +127,40 @@ async def leaderboard(
     return paginated_result
 
 
-@router.get("/matches/history/{user_id}", response_model=list[MatchHistoryItem])
-async def match_history(user_id: int, session: SessionDependency):
-    return await get_match_history(user_id, session)
+@router.get("/matches/history", response_model=MatchHistoryPage)
+async def match_history_search(
+        session: SessionDependency,
+        player_id: Annotated[int, Depends(get_player_id_or_me)],
+        date_from: datetime | None = Query(
+            None,
+            description='Start datetime in ISO 8601 format'
+        ),
+        date_to: datetime | None = Query(
+            None,
+            description='End datetime in ISO 8601 format'
+        ),
+        result: str = Query('all', pattern='^(all|win|loss)$'),
+        order: str = Query(
+            '',
+            description="colname:desc,othercol:asc"
+        ),
+        limit: int = Query(10, ge=1),
+        page: int = Query(0, ge=0)
+) -> MatchHistoryPage:
+    if limit > 50:
+        limit = 50
+    sort_assoc = get_sort_assoc_from_order_query(order)
+    search_for = {
+        'player_id': player_id,
+        'date_from': date_from,
+        'date_to': date_to,
+        'result': result,
+        'limit': limit,
+        'page': page,
+    }
+    return await get_match_history_paginated(
+        search_for, sort_assoc, session
+    )
 
 
 @router.get("/matches/{user_id}", response_model=list[MatchResponse])

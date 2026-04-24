@@ -4,12 +4,14 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sess
 from sqlalchemy.pool import NullPool
 from sqlalchemy import text
 from httpx import AsyncClient, ASGITransport
+from datetime import datetime, timedelta, timezone
 
 from shared.config.settings import settings
 from shared.database import get_db
 from service.auth import get_current_user_id
 from main import app
-
+from jose import jwt
+import json
 # --------------------------------------------------------------------------- #
 # Shared PostgreSQL engine for all HTTP tests in this module
 # --------------------------------------------------------------------------- #
@@ -22,8 +24,13 @@ async def _override_get_db():
     async with _TestSession() as session:
         yield session
 
+@pytest_asyncio.fixture()
+async def session():
+    async with _TestSession() as session:
+        yield session
 
-@pytest_asyncio.fixture
+
+@pytest_asyncio.fixture()
 async def client():
     async with _engine.begin() as conn:
         # Defensively clear abandoned transactions left by earlier suites sharing the same DB.
@@ -39,7 +46,7 @@ async def client():
             "TRUNCATE TABLE tournament_matches, tournament_participants, "
             "tournaments, matches, users, credentials RESTART IDENTITY CASCADE"
         ))
-        
+
         # Create isolated test credentials with high IDs to avoid conflicts with seeded users
         test_users = [
             (5001, "test_alice"), (5002, "test_bob"), (5003, "test_charlie"),
@@ -80,7 +87,7 @@ def _override_user_id(uid: int):
 async def auth_client():
     """Yield a factory that creates an AsyncClient authenticated as a given user ID."""
     async with _engine.begin() as conn:
-        await conn.execute(text("TRUNCATE TABLE matches RESTART IDENTITY CASCADE"))
+
         test_users = [
             (5001, "test_alice"), (5002, "test_bob"), (5003, "test_charlie"),
             (5010, "test_user10"), (5020, "test_user20"), (5030, "test_user30"),
@@ -233,10 +240,10 @@ async def test_get_leaderboard_returns_ranked_rows(client):
     resp = await client.get("/leaderboard")
     assert resp.status_code == 200
     data = resp.json()
-    assert len(data['results']) == 3
+    assert len(data['results']) == 8
     assert data['results'][0]["rank"] == 1
     assert data['results'][0]["user_id"] == 5001
-    assert data['results'][0]["points"] == 3
+    assert data['results'][0]["points"] == 9
 
 
 @pytest.mark.asyncio
@@ -268,19 +275,19 @@ async def test_get_leaderboard_limit_one_page_one(client):
     data = resp.json()
     assert data['page'] == 1
     assert data['per_page'] == 1
-    assert data['last_page'] == 7
-    assert data['total'] == 8
+    assert data['last_page'] == 11
+    assert data['total'] == 12
     results = data['results']
     assert len(results) == 1
     assert results[0]['rank'] == 2
     assert results[0]['max_streak'] == 21
     assert results[0]['current_streak'] == 21
-    assert results[0]['total_games'] == 27
-    assert results[0]['wins'] == 21
+    assert results[0]['total_games'] == 28
+    assert results[0]['wins'] == 22
     assert results[0]['losses'] == 6
     assert data['summary']['max_max_streak']['value'] == 21
     assert data['summary']['max_current_streak']['value'] == 21
-    assert data['summary']['max_points']['value'] == 63
+    assert data['summary']['max_points']['value'] == 72
 
 
 @pytest.mark.asyncio
@@ -300,21 +307,21 @@ async def test_get_leaderboard_limit_one_page_zero_rank_desc(client):
 
     assert data['page'] == 0
     assert data['per_page'] == 1
-    assert data['last_page'] == 7
-    assert data['total'] == 8
+    assert data['last_page'] == 11
+    assert data['total'] == 12
     results = data['results']
     assert len(results) == 1
-    assert results[0]['rank'] == 8
+    assert results[0]['rank'] == 11
     assert results[0]['wins'] == 0
-    assert results[0]['losses'] == 9
+    assert results[0]['losses'] == 21
     assert results[0]['current_streak'] == 0
     assert results[0]['max_streak'] == 0
     assert results[0]['goals_scored'] == 0
-    assert results[0]['goals_conceded'] == 9
-    assert results[0]['goal_difference'] == -9
+    assert results[0]['goals_conceded'] == 27
+    assert results[0]['goal_difference'] == -27
     assert data['summary']['max_max_streak']['value'] == 21
     assert data['summary']['max_current_streak']['value'] == 21
-    assert data['summary']['max_points']['value'] == 63
+    assert data['summary']['max_points']['value'] == 135
 
 
 # --------------------------------------------------------------------------- #
@@ -426,3 +433,197 @@ async def test_start_ai_game_defaults_speed_when_no_preferences(auth_client):
     assert abs(session.speed_multiplier - 1.0) < 0.001
 
     await game_manager.delete_session(game_id)
+
+    
+def create_fake_access_token(data: dict, expires_delta: timedelta):
+    ALGORITHM = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES = 15
+    REFRESH_TOKEN_EXPIRE_DAYS = 7
+
+    to_encode = data.copy()
+    expire = datetime.now(timezone.utc) + expires_delta
+    to_encode.update({"exp": expire})
+    return jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm=ALGORITHM)
+
+
+@pytest.mark.asyncio
+async def test_matches_history_without_query_parameters_and_no_token_is_bad(client):
+    resp = await client.get("/matches/history?")
+    assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_matches_history_with_no_query_parameters_and_valid_token_is_ok(client):
+
+    access_token = create_fake_access_token(
+        data={"sub": 'test_alice', "credential_id": 15001},
+        expires_delta=timedelta(minutes=30),
+    )
+    resp = await client.get("/matches/history", headers={"Authorization": f"Bearer {access_token}"})
+    assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_matches_history_with_player_id_query_parameters_and_valid_token_is_ok(client):
+
+    access_token = create_fake_access_token(
+        data={"sub": 'test_alice', "credential_id": 15001},
+        expires_delta=timedelta(minutes=30),
+    )
+    resp = await client.get("/matches/history?player_id=2", headers={"Authorization": f"Bearer {access_token}"})
+    assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_matches_history_with_player_id_query_parameters_and_no_token_is_ok(client):
+
+    resp = await client.get("/matches/history?player_id=2")
+    assert resp.status_code == 200
+
+@pytest.mark.asyncio
+async def test_matches_history_when_ok_returns_schema(client):
+
+    access_token = create_fake_access_token(
+        data={"sub": 'test_alice', "credential_id": 15001},
+        expires_delta=timedelta(minutes=30),
+    )
+    resp = await client.get("/matches/history", headers={"Authorization": f"Bearer {access_token}"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert isinstance(data, dict)
+    assert isinstance(data.get('results'), list)
+    assert isinstance(data.get('total'), int)
+    assert isinstance(data.get('page'), int)
+    assert isinstance(data.get('per_page'), int)
+    assert isinstance(data.get('last_page'), int)
+
+    if len(data.get('results')) > 0:
+        element = data.get('results')[0]
+        assert isinstance(element.get('match_id'), int)
+        assert isinstance(element.get('player_id'), int)
+        assert isinstance(element.get('opponent_id'), int)
+        assert isinstance(element.get('score'), str)
+        assert isinstance(element.get('date'), str)
+
+@pytest.mark.asyncio
+async def test_matches_history_with_limit_query_parameter_respect_limit(client):
+
+    access_token = create_fake_access_token(
+        data={"sub": 'test_alice', "credential_id": 15001},
+        expires_delta=timedelta(minutes=30),
+    )
+    resp = await client.get("/matches/history?limit=1", headers={"Authorization": f"Bearer {access_token}"})
+    assert resp.status_code == 200
+    data = resp.json()
+
+    assert data.get('page') == 0
+    assert data.get('per_page') == 1
+    results = data.get('results')
+    assert len(results) == 1
+
+@pytest.mark.asyncio
+async def test_matches_history_with_page_query_parameter_respect_page(client):
+
+    access_token = create_fake_access_token(
+        data={"sub": 'test_alice', "credential_id": 15001},
+        expires_delta=timedelta(minutes=30),
+    )
+    for page in range(3):
+        resp = await client.get(f"/matches/history?limit=1&page={page}", headers={"Authorization": f"Bearer {access_token}"})
+        assert resp.status_code == 200
+        data = resp.json()
+
+        assert data.get('page') == page
+        assert data.get('per_page') == 1
+        results = data.get('results')
+        assert len(results) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("result_query", [
+    ("win"),
+    ("loss")
+])
+async def test_matches_history_with_result_query_parameter_respect_result(result_query, client):
+
+    resp = await client.get(f"/matches/history?player_id=5001&limit=3&page=0&result={result_query}")
+    assert resp.status_code == 200
+    data = resp.json()
+
+    results = data.get('results')
+    assert len(results) > 0
+    for pong_match in results:
+        result = pong_match['result']
+        assert result == result_query.capitalize()
+
+
+@pytest.mark.asyncio
+async def test_matches_history_with_date_from_query_parameter_respect_date(client, session):
+
+    player_id = 5001
+    statement = text("""
+SELECT DISTINCT finished_at FROM matches
+WHERE (player1_id = (:player_id)::int OR player2_id = :player_id)
+    AND status = 'finished'
+    ORDER BY finished_at ASC
+    """)
+    query_result = await session.execute(statement, {
+        'player_id': player_id
+    })
+    data = [d['finished_at'] for d in query_result.mappings().all()]
+
+    assert len(data) > 2
+
+    from urllib.parse import quote_plus
+    date_str = quote_plus(data[1].isoformat())
+
+    resp_no_filter = await client.get(f"/matches/history?player_id=5001&limit=50&page=0&order=date:asc")
+    assert resp_no_filter.status_code == 200
+    data_no_filter = resp_no_filter.json()
+    unfiltered_results = data_no_filter.get('results')
+    assert len(unfiltered_results) > 2
+
+    resp_filtered = await client.get(f"/matches/history?player_id=5001&limit=50&page=0&date_from={date_str}&order=date:asc")
+    assert resp_filtered.status_code == 200
+    data_date_from_filter = resp_filtered.json()
+    filtered_results = data_date_from_filter.get('results')
+    assert len(unfiltered_results) >= 1
+
+    assert filtered_results[0]['date'] \
+        > unfiltered_results[0]['date']
+
+@pytest.mark.asyncio
+async def test_matches_history_with_date_to_query_parameter_respect_date(client, session):
+
+    player_id = 5001
+    statement = text("""
+SELECT DISTINCT finished_at FROM matches
+WHERE (player1_id = (:player_id)::int OR player2_id = :player_id)
+    AND status = 'finished'
+    ORDER BY finished_at DESC
+    """)
+    query_result = await session.execute(statement, {
+        'player_id': player_id
+    })
+    data = [d['finished_at'] for d in query_result.mappings().all()]
+
+    assert len(data) > 2
+
+    from urllib.parse import quote_plus
+    date_str = quote_plus(data[1].isoformat())
+
+    resp_no_filter = await client.get(f"/matches/history?player_id=5001&limit=50&page=0")
+    assert resp_no_filter.status_code == 200
+    data_no_filter = resp_no_filter.json()
+    unfiltered_results = data_no_filter.get('results')
+    assert len(unfiltered_results) > 2
+
+    resp_filtered = await client.get(f"/matches/history?player_id=5001&limit=50&page=0&date_to={date_str}")
+    assert resp_filtered.status_code == 200
+    data_date_to_filter = resp_filtered.json()
+    filtered_results = data_date_to_filter.get('results')
+    assert len(unfiltered_results) >= 1
+
+    assert filtered_results[-1]['date'] \
+        < unfiltered_results[-1]['date']
+

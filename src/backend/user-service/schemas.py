@@ -129,6 +129,8 @@ NOTIFICATION_TYPES = Literal[
     "tournament_complete",
     "unread_chat",
     "match_result",
+    "user_achievement",
+    "game_achievement"
 ]
 
 

@@ -45,7 +45,7 @@ def _session_returning(*call_results):
 
 
 def _valid_token(username: str = "alice") -> str:
-    return create_access_token({"sub": username}, expires_delta=timedelta(minutes=30))
+    return create_access_token({"sub": username, "credential_id": 1 }, expires_delta=timedelta(minutes=30))
 
 
 @pytest.mark.asyncio
@@ -53,8 +53,8 @@ async def test_get_me_returns_existing_user():
     """Valid token + existing User row → 200 with user data."""
     cred = _make_credential()
     user = _make_user()
-    # execute calls: 1=credentials, 2=user by credential_id (hit)
-    session = _session_returning(cred, user)
+
+    session = _session_returning(user)
     session.refresh = AsyncMock()
 
     from shared.database import get_db
@@ -78,8 +78,8 @@ async def test_get_me_returns_existing_user():
 async def test_get_me_creates_user_on_first_call():
     """Valid token but no User row yet → User is created and returned."""
     cred = _make_credential()
-    # execute calls: 1=credentials, 2=user by credential_id (miss → create)
-    session = _session_returning(cred, None)
+
+    session = _session_returning(None)
 
     added_objects = []
     session.add = MagicMock(side_effect=added_objects.append)
@@ -91,7 +91,15 @@ async def test_get_me_creates_user_on_first_call():
         obj.status = "offline"
         obj.dark_mode = False
 
+    async def mock_merge(user_obj):
+        user_obj.credential_id = user_obj.credential_id if user_obj.credential_id is not None else 1
+        _apply_db_defaults(user_obj)
+        added_objects.append(user_obj)
+        return user_obj
+
+    session.merge = AsyncMock(side_effect=mock_merge)
     session.refresh = AsyncMock(side_effect=lambda obj: _apply_db_defaults(obj))
+    session.commit = AsyncMock()
 
     from shared.database import get_db
 
@@ -113,56 +121,6 @@ async def test_get_me_creates_user_on_first_call():
     assert len(created) == 1
     assert created[0].credential_id == cred.id
     assert created[0].username == cred.username
-
-
-@pytest.mark.asyncio
-async def test_get_me_recovers_from_user_creation_race():
-    """If concurrent user creation causes IntegrityError, /auth/me should still recover."""
-    cred = _make_credential()
-    existing_user = _make_user()
-
-    def _result_for(obj):
-        scalars_mock = MagicMock()
-        scalars_mock.first.return_value = obj
-        result_mock = MagicMock()
-        result_mock.scalars.return_value = scalars_mock
-        return result_mock
-
-    # execute calls:
-    # 1=credentials lookup
-    # 2=user lookup miss (triggers create path)
-    # 3=retry lookup immediately after rollback (still not visible)
-    # 4=retry lookup succeeds once concurrent transaction commits
-    session = AsyncMock()
-    session.execute.side_effect = [
-        _result_for(cred),
-        _result_for(None),
-        _result_for(None),
-        _result_for(existing_user),
-    ]
-    session.add = MagicMock()
-    session.refresh = AsyncMock()
-    session.rollback = AsyncMock()
-    session.commit = AsyncMock(
-        side_effect=IntegrityError("insert into users ...", {}, Exception("duplicate"))
-    )
-
-    from shared.database import get_db
-
-    async def _fake_db():
-        yield session
-
-    app.dependency_overrides[get_db] = _fake_db
-
-    try:
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            resp = await client.get("/auth/me", headers={"Authorization": f"Bearer {_valid_token()}"})
-    finally:
-        app.dependency_overrides.pop(get_db, None)
-
-    assert resp.status_code == 200, resp.text
-    assert resp.json()["id"] == existing_user.id
-    session.rollback.assert_awaited_once()
 
 
 @pytest.mark.asyncio

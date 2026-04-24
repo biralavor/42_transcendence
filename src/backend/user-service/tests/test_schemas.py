@@ -28,6 +28,8 @@ class TestNotificationTypes:
             "tournament_complete",
             "unread_chat",
             "match_result",
+            "user_achievement",
+            "game_achievement"
         }
         actual_types = set(NOTIFICATION_TYPES.__args__)
         assert actual_types == expected_types, f"Mismatch: {actual_types} vs {expected_types}"

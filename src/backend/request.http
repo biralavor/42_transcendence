@@ -130,3 +130,9 @@ Authorization: Bearer <access_token>
 
 ##
 GET https://localhost:8443/api/game/leaderboard?limit=4&page=1&order=wins:desc,display_name:asc HTTP/1.1
+
+
+##
+GET https://localhost:8443/api/game/matches/history?player_id=1&limit=1&page=10 
+
+

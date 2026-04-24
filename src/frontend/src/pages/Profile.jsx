@@ -53,11 +53,27 @@ function sanitizeAvatarUrl(rawUrl) {
   return placeholder
 }
 
+function emptyHistory(){
+  return {
+    results: [],
+    summary: {
+      player_id: 0,
+      wins: 0,
+      losses: 0,
+      total_matches: 0
+    },
+    total: 0,
+    page: 0,
+    per_page: 0,
+    last_page: 0,
+  }
+}
+
 export default function Profile() {
   const { auth } = useAuth()
   const [userId, setUserId] = useState(null)
   const [profile, setProfile] = useState(null)
-  const [history, setHistory] = useState([])
+  const [paginatedHistory, setPaginatedHistory] = useState(emptyHistory())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [saveStatus, setSaveStatus] = useState('')
@@ -76,51 +92,27 @@ export default function Profile() {
 
     const controller = new AbortController()
     const { signal } = controller
-    setLoading(true)
-    setError('')
 
-    const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
-
-    const fetchMeWithRetry = async () => {
-      const maxAttempts = 2
-      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-        const response = await apiCall('/api/users/auth/me', { signal })
-        if (response.ok) {
-          return response.json()
-        }
-
-        const shouldRetry = response.status >= 500 && attempt < maxAttempts
-        if (!shouldRetry) {
-          throw new Error(`Auth failed: ${response.status}`)
-        }
-        await wait(250)
-      }
-
-      throw new Error('Auth failed: retry limit reached')
-    }
-
-    ;(async () => {
-      try {
-        const me = await fetchMeWithRetry()
+    apiCall('/api/users/auth/me', { signal })
+      .then(r => {
+        if (!r.ok) throw new Error(`Auth failed: ${r.status}`)
+        return r.json()
+      })
+      .then(me => {
         const id = me.id
         setUserId(id)
-
-        const [profileResult, historyResult] = await Promise.allSettled([
+        return Promise.all([
           apiCall(`/api/users/profile/${id}`, { signal }).then(r => {
             if (!r.ok) throw new Error(`Profile fetch failed: ${r.status}`)
             return r.json()
           }),
-          apiCall(`/api/game/matches/history/${id}`, { signal }).then(r => {
+          apiCall(`/api/game/matches/history?player_id=${id}`, { signal }).then(r => {
             if (!r.ok) throw new Error(`History fetch failed: ${r.status}`)
             return r.json()
           }),
         ])
-
-        if (profileResult.status !== 'fulfilled') {
-          throw profileResult.reason
-        }
-
-        const profileData = profileResult.value
+      })
+      .then(([profileData, historyData]) => {
         setProfile({
           displayName: profileData.display_name ?? '',
           darkMode: profileData.dark_mode ?? false,
@@ -130,20 +122,14 @@ export default function Profile() {
           status: profileData.status,
           createdAt: profileData.created_at,
         })
-
-        if (historyResult.status === 'fulfilled') {
-          setHistory(historyResult.value)
-        } else {
-          // History is non-critical for rendering profile core data.
-          console.warn('[Profile] Match history unavailable:', historyResult.reason?.message || historyResult.reason)
-          setHistory([])
-        }
-      } catch (err) {
+        setPaginatedHistory(historyData)
+      })
+      .catch(err => {
         if (err.name !== 'AbortError') setError(err.message)
-      } finally {
+      })
+      .finally(() => {
         if (!signal.aborted) setLoading(false)
-      }
-    })()
+      })
 
     return () => controller.abort()
   }, [auth.access_token])
@@ -184,8 +170,8 @@ export default function Profile() {
     }
   }
 
-  const wins = history.filter(m => m.result === 'Win').length
-  const matches = history.length
+  const wins = paginatedHistory.summary.wins
+  const matches = paginatedHistory.summary.total_matches
 
   if (loading) return (
     <div className="arcade-shell">
@@ -310,7 +296,7 @@ export default function Profile() {
 
               <div className="profile-history">
                 <h2 className="profile-section-title">Match history</h2>
-                {history.length === 0 ? (
+                {paginatedHistory.total === 0 ? (
                   <p style={{ color: 'var(--metal-silver)', fontFamily: 'VT323, monospace' }}>
                     No matches yet.
                   </p>
@@ -322,8 +308,8 @@ export default function Profile() {
                       <div className="history-col">Result</div>
                       <div className="history-col">Score</div>
                     </div>
-                    {history.map((match) => (
-                      <div className="history-row" key={match.id}>
+                    {paginatedHistory.results.map((match) => (
+                      <div className="history-row" key={match.match_id}>
                         <div className="history-col history-opponent">Player #{match.opponent_id}</div>
                         <div className="history-col history-date">
                           {match.date ? new Date(match.date).toLocaleDateString() : '—'}

@@ -130,12 +130,15 @@ async def get_profile(user_id: int, session: AsyncSession) -> User | None:
     return result.scalars().first()
 
 
-async def get_me(token: str, session: AsyncSession) -> MeResponse:
+async def get_me(token: str, session: AsyncSession) -> User:
     try:
         payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[ALGORITHM])
         username: str = payload.get("sub")
+        credential_id: int = payload.get("credential_id")
         if username is None:
             raise JWTError("missing sub")
+        elif credential_id is None:
+            raise JWTError("missing credential_id")
     except ExpiredSignatureError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -146,38 +149,28 @@ async def get_me(token: str, session: AsyncSession) -> MeResponse:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token",
         ) from exc
-    result = await session.execute(select(Credentials).where(Credentials.username == username))
-    credential = result.scalars().first()
-    if credential is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-    user_row = await session.execute(select(User).where(User.credential_id == credential.id))
-    user = user_row.scalars().first()
-    if user is None:
-        user = User(username=credential.username, credential_id=credential.id)
-        session.add(user)
-        try:
-            await session.commit()
-            await session.refresh(user)
-        except IntegrityError:
-            # Handle race condition: another request may be creating this user.
-            # Retry after rollback so concurrent commit can become visible.
-            await session.rollback()
-            user = None
-            for attempt in range(USER_CREATION_RETRY_ATTEMPTS):
-                user_row = await session.execute(
-                    select(User).where(User.credential_id == credential.id)
-                )
-                user = user_row.scalars().first()
-                if user is not None:
-                    break
-                delay = USER_CREATION_RETRY_BASE_DELAY_SECONDS * (attempt + 1)
-                await asyncio.sleep(delay)
-            if user is None:
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="Failed to create user"
-                )
-    return user
+
+    result = await session.execute(
+        select(User).where(User.credential_id == credential_id)
+    )
+    user = result.scalars().first()
+
+    if user:
+        return user
+
+    user = User(username=username, credential_id=credential_id)
+    try:
+        user = await session.merge(user)
+        await session.commit()
+        await session.refresh(user)
+        return user
+    except IntegrityError:
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="User was created concurrently, failed to retrieve user data"
+        )
+
 
 
 async def update_profile(
