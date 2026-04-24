@@ -1,26 +1,56 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import NavbarComponent from '../Components/Navbar'
 import PongCanvasMultiplayer from '../Components/PongCanvasMultiplayer'
+import GameOverOverlay from '../Components/GameOverOverlay'
 import './GamePage.css'
 import { apiJson } from '../utils/apiClient'
+import {
+  buildInviteRoomId,
+  sendGameChannelMessage,
+} from '../utils/gameInviteChannel'
 
 /**
  * GamePage - Multiplayer Pong Game with Server-Authoritative Logic
  *
  * This page is reached after both players are ready in GameWaitingRoom.
  * It renders the game canvas connected to the backend game-service.
+ * On game end, shows GameOverOverlay instead of navigating away immediately.
  */
 export default function GamePage() {
   const { roomId } = useParams()
   const navigate = useNavigate()
   const location = useLocation()
 
-  const player1Id = location.state?.player1_id ?? location.state?.currentUser?.id
-  const player2Id = location.state?.player2_id ?? location.state?.opponent?.id
+  const currentUser = location.state?.currentUser ?? { id: location.state?.player1_id, username: 'Player 1', avatar_url: null }
+  const opponent = location.state?.opponent ?? null
+
+  const player1Id = location.state?.player1_id ?? currentUser?.id
+  const player2Id = location.state?.player2_id ?? opponent?.id
+  const isAiGame = Number(player2Id) === 0
+
+  const [p1Name, setP1Name] = useState(currentUser?.username ?? 'Player 1')
+  const [p2Name, setP2Name] = useState(isAiGame ? 'AI Opponent' : (opponent?.username ?? 'Player 2'))
+
+  useEffect(() => {
+    if (player1Id != null) {
+      apiJson(`/api/users/profile/${player1Id}`)
+        .then(p => setP1Name(p.display_name ?? p.username))
+        .catch(() => {})
+    }
+    if (player2Id != null && !isAiGame) {
+      apiJson(`/api/users/profile/${player2Id}`)
+        .then(p => setP2Name(p.display_name ?? p.username))
+        .catch(() => {})
+    }
+  }, [player1Id, player2Id])
+
   const tournamentId = location.state?.tournamentId
   const tournamentMatchId = location.state?.tournamentMatchId
-  const [submittingResult, setSubmittingResult] = useState(false)
+  const difficulty = location.state?.difficulty ?? 'medium'
+
+  const [gameOverResult, setGameOverResult] = useState(null)
+  const submittingRef = useRef(false)
 
   useEffect(() => {
     // Redirect to play if no room context or missing player IDs
@@ -34,41 +64,119 @@ export default function GamePage() {
   }
 
   async function handleGameEnd(result) {
-    console.log('Game ended:', result)
-
-    if (tournamentId && tournamentMatchId && !submittingResult) {
-      setSubmittingResult(true)
+    if (tournamentId && tournamentMatchId && !submittingRef.current) {
+      submittingRef.current = true
       try {
         await apiJson(`/api/game/tournaments/${tournamentId}/matches/${tournamentMatchId}/result`, {
           method: 'POST',
           body: JSON.stringify(result),
         })
-        navigate(`/tournaments/${tournamentId}`)
-        return
+        // Fall through — show overlay with tournament-specific buttons
       } catch (error) {
         console.error('Failed to submit tournament result:', error)
       } finally {
-        setSubmittingResult(false)
+        submittingRef.current = false
       }
     }
-
-    navigate('/play', {
-      state: {
-        gameResult: result,
-      },
-    })
+    setGameOverResult(result)
   }
+
+  async function handlePlayAgain() {
+    if (isAiGame) {
+      try {
+        const me = await apiJson('/api/users/auth/me')
+        const { game_id } = await apiJson('/api/game/ai', {
+          method: 'POST',
+          body: JSON.stringify({ difficulty }),
+        })
+        setGameOverResult(null)
+        navigate(`/game/${game_id}`, {
+          state: { player1_id: me.id, player2_id: 0, difficulty, gameType: 'ai' },
+        })
+      } catch {
+        setGameOverResult(null)
+        navigate('/play')
+      }
+      return
+    }
+
+    if (!opponent?.id) {
+      setGameOverResult(null)
+      navigate('/play')
+      return
+    }
+    const newRoomId = buildInviteRoomId(currentUser.id, opponent.id)
+    const expiresAt = Date.now() + 30000
+    try {
+      await sendGameChannelMessage(opponent.id, {
+        type: 'game_invite',
+        room_id: newRoomId,
+        from_user_id: currentUser.id,
+        from_username: currentUser.username,
+        from_avatar_url: currentUser.avatar_url ?? null,
+        to_user_id: opponent.id,
+        to_username: opponent.username,
+        expires_at: expiresAt,
+      })
+      setGameOverResult(null)
+      navigate(`/game/waiting/${newRoomId}`, {
+        state: {
+          currentUser,
+          opponent,
+          friendId: opponent.id,
+          friendUsername: opponent.username,
+        },
+      })
+    } catch {
+      setGameOverResult(null)
+      navigate('/play')
+    }
+  }
+
+  function handleClose() {
+    navigate('/play')
+  }
+
+  function handleViewBracket() {
+    navigate(`/tournaments/${tournamentId}`)
+  }
+
+  function handleNextTurn() {
+    navigate(`/tournaments/${tournamentId}`)
+  }
+
+  const winnerId = gameOverResult?.winner_id
+  // player1 is always currentUser (set by VsCpuCard and GameWaitingRoom)
+  const isCurrentUserWinner = gameOverResult ? winnerId === Number(player1Id) : null
+  const scoreP1 = gameOverResult?.score_p1 ?? 0
+  const scoreP2 = gameOverResult?.score_p2 ?? 0
 
   return (
     <>
       <NavbarComponent />
-      <main className="game-page">
+      <main className="game-page" style={{ position: 'relative' }}>
         <PongCanvasMultiplayer
+          key={roomId}
           gameId={roomId}
           player1Id={player1Id}
           player2Id={player2Id}
           onGameEnd={handleGameEnd}
         />
+        {gameOverResult && (
+          <GameOverOverlay
+            winnerName={p1Name}
+            scoreP1={scoreP1}
+            scoreP2={scoreP2}
+            p1Name={p1Name}
+            p2Name={p2Name}
+            isCurrentUserWinner={isCurrentUserWinner}
+            isTournamentGame={Boolean(tournamentId)}
+            onPlayAgain={handlePlayAgain}
+            onClose={handleClose}
+            onViewBracket={handleViewBracket}
+            onNextTurn={handleNextTurn}
+          />
+        )}
       </main>
     </>
   )
