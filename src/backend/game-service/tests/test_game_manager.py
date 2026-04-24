@@ -293,6 +293,75 @@ async def test_create_session_default_speed_multiplier_is_1():
     assert session.speed_multiplier == 1.0
 
 
+@pytest.mark.asyncio
+async def test_pause_session_stops_broadcasts():
+    """While paused, the game loop does not advance or broadcast."""
+    from service.game_manager import GameManager
+
+    manager = GameManager()
+    states = []
+
+    async def mock_broadcast(game_id, state):
+        states.append(state)
+
+    await manager.create_session(
+        game_id="pause-test",
+        player1_id=1,
+        player2_id=2,
+        broadcast_callback=mock_broadcast,
+    )
+    await asyncio.sleep(0.15)  # ~4 ticks at 30 FPS
+    assert len(states) > 0, "Should have broadcasts before pause"
+
+    manager.pause_session("pause-test")
+    states.clear()
+
+    await asyncio.sleep(0.15)
+    assert len(states) == 0, "No broadcasts while paused"
+
+    await manager.delete_session("pause-test")
+
+
+@pytest.mark.asyncio
+async def test_resume_session_restarts_broadcasts():
+    """After resume, the game loop broadcasts normally again."""
+    from service.game_manager import GameManager
+
+    manager = GameManager()
+    states = []
+
+    async def mock_broadcast(game_id, state):
+        states.append(state)
+
+    await manager.create_session(
+        game_id="resume-test",
+        player1_id=1,
+        player2_id=2,
+        broadcast_callback=mock_broadcast,
+    )
+    await asyncio.sleep(0.1)
+    assert len(states) > 0, "Must have broadcasts before pausing"
+
+    manager.pause_session("resume-test")
+    states.clear()
+    await asyncio.sleep(0.1)
+    assert len(states) == 0
+
+    manager.resume_session("resume-test")
+    await asyncio.sleep(0.15)
+    assert len(states) > 0, "Broadcasts should resume after resume_session()"
+
+    await manager.delete_session("resume-test")
+
+
+def test_pause_resume_unknown_game_is_noop():
+    """pause_session / resume_session on a non-existent game_id must not raise."""
+    from service.game_manager import GameManager
+    manager = GameManager()
+    manager.pause_session("ghost-game")   # must not raise
+    manager.resume_session("ghost-game")  # must not raise
+
+
 async def main():
     print("Running GameManager integration tests...\n")
 
@@ -305,6 +374,9 @@ async def main():
         await test_game_manager_no_ai_params_leaves_p2_direction_as_stop()
         await test_create_session_applies_speed_multiplier()
         await test_create_session_default_speed_multiplier_is_1()
+        await test_pause_session_stops_broadcasts()
+        await test_resume_session_restarts_broadcasts()
+        test_pause_resume_unknown_game_is_noop()
 
         print("\n✅ All integration tests passed!")
     except AssertionError as e:

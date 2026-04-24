@@ -278,23 +278,39 @@ def test_ball_bounces_off_left_paddle_during_tick():
     assert s.score.p2 == 0, "No point should be scored"
 
 
+def test_game_session_is_paused_defaults_false():
+    from service.game_session import GameSession
+    session = GameSession(player1_id=1, player2_id=2)
+    assert session.is_paused is False
+
+
+def test_game_session_is_paused_independent_of_is_active():
+    from service.game_session import GameSession
+    session = GameSession(player1_id=1, player2_id=2)
+    session.is_paused = True
+    assert session.is_active is True   # paused ≠ stopped
+    session.is_paused = False
+    session.is_active = False
+    assert session.is_paused is False  # stopping doesn't affect pause flag
+
+
 if __name__ == "__main__":
     test_game_session_creation()
     print("✓ test_game_session_creation passed")
-    
+
     test_paddle_movement()
     print("✓ test_paddle_movement passed")
-    
+
     test_ball_movement()
     print("✓ test_ball_movement passed")
-    
+
     test_game_tick()
     print("✓ test_game_tick passed")
-    
+
     test_scoring()
     print("✓ test_scoring passed")
-    
+
     test_state_snapshot()
     print("✓ test_state_snapshot passed")
-    
+
     print("\n✅ All tests passed!")

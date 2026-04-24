@@ -1,5 +1,7 @@
 # Note: sys.path is set by main.py (Docker) or test file (host) — not repeated here.
+import asyncio
 from uuid import uuid4
+from dataclasses import asdict
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException, Depends
 from jose import jwt
 from sqlalchemy import text
@@ -25,6 +27,12 @@ _setup_sessions: dict[str, tuple[int, int]] = {}
 _match_ids: dict[str, int] = {}
 # Maps game_id (str) → {player_id: ready_bool} for waiting-room ready tracking
 _player_ready: dict[str, dict[int, bool]] = {}
+# Maps game_id → player_id who disconnected mid-game (waiting to reconnect or time out)
+_disconnected_players: dict[str, int] = {}
+# Maps game_id → asyncio Task running the disconnect countdown
+_disconnect_timers: dict[str, asyncio.Task] = {}
+
+DISCONNECT_GRACE_SECONDS = 30
 
 
 async def _broadcast_state(game_id: str, state_snapshot: dict) -> None:
@@ -81,11 +89,23 @@ async def _on_game_over(game_id: str, winner_id: int, score_p1: int, score_p2: i
     except SQLAlchemyError:
         pass  # best-effort
     finally:
+        # Cancel any in-flight disconnect countdown and await its completion so the
+        # countdown coroutine fully exits before we proceed with cleanup.
+        _disc_timer = _disconnect_timers.pop(game_id, None)
+        if _disc_timer and not _disc_timer.done():
+            _disc_timer.cancel()
+            try:
+                await asyncio.shield(_disc_timer)
+            except (asyncio.CancelledError, Exception):
+                pass
+        _disconnected_players.pop(game_id, None)
+
         # Clean up memory
         await game_manager.delete_session(game_id)
         _setup_sessions.pop(game_id, None)
         _match_ids.pop(game_id, None)
-        
+        _player_ready.pop(game_id, None)
+
         # Broadcast the game over event authoritatively
         await manager.broadcast(game_id, {
             "type": "game_over",
@@ -98,6 +118,41 @@ async def _on_game_over(game_id: str, winner_id: int, score_p1: int, score_p2: i
 # Colocated with the WS router (rather than service/router.py) because it
 # seeds _match_ids / _setup_sessions and wires _on_game_over / _broadcast_state,
 # all of which live here and are consumed by the WS handler below.
+
+
+async def _disconnect_countdown(game_id: str, winner_id: int) -> None:
+    """Broadcast a countdown and award forfeit win if the player doesn't reconnect."""
+    try:
+        for seconds_left in range(DISCONNECT_GRACE_SECONDS, 0, -1):
+            await manager.broadcast(game_id, {
+                "type": "opponent_disconnected",
+                "seconds_left": seconds_left,
+            })
+            await asyncio.sleep(1.0)
+
+        # Timeout expired: award forfeit win to the still-connected player.
+        # Guard against the race where both players disconnect near the end of the
+        # countdown — active_connections(game_id) == 0 means nobody is present.
+        session = game_manager.get_session(game_id)
+        if session and session.is_active and manager.active_connections(game_id) > 0:
+            try:
+                await _on_game_over(game_id, winner_id, session.score.p1, session.score.p2)
+            except Exception:
+                import logging
+                logging.getLogger(__name__).exception(
+                    "[DISCONNECT_COUNTDOWN] _on_game_over failed for %s", game_id
+                )
+    except asyncio.CancelledError:
+        pass  # Reconnect cancelled the timer — normal path, do nothing
+    finally:
+        # Clean up whether we timed out, were cancelled, or errored.
+        # The reconnect path in game_websocket may have already popped these keys —
+        # .pop(..., None) is idempotent so double-pop is safe. This finally block
+        # must not do anything beyond these two pops to avoid undoing reconnect state.
+        _disconnected_players.pop(game_id, None)
+        _disconnect_timers.pop(game_id, None)
+
+
 @router.post("/ai", status_code=201, response_model=AiGameResponse)
 async def start_ai_game(
     body: AiGameRequest,
@@ -245,7 +300,38 @@ async def game_websocket(websocket: WebSocket, game_id: str, token: str | None =
         state='open',
         metadata={'token_valid': token is not None, 'active_connections': active_in_room}
     )
-    
+
+    # Reconnect detection: player rejoining during the disconnect grace window
+    if game_id in _disconnected_players and _disconnected_players[game_id] == player_id:
+        timer = _disconnect_timers.pop(game_id, None)
+        if timer and not timer.done():
+            timer.cancel()
+            try:
+                await asyncio.shield(timer)
+            except (asyncio.CancelledError, Exception):
+                pass
+        _disconnected_players.pop(game_id, None)
+
+        game_manager.resume_session(game_id)
+
+        session = game_manager.get_session(game_id)
+        if session:
+            snapshot = session.get_state_snapshot()
+            await websocket.send_json({
+                "type": "state",
+                **asdict(snapshot),
+            })
+
+        # Broadcast to all (including the reconnecting player). Both players
+        # benefit: the reconnecting player can show "connection restored" and
+        # the surviving player can hide the countdown UI.
+        await manager.broadcast(game_id, {"type": "opponent_reconnected"})
+
+        logger.info(
+            f"[RECONNECT] Player {player_id} reconnected to {game_id}. "
+            "Countdown cancelled, game resumed."
+        )
+
     try:
         while True:
             # Start flow timing
@@ -410,31 +496,30 @@ async def game_websocket(websocket: WebSocket, game_id: str, token: str | None =
         pass
     
     finally:
-        # Clean up on disconnect
         manager.disconnect(game_id, websocket)
-        
+
         import logging
         logger = logging.getLogger(__name__)
         remaining = manager.active_connections(game_id)
-        logger.info(f"[CLEANUP] Player {player_id} removed from room {game_id}. Remaining: {remaining}")
-        
-        # If this was the last player, end the game
-        if remaining == 0:
-            logger.info(f"[CLEANUP] Room {game_id} is empty, cleaning up game session")
+        logger.info(
+            f"[CLEANUP] Player {player_id} removed from room {game_id}. "
+            f"Remaining: {remaining}"
+        )
 
-            # If this is an AI game whose match wasn't already finalized by
-            # the natural game-over callback, record a forfeit with the
-            # current score snapshot and AI as the winner. We update the
-            # matches row directly instead of calling finish_match, because
-            # finish_match awards XP to the winner via an FK-bound user_xp
-            # row — and AI_PLAYER_ID has no users row, so that path would
-            # rollback the whole transaction.
+        if remaining == 0:
+            # Last player gone — cancel any pending countdown, then full cleanup
+            timer = _disconnect_timers.pop(game_id, None)
+            if timer and not timer.done():
+                timer.cancel()
+                try:
+                    await asyncio.shield(timer)
+                except (asyncio.CancelledError, Exception):
+                    pass
+            _disconnected_players.pop(game_id, None)
+
+            # AI forfeit: if the human left an AI game before natural game-over
             session = game_manager.get_session(game_id)
             match_id = _match_ids.get(game_id)
-            # session.is_active is flipped to False synchronously when the
-            # game loop detects victory (game_manager.py), before _on_game_over
-            # is scheduled. Skipping when inactive prevents the forfeit write
-            # from racing with — and overwriting — the natural game-over commit.
             if (
                 match_id is not None
                 and session is not None
@@ -462,9 +547,31 @@ async def game_websocket(websocket: WebSocket, game_id: str, token: str | None =
                         )
                         await db.commit()
                 except SQLAlchemyError:
-                    pass  # best-effort
+                    pass
 
             await game_manager.delete_session(game_id)
             _setup_sessions.pop(game_id, None)
             _match_ids.pop(game_id, None)
             _player_ready.pop(game_id, None)
+
+        else:
+            # One player still connected — pause and start countdown for remote games only
+            session = game_manager.get_session(game_id)
+            if session and session.is_active and session.player2_id != AI_PLAYER_ID:
+                setup = _setup_sessions.get(game_id)
+                if setup:
+                    p1, p2 = setup
+                    if player_id not in (p1, p2):
+                        pass  # intruder — not a game participant, skip countdown
+                    else:
+                        winner_id = p2 if player_id == p1 else p1
+                        game_manager.pause_session(game_id)
+                        _disconnected_players[game_id] = player_id
+                        timer = asyncio.create_task(
+                            _disconnect_countdown(game_id, winner_id)
+                        )
+                        _disconnect_timers[game_id] = timer
+                        logger.info(
+                            f"[DISCONNECT] Player {player_id} left {game_id}. "
+                            f"{DISCONNECT_GRACE_SECONDS}s countdown started. Forfeit winner if timeout: {winner_id}"
+                        )
