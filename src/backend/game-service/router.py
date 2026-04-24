@@ -4,10 +4,8 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from service.auth import get_current_user_id, get_player_id_or_me, get_current_token
-from service.history import (
-    get_match_history,
-    get_match_history_paginated,
-)
+from service.history import get_match_history_paginated
+
 from service.notifications import send_tournament_notification
 
 from service.persistence import (
