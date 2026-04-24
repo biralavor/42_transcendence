@@ -68,11 +68,11 @@ describe('GamePage game over overlay', () => {
     expect(screen.getByText('p2:3')).toBeInTheDocument()
   })
 
-  it('shows YOU LOST and winnerName is still current user when opponent wins', async () => {
+  it('shows YOU LOST and winnerName is the current user (not the opponent) when opponent wins', async () => {
     renderGamePage(remoteState)
     fireEvent.click(screen.getByText('Simulate Opponent Win'))
     expect(await screen.findByRole('heading', { name: /you lost/i })).toBeInTheDocument()
-    // winnerName is always p1Name (current user viewing the screen), not the actual game winner
+    // winnerName comes from myName (/auth/me), so the screen always addresses the viewer
     expect(screen.getByTestId('winner-name').textContent).toBe('Alice')
   })
 
@@ -91,6 +91,30 @@ describe('GamePage game over overlay', () => {
     expect(screen.getByTestId('p2-name').textContent).toBe('Bob from DB')
     expect(apiJson).toHaveBeenCalledWith('/api/users/profile/1')
     expect(apiJson).toHaveBeenCalledWith('/api/users/profile/2')
+  })
+
+  it('shows YOU LOST for player2 in tournament even when player1_id in state is the opponent', async () => {
+    // Regression: tournament navigation puts bracket player1_id (opponent) in location.state.
+    // João (id=2) is bracket player2; state.player1_id = 1 (Maria).
+    // Without the /auth/me fix, João would see isCurrentUserWinner=true because
+    // winner_id(1) === player1_id(1). With the fix, myId=2 so he sees YOU LOST.
+    apiJson.mockImplementation((url) => {
+      if (url.includes('/auth/me')) return Promise.resolve({ id: 2, username: 'joao', display_name: 'João' })
+      return Promise.reject(new Error('no-op'))
+    })
+    const tournamentState = {
+      player1_id: 1,   // bracket's player1 = Maria (the OPPONENT for João)
+      player2_id: 2,   // bracket's player2 = João (the VIEWER)
+      tournamentId: 99,
+      matchId: 7,
+    }
+    renderGamePage(tournamentState)
+    await act(async () => {})
+    // Maria (winner_id=1) wins — João clicks the "Simulate Game End" (winner_id=1)
+    fireEvent.click(screen.getByText('Simulate Game End'))
+    // João should see YOU LOST, not YOU WON
+    expect(await screen.findByRole('heading', { name: /you lost/i })).toBeInTheDocument()
+    expect(screen.getByTestId('winner-name').textContent).toBe('João')
   })
 
   it('skips profile fetch for player2 in AI games (player2Id === 0)', async () => {

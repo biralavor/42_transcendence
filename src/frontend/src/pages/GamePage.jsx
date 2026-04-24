@@ -25,6 +25,21 @@ export default function GamePage() {
   const [p1Name, setP1Name] = useState(currentUser?.username ?? 'Player 1')
   const [p2Name, setP2Name] = useState(isAiGame ? 'AI Opponent' : (opponent?.username ?? 'Player 2'))
 
+  // The current user's real ID and name — authoritative regardless of how this page was
+  // navigated to (waiting-room state, tournament bracket state, or VsCpuCard state all
+  // put different shapes in location.state, so we can't rely on player1Id being "me").
+  const [myId, setMyId] = useState(currentUser?.id ?? null)
+  const [myName, setMyName] = useState(currentUser?.username ?? 'Player 1')
+
+  useEffect(() => {
+    apiJson('/api/users/auth/me')
+      .then(me => {
+        setMyId(me.id)
+        setMyName(me.display_name ?? me.username)
+      })
+      .catch(() => {})
+  }, [])
+
   useEffect(() => {
     if (player1Id != null) {
       apiJson(`/api/users/profile/${player1Id}`)
@@ -141,8 +156,12 @@ export default function GamePage() {
   }
 
   const winnerId = gameOverResult?.winner_id
-  // player1 is always currentUser (set by VsCpuCard and GameWaitingRoom)
-  const isCurrentUserWinner = gameOverResult ? winnerId === Number(player1Id) : null
+  // Compare winner_id against myId (from /auth/me), not player1Id, because
+  // tournament and some remote paths put the bracket's player1 in location.state
+  // rather than the actual current user — so player1Id is unreliable here.
+  const isCurrentUserWinner = gameOverResult && myId != null
+    ? winnerId === Number(myId)
+    : null
   const scoreP1 = gameOverResult?.score_p1 ?? 0
   const scoreP2 = gameOverResult?.score_p2 ?? 0
 
@@ -167,7 +186,7 @@ export default function GamePage() {
               />
               {gameOverResult && (
                 <GameOverOverlay
-                  winnerName={p1Name}
+                  winnerName={myName}
                   scoreP1={scoreP1}
                   scoreP2={scoreP2}
                   p1Name={p1Name}
