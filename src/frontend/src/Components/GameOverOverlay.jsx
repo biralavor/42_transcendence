@@ -6,9 +6,9 @@ const defeatEmojiList  = ['😢', '😭', '💀', '💩', '🥀', '👎', '💣'
 
 // Matches the CSS animation-duration on .flying-emoji (flyUp / flyDown: 3s).
 // Controls both the spawn-stagger window and the post-animation removal delay.
-const EMOJI_ANIM_MS = 3000
+const EMOJI_ANIM_MS = 7000
 // How many times the emoji list is repeated per burst (1 = one pass, 2 = double, etc.)
-const EMOJI_BURST_REPEAT = 2
+const EMOJI_BURST_REPEAT = 7
 
 function createFlyingEmoji(char, extraClass) {
   const el = document.createElement('div')
