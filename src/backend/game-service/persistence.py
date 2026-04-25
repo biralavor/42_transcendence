@@ -918,7 +918,6 @@ WITH all_matches AS
         *
     FROM ranking_results
     WHERE ((:player_id)::int IS NOT NULL AND :player_id = user_id)
-       OR ((:player_id)::int IS NULL AND rank = 1)
 )
 , summary AS
 (

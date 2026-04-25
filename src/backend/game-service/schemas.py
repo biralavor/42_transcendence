@@ -147,7 +147,7 @@ class LeaderboardResponse(BaseModel):
     per_page: int
     total: int
     results: list[PlayerStats]
-    player_stats: PlayerStats
+    player_stats: PlayerStats | None
     summary: Summary
 
 
