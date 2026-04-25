@@ -4,6 +4,8 @@ import NavbarComponent from '../Components/Navbar'
 import { useAuth } from '../context/authContext'
 import { apiCall, apiJson } from '../utils/apiClient'
 
+const TOURNAMENTS_SYNC_INTERVAL_MS = 5000
+
 function getTournamentChampionId(tournament) {
   if (!tournament || tournament.status !== 'complete') return null
 
@@ -38,6 +40,26 @@ function getTournamentChampionId(tournament) {
   return Number.isFinite(winnerId) ? winnerId : null
 }
 
+function getStatusMeta(status) {
+  switch (status) {
+    case 'open':
+      return { label: 'Open', className: 'bg-success' }
+    case 'in_progress':
+      return { label: 'In Progress', className: 'bg-warning text-dark' }
+    case 'complete':
+      return { label: 'Completed', className: 'bg-info text-dark' }
+    case 'cancelled':
+      return { label: 'Cancelled', className: 'bg-secondary' }
+    default:
+      return { label: status || 'Unknown', className: 'bg-dark border border-secondary' }
+  }
+}
+
+function isTournamentGoneError(message) {
+  const text = String(message || '').toLowerCase()
+  return text.includes('not found') || text.includes('does not exist') || text.includes('http 404')
+}
+
 export default function Tournaments() {
   const navigate = useNavigate()
   const { auth } = useAuth()
@@ -52,6 +74,10 @@ export default function Tournaments() {
   const [manualId, setManualId] = useState('')
   const [joiningById, setJoiningById] = useState(false)
   const [championProfiles, setChampionProfiles] = useState({})
+
+  function removeTournamentFromList(id) {
+    setTournaments((prev) => prev.filter((t) => Number(t.id) !== Number(id)))
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -198,6 +224,13 @@ export default function Tournaments() {
         navigate(`/tournaments/${id}`)
       }
     } catch (err) {
+      if (isTournamentGoneError(err?.message)) {
+        removeTournamentFromList(id)
+        setError('This tournament was removed. The list has been refreshed.')
+        void loadTournaments()
+        return
+      }
+
       setError(err.message || 'Failed to join tournament')
     }
   }
@@ -225,7 +258,10 @@ export default function Tournaments() {
 
       const resp = await apiCall(`/api/game/tournaments/${idNum}`)
       if (!resp.ok) {
-        if (resp.status === 404) throw new Error('Tournament not found')
+        if (resp.status === 404) {
+          removeTournamentFromList(idNum)
+          throw new Error('Tournament not found')
+        }
         throw new Error('Failed to fetch tournament')
       }
 
@@ -242,6 +278,9 @@ export default function Tournaments() {
       await loadTournaments()
       setManualId('')
     } catch (err) {
+      if (isTournamentGoneError(err?.message)) {
+        void loadTournaments()
+      }
       setError(err.message || 'Could not join tournament')
     } finally {
       setJoiningById(false)
@@ -250,6 +289,27 @@ export default function Tournaments() {
 
   useEffect(() => {
     loadTournaments()
+
+    const syncList = () => {
+      void loadTournaments()
+    }
+
+    const intervalId = setInterval(syncList, TOURNAMENTS_SYNC_INTERVAL_MS)
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        syncList()
+      }
+    }
+
+    window.addEventListener('focus', syncList)
+    document.addEventListener('visibilitychange', onVisibilityChange)
+
+    return () => {
+      clearInterval(intervalId)
+      window.removeEventListener('focus', syncList)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+    }
   }, [])
 
   useEffect(() => {
@@ -471,13 +531,16 @@ function hasJoined(t) {
                         const canJoin = !joined && t.status === 'open' && !isFull && !hasActiveTournament
                         const championId = getTournamentChampionId(t)
                         const championProfile = championId != null ? championProfiles[championId] : null
+                        const statusMeta = getStatusMeta(t.status)
 
                         return (
                           <tr key={t.id}>
                             <td>{t.id}</td>
                             <td>{t.name || `Tournament ${t.id}`}</td>
                             <td>{participantCount} / {t.max_participants}</td>
-                            <td>{t.status}</td>
+                            <td>
+                              <span className={`badge ${statusMeta.className}`}>{statusMeta.label}</span>
+                            </td>
                             <td>
                               {t.status !== 'complete' && <span className="text-muted">-</span>}
 
