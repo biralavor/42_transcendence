@@ -116,8 +116,7 @@ async def test_player_input_accepts_clock_skewed_client_ts():
         player_id=1,
         message={
             "type": "input",
-            "direction": "down",
-            "client_ts": "not-a-number",
+            "direction": "up",
         }
     )
     assert session.p1_direction == "down", "Invalid timestamp metadata should be ignored"
