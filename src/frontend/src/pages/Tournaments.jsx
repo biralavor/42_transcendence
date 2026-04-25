@@ -60,6 +60,12 @@ function isTournamentGoneError(message) {
   return text.includes('not found') || text.includes('does not exist') || text.includes('http 404')
 }
 
+function buildActiveTournamentMessage(activeTournament) {
+  const idLabel = activeTournament?.id != null ? ` #${activeTournament.id}` : ''
+  const nameLabel = activeTournament?.name ? ` (${activeTournament.name})` : ''
+  return `You are currently registered in an active tournament${idLabel}${nameLabel}. You cannot create or join another one right now.`
+}
+
 export default function Tournaments() {
   const navigate = useNavigate()
   const { auth } = useAuth()
@@ -71,6 +77,7 @@ export default function Tournaments() {
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState('')
   const [hasActiveTournament, setHasActiveTournament] = useState(false)
+  const [activeTournament, setActiveTournament] = useState(null)
   const [manualId, setManualId] = useState('')
   const [joiningById, setJoiningById] = useState(false)
   const [championProfiles, setChampionProfiles] = useState({})
@@ -145,7 +152,7 @@ export default function Tournaments() {
     if (!name || creating) return
 
     if (hasActiveTournament) {
-      setError('You are already registered in an active tournament. You cannot create another one right now.')
+      setError(buildActiveTournamentMessage(activeTournament))
       return
     }
 
@@ -207,7 +214,7 @@ export default function Tournaments() {
       )
 
       if (!alreadyJoined) {
-        setError('You are already registered in an active tournament. You cannot join another one right now.')
+        setError(buildActiveTournamentMessage(activeTournament))
         return
       }
     }
@@ -251,7 +258,7 @@ export default function Tournaments() {
         )
 
         if (!alreadyJoinedExisting) {
-          setError('You are already registered in an active tournament. You cannot join another one right now.')
+          setError(buildActiveTournamentMessage(activeTournament))
           return
         }
       }
@@ -363,15 +370,17 @@ export default function Tournaments() {
   useEffect(() => {
     if (!currentUser) {
       setHasActiveTournament(false)
+      setActiveTournament(null)
       return
     }
 
-    const active = tournaments.some((t) => {
+    const active = tournaments.find((t) => {
       const joined = t.participants?.some((p) => Number(p.user_id) === Number(currentUser.id))
       return joined && (t.status === 'open' || t.status === 'in_progress')
     })
 
-    setHasActiveTournament(active)
+    setHasActiveTournament(Boolean(active))
+    setActiveTournament(active || null)
   }, [tournaments, currentUser])
 
   useEffect(() => {
@@ -422,11 +431,6 @@ function hasJoined(t) {
 
             <div className="arcade-card soft p-4 mb-4">
               <h2 className="arcade-section-title mb-3">Create new tournament</h2>
-              {hasActiveTournament && (
-                <p className="arcade-copy text-warning mb-2">
-                  You are currently registered in an active tournament. You cannot create or join another one right now.
-                </p>
-              )}
 
               <form onSubmit={handleCreate} className="row g-3 align-items-end">
                 <div className="col-12 col-sm-6 col-md-5">
@@ -462,7 +466,7 @@ function hasJoined(t) {
                   <button
                     type="submit"
                     className="arcade-btn arcade-btn-primary w-100"
-                    disabled={creating || !name || hasActiveTournament}
+                    disabled={creating || !name}
                   >
                     {creating ? 'Creating...' : 'Create'}
                   </button>
@@ -492,7 +496,7 @@ function hasJoined(t) {
                   <button
                     type="submit"
                     className="arcade-btn arcade-btn-secondary w-100"
-                    disabled={joiningById || !manualId || hasActiveTournament}
+                    disabled={joiningById || !manualId}
                   >
                     {joiningById ? 'Processing...' : 'Join'}
                   </button>
@@ -528,7 +532,7 @@ function hasJoined(t) {
                         const joined = hasJoined(t)
                         const participantCount = t.participants?.length ?? 0
                         const isFull = participantCount >= (t.max_participants || 0)
-                        const canJoin = !joined && t.status === 'open' && !isFull && !hasActiveTournament
+                        const canJoin = !joined && t.status === 'open' && !isFull
                         const championId = getTournamentChampionId(t)
                         const championProfile = championId != null ? championProfiles[championId] : null
                         const statusMeta = getStatusMeta(t.status)
