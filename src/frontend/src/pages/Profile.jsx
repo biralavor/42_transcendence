@@ -332,7 +332,13 @@ export default function Profile() {
                         const base = getSafeAvatarUrl(profile?.avatarUrl)
                         if (!base) return ''
                         if (avatarVersion > 0 && profile?.avatarUrl !== PLACEHOLDER_AVATAR) {
-                          return `${base}${base.includes('?') ? '&' : '?'}v=${avatarVersion}`
+                          try {
+                            const u = new URL(base, window.location.origin)
+                            u.searchParams.set('v', String(avatarVersion))
+                            return u.toString()
+                          } catch {
+                            return base
+                          }
                         }
                         return base
                       })()
