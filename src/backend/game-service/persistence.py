@@ -1187,12 +1187,14 @@ insert_achievement_if_not_exists AS
         VALUES (:user_id, COALESCE((SELECT id FROM achievements WHERE key = :a_key),
                                    (table insert_achievement_if_not_exists)))
     ON CONFLICT (user_id, achievement_id) DO NOTHING
-    RETURNING achievement_id
+    RETURNING achievement_id, true as was_inserted
 )
 , insertion_notification AS
 (
     INSERT INTO notifications (user_id, type, message)
-        VALUES (:user_id, 'game_achievement', :a_desc)
+        SELECT :user_id, 'game_achievement', :a_desc
+        FROM insertion_user_achievement
+        WHERE was_inserted = true
 )
 SELECT
     :user_id as user_id
