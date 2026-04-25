@@ -1,6 +1,6 @@
 // src/frontend/src/pages/Profile.test.jsx
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import Profile from './Profile'
 
@@ -88,6 +88,9 @@ function renderProfile() {
 }
 
 describe('Profile avatar UI', () => {
+  let restoreCreateObjectURL
+  let restoreRevokeObjectURL
+
   beforeEach(() => {
     mockAuth = { access_token: 'fake-token' }
     sessionStorage.clear()
@@ -96,14 +99,27 @@ describe('Profile avatar UI', () => {
     sessionStorage.setItem('refresh_token', 'fake-refresh')
     sessionStorage.setItem('token_type', 'bearer')
 
-    if (!global.URL.createObjectURL) global.URL.createObjectURL = vi.fn()
-    if (!global.URL.revokeObjectURL) global.URL.revokeObjectURL = vi.fn()
-    vi.spyOn(URL, 'createObjectURL').mockReturnValue(FAKE_OBJECT_URL)
-    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
+    const hadCreate = 'createObjectURL' in URL
+    const hadRevoke = 'revokeObjectURL' in URL
+    const origCreate = URL.createObjectURL
+    const origRevoke = URL.revokeObjectURL
+    URL.createObjectURL = vi.fn(() => FAKE_OBJECT_URL)
+    URL.revokeObjectURL = vi.fn()
+    restoreCreateObjectURL = () => {
+      if (hadCreate) URL.createObjectURL = origCreate
+      else delete URL.createObjectURL
+    }
+    restoreRevokeObjectURL = () => {
+      if (hadRevoke) URL.revokeObjectURL = origRevoke
+      else delete URL.revokeObjectURL
+    }
   })
 
   afterEach(() => {
+    cleanup()
     vi.restoreAllMocks()
+    restoreCreateObjectURL?.()
+    restoreRevokeObjectURL?.()
   })
 
   it('renders Change avatar and Remove buttons after profile loads', async () => {

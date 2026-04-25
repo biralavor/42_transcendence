@@ -110,10 +110,7 @@ export default function Profile() {
   }
 
   const clearAvatarSelection = () => {
-    setAvatarPreview(prev => {
-      if (prev) URL.revokeObjectURL(prev)
-      return null
-    })
+    setAvatarPreview(null)
     setAvatarFile(null)
   }
 
@@ -129,7 +126,6 @@ export default function Profile() {
       showAvatarToast('error', 'File is too large. Maximum size is 2 MB.')
       return
     }
-    if (avatarPreview) URL.revokeObjectURL(avatarPreview)
     setAvatarFile(file)
     setAvatarPreview(URL.createObjectURL(file))
   }
