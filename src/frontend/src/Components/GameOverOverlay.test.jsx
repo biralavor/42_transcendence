@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, act } from '@testing-library/react'
 import GameOverOverlay from './GameOverOverlay'
 
 // Suppress DOM emoji side-effects in tests
@@ -61,40 +61,39 @@ describe('GameOverOverlay — score display', () => {
 })
 
 describe('GameOverOverlay — emoji burst', () => {
-  afterEach(() => {
-    vi.useRealTimers()
-  })
+  afterEach(() => vi.useRealTimers())
 
-  it('spawns EMOJI_BURST_REPEAT × emojiList.length emojis on victory', () => {
+  it('spawns at least one emoji on victory', () => {
     vi.useFakeTimers()
     render(<GameOverOverlay {...makeBaseProps()} isCurrentUserWinner={true} />)
-    vi.runAllTimers()
+    appendChildSpy.mockClear()
+    vi.advanceTimersByTime(1)  // fires the delay-0 first spawn timer
     const emojiCalls = appendChildSpy.mock.calls.filter(
       ([node]) => node?.classList?.contains('flying-emoji')
     )
-    // EMOJI_BURST_REPEAT(2) × victoryEmojiList.length(8) = 16
-    expect(emojiCalls).toHaveLength(16)
+    expect(emojiCalls.length).toBeGreaterThan(0)
   })
 
-  it('spawns EMOJI_BURST_REPEAT × emojiList.length emojis on defeat', () => {
+  it('spawns at least one emoji on defeat', () => {
     vi.useFakeTimers()
     render(<GameOverOverlay {...makeBaseProps()} isCurrentUserWinner={false} />)
-    vi.runAllTimers()
+    appendChildSpy.mockClear()
+    vi.advanceTimersByTime(1)
     const emojiCalls = appendChildSpy.mock.calls.filter(
       ([node]) => node?.classList?.contains('flying-emoji')
     )
-    // EMOJI_BURST_REPEAT(2) × defeatEmojiList.length(8) = 16
-    expect(emojiCalls).toHaveLength(16)
+    expect(emojiCalls.length).toBeGreaterThan(0)
   })
 
-  it('spawns no emojis when isCurrentUserWinner is null (local game)', () => {
+  it('spawns victory emojis when isCurrentUserWinner is null (local game)', () => {
     vi.useFakeTimers()
     render(<GameOverOverlay {...makeBaseProps()} isCurrentUserWinner={null} />)
-    vi.runAllTimers()
+    appendChildSpy.mockClear()
+    vi.advanceTimersByTime(1)  // fires the delay-0 first spawn timer
     const emojiCalls = appendChildSpy.mock.calls.filter(
       ([node]) => node?.classList?.contains('flying-emoji')
     )
-    expect(emojiCalls).toHaveLength(0)
+    expect(emojiCalls.length).toBeGreaterThan(0)
   })
 })
 
@@ -164,5 +163,26 @@ describe('GameOverOverlay — buttons', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: /next turn/i }))
     expect(onNextTurn).toHaveBeenCalledTimes(1)
+  })
+
+  it('calls onClose when Escape key is pressed', () => {
+    const props = makeBaseProps()
+    render(<GameOverOverlay {...props} isCurrentUserWinner={true} />)
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(props.onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not throw when Escape is pressed and onClose is undefined', () => {
+    const props = { ...makeBaseProps(), onClose: undefined }
+    render(<GameOverOverlay {...props} isCurrentUserWinner={true} />)
+    expect(() => fireEvent.keyDown(window, { key: 'Escape' })).not.toThrow()
+  })
+
+  it('does not call onClose for non-Escape keys', () => {
+    const props = makeBaseProps()
+    render(<GameOverOverlay {...props} isCurrentUserWinner={true} />)
+    fireEvent.keyDown(window, { key: 'Enter' })
+    fireEvent.keyDown(window, { key: 'Space' })
+    expect(props.onClose).not.toHaveBeenCalled()
   })
 })

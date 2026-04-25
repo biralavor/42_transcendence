@@ -51,11 +51,10 @@ export default function Play() {
     setCanvasKey(k => k + 1)
   }, [])
 
-  const winnerName = localGameResult
-    ? (localGameResult.winner === 'p1' ? p1Name
-       : localGameResult.winner === 'p2' ? 'Player 2'
-       : null)
-    : null
+  // Headline always addresses the logged-in user (P1), matching GamePage.jsx pattern.
+  // isCurrentUserWinner drives YOU WON/YOU LOST + emoji type: true if P1 won, false if P2 won.
+  const winnerName = localGameResult ? p1Name : null
+  const isCurrentUserWinner = localGameResult ? localGameResult.winner === 'p1' : null
 
   return (
     <div className="arcade-shell">
@@ -103,7 +102,7 @@ export default function Play() {
                         scoreP2={localGameResult.score_p2}
                         p1Name={p1Name}
                         p2Name="Player 2"
-                        isCurrentUserWinner={null}
+                        isCurrentUserWinner={isCurrentUserWinner}
                         onPlayAgain={handlePlayAgain}
                         onClose={handleClose}
                       />

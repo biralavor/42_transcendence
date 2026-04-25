@@ -25,7 +25,7 @@ function spawnEmojiBurst(emojiList, extraClass) {
   const expandedList = Array.from({ length: EMOJI_BURST_REPEAT }, () => emojiList).flat()
   // Spread emojis evenly across the full animation window so the last one
   // spawns just as the first finishes, giving a continuous one-by-one effect.
-  const interval = Math.floor(EMOJI_ANIM_MS / expandedList.length)
+  const interval = Math.max(1, Math.floor(EMOJI_ANIM_MS / expandedList.length))
   const spawnTimers = []
   const createdEls = []
   expandedList.forEach((emoji, i) => {
@@ -63,6 +63,10 @@ export default function GameOverOverlay({
       ({ spawnTimers, createdEls } = spawnEmojiBurst(victoryEmojiList, null))
     else if (isCurrentUserWinner === false)
       ({ spawnTimers, createdEls } = spawnEmojiBurst(defeatEmojiList, 'flying-emoji--sad'))
+    else
+      // null = local game (both players share the screen); show victory emojis
+      // since the winner is always known and celebration is for everyone.
+      ({ spawnTimers, createdEls } = spawnEmojiBurst(victoryEmojiList, null))
     return () => {
       spawnTimers.forEach(clearTimeout)   // cancel pending spawns
       createdEls.forEach(el => el.remove()) // immediately remove any already-created nodes
@@ -70,6 +74,13 @@ export default function GameOverOverlay({
   // isCurrentUserWinner is intentionally read once at mount — burst fires only on appearance
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Escape key: proper modal dismissal so aria-modal="true" semantics are correct
+  useEffect(() => {
+    const onKeyDown = (e) => { if (e.key === 'Escape') onClose?.() }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [onClose])
 
   const headline = isCurrentUserWinner === null
     ? 'WINS!'

@@ -32,8 +32,6 @@ manager = ConnectionManager()
 _setup_sessions: dict[str, tuple[int, int]] = {}
 # Maps game_id (str) → match_id (int) for database updates
 _match_ids: dict[str, int] = {}
-# Maps game_id (str) → {player_id: ready_bool} for waiting-room ready tracking
-_player_ready: dict[str, dict[int, bool]] = {}
 # Maps game_id → player_id who disconnected mid-game (waiting to reconnect or time out)
 _disconnected_players: dict[str, int] = {}
 # Maps game_id → asyncio Task running the disconnect countdown
@@ -557,7 +555,6 @@ async def _on_game_over(game_id: str, winner_id: int, score_p1: int, score_p2: i
         await game_manager.delete_session(game_id)
         _setup_sessions.pop(game_id, None)
         _match_ids.pop(game_id, None)
-        _player_ready.pop(game_id, None)
         _cleanup_waiting_room(game_id)
 
         # Broadcast the game over event authoritatively
@@ -1062,11 +1059,15 @@ async def game_websocket(websocket: WebSocket, game_id: str, token: str | None =
                 except SQLAlchemyError:
                     pass
 
-            await game_manager.delete_session(game_id)
-            _setup_sessions.pop(game_id, None)
-            _match_ids.pop(game_id, None)
-            _player_ready.pop(game_id, None)
-            _cleanup_waiting_room(game_id)
+            # Guard against the race where natural victory fires _on_game_over
+            # via create_task while both players are simultaneously disconnecting.
+            # If the session is already inactive, _on_game_over owns the DB write
+            # and cleanup — skip here to avoid clearing _match_ids before it runs.
+            if session is None or session.is_active:
+                await game_manager.delete_session(game_id)
+                _setup_sessions.pop(game_id, None)
+                _match_ids.pop(game_id, None)
+                _cleanup_waiting_room(game_id)
 
         else:
             # One player still connected — pause and start countdown for remote games only

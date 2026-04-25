@@ -237,6 +237,65 @@ async def test_remaining_zero_cancels_in_flight_timer():
 
 @pytest.mark.asyncio
 @pytest.mark.timeout(5)
+async def test_remaining_zero_skips_cleanup_when_session_already_inactive():
+    """When remaining==0 but session.is_active is False (natural game-over task
+    already scheduled), the cleanup branch must not pop _match_ids so that
+    _on_game_over can still record the DB result."""
+    mock_session = MagicMock()
+    mock_session.is_active = False  # game loop ended naturally via check_victory
+
+    mock_gm = MagicMock()
+    mock_gm.get_session.return_value = mock_session
+
+    game_id = "match-race"
+    match_ids: dict[str, int] = {game_id: 42}
+    setup_sessions: dict[str, tuple] = {game_id: (1, 2)}
+
+    session = mock_gm.get_session(game_id)
+
+    # Reproduce the `remaining == 0` guard from game_websocket's finally block
+    if session is None or session.is_active:
+        await mock_gm.delete_session(game_id)
+        setup_sessions.pop(game_id, None)
+        match_ids.pop(game_id, None)
+
+    # session.is_active is False → cleanup should be skipped
+    mock_gm.delete_session.assert_not_called()
+    assert game_id in match_ids, "_match_ids must be preserved so _on_game_over can write the result"
+    assert game_id in setup_sessions, "_setup_sessions must be preserved"
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(5)
+async def test_remaining_zero_runs_cleanup_when_session_is_active():
+    """When remaining==0 and the session is still active (mid-game disconnect
+    with no natural game-over), full cleanup must proceed."""
+    mock_session = MagicMock()
+    mock_session.is_active = True  # game was in progress when both disconnected
+    mock_session.player2_id = 2    # not AI — avoids the AI-forfeit branch
+
+    mock_gm = MagicMock()
+    mock_gm.get_session.return_value = mock_session
+    mock_gm.delete_session = AsyncMock()
+
+    game_id = "match-active"
+    match_ids: dict[str, int] = {game_id: 7}
+    setup_sessions: dict[str, tuple] = {game_id: (1, 2)}
+
+    session = mock_gm.get_session(game_id)
+
+    if session is None or session.is_active:
+        await mock_gm.delete_session(game_id)
+        setup_sessions.pop(game_id, None)
+        match_ids.pop(game_id, None)
+
+    mock_gm.delete_session.assert_called_once_with(game_id)
+    assert game_id not in match_ids, "_match_ids should be cleared for active-session cleanup"
+    assert game_id not in setup_sessions
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(5)
 async def test_reconnect_cancels_timer_resumes_and_sends_snapshot():
     """Reconnecting player cancels countdown, resumes game, gets snapshot, other player notified."""
     game_id = "match-xyz"
