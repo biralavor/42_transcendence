@@ -221,6 +221,20 @@ export default function Tournament() {
     return entries
   }, [tournament, profiles])
 
+  const champion = useMemo(() => {
+    if (!tournament || tournament.status !== 'complete' || leaderboard.length === 0) {
+      return null
+    }
+
+    const winnerId = Number(tournament.winner_id)
+    if (Number.isFinite(winnerId)) {
+      const winnerEntry = leaderboard.find((entry) => Number(entry.userId) === winnerId)
+      if (winnerEntry) return winnerEntry
+    }
+
+    return leaderboard[0]
+  }, [tournament, leaderboard])
+
   useEffect(() => {
     currentUserRef.current = currentUser
   }, [currentUser])
@@ -687,6 +701,25 @@ export default function Tournament() {
             {readyError && (
               <div className="alert alert-warning mb-4" role="alert">
                 {readyError}
+              </div>
+            )}
+
+            {champion && (
+              <div className="tournament-champion mb-4" role="status" aria-live="polite">
+                <p className="arcade-kicker mb-2">Tournament Champion</p>
+                <div className="tournament-champion-body">
+                  <img
+                    src={champion.avatarUrl || '/avatar_placeholder.jpg'}
+                    alt={`${champion.username} champion avatar`}
+                    className="tournament-champion-avatar"
+                  />
+                  <div>
+                    <h2 className="arcade-section-title mb-1">{champion.username}</h2>
+                    <p className="arcade-copy mb-0">
+                      Winner of {tournament?.name || 'this tournament'}
+                    </p>
+                  </div>
+                </div>
               </div>
             )}
 

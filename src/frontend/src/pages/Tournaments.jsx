@@ -4,6 +4,40 @@ import NavbarComponent from '../Components/Navbar'
 import { useAuth } from '../context/authContext'
 import { apiCall, apiJson } from '../utils/apiClient'
 
+function getTournamentChampionId(tournament) {
+  if (!tournament || tournament.status !== 'complete') return null
+
+  const topLevelWinnerId = Number(tournament.winner_id)
+  if (Number.isFinite(topLevelWinnerId)) {
+    return topLevelWinnerId
+  }
+
+  if (!Array.isArray(tournament.matches) || tournament.matches.length === 0) {
+    return null
+  }
+
+  const finishedMatches = tournament.matches.filter(
+    (match) => match?.status === 'finished' && match?.winner_id != null,
+  )
+
+  if (finishedMatches.length === 0) return null
+
+  const finalMatch = finishedMatches.reduce((currentFinal, match) => {
+    const currentRound = Number(currentFinal?.round ?? 0)
+    const nextRound = Number(match?.round ?? 0)
+
+    if (nextRound > currentRound) return match
+    if (nextRound < currentRound) return currentFinal
+
+    const currentPosition = Number(currentFinal?.position ?? 0)
+    const nextPosition = Number(match?.position ?? 0)
+    return nextPosition >= currentPosition ? match : currentFinal
+  }, finishedMatches[0])
+
+  const winnerId = Number(finalMatch?.winner_id)
+  return Number.isFinite(winnerId) ? winnerId : null
+}
+
 export default function Tournaments() {
   const navigate = useNavigate()
   const { auth } = useAuth()
@@ -17,6 +51,7 @@ export default function Tournaments() {
   const [hasActiveTournament, setHasActiveTournament] = useState(false)
   const [manualId, setManualId] = useState('')
   const [joiningById, setJoiningById] = useState(false)
+  const [championProfiles, setChampionProfiles] = useState({})
 
   useEffect(() => {
     let cancelled = false
@@ -218,6 +253,54 @@ export default function Tournaments() {
   }, [])
 
   useEffect(() => {
+    let cancelled = false
+
+    async function loadChampionProfiles() {
+      const championIds = [...new Set(
+        tournaments
+          .filter((t) => t.status === 'complete')
+          .map((t) => getTournamentChampionId(t))
+          .filter((id) => Number.isFinite(id)),
+      )]
+
+      const missingIds = championIds.filter((id) => !championProfiles[id])
+      if (missingIds.length === 0) return
+
+      const entries = {}
+
+      await Promise.all(
+        missingIds.map(async (id) => {
+          try {
+            const resp = await apiCall(`/api/users/profile/${id}`)
+            if (!resp.ok) throw new Error('Profile fetch failed')
+            const profile = await resp.json()
+
+            entries[id] = {
+              username: profile.display_name || profile.username || `User ${id}`,
+              avatarUrl: profile.avatar_url || '/avatar_placeholder.jpg',
+            }
+          } catch {
+            entries[id] = {
+              username: `User ${id}`,
+              avatarUrl: '/avatar_placeholder.jpg',
+            }
+          }
+        }),
+      )
+
+      if (!cancelled && Object.keys(entries).length > 0) {
+        setChampionProfiles((prev) => ({ ...prev, ...entries }))
+      }
+    }
+
+    void loadChampionProfiles()
+
+    return () => {
+      cancelled = true
+    }
+  }, [tournaments, championProfiles])
+
+  useEffect(() => {
     if (!currentUser) {
       setHasActiveTournament(false)
       return
@@ -375,6 +458,7 @@ function hasJoined(t) {
                         <th>Name</th>
                         <th>Players</th>
                         <th>Status</th>
+                        <th>Winner</th>
                         <th>Actions</th>
                       </tr>
                     </thead>
@@ -385,6 +469,8 @@ function hasJoined(t) {
                         const participantCount = t.participants?.length ?? 0
                         const isFull = participantCount >= (t.max_participants || 0)
                         const canJoin = !joined && t.status === 'open' && !isFull && !hasActiveTournament
+                        const championId = getTournamentChampionId(t)
+                        const championProfile = championId != null ? championProfiles[championId] : null
 
                         return (
                           <tr key={t.id}>
@@ -392,6 +478,24 @@ function hasJoined(t) {
                             <td>{t.name || `Tournament ${t.id}`}</td>
                             <td>{participantCount} / {t.max_participants}</td>
                             <td>{t.status}</td>
+                            <td>
+                              {t.status !== 'complete' && <span className="text-muted">-</span>}
+
+                              {t.status === 'complete' && championId == null && (
+                                <span className="text-muted">TBD</span>
+                              )}
+
+                              {t.status === 'complete' && championId != null && (
+                                <div className="d-flex align-items-center gap-2">
+                                  <img
+                                    src={championProfile?.avatarUrl || '/avatar_placeholder.jpg'}
+                                    alt={championProfile?.username || `User ${championId}`}
+                                    style={{ width: '28px', height: '28px', borderRadius: '50%' }}
+                                  />
+                                  <span>{championProfile?.username || `User ${championId}`}</span>
+                                </div>
+                              )}
+                            </td>
                             <td className="d-flex gap-2">
                               {canJoin && (
                                 <button

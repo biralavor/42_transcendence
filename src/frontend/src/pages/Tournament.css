@@ -46,6 +46,34 @@
   text-align: center;
 }
 
+.tournament-champion {
+  border: 2px solid var(--metal-silver);
+  border-radius: 12px;
+  padding: 1rem;
+  background: linear-gradient(135deg, rgba(18, 28, 46, 0.95), rgba(33, 49, 74, 0.95));
+}
+
+.tournament-champion-body {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.tournament-champion-avatar {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--metal-silver);
+}
+
+@media (max-width: 575px) {
+  .tournament-champion-body {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
 /* Bracket container */
 .tournament-bracket {
   overflow-x: auto;
