@@ -232,6 +232,7 @@ async def _handle_waiting_room_timeout(game_id: str) -> None:
                         winner_id=timeout_winner,
                     )
                 except Exception:
+                    await db.rollback()
                     tournament_complete = False
                     newly_assigned = []
 
@@ -353,6 +354,7 @@ async def _handle_tournament_ready_timeout(
                     winner_id=timeout_winner,
                 )
             except Exception:
+                await db.rollback()
                 tournament_complete = False
 
             refreshed = await get_tournament_with_participants(db, tournament_id)

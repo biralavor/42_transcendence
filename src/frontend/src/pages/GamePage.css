@@ -10,7 +10,7 @@
 
 .game-page-panel {
   width: 100%;
-  max-width: 980px;
+  max-width: 1160px;
   margin: 0 auto;
   padding: 18px;
 }
@@ -32,10 +32,76 @@
   margin: 0;
 }
 
+.game-page-stage {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr;
+  justify-items: center;
+  align-items: start;
+  margin-bottom: 14px;
+  overflow: visible;
+}
+
 .game-page-canvas-shell {
   width: 100%;
   max-width: 840px;
   margin: 0 auto;
+}
+
+.tournament-side-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 14px 12px;
+  border: 1px solid rgba(220, 220, 220, 0.24);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.07);
+  backdrop-filter: blur(8px);
+  min-width: 0;
+  min-height: 132px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.18);
+}
+
+.game-page-side-panel {
+  position: absolute;
+  top: 16px;
+  width: clamp(150px, 14vw, 190px);
+  z-index: 2;
+}
+
+.game-page-side-left {
+  left: 0;
+  transform: translateX(calc(-100% - 16px));
+}
+
+.game-page-side-right {
+  right: 0;
+  transform: translateX(calc(100% + 16px));
+}
+
+.tournament-side-panel.is-you {
+  border-color: rgba(76, 175, 80, 0.75);
+  box-shadow: 0 0 0 1px rgba(76, 175, 80, 0.25) inset;
+}
+
+.tournament-side-avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid rgba(255, 255, 255, 0.18);
+  flex: 0 0 auto;
+}
+
+.tournament-side-name {
+  font-weight: 700;
+  color: #fff;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .game-page-canvas-shell .pong-canvas-container {
@@ -67,5 +133,16 @@
   .game-page-canvas-shell,
   .game-page-canvas-shell .pong-canvas-container {
     max-width: 100%;
+  }
+
+  .tournament-side-panel {
+    position: static;
+    transform: none;
+    width: 100%;
+    min-height: 0;
+  }
+
+  .game-page-stage {
+    gap: 12px;
   }
 }

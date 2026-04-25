@@ -24,6 +24,8 @@ export default function GamePage() {
 
   const [p1Name, setP1Name] = useState(currentUser?.username ?? 'Player 1')
   const [p2Name, setP2Name] = useState(isAiGame ? 'AI Opponent' : (opponent?.username ?? 'Player 2'))
+  const [p1Avatar, setP1Avatar] = useState(currentUser?.avatarUrl ?? currentUser?.avatar_url ?? '/avatar_placeholder.jpg')
+  const [p2Avatar, setP2Avatar] = useState(isAiGame ? '/avatar_placeholder.jpg' : (opponent?.avatarUrl ?? opponent?.avatar_url ?? '/avatar_placeholder.jpg'))
 
   // The current user's real ID and name — authoritative regardless of how this page was
   // navigated to (waiting-room state, tournament bracket state, or VsCpuCard state all
@@ -43,15 +45,27 @@ export default function GamePage() {
   useEffect(() => {
     if (player1Id != null) {
       apiJson(`/api/users/profile/${player1Id}`)
-        .then(p => setP1Name(p.display_name ?? p.username))
+        .then(p => {
+          setP1Name(p.display_name ?? p.username)
+          setP1Avatar(p.avatar_url || '/avatar_placeholder.jpg')
+        })
         .catch(() => {})
     }
     if (player2Id != null && !isAiGame) {
       apiJson(`/api/users/profile/${player2Id}`)
-        .then(p => setP2Name(p.display_name ?? p.username))
+        .then(p => {
+          setP2Name(p.display_name ?? p.username)
+          setP2Avatar(p.avatar_url || '/avatar_placeholder.jpg')
+        })
         .catch(() => {})
     }
   }, [player1Id, player2Id])
+
+  useEffect(() => {
+    if (isAiGame) {
+      setP2Avatar('/avatar_placeholder.jpg')
+    }
+  }, [isAiGame])
 
   const tournamentId = location.state?.tournamentId
   const tournamentMatchId = location.state?.tournamentMatchId
@@ -164,6 +178,7 @@ export default function GamePage() {
     : null
   const scoreP1 = gameOverResult?.score_p1 ?? 0
   const scoreP2 = gameOverResult?.score_p2 ?? 0
+  const isMyLeftSide = Number(myId) === Number(player1Id)
 
   return (
     <>
@@ -176,29 +191,49 @@ export default function GamePage() {
               <h1 className="arcade-title game-page-title">Pong Arena</h1>
             </div>
 
-            <div className="game-page-canvas-shell" style={{ position: 'relative' }}>
-              <PongCanvasMultiplayer
-                key={roomId}
-                gameId={roomId}
-                player1Id={player1Id}
-                player2Id={player2Id}
-                onGameEnd={handleGameEnd}
-              />
-              {gameOverResult && (
-                <GameOverOverlay
-                  winnerName={myName}
-                  scoreP1={scoreP1}
-                  scoreP2={scoreP2}
-                  p1Name={p1Name}
-                  p2Name={p2Name}
-                  isCurrentUserWinner={isCurrentUserWinner}
-                  isTournamentGame={Boolean(tournamentId)}
-                  onPlayAgain={handlePlayAgain}
-                  onClose={handleClose}
-                  onViewBracket={handleViewBracket}
-                  onNextTurn={handleNextTurn}
+            <div className="game-page-stage" aria-label="Players by side">
+              <aside className={`tournament-side-panel game-page-side-panel game-page-side-left ${isMyLeftSide ? 'is-you' : ''}`}>
+                <img
+                  src={p1Avatar}
+                  alt={p1Name}
+                  className="tournament-side-avatar"
                 />
-              )}
+                <span className="tournament-side-name">{p1Name}</span>
+              </aside>
+
+              <div className="game-page-canvas-shell" style={{ position: 'relative' }}>
+                <PongCanvasMultiplayer
+                  key={roomId}
+                  gameId={roomId}
+                  player1Id={player1Id}
+                  player2Id={player2Id}
+                  onGameEnd={handleGameEnd}
+                />
+                {gameOverResult && (
+                  <GameOverOverlay
+                    winnerName={myName}
+                    scoreP1={scoreP1}
+                    scoreP2={scoreP2}
+                    p1Name={p1Name}
+                    p2Name={p2Name}
+                    isCurrentUserWinner={isCurrentUserWinner}
+                    isTournamentGame={Boolean(tournamentId)}
+                    onPlayAgain={handlePlayAgain}
+                    onClose={handleClose}
+                    onViewBracket={handleViewBracket}
+                    onNextTurn={handleNextTurn}
+                  />
+                )}
+              </div>
+
+              <aside className={`tournament-side-panel game-page-side-panel game-page-side-right ${!isMyLeftSide ? 'is-you' : ''}`}>
+                <img
+                  src={p2Avatar}
+                  alt={p2Name}
+                  className="tournament-side-avatar"
+                />
+                <span className="tournament-side-name">{p2Name}</span>
+              </aside>
             </div>
           </div>
         </section>

@@ -406,6 +406,7 @@ export default function Tournament() {
           } else {
             setReadyError('Ready timeout: no player ready, no winner assigned.')
           }
+          await refreshTournament()
           return
         }
 
@@ -517,7 +518,7 @@ export default function Tournament() {
     const winner = winner_id != null ? profiles[winner_id] : null
     const p1Label = p1?.username || (player1_id != null ? `User ${player1_id}` : 'TBD')
     const p2Label = p2?.username || (player2_id != null ? `User ${player2_id}` : 'TBD')
-    const winnerLabel = winner?.username || (winner_id != null ? `User ${winner_id}` : 'Unknown')
+    const winnerLabel = winner?.username || (winner_id != null ? `User ${winner_id}` : 'No winner (WO)')
 
     const isCurrentUsersMatch =
       currentUser &&
@@ -567,7 +568,7 @@ export default function Tournament() {
           <span className="tournament-player-name">{p2Label}</span>
         </div>
 
-        {status === 'in_progress' && readyCountdownLabel && (
+        {isCurrentUsersMatch && status === 'in_progress' && readyCountdownLabel && (
           <div className="arcade-copy mt-2">
             Ready timeout in: {readyCountdownLabel}
           </div>
