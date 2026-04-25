@@ -60,7 +60,7 @@ describe('VsCpuCard', () => {
     fireEvent.click(screen.getByRole('button', { name: /confirm/i }))
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith(
       '/game/abc-123',
-      { state: { player1_id: 42, player2_id: 0 } },
+      { state: { player1_id: 42, player2_id: 0, difficulty: 'medium', gameType: 'ai' } },
     ))
   })
 

@@ -9,6 +9,8 @@ import { useGameSettings } from '../context/gameSettingsContext';
 import { THEMES } from '../game/themes';
 import { loadThemeImages } from '../game/themeLoader';
 
+const WIN_SCORE = 10
+
 function getLocalInput(keyState, keyUp, keyDown) {
     let velY = keyState[keyDown] ? 1 : 0;
     velY -= keyState[keyUp] ? 1 : 0;
@@ -82,12 +84,29 @@ export default function PongCanvas(props)
   }, [theme]);
 
   function onGoal() {
-    kickoffRef.current = true;
-    setShowGoal(true);
+    kickoffRef.current = true
+    setShowGoal(true)
     goalTimerRef.current = setTimeout(() => {
-      kickoffRef.current = false;
-      setShowGoal(false);
-    }, 2000);
+      kickoffRef.current = false
+      setShowGoal(false)
+    }, 2000)
+
+    const { player1, player2 } = gameStateRef.current.score
+    if (player1 >= WIN_SCORE) {
+      cancelAnimationFrame(loopRef.current)
+      clearTimeout(goalTimerRef.current)
+      goalTimerRef.current = null
+      kickoffRef.current = false
+      setShowGoal(false)
+      props.onGameEnd?.({ winner: 'p1', score_p1: player1, score_p2: player2 })
+    } else if (player2 >= WIN_SCORE) {
+      cancelAnimationFrame(loopRef.current)
+      clearTimeout(goalTimerRef.current)
+      goalTimerRef.current = null
+      kickoffRef.current = false
+      setShowGoal(false)
+      props.onGameEnd?.({ winner: 'p2', score_p1: player1, score_p2: player2 })
+    }
   }
 
   const isKickoff = () => kickoffRef.current;
@@ -158,8 +177,8 @@ export default function PongCanvas(props)
           );
 
     function loop() {
-      gameLoop(canvasContext, gameStateRef.current, callbacks, themeImagesRef.current, theme);
       loopRef.current = requestAnimationFrame(loop);
+      gameLoop(canvasContext, gameStateRef.current, callbacks, themeImagesRef.current, theme);
     }
 
     window.addEventListener('resize', onResize);

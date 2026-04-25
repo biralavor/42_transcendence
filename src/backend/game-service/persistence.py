@@ -1114,6 +1114,15 @@ async def reward_game_achievement_if_should(
     """ caller should commit session"""
     win_breakpoints = [1, 3, 5, 10, 25, 50, 100, 250, 500, 1000]
 
+    # ASCIImoji icons — must stay in sync with the gamification migration
+    _regular_icons = {
+        1: '(•̀ᴗ•́)و', 3: 'ᕦ(ò_óˇ)ᕤ', 5: "(ง'̀-'́)ง",
+        10: 'ᕙ(⇀‸↼‶)ᕗ', 25: r'\(^o^)/',
+    }
+    _tournament_icons = {
+        1: 'ʕ•ᴥ•ʔ╯', 3: 'ʕ•̫͡•ʔ', 5: 'ʕ⊙ᴥ⊙ʔ',
+    }
+
     regular_achievement = next((
         w_break for w_break in win_breakpoints
         if result_victories['regular_wins'] == w_break
@@ -1121,10 +1130,10 @@ async def reward_game_achievement_if_should(
 
     if regular_achievement is not None:
         achievement = {
-            "a_key": f'win{regular_achievement}',
+            "a_key":  f'win{regular_achievement}',
             "a_name": f'win {regular_achievement} matches',
             "a_desc": f'You Won {regular_achievement} regular matches',
-            "a_icon": f'({regular_achievement})'
+            "a_icon": _regular_icons.get(regular_achievement, f'({regular_achievement})'),
         }
         await insert_game_achievement(user_id, achievement, session)
 
@@ -1135,10 +1144,10 @@ async def reward_game_achievement_if_should(
 
     if tournament_achievement is not None:
         achievement = {
-            "a_key": f'twin{tournament_achievement}',
+            "a_key":  f'twin{tournament_achievement}',
             "a_name": f'win {tournament_achievement} tournament matches',
             "a_desc": f'You Won {tournament_achievement} tournament matches',
-            "a_icon": f'_\({tournament_achievement})/_'
+            "a_icon": _tournament_icons.get(tournament_achievement, f'_\\({tournament_achievement})/_'),
         }
         await insert_game_achievement(user_id, achievement, session)
 

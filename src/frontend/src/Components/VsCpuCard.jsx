@@ -23,7 +23,7 @@ export default function VsCpuCard() {
         body: JSON.stringify({ difficulty }),
       })
       navigate(`/game/${game_id}`, {
-        state: { player1_id: me.id, player2_id: 0 },
+        state: { player1_id: me.id, player2_id: 0, difficulty, gameType: 'ai' },
       })
     } catch (err) {
       setError(err?.message || 'Failed to start game. Please try again.')

@@ -1,6 +1,9 @@
+import { useState, useCallback, useEffect } from 'react'
 import NavbarComponent from '../Components/Navbar'
 import PongCanvas from '../Components/PongCanvas'
 import VsCpuCard from '../Components/VsCpuCard'
+import GameOverOverlay from '../Components/GameOverOverlay'
+import { apiJson } from '../utils/apiClient'
 
 const matchModes = [
   {
@@ -24,6 +27,35 @@ const quickActions = [
 ]
 
 export default function Play() {
+  const [localGameResult, setLocalGameResult] = useState(null)
+  const [canvasKey, setCanvasKey] = useState(0)
+  const [p1Name, setP1Name] = useState('Player 1')
+
+  useEffect(() => {
+    apiJson('/api/users/auth/me')
+      .then(me => setP1Name(me.display_name ?? me.username ?? 'Player 1'))
+      .catch(() => {})
+  }, [])
+
+  const handleLocalGameEnd = useCallback((result) => {
+    setLocalGameResult(prev => prev ?? result)
+  }, [])
+
+  const handlePlayAgain = useCallback(() => {
+    setLocalGameResult(null)
+    setCanvasKey(k => k + 1)
+  }, [])
+
+  const handleClose = useCallback(() => {
+    setLocalGameResult(null)
+    setCanvasKey(k => k + 1)
+  }, [])
+
+  // Headline always addresses the logged-in user (P1), matching GamePage.jsx pattern.
+  // isCurrentUserWinner drives YOU WON/YOU LOST + emoji type: true if P1 won, false if P2 won.
+  const winnerName = localGameResult ? p1Name : null
+  const isCurrentUserWinner = localGameResult ? localGameResult.winner === 'p1' : null
+
   return (
     <div className="arcade-shell">
       <NavbarComponent />
@@ -61,8 +93,20 @@ export default function Play() {
             <div className="arcade-card soft p-3 p-lg-4 mb-4">
               <div className="row g-4 align-items-start">
                 <div className="col-12 col-xl-8">
-                  <div className="pong-board">
-                    <PongCanvas player1Kind='local' player2Kind='local' />
+                  <div className="pong-board" style={{ position: 'relative' }}>
+                    <PongCanvas key={canvasKey} player1Kind='local' player2Kind='local' onGameEnd={handleLocalGameEnd} />
+                    {localGameResult && (
+                      <GameOverOverlay
+                        winnerName={winnerName}
+                        scoreP1={localGameResult.score_p1}
+                        scoreP2={localGameResult.score_p2}
+                        p1Name={p1Name}
+                        p2Name="Player 2"
+                        isCurrentUserWinner={isCurrentUserWinner}
+                        onPlayAgain={handlePlayAgain}
+                        onClose={handleClose}
+                      />
+                    )}
                   </div>
                 </div>
 
