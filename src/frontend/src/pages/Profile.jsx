@@ -316,7 +316,12 @@ export default function Profile() {
                     </div>
                     {paginatedHistory.results.map((match) => (
                       <div className="history-row" key={match.match_id}>
-                        <div className="history-col history-opponent">Player #{match.opponent_id}</div>
+                        <div className="history-col history-opponent">
+                          {
+                            match.opponent_display_name
+                              ?? `Player #${match.opponent_id}`
+                          }
+                        </div>
                         <div className="history-col history-date">
                           {match.date ? new Date(match.date).toLocaleDateString() : '—'}
                         </div>
