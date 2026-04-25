@@ -318,7 +318,7 @@ export default function Profile() {
                       <div className="history-row" key={match.match_id}>
                         <div className="history-col history-opponent">
                           {
-                            match.opponent_display_name
+                            match?.opponent_display_name
                               ?? `Player #${match.opponent_id}`
                           }
                         </div>

@@ -138,7 +138,7 @@ WITH all_finished_matches AS
         , COALESCE(NULLIF(TRIM(users.display_name), ''), users.username)
         AS opponent_display_name
     FROM paged_matches
-        INNER JOIN users
+        LEFT JOIN users
             ON paged_matches.opponent_id = users.id
 )
 , page_stats AS
