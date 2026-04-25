@@ -220,10 +220,12 @@ describe('Profile avatar UI', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: /cancel/i }))
 
-    expect(URL.revokeObjectURL).toHaveBeenCalledWith(FAKE_OBJECT_URL)
     expect(
       await screen.findByRole('button', { name: /change avatar/i })
     ).toBeInTheDocument()
+    await waitFor(() => {
+      expect(URL.revokeObjectURL).toHaveBeenCalledWith(FAKE_OBJECT_URL)
+    })
   })
 
   it('Confirm upload posts FormData and updates avatar on success', async () => {

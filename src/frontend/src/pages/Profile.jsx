@@ -1,5 +1,5 @@
 // src/frontend/src/pages/Profile.jsx
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import NavbarComponent from '../Components/Navbar'
 import GameSettings from '../Components/GameSettings'
 import { getAvatarFilter } from '../utils/avatarFilter'
@@ -7,6 +7,10 @@ import { apiCall } from '../utils/apiClient'
 import './Profile.css'
 import FriendsSidebar from '../Components/FriendsSidebar'
 import { useAuth } from '../context/authContext'
+
+const ALLOWED_AVATAR_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+const MAX_AVATAR_BYTES = 2 * 1024 * 1024
+const PLACEHOLDER_AVATAR = '/avatar_placeholder.jpg'
 
 function getSafeAvatarUrl(avatarUrl) {
   if (!avatarUrl || typeof avatarUrl !== 'string') {
@@ -35,10 +39,8 @@ function getSafeAvatarUrl(avatarUrl) {
 }
 
 function sanitizeAvatarUrl(rawUrl) {
-  const placeholder = '/avatar_placeholder.jpg'
-
   if (typeof rawUrl !== 'string' || rawUrl.trim() === '') {
-    return placeholder
+    return PLACEHOLDER_AVATAR
   }
 
   const url = rawUrl.trim()
@@ -60,12 +62,8 @@ function sanitizeAvatarUrl(rawUrl) {
     }
   }
 
-  return placeholder
+  return PLACEHOLDER_AVATAR
 }
-
-const ALLOWED_AVATAR_TYPES = ['image/jpeg', 'image/png', 'image/webp']
-const MAX_AVATAR_BYTES = 2 * 1024 * 1024
-const PLACEHOLDER_AVATAR = '/avatar_placeholder.jpg'
 
 function emptyHistory(){
   return {
@@ -112,6 +110,17 @@ export default function Profile() {
       if (avatarPreview) URL.revokeObjectURL(avatarPreview)
     }
   }, [avatarPreview])
+
+  const avatarSrc = useMemo(() => {
+    if (avatarPreview) return avatarPreview
+    const base = getSafeAvatarUrl(profile?.avatarUrl)
+    if (!base) return ''
+    if (avatarVersion > 0 && profile?.avatarUrl !== PLACEHOLDER_AVATAR) {
+      const sep = base.includes('?') ? '&' : '?'
+      return `${base}${sep}v=${encodeURIComponent(avatarVersion)}`
+    }
+    return base
+  }, [avatarPreview, profile?.avatarUrl, avatarVersion])
 
   const showAvatarToast = (kind, message) => {
     setAvatarToast({ kind, message })
@@ -224,7 +233,7 @@ export default function Profile() {
         setProfile({
           displayName: profileData.display_name ?? '',
           darkMode: profileData.dark_mode ?? false,
-          avatarUrl: profileData.avatar_url ?? '/avatar_placeholder.jpg',
+          avatarUrl: profileData.avatar_url ?? PLACEHOLDER_AVATAR,
           username: profileData.username,
           bio: profileData.bio ?? '',
           status: profileData.status,
@@ -332,18 +341,7 @@ export default function Profile() {
               <div className="profile-header">
                 <div className="profile-avatar-wrapper">
                   <img
-                    src={
-                      avatarPreview ||
-                      (() => {
-                        const base = getSafeAvatarUrl(profile?.avatarUrl)
-                        if (!base) return ''
-                        if (avatarVersion > 0 && profile?.avatarUrl !== PLACEHOLDER_AVATAR) {
-                          const sep = base.includes('?') ? '&' : '?'
-                          return `${base}${sep}v=${encodeURIComponent(avatarVersion)}`
-                        }
-                        return base
-                      })()
-                    }
+                    src={avatarSrc}
                     alt="User avatar"
                     className="profile-avatar"
                     style={{ filter: avatarPreview ? 'none' : getAvatarFilter(userId) }}
