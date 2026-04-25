@@ -225,11 +225,11 @@ export default function Profile() {
             return r.json()
           }),
           apiCall(`/api/game/matches/history?player_id=${id}`, { signal }).then(r => {
-            if (!r.ok) throw new Error(`History fetch failed: ${r.status}`)
+            if (!r.ok) throw new Error(`Matches History fetch failed: ${r.status}`)
             return r.json()
           }),
           apiCall(`/api/game/leaderboard?player_id=${id}&limit=1`, { signal }).then(r => {
-            if (!r.ok) throw new Error(`History fetch failed: ${r.status}`)
+            if (!r.ok) throw new Error(`Leaderboard fetch failed: ${r.status}`)
             return r.json()
           }),
         ])
