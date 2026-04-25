@@ -371,6 +371,7 @@ function hasJoined(t) {
                   <table className="table table-dark table-striped align-middle">
                     <thead>
                       <tr>
+                        <th>ID</th>
                         <th>Name</th>
                         <th>Players</th>
                         <th>Status</th>
@@ -387,6 +388,7 @@ function hasJoined(t) {
 
                         return (
                           <tr key={t.id}>
+                            <td>{t.id}</td>
                             <td>{t.name || `Tournament ${t.id}`}</td>
                             <td>{participantCount} / {t.max_participants}</td>
                             <td>{t.status}</td>

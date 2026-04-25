@@ -725,6 +725,7 @@ export default function Tournament() {
                   <table className="table table-dark table-striped align-middle">
                     <thead>
                       <tr>
+                        <th className="text-center">Pos</th>
                         <th>Player</th>
                         <th>Pts</th>
                         <th>W</th>
@@ -735,8 +736,9 @@ export default function Tournament() {
                       </tr>
                     </thead>
                     <tbody>
-                      {leaderboard.map((row) => (
+                      {leaderboard.map((row, index) => (
                         <tr key={row.userId}>
+                          <td className="text-center fw-semibold">{index + 1}</td>
                           <td className="d-flex align-items-center gap-2">
                             <img
                               src={row.avatarUrl || '/avatar_placeholder.jpg'}
