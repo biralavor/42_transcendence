@@ -735,6 +735,7 @@ def leaderboard_order_by_str(sort_assoc: list[tuple[str, str]] | None) -> str | 
 
 async def get_leaderboard_paginated(
         db: AsyncSession,
+        player_id: int | None = None,
         limit: int = 20,
         page: int = 0,
         sort_assoc: list[tuple[str, str]] | None = None
@@ -868,7 +869,7 @@ WITH all_matches AS
     SELECT
         users.id
         AS user_id
-        , COALESCE(users.display_name, users.username)
+        , COALESCE(NULLIF(TRIM(users.display_name), ''), users.username)
         AS display_name
         , sum(wins)
         AS wins
@@ -910,6 +911,14 @@ WITH all_matches AS
         , current_streak
         , max_streak
     FROM ranked_stats
+)
+, player_stats AS
+(
+    SELECT
+        *
+    FROM ranking_results
+    WHERE ((:player_id)::int IS NOT NULL AND :player_id = user_id)
+       OR ((:player_id)::int IS NULL AND rank = 1)
 )
 , summary AS
 (
@@ -984,11 +993,19 @@ SELECT
     AS results
     , (SELECT to_jsonb(summary) FROM summary)
     AS summary
+    , (SELECT to_jsonb(player_stats) FROM player_stats)
+    AS player_stats
+    
 FROM page_ranking_results
     """)
 
     result = await db.execute(
-        statement, {'offset': offset, 'limit': limit, 'page': page}
+        statement, {
+            'offset': offset,
+            'limit': limit,
+            'page': page,
+            'player_id': player_id,
+        }
     )
     return result.mappings().one_or_none()
 
