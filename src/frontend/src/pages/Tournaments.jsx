@@ -3,42 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import NavbarComponent from '../Components/Navbar'
 import { useAuth } from '../context/authContext'
 import { apiCall, apiJson } from '../utils/apiClient'
+import { getTournamentChampionId } from '../utils/tournamentStandings'
 
 const TOURNAMENTS_SYNC_INTERVAL_MS = 5000
-
-function getTournamentChampionId(tournament) {
-  if (!tournament || tournament.status !== 'complete') return null
-
-  const topLevelWinnerId = Number(tournament.winner_id)
-  if (Number.isFinite(topLevelWinnerId)) {
-    return topLevelWinnerId
-  }
-
-  if (!Array.isArray(tournament.matches) || tournament.matches.length === 0) {
-    return null
-  }
-
-  const finishedMatches = tournament.matches.filter(
-    (match) => match?.status === 'finished' && match?.winner_id != null,
-  )
-
-  if (finishedMatches.length === 0) return null
-
-  const finalMatch = finishedMatches.reduce((currentFinal, match) => {
-    const currentRound = Number(currentFinal?.round ?? 0)
-    const nextRound = Number(match?.round ?? 0)
-
-    if (nextRound > currentRound) return match
-    if (nextRound < currentRound) return currentFinal
-
-    const currentPosition = Number(currentFinal?.position ?? 0)
-    const nextPosition = Number(match?.position ?? 0)
-    return nextPosition >= currentPosition ? match : currentFinal
-  }, finishedMatches[0])
-
-  const winnerId = Number(finalMatch?.winner_id)
-  return Number.isFinite(winnerId) ? winnerId : null
-}
 
 function getStatusMeta(status) {
   switch (status) {

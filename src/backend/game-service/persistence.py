@@ -543,6 +543,7 @@ async def record_tournament_match_result(
     winner_id: int,
     score_p1: int = 0,
     score_p2: int = 0,
+    user_id: int | None = None,
 ) -> tuple[Tournament, bool, list[TournamentMatch]]:
     """Record the winner of a tournament match and advance the bracket.
 
@@ -566,6 +567,8 @@ async def record_tournament_match_result(
         raise TournamentMatchNotFound()
     if tm.status == "finished":
         raise TournamentMatchAlreadyFinished()
+    if user_id is not None and user_id not in (tm.player1_id, tm.player2_id):
+        raise TournamentNotParticipant()
     if winner_id not in (tm.player1_id, tm.player2_id):
         raise InvalidWinner()
 

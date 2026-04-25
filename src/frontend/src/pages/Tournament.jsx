@@ -4,6 +4,7 @@ import NavbarComponent from '../Components/Navbar'
 import { apiCall, apiJson } from '../utils/apiClient'
 import { useAuth } from '../context/authContext'
 import { createWsClient } from '../utils/wsClient'
+import { buildTournamentStandings } from '../utils/tournamentStandings'
 import './Tournament.css'
 
 const READY_TIMEOUT_SECONDS = 90
@@ -155,81 +156,12 @@ export default function Tournament() {
   }, [showStartButton, participantCount, maxParticipants, startLoading])
 
   const leaderboard = useMemo(() => {
-    if (!tournament || !tournament.participants) return []
-
-    const stats = {}
-
-    tournament.participants.forEach(({ user_id }) => {
-      stats[user_id] = {
-        userId: user_id,
-        wins: 0,
-        matches: 0,
-        goalsFor: 0,
-        goalsAgainst: 0,
-      }
-    })
-
-    if (tournament.matches) {
-      tournament.matches.forEach((m) => {
-        const p1Id = m.player1_id
-        const p2Id = m.player2_id
-        const p1Score = Number(m.score_p1 ?? 0)
-        const p2Score = Number(m.score_p2 ?? 0)
-
-        if (p1Id != null && stats[p1Id]) {
-          stats[p1Id].matches++
-          stats[p1Id].goalsFor += p1Score
-          stats[p1Id].goalsAgainst += p2Score
-        }
-
-        if (p2Id != null && stats[p2Id]) {
-          stats[p2Id].matches++
-          stats[p2Id].goalsFor += p2Score
-          stats[p2Id].goalsAgainst += p1Score
-        }
-
-        if (m.status === 'finished' && m.winner_id != null && stats[m.winner_id]) {
-          stats[m.winner_id].wins++
-        }
-      })
-    }
-
-    const entries = Object.values(stats).map((s) => {
-      const prof = profiles[s.userId] || {}
-
-      return {
-        userId: s.userId,
-        username: prof.username || `User ${s.userId}`,
-        avatarUrl: prof.avatarUrl || '/avatar_placeholder.jpg',
-        wins: s.wins,
-        matches: s.matches,
-        goalsFor: s.goalsFor,
-        goalsAgainst: s.goalsAgainst,
-        goalDifference: s.goalsFor - s.goalsAgainst,
-        points: s.wins,
-      }
-    })
-
-    entries.sort((a, b) =>
-      b.points - a.points ||
-      b.goalDifference - a.goalDifference ||
-      b.goalsFor - a.goalsFor ||
-      b.wins - a.wins ||
-      a.username.localeCompare(b.username)
-    )
-
-    return entries
+    return buildTournamentStandings(tournament, profiles)
   }, [tournament, profiles])
 
   const champion = useMemo(() => {
     if (!tournament || tournament.status !== 'complete' || leaderboard.length === 0) {
       return null
-    }
-
-    const winnerId = Number(tournament.winner_id)
-    if (Number.isFinite(winnerId)) {
-      const winnerEntry = leaderboard.find((entry) => Number(entry.userId) === winnerId)
-      if (winnerEntry) return winnerEntry
     }
 
     return leaderboard[0]
