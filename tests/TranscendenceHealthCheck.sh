@@ -148,7 +148,20 @@ fi
 if [[ -n "$net" ]]; then
     pass "Docker network found: $net"
     for svc in db user-service game-service chat-service frontend nginx adminer; do
-        if docker network inspect "$net" 2>/dev/null | grep -q "\"$svc\""; then
+        # Use docker inspect on the container itself (authoritative) rather than
+        # the reverse-lookup via docker network inspect (can lag on CI startup).
+        # Retry up to 3 times with 2s gaps so a brief attachment delay isn't fatal.
+        connected=false
+        for _attempt in 1 2 3; do
+            if docker inspect "$svc" \
+                 --format '{{range $k,$v := .NetworkSettings.Networks}}{{$k}} {{end}}' \
+                 2>/dev/null | tr ' ' '\n' | grep -qx "$net"; then
+                connected=true
+                break
+            fi
+            [[ $_attempt -lt 3 ]] && sleep 2
+        done
+        if $connected; then
             pass "$svc is connected to $net"
         else
             fail "$svc is NOT connected to $net"

@@ -67,6 +67,7 @@ class GameSession:
         self.p1_direction = "stop"  # "up", "down", or "stop"
         self.p2_direction = "stop"
         self.is_active = True
+        self.is_paused = False
         self.started_at = time.time()
         self.tick_count = 0
         
