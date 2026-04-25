@@ -16,13 +16,20 @@ function getSafeAvatarUrl(avatarUrl) {
   if (!trimmed) {
     return ''
   }
-  try {
-    const url = new URL(trimmed, window.location.origin)
-    if (url.protocol === 'http:' || url.protocol === 'https:') {
-      return url.toString()
+  // Same-origin relative path (reject scheme-relative "//host/...")
+  if (trimmed.startsWith('/') && !trimmed.startsWith('//')) {
+    return trimmed
+  }
+  // Absolute http(s) URL
+  if (/^https?:\/\//i.test(trimmed)) {
+    try {
+      const url = new URL(trimmed)
+      if (url.protocol === 'http:' || url.protocol === 'https:') {
+        return url.toString()
+      }
+    } catch {
+      // fall through to return empty string
     }
-  } catch {
-    // fall through to return empty string
   }
   return ''
 }
@@ -36,18 +43,21 @@ function sanitizeAvatarUrl(rawUrl) {
 
   const url = rawUrl.trim()
 
-  // Allow relative URLs (served from this origin)
-  if (url.startsWith('/')) {
+  // Same-origin relative path (reject scheme-relative "//host/...")
+  if (url.startsWith('/') && !url.startsWith('//')) {
     return url
   }
 
-  try {
-    const parsed = new URL(url, window.location.origin)
-    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
-      return parsed.toString()
+  // Absolute http(s) URL
+  if (/^https?:\/\//i.test(url)) {
+    try {
+      const parsed = new URL(url)
+      if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+        return parsed.toString()
+      }
+    } catch {
+      // Fall through to placeholder on parse errors
     }
-  } catch {
-    // Fall through to placeholder on parse errors
   }
 
   return placeholder
@@ -328,13 +338,8 @@ export default function Profile() {
                         const base = getSafeAvatarUrl(profile?.avatarUrl)
                         if (!base) return ''
                         if (avatarVersion > 0 && profile?.avatarUrl !== PLACEHOLDER_AVATAR) {
-                          try {
-                            const u = new URL(base, window.location.origin)
-                            u.searchParams.set('v', String(avatarVersion))
-                            return u.toString()
-                          } catch {
-                            return base
-                          }
+                          const sep = base.includes('?') ? '&' : '?'
+                          return `${base}${sep}v=${encodeURIComponent(avatarVersion)}`
                         }
                         return base
                       })()
