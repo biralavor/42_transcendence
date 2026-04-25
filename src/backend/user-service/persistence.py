@@ -2,17 +2,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 
 async def reward_friendship_achievement_if_should(
-        requester_id, addressee_id, session
-):
-    print('requester_id', requester_id, 'addressee_id', addressee_id)
-    friendship_brekpoints = [1, 3, 5, 11, 21, 42, 77, 111, 450, 987]
+        requester_id: int, addressee_id: int, session: AsyncSession
+) -> None:
+
+    friendship_breakpoints = [1, 3, 5, 11, 21, 42, 77, 111, 450, 987]
 
     requester_friendship_count = \
         ((await friend_count(requester_id, session)) or 0)
     addressee_friendship_count = \
         ((await friend_count(addressee_id, session)) or 0)
 
-    if requester_friendship_count in friendship_brekpoints:
+    if requester_friendship_count in friendship_breakpoints:
         achievement = {
             "a_key": f'friend{requester_friendship_count}',
             "a_name": f'{requester_friendship_count} mates',
@@ -21,7 +21,7 @@ async def reward_friendship_achievement_if_should(
         }
         await insert_user_achievement(
             requester_id, achievement, session)
-    if addressee_friendship_count in friendship_brekpoints:
+    if addressee_friendship_count in friendship_breakpoints:
         achievement = {
             "a_key": f'friend{addressee_friendship_count}',
             "a_name": f'{addressee_friendship_count} mates',
