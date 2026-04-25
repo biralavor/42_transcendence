@@ -53,6 +53,10 @@ function sanitizeAvatarUrl(rawUrl) {
   return placeholder
 }
 
+const ALLOWED_AVATAR_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+const MAX_AVATAR_BYTES = 2 * 1024 * 1024
+const PLACEHOLDER_AVATAR = '/avatar_placeholder.jpg'
+
 function emptyHistory(){
   return {
     results: [],
@@ -78,10 +82,108 @@ export default function Profile() {
   const [error, setError] = useState('')
   const [saveStatus, setSaveStatus] = useState('')
   const saveStatusTimer = useRef(null)
+  const [avatarFile, setAvatarFile] = useState(null)
+  const [avatarPreview, setAvatarPreview] = useState(null)
+  const [avatarBusy, setAvatarBusy] = useState(false)
+  const [avatarToast, setAvatarToast] = useState(null)
+  const [avatarVersion, setAvatarVersion] = useState(0)
+  const fileInputRef = useRef(null)
+  const avatarToastTimer = useRef(null)
 
   useEffect(() => {
-    return () => clearTimeout(saveStatusTimer.current)
+    return () => {
+      clearTimeout(saveStatusTimer.current)
+      clearTimeout(avatarToastTimer.current)
+    }
   }, [])
+
+  useEffect(() => {
+    return () => {
+      if (avatarPreview) URL.revokeObjectURL(avatarPreview)
+    }
+  }, [avatarPreview])
+
+  const showAvatarToast = (kind, message) => {
+    setAvatarToast({ kind, message })
+    clearTimeout(avatarToastTimer.current)
+    avatarToastTimer.current = setTimeout(() => setAvatarToast(null), 4000)
+  }
+
+  const clearAvatarSelection = () => {
+    setAvatarPreview(prev => {
+      if (prev) URL.revokeObjectURL(prev)
+      return null
+    })
+    setAvatarFile(null)
+  }
+
+  const handleAvatarPick = (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    if (!ALLOWED_AVATAR_TYPES.includes(file.type)) {
+      showAvatarToast('error', 'Only JPEG, PNG, or WebP images are allowed.')
+      return
+    }
+    if (file.size > MAX_AVATAR_BYTES) {
+      showAvatarToast('error', 'File is too large. Maximum size is 2 MB.')
+      return
+    }
+    if (avatarPreview) URL.revokeObjectURL(avatarPreview)
+    setAvatarFile(file)
+    setAvatarPreview(URL.createObjectURL(file))
+  }
+
+  const handleAvatarUpload = async () => {
+    if (!avatarFile || avatarBusy) return
+    setAvatarBusy(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', avatarFile)
+      const response = await apiCall('/api/users/avatar', {
+        method: 'POST',
+        body: formData,
+      })
+      if (!response.ok) {
+        let msg = `Upload failed (HTTP ${response.status})`
+        try {
+          const data = await response.json()
+          if (data?.detail) msg = data.detail
+        } catch {
+          // response had no JSON body
+        }
+        throw new Error(msg)
+      }
+      const data = await response.json()
+      setProfile(prev => prev ? { ...prev, avatarUrl: data.avatar_url } : prev)
+      setAvatarVersion(v => v + 1)
+      clearAvatarSelection()
+      showAvatarToast('success', 'Avatar updated.')
+    } catch (err) {
+      showAvatarToast('error', err.message || 'Failed to upload avatar.')
+    } finally {
+      setAvatarBusy(false)
+    }
+  }
+
+  const handleAvatarDelete = async () => {
+    if (avatarBusy) return
+    setAvatarBusy(true)
+    try {
+      const response = await apiCall('/api/users/avatar', { method: 'DELETE' })
+      if (!response.ok) {
+        throw new Error(`Delete failed (HTTP ${response.status})`)
+      }
+      setProfile(prev => prev ? { ...prev, avatarUrl: PLACEHOLDER_AVATAR } : prev)
+      setAvatarVersion(v => v + 1)
+      clearAvatarSelection()
+      showAvatarToast('success', 'Avatar removed.')
+    } catch (err) {
+      showAvatarToast('error', err.message || 'Failed to remove avatar.')
+    } finally {
+      setAvatarBusy(false)
+    }
+  }
 
   useEffect(() => {
     if (!auth.access_token) {
@@ -213,14 +315,87 @@ export default function Profile() {
           </div>
           <div className="profile-main-col">
             <div className="arcade-screen profile-card">
+              {avatarToast && (
+                <div
+                  className={`alert ${avatarToast.kind === 'success' ? 'alert-success' : 'alert-danger'} profile-alert`}
+                  role="alert"
+                >
+                  {avatarToast.message}
+                </div>
+              )}
               <div className="profile-header">
                 <div className="profile-avatar-wrapper">
                   <img
-                    src={getSafeAvatarUrl(profile?.avatarUrl)}
+                    src={
+                      avatarPreview ||
+                      (() => {
+                        const base = getSafeAvatarUrl(profile?.avatarUrl)
+                        if (!base) return ''
+                        if (avatarVersion > 0 && profile?.avatarUrl !== PLACEHOLDER_AVATAR) {
+                          return `${base}${base.includes('?') ? '&' : '?'}v=${avatarVersion}`
+                        }
+                        return base
+                      })()
+                    }
                     alt="User avatar"
                     className="profile-avatar"
-                    style={{ filter: getAvatarFilter(userId) }}
+                    style={{ filter: avatarPreview ? 'none' : getAvatarFilter(userId) }}
                   />
+                  {avatarBusy && (
+                    <div className="profile-avatar-spinner" aria-label="Uploading avatar" role="status">
+                      <span className="profile-spinner" />
+                    </div>
+                  )}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="profile-avatar-file-input"
+                    onChange={handleAvatarPick}
+                    aria-label="Choose avatar image"
+                  />
+                  <div className="profile-avatar-actions">
+                    {!avatarPreview && (
+                      <>
+                        <button
+                          type="button"
+                          className="arcade-btn arcade-btn-secondary profile-avatar-btn"
+                          onClick={() => fileInputRef.current?.click()}
+                          disabled={avatarBusy}
+                        >
+                          Change avatar
+                        </button>
+                        <button
+                          type="button"
+                          className="arcade-btn arcade-btn-danger profile-avatar-btn"
+                          onClick={handleAvatarDelete}
+                          disabled={avatarBusy || !profile?.avatarUrl || profile.avatarUrl === PLACEHOLDER_AVATAR}
+                        >
+                          Remove
+                        </button>
+                      </>
+                    )}
+                    {avatarPreview && (
+                      <>
+                        <button
+                          type="button"
+                          className="arcade-btn arcade-btn-primary profile-avatar-btn"
+                          onClick={handleAvatarUpload}
+                          disabled={avatarBusy}
+                        >
+                          {avatarBusy ? 'Uploading…' : 'Confirm upload'}
+                        </button>
+                        <button
+                          type="button"
+                          className="arcade-btn arcade-btn-secondary profile-avatar-btn"
+                          onClick={clearAvatarSelection}
+                          disabled={avatarBusy}
+                        >
+                          Cancel
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
                 <div className="profile-info">
                   <h1 className="profile-display-name">{profile.displayName || profile.username}</h1>
