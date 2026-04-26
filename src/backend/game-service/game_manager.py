@@ -1,5 +1,4 @@
 import asyncio
-import time
 from typing import Optional, Callable, Any
 from dataclasses import asdict
 from service.game_session import GameSession
@@ -65,16 +64,13 @@ class GameManager:
         session = self.get_session(game_id)
         if not session:
             return
+
         direction = message.get("direction", "stop")
-        client_ts = message.get("client_ts")
         if direction not in ("up", "down", "stop"):
             return
-        server_now = int(time.time() * 1000)  # Current server time in ms
-        if client_ts is not None:
-            if not isinstance(client_ts, (int, float)):
-                return
-            if abs(server_now - client_ts) > 300:
-                return
+
+        # Do not gate input on the client's wall clock. In LAN multiplayer, two
+        # real PCs can easily differ by >300ms, which would freeze that paddle.
         if player_id == session.player1_id:
             session.p1_direction = direction
         elif player_id == session.player2_id:

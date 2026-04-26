@@ -67,8 +67,8 @@ async def test_game_manager_creation():
 
 
 @pytest.mark.asyncio
-async def test_latency_filter():
-    """Test that inputs with high latency are filtered out."""
+async def test_player_input_accepts_clock_skewed_client_ts():
+    """Inputs must not depend on synchronized clocks between two LAN players."""
     from service.game_manager import GameManager
     import time
     
@@ -84,7 +84,6 @@ async def test_latency_filter():
         broadcast_callback=mock_broadcast,
     )
     
-    # Send a fresh input (should be accepted)
     current_time = int(time.time() * 1000)
     await manager.handle_player_input(
         game_id="test-latency",
@@ -92,24 +91,26 @@ async def test_latency_filter():
         message={
             "type": "input",
             "direction": "up",
-            "client_ts": current_time,  # Current time
+            "client_ts": current_time,
         }
     )
     assert session.p1_direction == "up", "Fresh input should be accepted"
     
-    # Send a stale input (very old timestamp - should be rejected)
+    # A real second PC can have a clock that differs from the host. Movement
+    # should still work because the WebSocket connection already authenticates
+    # the player, and the direction is just the current input state.
     await manager.handle_player_input(
         game_id="test-latency",
         player_id=1,
         message={
             "type": "input",
             "direction": "down",
-            "client_ts": current_time - 500,  # 500ms old - exceeds 300ms threshold
+            "client_ts": current_time - 500,
         }
     )
-    assert session.p1_direction == "up", "Stale input should be ignored"
-    
-    # Send an invalid timestamp (string - should be rejected)
+    assert session.p1_direction == "down", "Clock-skewed input should be accepted"
+
+    # Bad timestamp metadata should not block otherwise valid movement input.
     await manager.handle_player_input(
         game_id="test-latency",
         player_id=1,
@@ -119,12 +120,12 @@ async def test_latency_filter():
             "client_ts": "not-a-number",
         }
     )
-    assert session.p1_direction == "up", "Invalid timestamp type should be ignored"
+    assert session.p1_direction == "down", "Invalid timestamp metadata should be ignored"
 
     # Clean up
     await manager.delete_session("test-latency")
     
-    print("✓ test_latency_filter passed")
+    print("✓ test_player_input_accepts_clock_skewed_client_ts passed")
 
 
 @pytest.mark.asyncio
@@ -367,7 +368,7 @@ async def main():
 
     try:
         await test_game_manager_creation()
-        await test_latency_filter()
+        await test_player_input_accepts_clock_skewed_client_ts()
         await test_player_input_routing()
         await test_game_manager_ai_params_stored_on_session()
         await test_game_manager_ai_drives_p2_direction()
