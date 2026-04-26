@@ -47,6 +47,22 @@ container_running() {
     docker compose ps --format '{{.Names}}' 2>/dev/null | grep -q "^${1}$"
 }
 
+print_pytest_fail_paths() {
+    local output="$1"
+    local label="$2"
+    local failed_files
+
+    failed_files=$(printf "%s\n" "$output" | sed -nE 's/^[[:space:]]*FAILED[[:space:]]+([^:[:space:]]+).*/\1/p' | sort -u)
+    if [[ -n "$failed_files" ]]; then
+        printf "${RED}[FAIL PATH]${RESET} %s failing test file(s):\n" "$label"
+        while IFS= read -r file; do
+            [[ -n "$file" ]] && printf "  - %s\n" "$file"
+        done <<< "$failed_files"
+    else
+        info "$label tests failed, but failing file path could not be extracted from pytest output"
+    fi
+}
+
 # ── 1. Container Status ────────────────────────────────────────────────────────
 section "Container Status"
 for svc in db user-service game-service chat-service frontend nginx adminer; do
@@ -864,6 +880,7 @@ if container_running user-service; then
         SUITE_FAIL["$suite_name"]=$fail_count
         ((PASS+=$pass_count))
         ((FAIL+=$fail_count))
+        print_pytest_fail_paths "$out" "User Service"
         printf "%s\n" "$out" | grep -i "error\|failed" | head -5 || true
     else
         printf "${GREEN}[PASS]${RESET} User Service unit tests (${pass_count} passed, ${fail_count} failed)\n"
@@ -892,6 +909,7 @@ if container_running game-service; then
         SUITE_FAIL["$suite_name"]=$fail_count
         ((PASS+=$pass_count))
         ((FAIL+=$fail_count))
+        print_pytest_fail_paths "$out" "Game Service"
         printf "%s\n" "$out" | grep -i "error\|failed" | head -5 || true
     else
         printf "${GREEN}[PASS]${RESET} Game Service unit tests (${pass_count} passed, ${fail_count} failed)\n"
@@ -920,6 +938,7 @@ if container_running chat-service; then
         SUITE_FAIL["$suite_name"]=$fail_count
         ((PASS+=$pass_count))
         ((FAIL+=$fail_count))
+        print_pytest_fail_paths "$out" "Chat Service"
         printf "%s\n" "$out" | grep -i "error\|failed" | head -5 || true
     else
         printf "${GREEN}[PASS]${RESET} Chat Service unit tests (${pass_count} passed, ${fail_count} failed)\n"
@@ -952,6 +971,19 @@ if container_running frontend; then
         SUITE_FAIL["$suite_name"]=$fail_count
         ((PASS+=$pass_count))
         ((FAIL+=$fail_count))
+
+        # Print failing test file paths first so make check output is actionable.
+        clean_out=$(printf "%s\n" "$out" | sed -E 's/\x1B\[[0-9;]*[A-Za-z]//g')
+        failed_files=$(printf "%s\n" "$clean_out" | sed -nE 's/^[[:space:]]*FAIL[[:space:]]+([^[:space:]]+).*/\1/p' | sort -u)
+        if [[ -n "$failed_files" ]]; then
+            printf "${RED}[FAIL PATH]${RESET} Frontend failing test file(s):\n"
+            while IFS= read -r file; do
+                [[ -n "$file" ]] && printf "  - %s\n" "$file"
+            done <<< "$failed_files"
+        else
+            info "Frontend tests failed, but failing file path could not be extracted from Vitest output"
+        fi
+
         printf "%s\n" "$out" | grep -i "error\|failed" | head -5 || true
     else
         printf "${GREEN}[PASS]${RESET} Frontend unit tests (${pass_count} passed, ${fail_count} failed)\n"
