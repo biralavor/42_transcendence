@@ -80,8 +80,8 @@ describe('Leaderboard subtitle captions', () => {
           'GoalsAgainst',
           'GoalDifference',
           'Points',
-          'MaxWinStreak',
-          'CurrentWinStreak',
+          'Max WinStreak',
+          'CurrentWin Streak',
           'Level',
         ])
       )

@@ -428,6 +428,9 @@ export default function Profile() {
                 <div className="profile-info">
                   <h1 className="profile-display-name">{profile.displayName || profile.username}</h1>
                   <p className="profile-username">@{profile.username}</p>
+                  {xpData && (
+                    <XpBar level={xpData.level} xpInLevel={xpData.xp_in_level} />
+                  )}
                   <div className="profile-stats">
                     <div className="profile-stat-card">
                       <span className="profile-stat-value">{wins}</span>
@@ -532,13 +535,6 @@ export default function Profile() {
             </div>
           </div>
         </div>
-
-        {xpData && (
-          <section className="profile-gamification" style={{ maxWidth: '800px', margin: '0 auto 2rem', padding: '0 1rem' }}>
-            <h2 style={{ marginBottom: '0.5rem' }}>Progress</h2>
-            <XpBar level={xpData.level} xpInLevel={xpData.xp_in_level} />
-          </section>
-        )}
 
         {achievements.length > 0 && (
           <section className="profile-gamification" style={{ maxWidth: '800px', margin: '0 auto 2rem', padding: '0 1rem' }}>
