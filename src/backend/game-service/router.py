@@ -375,7 +375,13 @@ async def record_tournament_match_result_endpoint(
 ):
     try:
         _, tournament_complete, newly_assigned = await record_tournament_match_result(
-            session, tournament_id, match_id, body.winner_id, body.score_p1, body.score_p2
+            session,
+            tournament_id,
+            match_id,
+            body.winner_id,
+            body.score_p1,
+            body.score_p2,
+            user_id=user_id,
         )
     except TournamentNotFound:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tournament not found")
@@ -385,6 +391,8 @@ async def record_tournament_match_result_endpoint(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Match already finished")
     except InvalidWinner:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="winner_id must be one of the match players")
+    except TournamentNotParticipant:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only match participants can submit tournament results")
 
     await ws_manager.broadcast(
         f"tournament_{tournament_id}",
