@@ -59,6 +59,12 @@ export default function Chat() {
     return () => controller.abort()
   }, [auth.access_token, userId])
 
+  useEffect(() => {
+    // Clear room messages when changing room
+    setMessages([])
+    setTypingUsers([])
+  }, [roomId])
+
   // Mark room as active (suppresses badge increments) and clear any existing count
   useEffect(() => {
     if (!roomId) return
