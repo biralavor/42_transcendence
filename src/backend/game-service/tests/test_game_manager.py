@@ -110,7 +110,7 @@ async def test_player_input_accepts_clock_skewed_client_ts():
     )
     assert session.p1_direction == "down", "Clock-skewed input should be accepted"
 
-    # Bad timestamp metadata should not block otherwise valid movement input.
+    # Missing timestamp metadata should not block otherwise valid movement input.
     await manager.handle_player_input(
         game_id="test-latency",
         player_id=1,
@@ -119,7 +119,7 @@ async def test_player_input_accepts_clock_skewed_client_ts():
             "direction": "up",
         }
     )
-    assert session.p1_direction == "down", "Invalid timestamp metadata should be ignored"
+    assert session.p1_direction == "up", "Input without timestamp should still be accepted"
 
     # Clean up
     await manager.delete_session("test-latency")
