@@ -443,3 +443,19 @@ async def user_xp(user_id: int, session: SessionDependency):
     if data is None:
         return XpResponse(user_id=user_id, xp=0, level=1, xp_in_level=0, xp_to_next_level=100)
     return XpResponse(**data)
+
+
+@router.get("/xp-leaderboard", response_model=list[dict])
+async def xp_leaderboard(session: SessionDependency, limit: int = Query(20, ge=1, le=100)):
+    from sqlalchemy import text as _text
+    result = await session.execute(
+        _text("""
+            SELECT u.id AS user_id, u.username, ux.xp, ux.level
+            FROM user_xp ux
+            JOIN users u ON u.id = ux.user_id
+            ORDER BY ux.xp DESC
+            LIMIT :limit
+        """),
+        {"limit": limit},
+    )
+    return [dict(row) for row in result.mappings()]
