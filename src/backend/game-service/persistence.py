@@ -738,6 +738,7 @@ def leaderboard_order_by_str(sort_assoc: list[tuple[str, str]] | None) -> str | 
 
 async def get_leaderboard_paginated(
         db: AsyncSession,
+        player_id: int | None = None,
         limit: int = 20,
         page: int = 0,
         sort_assoc: list[tuple[str, str]] | None = None
@@ -871,7 +872,7 @@ WITH all_matches AS
     SELECT
         users.id
         AS user_id
-        , COALESCE(users.display_name, users.username)
+        , COALESCE(NULLIF(TRIM(users.display_name), ''), users.username)
         AS display_name
         , sum(wins)
         AS wins
@@ -913,6 +914,13 @@ WITH all_matches AS
         , current_streak
         , max_streak
     FROM ranked_stats
+)
+, player_stats AS
+(
+    SELECT
+        *
+    FROM ranking_results
+    WHERE ((:player_id)::int IS NOT NULL AND :player_id = user_id)
 )
 , summary AS
 (
@@ -987,11 +995,19 @@ SELECT
     AS results
     , (SELECT to_jsonb(summary) FROM summary)
     AS summary
+    , (SELECT to_jsonb(player_stats) FROM player_stats)
+    AS player_stats
+    
 FROM page_ranking_results
     """)
 
     result = await db.execute(
-        statement, {'offset': offset, 'limit': limit, 'page': page}
+        statement, {
+            'offset': offset,
+            'limit': limit,
+            'page': page,
+            'player_id': player_id,
+        }
     )
     return result.mappings().one_or_none()
 
@@ -1174,12 +1190,14 @@ insert_achievement_if_not_exists AS
         VALUES (:user_id, COALESCE((SELECT id FROM achievements WHERE key = :a_key),
                                    (table insert_achievement_if_not_exists)))
     ON CONFLICT (user_id, achievement_id) DO NOTHING
-    RETURNING achievement_id
+    RETURNING achievement_id, true as was_inserted
 )
 , insertion_notification AS
 (
     INSERT INTO notifications (user_id, type, message)
-        VALUES (:user_id, 'game_achievement', :a_desc)
+        SELECT :user_id, 'game_achievement', :a_desc
+        FROM insertion_user_achievement
+        WHERE was_inserted = true
 )
 SELECT
     :user_id as user_id
