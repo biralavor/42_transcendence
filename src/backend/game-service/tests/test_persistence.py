@@ -28,30 +28,35 @@ from persistence import (
 @pytest_asyncio.fixture
 async def db():
     engine = create_async_engine(settings.SQLALCHEMY_DATABASE_URI, poolclass=NullPool)
-    async with engine.begin() as conn:
-        await conn.execute(
-            text(
-                "TRUNCATE TABLE tournament_matches, tournament_participants, "
-                "tournaments, matches RESTART IDENTITY CASCADE"
-            )
-        )
-        # Keep persistence tests independent from module execution order.
-        # Some tests award XP and require winner user_ids to exist.
-        for uid in (1, 2, 3, 42, 50, 51, 99):
+    try:
+        async with engine.begin() as conn:
             await conn.execute(
                 text(
-                    "INSERT INTO credentials (id, username, password) "
-                    "VALUES (:id, :username, 'x') ON CONFLICT (id) DO NOTHING"
-                ),
-                {"id": uid, "username": f"persist_user_{uid}"},
+                    "TRUNCATE TABLE tournament_matches, tournament_participants, "
+                    "tournaments, matches RESTART IDENTITY CASCADE"
+                )
             )
-            await conn.execute(
-                text(
-                    "INSERT INTO users (id, username, credential_id) "
-                    "VALUES (:id, :username, :cid) ON CONFLICT (id) DO NOTHING"
-                ),
-                {"id": uid, "username": f"persist_user_{uid}", "cid": uid},
-            )
+            # Keep persistence tests independent from module execution order.
+            # Some tests award XP and require winner user_ids to exist.
+            for uid in (1, 2, 3, 42, 50, 51, 99):
+                await conn.execute(
+                    text(
+                        "INSERT INTO credentials (id, username, password) "
+                        "VALUES (:id, :username, 'x') ON CONFLICT (id) DO NOTHING"
+                    ),
+                    {"id": uid, "username": f"persist_user_{uid}"},
+                )
+                await conn.execute(
+                    text(
+                        "INSERT INTO users (id, username, credential_id) "
+                        "VALUES (:id, :username, :cid) ON CONFLICT (id) DO NOTHING"
+                    ),
+                    {"id": uid, "username": f"persist_user_{uid}", "cid": uid},
+                )
+    except Exception as exc:
+        await engine.dispose()
+        pytest.skip(f"Persistence integration DB unavailable: {exc}")
+
     Session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     async with Session() as session:
         yield session
