@@ -10,6 +10,7 @@ export function NotificationProvider({ children }) {
     const { unreadCounts, clearUnread, dmSenders } = useUnread()
     const [userId, setUserId] = useState(null)
     const [notifications, setNotifications] = useState([])
+    const [achievementQueue, setAchievementQueue] = useState([])
     const inviteVisibleRef = useRef(false)
     // Stable first-seen timestamp per DM room slug — set once, never updated, so sort order is stable
     const dmFirstSeenRef = useRef({})
@@ -156,6 +157,13 @@ export function NotificationProvider({ children }) {
                 const frame = JSON.parse(event.data)
                 if (frame.type !== 'notification') return
                 const notif = frame.notification
+
+                // Route game_achievement to toast queue instead of main notification list
+                if (notif.type === 'game_achievement') {
+                    setAchievementQueue(prev => [...prev, notif])
+                    return
+                }
+
                 // Suppress badge for game_invite when FriendsSidebar is already showing the invite.
                 // Mark as read so totalUnreadCount (derived from list) doesn't count it.
                 const suppressed = notif.type === 'game_invite' && inviteVisibleRef.current
@@ -276,6 +284,10 @@ export function NotificationProvider({ children }) {
         [notifications]
     )
 
+    const dismissAchievement = useCallback((id) => {
+        setAchievementQueue(prev => prev.filter(a => a.id !== id))
+    }, [])
+
     const value = useMemo(() => ({
         notifications: combinedNotifications,
         unreadCount: totalUnreadCount,
@@ -284,7 +296,9 @@ export function NotificationProvider({ children }) {
         markAllRead,
         removeNotification,
         setInviteVisible,
-    }), [combinedNotifications, totalUnreadCount, fetchNotifications, markRead, markAllRead, removeNotification, setInviteVisible])
+        achievementQueue,
+        dismissAchievement,
+    }), [combinedNotifications, totalUnreadCount, fetchNotifications, markRead, markAllRead, removeNotification, setInviteVisible, achievementQueue, dismissAchievement])
 
 
 
