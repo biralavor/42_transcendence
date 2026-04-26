@@ -56,6 +56,7 @@ export default function Leaderboard() {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [xpMap, setXpMap] = useState({}) // user_id → {xp, level}
 
   const entries = page.results ?? [];
   const summary = page.summary
@@ -105,6 +106,18 @@ export default function Leaderboard() {
       cancelled = true
       controller.abort()
     }
+  }, [])
+
+  useEffect(() => {
+    fetch('/api/game/xp-leaderboard?limit=20')
+      .then(r => r.ok ? r.json() : [])
+      .then(data => {
+        if (!Array.isArray(data)) return
+        const map = {}
+        data.forEach(row => { map[row.user_id] = { xp: row.xp, level: row.level } })
+        setXpMap(map)
+      })
+      .catch(() => {})
   }, [])
 
   return (
@@ -181,11 +194,14 @@ export default function Leaderboard() {
                         <th title='Points'>Pts</th>
                         <th title='Max Win Streak'>MWS</th>
                         <th title='Current Win Streak'>CWS</th>
+                        <th title='Player Level'>Lvl</th>
+                        <th title='Total XP'>XP</th>
                       </tr>
                     </thead>
                     <tbody>
                       {entries.map((entry) => {
                         const rowClass = entry.rank <= 3 ? `leaderboard-top-${entry.rank}` : ''
+                        const xp = xpMap[entry.user_id]
                         return (
                           <tr key={entry.user_id} className={rowClass}>
                             <td>#{entry.rank}</td>
@@ -199,6 +215,8 @@ export default function Leaderboard() {
                             <td>{entry.points}</td>
                             <td>{entry.max_streak}</td>
                             <td>{entry.current_streak}</td>
+                            <td>{xp ? xp.level : '—'}</td>
+                            <td>{xp ? xp.xp : '—'}</td>
                           </tr>
                         )
                       })}

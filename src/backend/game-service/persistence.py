@@ -529,8 +529,11 @@ async def finish_match(
     match.score_p2 = score_p2
     match.finished_at = datetime.now(timezone.utc)
     match.status = "finished"
+    loser_id = match.player2_id if winner_id == match.player1_id else match.player1_id
     await db.flush()
-    await award_xp(winner_id, 10, db)
+    await award_xp(winner_id, 25, db)
+    if loser_id != 0:
+        await award_xp(loser_id, 5, db)
     await db.commit()
     await db.refresh(match)
     return match
@@ -1170,6 +1173,42 @@ async def reward_game_achievement_if_should(
         }
         await insert_game_achievement(user_id, achievement, session)
 
+    # ── New badge conditions ─────────────────────────────────────────────────
+    total_games = await count_games(user_id, session)
+    if total_games >= 1:
+        await insert_game_achievement(user_id, {
+            "a_key": "first_game", "a_name": "Getting Started",
+            "a_desc": "Play your first game", "a_icon": "(ง •_•)ง",
+        }, session)
+
+    if await won_vs_ai(user_id, session):
+        await insert_game_achievement(user_id, {
+            "a_key": "ai_conqueror", "a_name": "AI Conqueror",
+            "a_desc": "Beat the AI opponent", "a_icon": "ʕっ•ᴥ•ʔっ",
+        }, session)
+
+    if await has_perfect_game(user_id, session):
+        await insert_game_achievement(user_id, {
+            "a_key": "perfect_game", "a_name": "Perfect Pong",
+            "a_desc": "Win a game 10-0", "a_icon": "¬‿¬",
+        }, session)
+
+    xp_result = await session.execute(
+        text("SELECT level FROM user_xp WHERE user_id = :uid"), {"uid": user_id}
+    )
+    level_row = xp_result.one_or_none()
+    if level_row:
+        if level_row.level >= 5:
+            await insert_game_achievement(user_id, {
+                "a_key": "level_5", "a_name": "Rising Star",
+                "a_desc": "Reach Level 5", "a_icon": "★彡(◕‿◕)",
+            }, session)
+        if level_row.level >= 10:
+            await insert_game_achievement(user_id, {
+                "a_key": "level_10", "a_name": "Elite Player",
+                "a_desc": "Reach Level 10", "a_icon": "(ﾉ≧∀≦)ﾉ",
+            }, session)
+
 
 async def insert_game_achievement(
         user_id: int, achievement: dict[str,str], session: AsyncSession):
@@ -1256,6 +1295,88 @@ LIMIT 1
     }
 
     return {**ret}
+
+
+async def count_games(user_id: int, session: AsyncSession) -> int:
+    """Total games played (won or lost) by user_id, including AI games."""
+    result = await session.execute(
+        text(
+            "SELECT COUNT(*) FROM matches "
+            "WHERE (player1_id = :uid OR player2_id = :uid) AND status = 'finished'"
+        ),
+        {"uid": user_id},
+    )
+    return result.scalar_one() or 0
+
+
+async def won_vs_ai(user_id: int, session: AsyncSession) -> bool:
+    """True if user has at least one win against AI (player2_id = 0)."""
+    result = await session.execute(
+        text(
+            "SELECT COUNT(*) FROM matches "
+            "WHERE winner_id = :uid AND player2_id = 0 AND status = 'finished'"
+        ),
+        {"uid": user_id},
+    )
+    return (result.scalar_one() or 0) >= 1
+
+
+async def has_perfect_game(user_id: int, session: AsyncSession) -> bool:
+    """True if user has won any match with opponent scoring 0."""
+    result = await session.execute(
+        text(
+            "SELECT COUNT(*) FROM matches "
+            "WHERE winner_id = :uid AND status = 'finished' "
+            "AND ("
+            "  (player1_id = :uid AND score_p2 = 0) OR "
+            "  (player2_id = :uid AND score_p1 = 0)"
+            ")"
+        ),
+        {"uid": user_id},
+    )
+    return (result.scalar_one() or 0) >= 1
+
+
+async def get_achievements_for_user(user_id: int, session: AsyncSession) -> list[dict]:
+    """Return full achievement catalog with per-user earned status, sorted earned-first."""
+    result = await session.execute(
+        text("""
+            SELECT
+                a.key,
+                a.name,
+                a.description,
+                a.icon,
+                (ua.user_id IS NOT NULL)      AS earned,
+                ua.earned_at
+            FROM achievements a
+            LEFT JOIN user_achievements ua
+                ON ua.achievement_id = a.id AND ua.user_id = :uid
+            ORDER BY
+                earned DESC,
+                ua.earned_at DESC NULLS LAST,
+                a.key ASC
+        """),
+        {"uid": user_id},
+    )
+    return [dict(row) for row in result.mappings()]
+
+
+async def get_xp_for_user(user_id: int, session: AsyncSession) -> dict | None:
+    """Return XP row for user, or None if user has never played."""
+    result = await session.execute(
+        text("SELECT user_id, xp, level FROM user_xp WHERE user_id = :uid"),
+        {"uid": user_id},
+    )
+    row = result.mappings().one_or_none()
+    if row is None:
+        return None
+    return {
+        "user_id": row["user_id"],
+        "xp": row["xp"],
+        "level": row["level"],
+        "xp_in_level": row["xp"] % 100,
+        "xp_to_next_level": 100,
+    }
 
 
 # async def get_leaderboard_paginated(

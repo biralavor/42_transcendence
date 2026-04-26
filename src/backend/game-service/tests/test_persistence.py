@@ -11,6 +11,7 @@ from persistence import (
     TournamentMatchAlreadyFinished,
     TournamentMatchNotFound,
     TournamentNotFound,
+    count_games,
     create_match,
     create_tournament,
     finish_match,
@@ -19,10 +20,12 @@ from persistence import (
     get_tournament_with_participants,
     get_user_matches,
     get_user_stats,
+    has_perfect_game,
     join_tournament,
     record_tournament_match_timeout_result,
     record_tournament_match_result,
     start_tournament,
+    won_vs_ai,
 )
 
 
@@ -460,3 +463,77 @@ async def test_get_leaderboard_applies_limit(db):
 
     leaderboard = await get_leaderboard(db, limit=2)
     assert len(leaderboard) == 2
+
+
+# ── Task 3: helper function tests ─────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_count_games_returns_zero_for_new_user(db):
+    count = await count_games(42, db)
+    assert count == 0
+
+
+@pytest.mark.asyncio
+async def test_won_vs_ai_returns_false_with_no_matches(db):
+    result = await won_vs_ai(42, db)
+    assert result is False
+
+
+@pytest.mark.asyncio
+async def test_has_perfect_game_returns_false_with_no_matches(db):
+    result = await has_perfect_game(42, db)
+    assert result is False
+
+
+@pytest.mark.asyncio
+async def test_first_game_badge_unlocked_after_any_game(db):
+    match = await create_match(db, player1_id=1, player2_id=2)
+    await finish_match(db, match.id, winner_id=1, score_p1=10, score_p2=5)
+    row = (await db.execute(
+        text(
+            "SELECT ua.user_id FROM user_achievements ua "
+            "JOIN achievements a ON a.id = ua.achievement_id "
+            "WHERE a.key = 'first_game' AND ua.user_id = :uid"
+        ),
+        {"uid": 1},
+    )).one_or_none()
+    assert row is not None, "first_game badge should be unlocked after winning a match"
+
+
+@pytest.mark.asyncio
+async def test_perfect_game_badge_unlocked_on_10_0_win(db):
+    match = await create_match(db, player1_id=1, player2_id=2)
+    await finish_match(db, match.id, winner_id=1, score_p1=10, score_p2=0)
+    row = (await db.execute(
+        text(
+            "SELECT ua.user_id FROM user_achievements ua "
+            "JOIN achievements a ON a.id = ua.achievement_id "
+            "WHERE a.key = 'perfect_game' AND ua.user_id = :uid"
+        ),
+        {"uid": 1},
+    )).one_or_none()
+    assert row is not None, "perfect_game badge should unlock on 10-0 win"
+
+
+# ── Task 2: XP amount tests ───────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_finish_match_awards_25_xp_to_winner(db):
+    """Winner earns +25 XP on regular game win."""
+    match = await create_match(db, player1_id=1, player2_id=2)
+    await finish_match(db, match.id, winner_id=1, score_p1=10, score_p2=5)
+    row = (await db.execute(
+        text("SELECT xp FROM user_xp WHERE user_id = :uid"), {"uid": 1}
+    )).one_or_none()
+    assert row is not None and row.xp == 25
+
+
+@pytest.mark.asyncio
+async def test_finish_match_awards_5_xp_to_loser(db):
+    """Loser earns +5 XP on regular game loss."""
+    match = await create_match(db, player1_id=1, player2_id=2)
+    await finish_match(db, match.id, winner_id=1, score_p1=10, score_p2=5)
+    row = (await db.execute(
+        text("SELECT xp FROM user_xp WHERE user_id = :uid"), {"uid": 2}
+    )).one_or_none()
+    assert row is not None and row.xp == 5

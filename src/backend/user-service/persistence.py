@@ -4,32 +4,23 @@ from sqlalchemy import text
 async def reward_friendship_achievement_if_should(
         requester_id: int, addressee_id: int, session: AsyncSession
 ) -> None:
-
-    friendship_breakpoints = [1, 3, 5, 11, 21, 42, 77, 111, 450, 987]
-
-    requester_friendship_count = \
-        ((await friend_count(requester_id, session)) or 0)
-    addressee_friendship_count = \
-        ((await friend_count(addressee_id, session)) or 0)
-
-    if requester_friendship_count in friendship_breakpoints:
-        achievement = {
-            "a_key": f'friend{requester_friendship_count}',
-            "a_name": f'{requester_friendship_count} mates',
-            "a_desc": f'You Have {requester_friendship_count} mates around here',
-            "a_icon": f'--#{requester_friendship_count}#--'
-        }
-        await insert_user_achievement(
-            requester_id, achievement, session)
-    if addressee_friendship_count in friendship_breakpoints:
-        achievement = {
-            "a_key": f'friend{addressee_friendship_count}',
-            "a_name": f'{addressee_friendship_count} mates',
-            "a_desc": f'You Have {addressee_friendship_count} mates around here',
-            "a_icon": f'--#{addressee_friendship_count}#--'
-        }
-        await insert_user_achievement(
-            addressee_id, achievement, session)
+    """Evaluate and unlock social badges for both sides of a new friendship."""
+    _social_badges = [
+        {"a_key": "first_friend",     "a_name": "Not Alone",
+         "a_desc": "Add your first friend",   "a_icon": "(つ◕‿◕)つ",  "threshold": 1},
+        {"a_key": "social_butterfly", "a_name": "Social Butterfly",
+         "a_desc": "Have 5 accepted friends",  "a_icon": "(づ｡◕‿‿◕｡)づ", "threshold": 5},
+        {"a_key": "popular",          "a_name": "The Popular One",
+         "a_desc": "Have 10 accepted friends", "a_icon": "(ﾉ◕ヮ◕)ﾉ*:･ﾟ✧", "threshold": 10},
+    ]
+    for uid in (requester_id, addressee_id):
+        count = await friend_count(uid, session)
+        if not isinstance(count, int):
+            continue
+        for badge in _social_badges:
+            if count >= badge["threshold"]:
+                achievement = {k: v for k, v in badge.items() if k != "threshold"}
+                await insert_user_achievement(uid, achievement, session)
 
 
 async def friend_count(user_id: int, session: AsyncSession) -> int | None:

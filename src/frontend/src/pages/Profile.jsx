@@ -7,6 +7,10 @@ import { apiCall } from '../utils/apiClient'
 import './Profile.css'
 import FriendsSidebar from '../Components/FriendsSidebar'
 import { useAuth } from '../context/authContext'
+import { useNotifications } from '../context/notificationContext'
+import XpBar from '../Components/XpBar'
+import BadgeGrid from '../Components/BadgeGrid'
+import AchievementToast from '../Components/AchievementToast'
 
 const ALLOWED_AVATAR_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024
@@ -83,6 +87,7 @@ function emptyHistory(){
 
 export default function Profile() {
   const { auth } = useAuth()
+  const { achievementQueue, dismissAchievement } = useNotifications()
   const [userId, setUserId] = useState(null)
   const [profile, setProfile] = useState(null)
   const [paginatedHistory, setPaginatedHistory] = useState(emptyHistory())
@@ -98,6 +103,8 @@ export default function Profile() {
   const [avatarVersion, setAvatarVersion] = useState(0)
   const fileInputRef = useRef(null)
   const avatarToastTimer = useRef(null)
+  const [xpData, setXpData] = useState(null)
+  const [achievements, setAchievements] = useState([])
 
   useEffect(() => {
     return () => {
@@ -232,20 +239,30 @@ export default function Profile() {
             if (!r.ok) throw new Error(`Leaderboard fetch failed: ${r.status}`)
             return r.json()
           }),
-        ])
-      })
-      .then(([profileData, historyData, rankData]) => {
-        setProfile({
-          displayName: profileData.display_name ?? '',
-          darkMode: profileData.dark_mode ?? false,
-          avatarUrl: profileData.avatar_url ?? PLACEHOLDER_AVATAR,
-          username: profileData.username,
-          bio: profileData.bio ?? '',
-          status: profileData.status,
-          createdAt: profileData.created_at,
+        ]).then(([profileData, historyData, rankData]) => {
+          setProfile({
+            displayName: profileData.display_name ?? '',
+            darkMode: profileData.dark_mode ?? false,
+            avatarUrl: profileData.avatar_url ?? PLACEHOLDER_AVATAR,
+            username: profileData.username,
+            bio: profileData.bio ?? '',
+            status: profileData.status,
+            createdAt: profileData.created_at,
+          })
+          setPaginatedHistory(historyData)
+          setUserRankData(rankData.player_stats)
+
+          // Fetch XP and achievements after core profile data is loaded (non-blocking)
+          apiCall(`/api/game/xp/${id}`, { signal })
+            .then(r => r.ok ? r.json() : null)
+            .then(data => { if (data) setXpData(data) })
+            .catch(() => {})
+
+          apiCall(`/api/game/achievements/${id}`, { signal })
+            .then(r => r.ok ? r.json() : [])
+            .then(data => setAchievements(Array.isArray(data) ? data : []))
+            .catch(() => {})
         })
-        setPaginatedHistory(historyData)
-        setUserRankData(rankData.player_stats)
       })
       .catch(err => {
         if (err.name !== 'AbortError') setError(err.message)
@@ -515,7 +532,31 @@ export default function Profile() {
             </div>
           </div>
         </div>
+
+        {xpData && (
+          <section className="profile-gamification" style={{ maxWidth: '800px', margin: '0 auto 2rem', padding: '0 1rem' }}>
+            <h2 style={{ marginBottom: '0.5rem' }}>Progress</h2>
+            <XpBar level={xpData.level} xpInLevel={xpData.xp_in_level} />
+          </section>
+        )}
+
+        {achievements.length > 0 && (
+          <section className="profile-gamification" style={{ maxWidth: '800px', margin: '0 auto 2rem', padding: '0 1rem' }}>
+            <h2 style={{ marginBottom: '0.5rem' }}>Achievements</h2>
+            <BadgeGrid achievements={achievements} />
+          </section>
+        )}
       </main>
+
+      {achievementQueue.length > 0 && (
+        <AchievementToast
+          key={achievementQueue[0].id}
+          icon={achievementQueue[0].icon ?? '🏆'}
+          name={achievementQueue[0].name ?? 'Achievement Unlocked'}
+          description={achievementQueue[0].message ?? ''}
+          onDismiss={() => dismissAchievement(achievementQueue[0].id)}
+        />
+      )}
     </div>
   )
 }
