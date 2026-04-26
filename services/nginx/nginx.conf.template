@@ -3,6 +3,9 @@ events {
 }
 
 http {
+    gzip off;
+    tcp_nodelay on;
+
     # Correctly handles both WebSocket upgrades and plain HTTP:
     # - $http_upgrade non-empty (e.g. "websocket") → Connection: upgrade
     # - $http_upgrade empty (regular request)       → Connection: close

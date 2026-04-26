@@ -672,7 +672,7 @@ async def game_websocket(websocket: WebSocket, game_id: str, token: str | None =
     WebSocket handler for in-game communication during a Pong match.
     
     Protocol:
-    - Client → Server: {"type": "input", "direction": "up"|"down"|"stop", "client_ts": <ms>}
+    - Client → Server: {"type": "input", "direction": "up"|"down"|"stop", "client_ts": <ms> (optional, ignored)}
     - Server → Client: {"type": "state", "ball": {...}, "paddles": {...}, "score": {...}}
     
     The game loop runs independently in game_manager and broadcasts state

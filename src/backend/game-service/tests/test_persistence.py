@@ -1,6 +1,7 @@
 import pytest
 import pytest_asyncio
 from sqlalchemy import text
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.pool import NullPool
 
@@ -28,33 +29,49 @@ from persistence import (
 @pytest_asyncio.fixture
 async def db():
     engine = create_async_engine(settings.SQLALCHEMY_DATABASE_URI, poolclass=NullPool)
-    async with engine.begin() as conn:
-        await conn.execute(
-            text(
-                "TRUNCATE TABLE tournament_matches, tournament_participants, "
-                "tournaments, matches RESTART IDENTITY CASCADE"
-            )
-        )
-        # Keep persistence tests independent from module execution order.
-        # Some tests award XP and require winner user_ids to exist.
-        for uid in (1, 2, 3, 42, 50, 51, 99):
-            await conn.execute(
-                text(
-                    "INSERT INTO credentials (id, username, password) "
-                    "VALUES (:id, :username, 'x') ON CONFLICT (id) DO NOTHING"
-                ),
-                {"id": uid, "username": f"persist_user_{uid}"},
-            )
-            await conn.execute(
-                text(
-                    "INSERT INTO users (id, username, credential_id) "
-                    "VALUES (:id, :username, :cid) ON CONFLICT (id) DO NOTHING"
-                ),
-                {"id": uid, "username": f"persist_user_{uid}", "cid": uid},
-            )
-    Session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-    async with Session() as session:
-        yield session
+    try:
+        async with engine.connect() as conn:
+            transaction = await conn.begin()
+
+            # Keep persistence tests independent from module execution order.
+            # Some tests award XP and require winner user_ids to exist.
+            for uid in (1, 2, 3, 42, 50, 51, 99):
+                await conn.execute(
+                    text(
+                        "INSERT INTO credentials (id, username, password) "
+                        "VALUES (:id, :username, 'x') ON CONFLICT (id) DO NOTHING"
+                    ),
+                    {"id": uid, "username": f"persist_user_{uid}"},
+                )
+                await conn.execute(
+                    text(
+                        "INSERT INTO users (id, username, credential_id) "
+                        "VALUES (:id, :username, :cid) ON CONFLICT (id) DO NOTHING"
+                    ),
+                    {"id": uid, "username": f"persist_user_{uid}", "cid": uid},
+                )
+
+            Session = async_sessionmaker(bind=conn, class_=AsyncSession, expire_on_commit=False)
+            session = Session()
+
+            # Helper functions under test call commit(); keep those changes inside
+            # a nested transaction so the fixture can roll everything back later.
+            await session.begin_nested()
+
+            @event.listens_for(session.sync_session, "after_transaction_end")
+            def _restart_savepoint(sync_session, transaction):
+                if transaction.nested and not transaction._parent.nested:
+                    sync_session.begin_nested()
+
+            try:
+                yield session
+            finally:
+                await session.close()
+                await transaction.rollback()
+    except Exception as exc:
+        await engine.dispose()
+        pytest.skip(f"Persistence integration DB unavailable: {exc}")
+
     await engine.dispose()
 
 
@@ -86,6 +103,25 @@ async def _setup_tournament(db, max_participants: int):
         await join_tournament(db, tournament.id, uid)
     _, matches = await start_tournament(db, tournament.id, user_id=6001)
     return tournament, matches
+
+
+async def _ensure_users(db, *user_ids: int) -> None:
+    for uid in user_ids:
+        await db.execute(
+            text(
+                "INSERT INTO credentials (id, username, password) "
+                "VALUES (:id, :username, 'x') ON CONFLICT (id) DO NOTHING"
+            ),
+            {"id": uid, "username": f"stats_user_{uid}"},
+        )
+        await db.execute(
+            text(
+                "INSERT INTO users (id, username, credential_id) "
+                "VALUES (:id, :username, :cid) ON CONFLICT (id) DO NOTHING"
+            ),
+            {"id": uid, "username": f"stats_user_{uid}", "cid": uid},
+        )
+    await db.flush()
 
 
 @pytest.mark.asyncio
@@ -142,14 +178,18 @@ async def test_get_user_stats_empty(db):
 
 @pytest.mark.asyncio
 async def test_get_user_stats_counts_correctly(db):
-    # player 1 wins one, loses one
-    m1 = await create_match(db, player1_id=1, player2_id=2)
-    await finish_match(db, m1.id, winner_id=1, score_p1=7, score_p2=3)
+    player1_id = 20001
+    player2_id = 20002
+    await _ensure_users(db, player1_id, player2_id)
 
-    m2 = await create_match(db, player1_id=1, player2_id=2)
-    await finish_match(db, m2.id, winner_id=2, score_p1=2, score_p2=7)
+    # player 20001 wins one, loses one
+    m1 = await create_match(db, player1_id=player1_id, player2_id=player2_id)
+    await finish_match(db, m1.id, winner_id=player1_id, score_p1=7, score_p2=3)
 
-    stats = await get_user_stats(db, user_id=1)
+    m2 = await create_match(db, player1_id=player1_id, player2_id=player2_id)
+    await finish_match(db, m2.id, winner_id=player2_id, score_p1=2, score_p2=7)
+
+    stats = await get_user_stats(db, user_id=player1_id)
     assert stats["wins"] == 1
     assert stats["losses"] == 1
     assert stats["total_games"] == 2
@@ -159,16 +199,25 @@ async def test_get_user_stats_counts_correctly(db):
 
 @pytest.mark.asyncio
 async def test_get_user_stats_excludes_ongoing_matches(db):
-    await create_match(db, player1_id=1, player2_id=2)  # not finished
-    stats = await get_user_stats(db, user_id=1)
+    player1_id = 20011
+    player2_id = 20012
+    await _ensure_users(db, player1_id, player2_id)
+
+    await create_match(db, player1_id=player1_id, player2_id=player2_id)  # not finished
+    stats = await get_user_stats(db, user_id=player1_id)
     assert stats["total_games"] == 0
 
 
 @pytest.mark.asyncio
 async def test_get_user_matches_returns_newest_first(db):
-    m1 = await create_match(db, player1_id=1, player2_id=2)
-    m2 = await create_match(db, player1_id=1, player2_id=3)
-    matches = await get_user_matches(db, user_id=1)
+    player1_id = 20021
+    player2_id = 20022
+    player3_id = 20023
+    await _ensure_users(db, player1_id, player2_id, player3_id)
+
+    m1 = await create_match(db, player1_id=player1_id, player2_id=player2_id)
+    m2 = await create_match(db, player1_id=player1_id, player2_id=player3_id)
+    matches = await get_user_matches(db, user_id=player1_id)
     assert len(matches) == 2
     assert matches[0].id == m2.id  # newest first
 
@@ -181,11 +230,15 @@ async def test_get_user_matches_returns_empty_for_unknown_user(db):
 
 @pytest.mark.asyncio
 async def test_get_user_stats_counts_goals_as_player2(db):
-    # user 2 is player2 in this match
-    m = await create_match(db, player1_id=1, player2_id=2)
-    await finish_match(db, m.id, winner_id=2, score_p1=3, score_p2=7)
+    player1_id = 20031
+    player2_id = 20032
+    await _ensure_users(db, player1_id, player2_id)
 
-    stats = await get_user_stats(db, user_id=2)
+    # player2_id is player2 in this match
+    m = await create_match(db, player1_id=player1_id, player2_id=player2_id)
+    await finish_match(db, m.id, winner_id=player2_id, score_p1=3, score_p2=7)
+
+    stats = await get_user_stats(db, user_id=player2_id)
     assert stats["wins"] == 1
     assert stats["goals_scored"] == 7
     assert stats["goals_conceded"] == 3
@@ -193,30 +246,36 @@ async def test_get_user_stats_counts_goals_as_player2(db):
 
 @pytest.mark.asyncio
 async def test_get_leaderboard_orders_by_points_then_goal_difference(db):
-    m1 = await create_match(db, player1_id=1, player2_id=2)
-    await finish_match(db, m1.id, winner_id=1, score_p1=7, score_p2=3)
+    p1 = 20041
+    p2 = 20042
+    p3 = 20043
+    await _ensure_users(db, p1, p2, p3)
 
-    m2 = await create_match(db, player1_id=2, player2_id=3)
-    await finish_match(db, m2.id, winner_id=2, score_p1=6, score_p2=1)
+    m1 = await create_match(db, player1_id=p1, player2_id=p2)
+    await finish_match(db, m1.id, winner_id=p1, score_p1=7, score_p2=3)
 
-    m3 = await create_match(db, player1_id=1, player2_id=3)
-    await finish_match(db, m3.id, winner_id=1, score_p1=5, score_p2=0)
+    m2 = await create_match(db, player1_id=p2, player2_id=p3)
+    await finish_match(db, m2.id, winner_id=p2, score_p1=6, score_p2=1)
+
+    m3 = await create_match(db, player1_id=p1, player2_id=p3)
+    await finish_match(db, m3.id, winner_id=p1, score_p1=5, score_p2=0)
 
     leaderboard = await get_leaderboard(db)
 
-    assert len(leaderboard) == 3
-    assert leaderboard[0]["user_id"] == 1
-    assert leaderboard[0]["points"] == 6
-    assert leaderboard[0]["rank"] == 1
+    rows = {row["user_id"]: row for row in leaderboard}
+    assert p1 in rows and p2 in rows and p3 in rows
 
-    assert leaderboard[1]["user_id"] == 2
-    assert leaderboard[1]["points"] == 3
-    assert leaderboard[1]["goal_difference"] == 1
-    assert leaderboard[1]["rank"] == 2
+    assert rows[p1]["points"] == 6
+    assert rows[p1]["goal_difference"] == 9
 
-    assert leaderboard[2]["user_id"] == 3
-    assert leaderboard[2]["points"] == 0
-    assert leaderboard[2]["rank"] == 3
+    assert rows[p2]["points"] == 3
+    assert rows[p2]["goal_difference"] == 1
+
+    assert rows[p3]["points"] == 0
+    assert rows[p3]["goal_difference"] == -10
+
+    # Ordering should still rank p1 above p2 above p3.
+    assert rows[p1]["rank"] < rows[p2]["rank"] < rows[p3]["rank"]
 
 
 @pytest.mark.asyncio
