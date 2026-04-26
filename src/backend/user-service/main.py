@@ -25,6 +25,7 @@ from service.friends import (
     delete_friendship, search_users_paginated
 )
 import service.notifications as _notifications
+import service.persistence as _persistence
 from shared.database import get_db
 from shared.util.order import get_sort_assoc_from_order_query
 from service.ws.presence_router import router as presence_router
@@ -248,7 +249,11 @@ async def respond_to_request(
     result = await _friends.respond_to_friend_request(current_user.id, request_id, body.action, session)
     if body.action == "decline":
         return Response(status_code=204)
-    
+
+    await _persistence.reward_friendship_achievement_if_should(
+        result.requester_id, current_user.id, session
+    )
+
     try:
         notif = await _notifications.create_notification(
             session, result.requester_id, "friend_request_accepted",
@@ -261,7 +266,7 @@ async def respond_to_request(
         # (friendship acceptance was already processed)
         import sys
         print(f"[WARNING] Failed to create notification: {e}", file=sys.stderr)
-    
+
     return result
 
 

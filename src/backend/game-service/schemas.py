@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Literal
+from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -158,3 +158,20 @@ class AiGameRequest(BaseModel):
 
 class AiGameResponse(BaseModel):
     game_id: str
+
+
+class AchievementResponse(BaseModel):
+    key: str
+    name: str
+    description: str
+    icon: Optional[str] = None
+    earned: bool
+    earned_at: Optional[datetime] = None
+
+
+class XpResponse(BaseModel):
+    user_id: int
+    xp: int
+    level: int
+    xp_in_level: int
+    xp_to_next_level: int = 100

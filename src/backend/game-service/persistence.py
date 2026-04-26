@@ -1337,6 +1337,48 @@ async def has_perfect_game(user_id: int, session: AsyncSession) -> bool:
     return (result.scalar_one() or 0) >= 1
 
 
+async def get_achievements_for_user(user_id: int, session: AsyncSession) -> list[dict]:
+    """Return full achievement catalog with per-user earned status, sorted earned-first."""
+    result = await session.execute(
+        text("""
+            SELECT
+                a.key,
+                a.name,
+                a.description,
+                a.icon,
+                (ua.user_id IS NOT NULL)      AS earned,
+                ua.earned_at
+            FROM achievements a
+            LEFT JOIN user_achievements ua
+                ON ua.achievement_id = a.id AND ua.user_id = :uid
+            ORDER BY
+                earned DESC,
+                ua.earned_at DESC NULLS LAST,
+                a.key ASC
+        """),
+        {"uid": user_id},
+    )
+    return [dict(row) for row in result.mappings()]
+
+
+async def get_xp_for_user(user_id: int, session: AsyncSession) -> dict | None:
+    """Return XP row for user, or None if user has never played."""
+    result = await session.execute(
+        text("SELECT user_id, xp, level FROM user_xp WHERE user_id = :uid"),
+        {"uid": user_id},
+    )
+    row = result.mappings().one_or_none()
+    if row is None:
+        return None
+    return {
+        "user_id": row["user_id"],
+        "xp": row["xp"],
+        "level": row["level"],
+        "xp_in_level": row["xp"] % 100,
+        "xp_to_next_level": 100,
+    }
+
+
 # async def get_leaderboard_paginated(
 #     db: AsyncSession,
 #     limit: int = 20,
