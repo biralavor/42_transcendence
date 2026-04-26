@@ -194,6 +194,7 @@ async def test_record_tournament_result_endpoint_persists_scores(client_and_user
     assert started.status_code == 200
     active_match = next(m for m in started.json()["matches"] if m["status"] == "in_progress")
 
+    current["id"] = active_match["player1_id"]
     resp = await client.post(
         f"/tournaments/{tournament_id}/matches/{active_match['match_id']}/result",
         json={
@@ -209,6 +210,37 @@ async def test_record_tournament_result_endpoint_persists_scores(client_and_user
     assert updated["winner_id"] == active_match["player1_id"]
     assert updated["score_p1"] == 7
     assert updated["score_p2"] == 3
+
+
+@pytest.mark.asyncio
+async def test_record_tournament_result_endpoint_rejects_non_match_participant(client_and_user):
+    client, current = client_and_user
+    tournament_id = (await client.post("/tournaments", json={"name": "Cup", "max_participants": 4})).json()["id"]
+    for uid in (7002, 7003, 7004):
+        current["id"] = uid
+        joined = await client.post(f"/tournaments/{tournament_id}/join")
+        assert joined.status_code == 201
+
+    current["id"] = 7001
+    started = await client.post(f"/tournaments/{tournament_id}/start")
+    assert started.status_code == 200
+    active_match = next(m for m in started.json()["matches"] if m["status"] == "in_progress")
+    non_participant = next(
+        uid for uid in (7001, 7002, 7003, 7004)
+        if uid not in (active_match["player1_id"], active_match["player2_id"])
+    )
+
+    current["id"] = non_participant
+    resp = await client.post(
+        f"/tournaments/{tournament_id}/matches/{active_match['match_id']}/result",
+        json={
+            "winner_id": active_match["player1_id"],
+            "score_p1": 7,
+            "score_p2": 3,
+        },
+    )
+
+    assert resp.status_code == 403
 
 
 @pytest.mark.asyncio

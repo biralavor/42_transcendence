@@ -1,20 +1,37 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 
-
 async def reward_friendship_achievement_if_should(
-    requester_id: int, addressee_id: int, session: AsyncSession
+        requester_id: int, addressee_id: int, session: AsyncSession
 ) -> None:
-    """Compatibility hook for friendship acceptance.
 
-    Achievement granting is currently disabled in this branch, but friends.py still
-    calls this hook. Keep it as a no-op to preserve service startup and flow safety.
-    """
-    _ = (requester_id, addressee_id, session)
-    return None
+    friendship_breakpoints = [1, 3, 5, 11, 21, 42, 77, 111, 450, 987]
+
+    requester_friendship_count = \
+        ((await friend_count(requester_id, session)) or 0)
+    addressee_friendship_count = \
+        ((await friend_count(addressee_id, session)) or 0)
+
+    if requester_friendship_count in friendship_breakpoints:
+        achievement = {
+            "a_key": f'friend{requester_friendship_count}',
+            "a_name": f'{requester_friendship_count} mates',
+            "a_desc": f'You Have {requester_friendship_count} mates around here',
+            "a_icon": f'--#{requester_friendship_count}#--'
+        }
+        await insert_user_achievement(
+            requester_id, achievement, session)
+    if addressee_friendship_count in friendship_breakpoints:
+        achievement = {
+            "a_key": f'friend{addressee_friendship_count}',
+            "a_name": f'{addressee_friendship_count} mates',
+            "a_desc": f'You Have {addressee_friendship_count} mates around here',
+            "a_icon": f'--#{addressee_friendship_count}#--'
+        }
+        await insert_user_achievement(
+            addressee_id, achievement, session)
 
 
-# check on friend request accepted?
 async def friend_count(user_id: int, session: AsyncSession) -> int | None:
     statement = text("""
 WITH requested AS
@@ -70,12 +87,14 @@ insert_achievement_if_not_exists AS
         VALUES (:user_id, COALESCE((SELECT id FROM achievements WHERE key = :a_key),
                                    (table insert_achievement_if_not_exists)))
     ON CONFLICT (user_id, achievement_id) DO NOTHING
-    RETURNING achievement_id
+    RETURNING achievement_id, true as was_inserted
 )
 , insertion_notification AS
 (
     INSERT INTO notifications (user_id, type, message)
-        VALUES (:user_id, 'user_achievement', :a_desc)
+        SELECT :user_id, 'user_achievement', :a_desc
+        FROM insertion_user_achievement
+        WHERE was_inserted = true
 )
 SELECT
     :user_id as user_id

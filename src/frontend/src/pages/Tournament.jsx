@@ -4,6 +4,7 @@ import NavbarComponent from '../Components/Navbar'
 import { apiCall, apiJson } from '../utils/apiClient'
 import { useAuth } from '../context/authContext'
 import { createWsClient } from '../utils/wsClient'
+import { buildTournamentStandings } from '../utils/tournamentStandings'
 import './Tournament.css'
 
 const READY_TIMEOUT_SECONDS = 90
@@ -155,71 +156,16 @@ export default function Tournament() {
   }, [showStartButton, participantCount, maxParticipants, startLoading])
 
   const leaderboard = useMemo(() => {
-    if (!tournament || !tournament.participants) return []
+    return buildTournamentStandings(tournament, profiles)
+  }, [tournament, profiles])
 
-    const stats = {}
-
-    tournament.participants.forEach(({ user_id }) => {
-      stats[user_id] = {
-        userId: user_id,
-        wins: 0,
-        matches: 0,
-        goalsFor: 0,
-        goalsAgainst: 0,
-      }
-    })
-
-    if (tournament.matches) {
-      tournament.matches.forEach((m) => {
-        const p1Id = m.player1_id
-        const p2Id = m.player2_id
-        const p1Score = Number(m.score_p1 ?? 0)
-        const p2Score = Number(m.score_p2 ?? 0)
-
-        if (p1Id != null && stats[p1Id]) {
-          stats[p1Id].matches++
-          stats[p1Id].goalsFor += p1Score
-          stats[p1Id].goalsAgainst += p2Score
-        }
-
-        if (p2Id != null && stats[p2Id]) {
-          stats[p2Id].matches++
-          stats[p2Id].goalsFor += p2Score
-          stats[p2Id].goalsAgainst += p1Score
-        }
-
-        if (m.status === 'finished' && m.winner_id != null && stats[m.winner_id]) {
-          stats[m.winner_id].wins++
-        }
-      })
+  const champion = useMemo(() => {
+    if (!tournament || tournament.status !== 'complete' || leaderboard.length === 0) {
+      return null
     }
 
-    const entries = Object.values(stats).map((s) => {
-      const prof = profiles[s.userId] || {}
-
-      return {
-        userId: s.userId,
-        username: prof.username || `User ${s.userId}`,
-        avatarUrl: prof.avatarUrl || '/avatar_placeholder.jpg',
-        wins: s.wins,
-        matches: s.matches,
-        goalsFor: s.goalsFor,
-        goalsAgainst: s.goalsAgainst,
-        goalDifference: s.goalsFor - s.goalsAgainst,
-        points: s.wins,
-      }
-    })
-
-    entries.sort((a, b) =>
-      b.points - a.points ||
-      b.goalDifference - a.goalDifference ||
-      b.goalsFor - a.goalsFor ||
-      b.wins - a.wins ||
-      a.username.localeCompare(b.username)
-    )
-
-    return entries
-  }, [tournament, profiles])
+    return leaderboard[0]
+  }, [tournament, leaderboard])
 
   useEffect(() => {
     currentUserRef.current = currentUser
@@ -392,6 +338,7 @@ export default function Tournament() {
           } else {
             setReadyError('Ready timeout: no player ready, no winner assigned.')
           }
+          await refreshTournament()
           return
         }
 
@@ -503,7 +450,7 @@ export default function Tournament() {
     const winner = winner_id != null ? profiles[winner_id] : null
     const p1Label = p1?.username || (player1_id != null ? `User ${player1_id}` : 'TBD')
     const p2Label = p2?.username || (player2_id != null ? `User ${player2_id}` : 'TBD')
-    const winnerLabel = winner?.username || (winner_id != null ? `User ${winner_id}` : 'Unknown')
+    const winnerLabel = winner?.username || (winner_id != null ? `User ${winner_id}` : 'No winner (WO)')
 
     const isCurrentUsersMatch =
       currentUser &&
@@ -553,7 +500,7 @@ export default function Tournament() {
           <span className="tournament-player-name">{p2Label}</span>
         </div>
 
-        {status === 'in_progress' && readyCountdownLabel && (
+        {isCurrentUsersMatch && status === 'in_progress' && readyCountdownLabel && (
           <div className="arcade-copy mt-2">
             Ready timeout in: {readyCountdownLabel}
           </div>
@@ -690,6 +637,25 @@ export default function Tournament() {
               </div>
             )}
 
+            {champion && (
+              <div className="tournament-champion mb-4" role="status" aria-live="polite">
+                <p className="arcade-kicker mb-2">Tournament Champion</p>
+                <div className="tournament-champion-body">
+                  <img
+                    src={champion.avatarUrl || '/avatar_placeholder.jpg'}
+                    alt={`${champion.username} champion avatar`}
+                    className="tournament-champion-avatar"
+                  />
+                  <div>
+                    <h2 className="arcade-section-title mb-1">{champion.username}</h2>
+                    <p className="arcade-copy mb-0">
+                      Winner of {tournament?.name || 'this tournament'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="tournament-participants mb-4">
               <h2 className="arcade-section-title mb-2">Participants</h2>
               <div className="participant-grid">
@@ -725,6 +691,7 @@ export default function Tournament() {
                   <table className="table table-dark table-striped align-middle">
                     <thead>
                       <tr>
+                        <th className="text-center">Pos</th>
                         <th>Player</th>
                         <th>Pts</th>
                         <th>W</th>
@@ -735,8 +702,9 @@ export default function Tournament() {
                       </tr>
                     </thead>
                     <tbody>
-                      {leaderboard.map((row) => (
+                      {leaderboard.map((row, index) => (
                         <tr key={row.userId}>
+                          <td className="text-center fw-semibold">{index + 1}</td>
                           <td className="d-flex align-items-center gap-2">
                             <img
                               src={row.avatarUrl || '/avatar_placeholder.jpg'}
