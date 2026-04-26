@@ -616,3 +616,75 @@ WHERE (player1_id = (:player_id)::int OR player2_id = :player_id)
     assert filtered_results[-1]['date'] \
         < unfiltered_results[-1]['date']
 
+
+
+# --------------------------------------------------------------------------- #
+# GET /achievements/{user_id}
+# --------------------------------------------------------------------------- #
+
+@pytest.mark.asyncio
+async def test_get_achievements_returns_full_catalog(client):
+    """GET /achievements/{user_id} returns all achievements with earned flag."""
+    resp = await client.get("/achievements/5001")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert isinstance(data, list)
+    assert len(data) >= 8
+    keys = [a["key"] for a in data]
+    assert "win1" in keys
+    assert "first_game" in keys
+    for a in data:
+        assert "key" in a
+        assert "earned" in a
+        assert "icon" in a
+
+
+@pytest.mark.asyncio
+async def test_get_achievements_earned_after_win(client):
+    """After winning a match, first_game badge appears as earned."""
+    resp_create = await client.post("/matches", json={"player1_id": 5001, "player2_id": 5002})
+    match_id = resp_create.json()["id"]
+    await client.post(f"/matches/{match_id}/finish", json={"winner_id": 5001, "score_p1": 10, "score_p2": 3})
+
+    resp = await client.get("/achievements/5001")
+    assert resp.status_code == 200
+    earned = [a for a in resp.json() if a["earned"]]
+    earned_keys = [a["key"] for a in earned]
+    assert "first_game" in earned_keys
+
+
+# --------------------------------------------------------------------------- #
+# GET /xp/{user_id}
+# --------------------------------------------------------------------------- #
+
+@pytest.mark.asyncio
+async def test_get_xp_returns_correct_structure(client):
+    """GET /xp/{user_id} always returns a valid XP response structure."""
+    resp = await client.get("/xp/5099")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["user_id"] == 5099
+    assert "xp" in data
+    assert "level" in data
+    assert "xp_in_level" in data
+    assert data["xp_to_next_level"] == 100
+    assert data["xp"] >= 0
+    assert data["xp_in_level"] == data["xp"] % 100
+
+
+@pytest.mark.asyncio
+async def test_get_xp_returns_level_and_breakdown(client):
+    """GET /xp/{user_id} returns xp, level, and within-level breakdown after a win."""
+    resp_create = await client.post("/matches", json={"player1_id": 5001, "player2_id": 5002})
+    match_id = resp_create.json()["id"]
+    await client.post(f"/matches/{match_id}/finish", json={"winner_id": 5001, "score_p1": 7, "score_p2": 2})
+
+    resp = await client.get("/xp/5001")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["user_id"] == 5001
+    assert data["xp"] >= 25
+    assert "level" in data
+    assert "xp_in_level" in data
+    assert data["xp_to_next_level"] == 100
+    assert data["xp_in_level"] == data["xp"] % 100
