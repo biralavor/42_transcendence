@@ -86,6 +86,7 @@ export default function Profile() {
   const [userId, setUserId] = useState(null)
   const [profile, setProfile] = useState(null)
   const [paginatedHistory, setPaginatedHistory] = useState(emptyHistory())
+  const [userRankData, setUserRankData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [saveStatus, setSaveStatus] = useState('')
@@ -224,12 +225,16 @@ export default function Profile() {
             return r.json()
           }),
           apiCall(`/api/game/matches/history?player_id=${id}`, { signal }).then(r => {
-            if (!r.ok) throw new Error(`History fetch failed: ${r.status}`)
+            if (!r.ok) throw new Error(`Matches History fetch failed: ${r.status}`)
+            return r.json()
+          }),
+          apiCall(`/api/game/leaderboard?player_id=${id}&limit=1`, { signal }).then(r => {
+            if (!r.ok) throw new Error(`Leaderboard fetch failed: ${r.status}`)
             return r.json()
           }),
         ])
       })
-      .then(([profileData, historyData]) => {
+      .then(([profileData, historyData, rankData]) => {
         setProfile({
           displayName: profileData.display_name ?? '',
           darkMode: profileData.dark_mode ?? false,
@@ -240,6 +245,7 @@ export default function Profile() {
           createdAt: profileData.created_at,
         })
         setPaginatedHistory(historyData)
+        setUserRankData(rankData.player_stats)
       })
       .catch(err => {
         if (err.name !== 'AbortError') setError(err.message)
@@ -411,7 +417,7 @@ export default function Profile() {
                       <span className="profile-stat-label">Wins</span>
                     </div>
                     <div className="profile-stat-card">
-                      <span className="profile-stat-value">—</span>
+                      <span className="profile-stat-value">{userRankData?.rank ?? '-'}</span>
                       <span className="profile-stat-label">Rank</span>
                     </div>
                     <div className="profile-stat-card">
@@ -490,7 +496,12 @@ export default function Profile() {
                     </div>
                     {paginatedHistory.results.map((match) => (
                       <div className="history-row" key={match.match_id}>
-                        <div className="history-col history-opponent">Player #{match.opponent_id}</div>
+                        <div className="history-col history-opponent">
+                          {
+                            match?.opponent_display_name
+                              ?? `Player #${match.opponent_id}`
+                          }
+                        </div>
                         <div className="history-col history-date">
                           {match.date ? new Date(match.date).toLocaleDateString() : '—'}
                         </div>

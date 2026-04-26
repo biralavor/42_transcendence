@@ -3,6 +3,35 @@ import { useNavigate } from 'react-router-dom'
 import NavbarComponent from '../Components/Navbar'
 import { useAuth } from '../context/authContext'
 import { apiCall, apiJson } from '../utils/apiClient'
+import { getTournamentChampionId } from '../utils/tournamentStandings'
+
+const TOURNAMENTS_SYNC_INTERVAL_MS = 5000
+
+function getStatusMeta(status) {
+  switch (status) {
+    case 'open':
+      return { label: 'Open', className: 'bg-success' }
+    case 'in_progress':
+      return { label: 'In Progress', className: 'bg-warning text-dark' }
+    case 'complete':
+      return { label: 'Completed', className: 'bg-info text-dark' }
+    case 'cancelled':
+      return { label: 'Cancelled', className: 'bg-secondary' }
+    default:
+      return { label: status || 'Unknown', className: 'bg-dark border border-secondary' }
+  }
+}
+
+function isTournamentGoneError(message) {
+  const text = String(message || '').toLowerCase()
+  return text.includes('not found') || text.includes('does not exist') || text.includes('http 404')
+}
+
+function buildActiveTournamentMessage(activeTournament) {
+  const idLabel = activeTournament?.id != null ? ` #${activeTournament.id}` : ''
+  const nameLabel = activeTournament?.name ? ` (${activeTournament.name})` : ''
+  return `You are currently registered in an active tournament${idLabel}${nameLabel}. You cannot create or join another one right now.`
+}
 
 export default function Tournaments() {
   const navigate = useNavigate()
@@ -15,8 +44,14 @@ export default function Tournaments() {
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState('')
   const [hasActiveTournament, setHasActiveTournament] = useState(false)
+  const [activeTournament, setActiveTournament] = useState(null)
   const [manualId, setManualId] = useState('')
   const [joiningById, setJoiningById] = useState(false)
+  const [championProfiles, setChampionProfiles] = useState({})
+
+  function removeTournamentFromList(id) {
+    setTournaments((prev) => prev.filter((t) => Number(t.id) !== Number(id)))
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -84,7 +119,7 @@ export default function Tournaments() {
     if (!name || creating) return
 
     if (hasActiveTournament) {
-      setError('You are already registered in an active tournament. You cannot create another one right now.')
+      setError(buildActiveTournamentMessage(activeTournament))
       return
     }
 
@@ -140,13 +175,13 @@ export default function Tournaments() {
     setError('')
 
     if (hasActiveTournament) {
-      const existing = tournaments.find((t) => t.id === id)
+      const existing = tournaments.find((t) => Number(t.id) === Number(id))
       const alreadyJoined = existing?.participants?.some(
         (p) => Number(p.user_id) === Number(currentUser?.id),
       )
 
       if (!alreadyJoined) {
-        setError('You are already registered in an active tournament. You cannot join another one right now.')
+        setError(buildActiveTournamentMessage(activeTournament))
         return
       }
     }
@@ -163,6 +198,13 @@ export default function Tournaments() {
         navigate(`/tournaments/${id}`)
       }
     } catch (err) {
+      if (isTournamentGoneError(err?.message)) {
+        removeTournamentFromList(id)
+        setError('This tournament was removed. The list has been refreshed.')
+        void loadTournaments()
+        return
+      }
+
       setError(err.message || 'Failed to join tournament')
     }
   }
@@ -177,20 +219,23 @@ export default function Tournaments() {
 
     try {
       if (hasActiveTournament) {
-        const existing = tournaments.find((t) => t.id === idNum)
+        const existing = tournaments.find((t) => Number(t.id) === Number(idNum))
         const alreadyJoinedExisting = existing?.participants?.some(
           (p) => Number(p.user_id) === Number(currentUser?.id),
         )
 
         if (!alreadyJoinedExisting) {
-          setError('You are already registered in an active tournament. You cannot join another one right now.')
+          setError(buildActiveTournamentMessage(activeTournament))
           return
         }
       }
 
       const resp = await apiCall(`/api/game/tournaments/${idNum}`)
       if (!resp.ok) {
-        if (resp.status === 404) throw new Error('Tournament not found')
+        if (resp.status === 404) {
+          removeTournamentFromList(idNum)
+          throw new Error('Tournament not found')
+        }
         throw new Error('Failed to fetch tournament')
       }
 
@@ -207,6 +252,9 @@ export default function Tournaments() {
       await loadTournaments()
       setManualId('')
     } catch (err) {
+      if (isTournamentGoneError(err?.message)) {
+        void loadTournaments()
+      }
       setError(err.message || 'Could not join tournament')
     } finally {
       setJoiningById(false)
@@ -215,20 +263,91 @@ export default function Tournaments() {
 
   useEffect(() => {
     loadTournaments()
+
+    const syncList = () => {
+      void loadTournaments()
+    }
+
+    const intervalId = setInterval(syncList, TOURNAMENTS_SYNC_INTERVAL_MS)
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        syncList()
+      }
+    }
+
+    window.addEventListener('focus', syncList)
+    document.addEventListener('visibilitychange', onVisibilityChange)
+
+    return () => {
+      clearInterval(intervalId)
+      window.removeEventListener('focus', syncList)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+    }
   }, [])
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadChampionProfiles() {
+      const championIds = [...new Set(
+        tournaments
+          .filter((t) => t.status === 'complete')
+          .map((t) => Number(getTournamentChampionId(t)))
+          .filter((id) => Number.isFinite(id)),
+      )]
+
+      const missingIds = championIds.filter((id) => !championProfiles[id])
+      if (missingIds.length === 0) return
+
+      const entries = {}
+
+      await Promise.all(
+        missingIds.map(async (id) => {
+          try {
+            const resp = await apiCall(`/api/users/profile/${id}`)
+            if (!resp.ok) throw new Error('Profile fetch failed')
+            const profile = await resp.json()
+
+            entries[id] = {
+              username: profile.display_name || profile.username || `User ${id}`,
+              avatarUrl: profile.avatar_url || '/avatar_placeholder.jpg',
+            }
+          } catch {
+            entries[id] = {
+              username: `User ${id}`,
+              avatarUrl: '/avatar_placeholder.jpg',
+            }
+          }
+        }),
+      )
+
+      if (!cancelled && Object.keys(entries).length > 0) {
+        setChampionProfiles((prev) => ({ ...prev, ...entries }))
+      }
+    }
+
+    void loadChampionProfiles()
+
+    return () => {
+      cancelled = true
+    }
+  }, [tournaments, championProfiles])
 
   useEffect(() => {
     if (!currentUser) {
       setHasActiveTournament(false)
+      setActiveTournament(null)
       return
     }
 
-    const active = tournaments.some((t) => {
+    const active = tournaments.find((t) => {
       const joined = t.participants?.some((p) => Number(p.user_id) === Number(currentUser.id))
       return joined && (t.status === 'open' || t.status === 'in_progress')
     })
 
-    setHasActiveTournament(active)
+    setHasActiveTournament(Boolean(active))
+    setActiveTournament(active || null)
   }, [tournaments, currentUser])
 
   useEffect(() => {
@@ -248,15 +367,15 @@ export default function Tournaments() {
   }
 
   function isActiveTournament(t) {
-  return t?.status === 'open' || t?.status === 'in_progress'
-}
+    return t?.status === 'open' || t?.status === 'in_progress'
+  }
 
-function hasJoined(t) {
-  if (!currentUser || !t.participants) return false
-  if (!isActiveTournament(t)) return false
+  function hasJoined(t) {
+    if (!currentUser || !t.participants) return false
+    if (!isActiveTournament(t)) return false
 
-  return t.participants.some((p) => Number(p.user_id) === Number(currentUser.id))
-}
+    return t.participants.some((p) => Number(p.user_id) === Number(currentUser.id))
+  }
 
   return (
     <div className="arcade-shell">
@@ -279,11 +398,6 @@ function hasJoined(t) {
 
             <div className="arcade-card soft p-4 mb-4">
               <h2 className="arcade-section-title mb-3">Create new tournament</h2>
-              {hasActiveTournament && (
-                <p className="arcade-copy text-warning mb-2">
-                  You are currently registered in an active tournament. You cannot create or join another one right now.
-                </p>
-              )}
 
               <form onSubmit={handleCreate} className="row g-3 align-items-end">
                 <div className="col-12 col-sm-6 col-md-5">
@@ -371,9 +485,11 @@ function hasJoined(t) {
                   <table className="table table-dark table-striped align-middle">
                     <thead>
                       <tr>
+                        <th>ID</th>
                         <th>Name</th>
                         <th>Players</th>
                         <th>Status</th>
+                        <th>Winner</th>
                         <th>Actions</th>
                       </tr>
                     </thead>
@@ -384,12 +500,36 @@ function hasJoined(t) {
                         const participantCount = t.participants?.length ?? 0
                         const isFull = participantCount >= (t.max_participants || 0)
                         const canJoin = !joined && t.status === 'open' && !isFull && !hasActiveTournament
+                        const championId = getTournamentChampionId(t)
+                        const championProfile = championId != null ? championProfiles[championId] : null
+                        const statusMeta = getStatusMeta(t.status)
 
                         return (
                           <tr key={t.id}>
+                            <td>{t.id}</td>
                             <td>{t.name || `Tournament ${t.id}`}</td>
                             <td>{participantCount} / {t.max_participants}</td>
-                            <td>{t.status}</td>
+                            <td>
+                              <span className={`badge ${statusMeta.className}`}>{statusMeta.label}</span>
+                            </td>
+                            <td>
+                              {t.status !== 'complete' && <span className="text-muted">-</span>}
+
+                              {t.status === 'complete' && championId == null && (
+                                <span className="text-muted">TBD</span>
+                              )}
+
+                              {t.status === 'complete' && championId != null && (
+                                <div className="d-flex align-items-center gap-2">
+                                  <img
+                                    src={championProfile?.avatarUrl || '/avatar_placeholder.jpg'}
+                                    alt={championProfile?.username || `User ${championId}`}
+                                    style={{ width: '28px', height: '28px', borderRadius: '50%' }}
+                                  />
+                                  <span>{championProfile?.username || `User ${championId}`}</span>
+                                </div>
+                              )}
+                            </td>
                             <td className="d-flex gap-2">
                               {canJoin && (
                                 <button

@@ -42,6 +42,7 @@ function mockProfileBoot({ avatarUrl = '/uploads/avatars/1.png' } = {}) {
   // 1) GET /api/users/auth/me
   // 2) GET /api/users/profile/{id}
   // 3) GET /api/game/matches/history?player_id={id}
+  // 4) GET /api/game/leaderboard?player_id={id}&limit=1
   vi.spyOn(global, 'fetch')
     .mockResolvedValueOnce(
       new Response(JSON.stringify({ id: 1, username: 'alice' }), {
@@ -73,6 +74,20 @@ function mockProfileBoot({ avatarUrl = '/uploads/avatars/1.png' } = {}) {
           page: 1,
           per_page: 10,
           last_page: 1,
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      )
+    )
+    .mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          player_stats: {
+            player_id: 1,
+            rank: 1,
+            wins: 0,
+            losses: 0,
+            total_matches: 0,
+          },
         }),
         { status: 200, headers: { 'Content-Type': 'application/json' } }
       )
@@ -340,7 +355,7 @@ describe('Profile page (general)', () => {
 
   it('shows loading state before profile data resolves', () => {
     // No fetch mock — promise never resolves within this synchronous render
-    vi.spyOn(global, 'fetch').mockImplementation(() => new Promise(() => {}))
+    vi.spyOn(global, 'fetch').mockImplementation(() => new Promise(() => { }))
     renderProfile()
     expect(screen.getByText(/loading profile/i)).toBeInTheDocument()
   })
@@ -393,7 +408,7 @@ describe('Profile page (general)', () => {
         new Response(
           JSON.stringify({
             results: [],
-            summary: { player_id: 7, wins: 5, losses: 2, total_matches: 7 },
+            summary: { player_id: 7, wins: 8, losses: 2, total_matches: 10 },
             total: 0,
             page: 1,
             per_page: 10,
@@ -402,12 +417,26 @@ describe('Profile page (general)', () => {
           { status: 200, headers: { 'Content-Type': 'application/json' } }
         )
       )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            player_stats: {
+              player_id: 7,
+              rank: 5,
+              wins: 8,
+              losses: 2,
+              total_matches: 10,
+            },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        )
+      )
 
     renderProfile()
     expect(await screen.findByText('Alice the Brave')).toBeInTheDocument()
     expect(screen.getByText('@alice')).toBeInTheDocument()
-    expect(screen.getByText('5')).toBeInTheDocument() // wins
-    expect(screen.getByText('7')).toBeInTheDocument() // total matches
+    expect(screen.getByText('8')).toBeInTheDocument() // wins
+    expect(screen.getByText('10')).toBeInTheDocument() // total matches
     expect(screen.getByDisplayValue('hi there')).toBeInTheDocument()
   })
 
@@ -443,6 +472,20 @@ describe('Profile page (general)', () => {
             page: 1,
             per_page: 10,
             last_page: 1,
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            player_stats: {
+              player_id: 1,
+              rank: 1,
+              wins: 0,
+              losses: 0,
+              total_matches: 0,
+            },
           }),
           { status: 200, headers: { 'Content-Type': 'application/json' } }
         )
@@ -506,6 +549,20 @@ describe('Profile page (general)', () => {
             page: 1,
             per_page: 10,
             last_page: 1,
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            player_stats: {
+              player_id: 1,
+              rank: 10,
+              wins: 1,
+              losses: 1,
+              total_matches: 2,
+            },
           }),
           { status: 200, headers: { 'Content-Type': 'application/json' } }
         )

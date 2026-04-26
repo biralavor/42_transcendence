@@ -47,6 +47,7 @@ class MatchHistoryItem(BaseModel):
     match_id: int
     player_id: int
     opponent_id: int
+    opponent_display_name: str | None
     result: str   # "Win" | "Loss"
     score: str    # e.g. "11-3" (user score first, ASCII hyphen)
     date: str     # finished_at ISO string, "" if null
@@ -146,6 +147,7 @@ class LeaderboardResponse(BaseModel):
     per_page: int
     total: int
     results: list[PlayerStats]
+    player_stats: PlayerStats | None
     summary: Summary
 
 
