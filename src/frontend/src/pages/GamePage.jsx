@@ -39,7 +39,7 @@ export default function GamePage() {
         setMyId(me.id)
         setMyName(me.display_name ?? me.username)
       })
-      .catch(() => {})
+      .catch(() => { })
   }, [])
 
   useEffect(() => {
@@ -49,7 +49,7 @@ export default function GamePage() {
           setP1Name(p.display_name ?? p.username)
           setP1Avatar(p.avatar_url || '/avatar_placeholder.jpg')
         })
-        .catch(() => {})
+        .catch(() => { })
     }
     if (player2Id != null && !isAiGame) {
       apiJson(`/api/users/profile/${player2Id}`)
@@ -57,7 +57,7 @@ export default function GamePage() {
           setP2Name(p.display_name ?? p.username)
           setP2Avatar(p.avatar_url || '/avatar_placeholder.jpg')
         })
-        .catch(() => {})
+        .catch(() => { })
     }
   }, [player1Id, player2Id])
 
@@ -188,10 +188,10 @@ export default function GamePage() {
           <div className="arcade-panel game-page-panel">
             <div className="game-page-header">
               <span className="arcade-display game-page-kicker">Live Match</span>
-              <h1 className="arcade-title game-page-title">Pong Arena</h1>
+              <h1 id="game-page-title" className="arcade-title game-page-title">Pong Arena</h1>
             </div>
 
-            <div className="game-page-stage" aria-label="Players by side">
+            <div className="game-page-stage" role="group" aria-labelledby="game-page-title">
               <aside className={`tournament-side-panel game-page-side-panel game-page-side-left ${isMyLeftSide ? 'is-you' : ''}`}>
                 <img
                   src={p1Avatar}

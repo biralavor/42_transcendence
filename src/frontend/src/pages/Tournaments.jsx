@@ -175,7 +175,7 @@ export default function Tournaments() {
     setError('')
 
     if (hasActiveTournament) {
-      const existing = tournaments.find((t) => t.id === id)
+      const existing = tournaments.find((t) => Number(t.id) === Number(id))
       const alreadyJoined = existing?.participants?.some(
         (p) => Number(p.user_id) === Number(currentUser?.id),
       )
@@ -219,7 +219,7 @@ export default function Tournaments() {
 
     try {
       if (hasActiveTournament) {
-        const existing = tournaments.find((t) => t.id === idNum)
+        const existing = tournaments.find((t) => Number(t.id) === Number(idNum))
         const alreadyJoinedExisting = existing?.participants?.some(
           (p) => Number(p.user_id) === Number(currentUser?.id),
         )
@@ -293,7 +293,7 @@ export default function Tournaments() {
       const championIds = [...new Set(
         tournaments
           .filter((t) => t.status === 'complete')
-          .map((t) => getTournamentChampionId(t))
+          .map((t) => Number(getTournamentChampionId(t)))
           .filter((id) => Number.isFinite(id)),
       )]
 
@@ -367,15 +367,15 @@ export default function Tournaments() {
   }
 
   function isActiveTournament(t) {
-  return t?.status === 'open' || t?.status === 'in_progress'
-}
+    return t?.status === 'open' || t?.status === 'in_progress'
+  }
 
-function hasJoined(t) {
-  if (!currentUser || !t.participants) return false
-  if (!isActiveTournament(t)) return false
+  function hasJoined(t) {
+    if (!currentUser || !t.participants) return false
+    if (!isActiveTournament(t)) return false
 
-  return t.participants.some((p) => Number(p.user_id) === Number(currentUser.id))
-}
+    return t.participants.some((p) => Number(p.user_id) === Number(currentUser.id))
+  }
 
   return (
     <div className="arcade-shell">
@@ -433,7 +433,7 @@ function hasJoined(t) {
                   <button
                     type="submit"
                     className="arcade-btn arcade-btn-primary w-100"
-                    disabled={creating || !name}
+                    disabled={creating || !name || hasActiveTournament}
                   >
                     {creating ? 'Creating...' : 'Create'}
                   </button>
@@ -463,7 +463,7 @@ function hasJoined(t) {
                   <button
                     type="submit"
                     className="arcade-btn arcade-btn-secondary w-100"
-                    disabled={joiningById || !manualId}
+                    disabled={joiningById || !manualId || hasActiveTournament}
                   >
                     {joiningById ? 'Processing...' : 'Join'}
                   </button>
@@ -499,7 +499,7 @@ function hasJoined(t) {
                         const joined = hasJoined(t)
                         const participantCount = t.participants?.length ?? 0
                         const isFull = participantCount >= (t.max_participants || 0)
-                        const canJoin = !joined && t.status === 'open' && !isFull
+                        const canJoin = !joined && t.status === 'open' && !isFull && !hasActiveTournament
                         const championId = getTournamentChampionId(t)
                         const championProfile = championId != null ? championProfiles[championId] : null
                         const statusMeta = getStatusMeta(t.status)

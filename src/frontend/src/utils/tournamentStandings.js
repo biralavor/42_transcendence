@@ -1,11 +1,24 @@
 export function buildTournamentStandings(tournament, profiles = {}) {
   if (!tournament || !Array.isArray(tournament.participants)) return []
 
+  const normalizeId = (value) => {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+
+  const normalizeScore = (value) => {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : 0
+  }
+
   const stats = {}
 
   tournament.participants.forEach(({ user_id }) => {
-    stats[user_id] = {
-      userId: user_id,
+    const normalizedUserId = normalizeId(user_id)
+    if (normalizedUserId == null) return
+
+    stats[normalizedUserId] = {
+      userId: normalizedUserId,
       wins: 0,
       matches: 0,
       goalsFor: 0,
@@ -17,10 +30,11 @@ export function buildTournamentStandings(tournament, profiles = {}) {
     tournament.matches.forEach((match) => {
       if (match.status !== 'finished') return
 
-      const p1Id = match.player1_id
-      const p2Id = match.player2_id
-      const p1Score = Number(match.score_p1 ?? 0)
-      const p2Score = Number(match.score_p2 ?? 0)
+      const p1Id = normalizeId(match.player1_id)
+      const p2Id = normalizeId(match.player2_id)
+      const winnerId = normalizeId(match.winner_id)
+      const p1Score = normalizeScore(match.score_p1)
+      const p2Score = normalizeScore(match.score_p2)
 
       if (p1Id != null && stats[p1Id]) {
         stats[p1Id].matches += 1
@@ -34,15 +48,15 @@ export function buildTournamentStandings(tournament, profiles = {}) {
         stats[p2Id].goalsAgainst += p1Score
       }
 
-      if (match.winner_id != null && stats[match.winner_id]) {
-        stats[match.winner_id].wins += 1
+      if (winnerId != null && stats[winnerId]) {
+        stats[winnerId].wins += 1
       }
     })
   }
 
   return Object.values(stats)
     .map((entry) => {
-      const profile = profiles[entry.userId] || {}
+      const profile = profiles[entry.userId] || profiles[String(entry.userId)] || {}
 
       return {
         userId: entry.userId,
