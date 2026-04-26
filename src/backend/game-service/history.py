@@ -131,6 +131,16 @@ WITH all_finished_matches AS
             FROM matches_count)
     LIMIT :limit
 )
+, paged_matches_with_opponent_display_name AS
+(
+    SELECT
+        paged_matches.*
+        , COALESCE(NULLIF(TRIM(users.display_name), ''), users.username)
+        AS opponent_display_name
+    FROM paged_matches
+        LEFT JOIN users
+            ON paged_matches.opponent_id = users.id
+)
 , page_stats AS
 (
     SELECT
@@ -146,16 +156,18 @@ WITH all_finished_matches AS
 )
 SELECT
     *
-    , COALESCE((SELECT
-                  jsonb_agg(jsonb_build_object(
-                     'match_id' ,match_id
-                     , 'player_id' ,player_id
-                     , 'opponent_id'  ,opponent_id
-                     , 'score'  ,score
-                     , 'result' , result
-                     , 'date'  ,date
-                  ) ORDER BY {query_order})
-                FROM paged_matches)
+    , COALESCE(
+        (SELECT
+             jsonb_agg(jsonb_build_object(
+                'match_id' ,match_id
+                , 'player_id' ,player_id
+                , 'opponent_id'  ,opponent_id
+                , 'score'  ,score
+                , 'result' , result
+                , 'date'  ,date
+                , 'opponent_display_name' ,opponent_display_name
+             ) ORDER BY {query_order})
+         FROM paged_matches_with_opponent_display_name)
                , '[]'::jsonb)
     AS results
     , (SELECT to_jsonb(summary) FROM summary)

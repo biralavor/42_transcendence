@@ -117,11 +117,12 @@ async def leaderboard(
     session: SessionDependency,
     limit: int = Query(20, ge=1, le=100),
     page: int = Query(0, ge=0),
-    order: str = Query('')
+    order: str = Query(''),
+    player_id: int | None = Query(None, ge=0)
 ):
     sort_assoc = get_sort_assoc_from_order_query(order)
     paginated_result = \
-        await get_leaderboard_paginated(session, limit, page, sort_assoc)
+        await get_leaderboard_paginated(session, player_id, limit, page, sort_assoc)
     return paginated_result
 
 

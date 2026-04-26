@@ -23,5 +23,6 @@ export default defineConfig({
     // across files, so default parallelism is kept. Occasional flakes may still
     // occur on very constrained hosts — rerunning `make check` resolves them.
     testTimeout: 30000,
+    reporters: ['verbose'],
   },
 })
