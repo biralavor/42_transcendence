@@ -1,5 +1,5 @@
 import asyncio
-from typing import Optional, Callable, Any
+from typing import Optional, Callable
 from dataclasses import asdict
 from service.game_session import GameSession
 from service.ai import update_ai_paddle
