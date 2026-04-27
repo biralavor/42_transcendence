@@ -1045,7 +1045,7 @@ SUITE_NAMES+=("$suite_name")
 # ── 25. Frontend Unit Tests ───────────────────────────────────────────────────
 suite_name="Frontend Unit Tests"
 printf "\n${CYAN}=== $suite_name ===${RESET}\n"
-printf "${YELLOW}Please wait for a while. I'm running more than 300 Frontend tests now...\n${RESET}"
+printf "${YELLOW}Please wait for a while. I'm running more than 500 Frontend tests now...\n${RESET}"
 printf "${YELLOW}If you see no output for a long time, it may be because the frontend container is still starting up or installing dependencies. You can check the status with: docker logs frontend -f\n${RESET}"
 printf "${YELLOW}If the tests fail, the most relevant error messages will be displayed below.\n${RESET}"
 if container_running frontend; then
