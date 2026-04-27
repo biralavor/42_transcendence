@@ -537,3 +537,54 @@ async def test_finish_match_awards_5_xp_to_loser(db):
         text("SELECT xp FROM user_xp WHERE user_id = :uid"), {"uid": 2}
     )).one_or_none()
     assert row is not None and row.xp == 5
+
+
+@pytest.mark.asyncio
+async def test_finish_match_skips_xp_when_ai_is_winner(db):
+    """When the AI (player_id=0) wins, no XP row is inserted for user_id=0
+    (would violate FK on user_xp.user_id → users.id).
+    """
+    # Match: human (user 1) vs AI (user_id=0)
+    # We need user 0 to NOT exist in users; AI matches use 0 as a sentinel.
+    match = await create_match(db, player1_id=1, player2_id=0)
+    # AI wins
+    finished = await finish_match(db, match.id, winner_id=0, score_p1=2, score_p2=10)
+    assert finished is not None
+    assert finished.status == "finished"
+    assert finished.winner_id == 0
+
+    # Verify no user_xp row was inserted for user_id=0
+    row = (await db.execute(
+        text("SELECT xp FROM user_xp WHERE user_id = 0"),
+    )).one_or_none()
+    assert row is None, "AI sentinel (user_id=0) should never get a user_xp row"
+
+    # Loser is user 1 — gets the +5 XP for losing (humans still get loss XP vs AI)
+    row_loser = (await db.execute(
+        text("SELECT xp FROM user_xp WHERE user_id = 1"),
+    )).one_or_none()
+    assert row_loser is not None and row_loser.xp >= 5
+
+
+@pytest.mark.asyncio
+async def test_finish_match_skips_xp_when_ai_is_loser(db):
+    """When the AI loses, the human winner still gets +25 XP, but no XP row
+    is inserted for the AI loser (user_id=0).
+    """
+    match = await create_match(db, player1_id=1, player2_id=0)
+    # Human wins
+    finished = await finish_match(db, match.id, winner_id=1, score_p1=10, score_p2=2)
+    assert finished is not None
+    assert finished.status == "finished"
+
+    # Winner (user 1) gets +25 XP
+    row_winner = (await db.execute(
+        text("SELECT xp FROM user_xp WHERE user_id = 1"),
+    )).one_or_none()
+    assert row_winner is not None and row_winner.xp >= 25
+
+    # AI loser (user_id=0) gets no XP row
+    row_ai = (await db.execute(
+        text("SELECT xp FROM user_xp WHERE user_id = 0"),
+    )).one_or_none()
+    assert row_ai is None, "AI sentinel (user_id=0) should never get a user_xp row"

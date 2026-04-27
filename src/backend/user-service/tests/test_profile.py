@@ -1,7 +1,7 @@
 # src/backend/user-service/tests/test_profile.py
 from httpx import AsyncClient, ASGITransport
 from service.main import app
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, patch
 import pytest
 
 @pytest.mark.asyncio

@@ -529,10 +529,15 @@ async def finish_match(
     match.score_p2 = score_p2
     match.finished_at = datetime.now(timezone.utc)
     match.status = "finished"
+    # AI player is represented by user_id = 0 (AI_PLAYER_ID sentinel).
+    # Skip XP/achievement awarding for the AI on either side — it has no
+    # row in the `users` table, so award_xp would violate the FK on user_xp.user_id.
+    AI_PLAYER_ID = 0
     loser_id = match.player2_id if winner_id == match.player1_id else match.player1_id
     await db.flush()
-    await award_xp(winner_id, 25, db)
-    if loser_id != 0:
+    if winner_id != AI_PLAYER_ID:
+        await award_xp(winner_id, 25, db)
+    if loser_id != AI_PLAYER_ID:
         await award_xp(loser_id, 5, db)
     await db.commit()
     await db.refresh(match)
