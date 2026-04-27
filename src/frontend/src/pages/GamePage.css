@@ -15,12 +15,21 @@
   padding: 18px;
 }
 
+/* 3-column header: left player card | title | right player card.
+   All three are vertically centered relative to each other. */
 .game-page-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  margin: 0px 0px 20px 0px;
+}
+
+.game-page-header-title {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  margin-bottom: 18px;
   text-align: center;
 }
 
@@ -64,21 +73,19 @@
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.18);
 }
 
+/* Side panels are now in-flow grid items inside the 3-column header. */
 .game-page-side-panel {
-  position: absolute;
-  top: 16px;
-  width: clamp(150px, 14vw, 190px);
-  z-index: 2;
+  width: 100%;
+  max-width: clamp(180px, 18vw, 160px);
+  margin: 0 2rem;
 }
 
 .game-page-side-left {
-  left: 0;
-  transform: translateX(calc(-100% - 16px));
+  justify-self: end;
 }
 
 .game-page-side-right {
-  right: 0;
-  transform: translateX(calc(100% + 16px));
+  justify-self: start;
 }
 
 .tournament-side-panel.is-you {
@@ -136,10 +143,20 @@
   }
 
   .tournament-side-panel {
-    position: static;
-    transform: none;
     width: 100%;
     min-height: 0;
+  }
+
+  /* On mobile, stack the 3-column header into a single column:
+     left player → title → right player. */
+  .game-page-header {
+    grid-template-columns: 1fr;
+  }
+
+  .game-page-side-left,
+  .game-page-side-right {
+    justify-self: stretch;
+    max-width: 100%;
   }
 
   .game-page-stage {

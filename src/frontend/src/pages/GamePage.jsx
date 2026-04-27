@@ -187,11 +187,6 @@ export default function GamePage() {
         <section className="arcade-screen game-page-screen">
           <div className="arcade-panel game-page-panel">
             <div className="game-page-header">
-              <span className="arcade-display game-page-kicker">Live Match</span>
-              <h1 id="game-page-title" className="arcade-title game-page-title">Pong Arena</h1>
-            </div>
-
-            <div className="game-page-stage" role="group" aria-labelledby="game-page-title">
               <aside className={`tournament-side-panel game-page-side-panel game-page-side-left ${isMyLeftSide ? 'is-you' : ''}`}>
                 <img
                   src={p1Avatar}
@@ -201,6 +196,22 @@ export default function GamePage() {
                 <span className="tournament-side-name">{p1Name}</span>
               </aside>
 
+              <div className="game-page-header-title">
+                <span className="arcade-display game-page-kicker">Live Match</span>
+                <h1 id="game-page-title" className="arcade-title game-page-title">Pong Arena</h1>
+              </div>
+
+              <aside className={`tournament-side-panel game-page-side-panel game-page-side-right ${!isMyLeftSide ? 'is-you' : ''}`}>
+                <img
+                  src={p2Avatar}
+                  alt={p2Name}
+                  className="tournament-side-avatar"
+                />
+                <span className="tournament-side-name">{p2Name}</span>
+              </aside>
+            </div>
+
+            <div className="game-page-stage" role="group" aria-labelledby="game-page-title">
               <div className="game-page-canvas-shell" style={{ position: 'relative' }}>
                 <PongCanvasMultiplayer
                   key={roomId}
@@ -225,15 +236,6 @@ export default function GamePage() {
                   />
                 )}
               </div>
-
-              <aside className={`tournament-side-panel game-page-side-panel game-page-side-right ${!isMyLeftSide ? 'is-you' : ''}`}>
-                <img
-                  src={p2Avatar}
-                  alt={p2Name}
-                  className="tournament-side-avatar"
-                />
-                <span className="tournament-side-name">{p2Name}</span>
-              </aside>
             </div>
           </div>
         </section>
