@@ -1286,7 +1286,6 @@ _BACKEND="${_REPO_ROOT}/src/backend"
 _FRONTEND="${_REPO_ROOT}/src/frontend/src"
 _API_E2E="${_REPO_ROOT}/tests/api_e2e"
 
-_total_test_files=0
 _mock_files=0
 _smoke_files=0
 _pure_files=0
@@ -1310,7 +1309,6 @@ count_js_cases() {
 
 if [[ -d "$_BACKEND" ]]; then
     while IFS= read -r f; do
-        _total_test_files=$((_total_test_files + 1))
         n=$(count_py_cases "$f")
         _total_test_cases=$((_total_test_cases + n))
         if grep -lqE "create_async_engine|_TestSession|NullPool|begin_nested" "$f" 2>/dev/null; then
@@ -1329,7 +1327,6 @@ fi
 
 if [[ -d "$_FRONTEND" ]]; then
     while IFS= read -r f; do
-        _total_test_files=$((_total_test_files + 1))
         n=$(count_js_cases "$f")
         _total_test_cases=$((_total_test_cases + n))
         if grep -lqE "vi.mock|vi\.fn|vi\.spyOn|MockResolvedValue" "$f" 2>/dev/null; then
@@ -1360,11 +1357,10 @@ else
     _mock_pct=0; _smoke_pct=0; _pure_pct=0
 fi
 
-printf "  Total test files (unit + smoke):  %d\n" "$_total_test_files"
 printf "  Total test cases (unit + smoke):  %d\n" "$_total_test_cases"
-printf "  Mock-based tests:                 %d cases / %d files (%d%%)  ${YELLOW}target: 70-80%%${RESET}\n" "$_mock_cases" "$_mock_files" "$_mock_pct"
-printf "  Real-DB smoke tests:              %d cases / %d files (%d%%)  ${YELLOW}target: 10-20%%${RESET}\n" "$_smoke_cases" "$_smoke_files" "$_smoke_pct"
-printf "  Pure-logic tests:                 %d cases / %d files (%d%%)\n" "$_pure_cases" "$_pure_files" "$_pure_pct"
+printf "    ├─ Mock-based tests:            %d cases / %d files (%d%%)  ${YELLOW}target: 70-80%%${RESET}\n" "$_mock_cases" "$_mock_files" "$_mock_pct"
+printf "    ├─ Real-DB smoke tests:         %d cases / %d files (%d%%)  ${YELLOW}target: 10-20%%${RESET}\n" "$_smoke_cases" "$_smoke_files" "$_smoke_pct"
+printf "    └─ Pure-logic tests:            %d cases / %d files (%d%%)\n" "$_pure_cases" "$_pure_files" "$_pure_pct"
 printf "  API E2E:                          %d cases / %d files       ${YELLOW}target: ≥3 files${RESET}\n" "$_api_e2e_cases" "$_api_e2e_files"
 
 # Health verdict
