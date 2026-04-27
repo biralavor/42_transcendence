@@ -361,95 +361,71 @@ export default function Profile() {
                   {avatarToast.message}
                 </div>
               )}
-              <div className="profile-header">
-                <div className="profile-avatar-wrapper">
-                  <img
-                    src={avatarSrc}
-                    alt="User avatar"
-                    className="profile-avatar"
-                    style={{ filter: avatarPreview ? 'none' : getAvatarFilter(userId) }}
-                  />
-                  {avatarBusy && (
-                    <div className="profile-avatar-spinner" aria-label="Uploading avatar" role="status">
-                      <span className="profile-spinner" />
-                    </div>
-                  )}
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    className="profile-avatar-file-input"
-                    onChange={handleAvatarPick}
-                    aria-label="Choose avatar image"
-                  />
-                  <div className="profile-avatar-actions">
-                    {!avatarPreview && (
-                      <>
-                        <button
-                          type="button"
-                          className="arcade-btn arcade-btn-secondary profile-avatar-btn"
-                          onClick={() => fileInputRef.current?.click()}
-                          disabled={avatarBusy}
-                        >
-                          Change avatar
-                        </button>
-                        <button
-                          type="button"
-                          className="arcade-btn arcade-btn-danger profile-avatar-btn"
-                          onClick={handleAvatarDelete}
-                          disabled={avatarBusy || !profile?.avatarUrl || profile.avatarUrl === PLACEHOLDER_AVATAR}
-                        >
-                          Remove
-                        </button>
-                      </>
-                    )}
-                    {avatarPreview && (
-                      <>
-                        <button
-                          type="button"
-                          className="arcade-btn arcade-btn-primary profile-avatar-btn"
-                          onClick={handleAvatarUpload}
-                          disabled={avatarBusy}
-                        >
-                          {avatarBusy ? 'Uploading…' : 'Confirm upload'}
-                        </button>
-                        <button
-                          type="button"
-                          className="arcade-btn arcade-btn-secondary profile-avatar-btn"
-                          onClick={clearAvatarSelection}
-                          disabled={avatarBusy}
-                        >
-                          Cancel
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </div>
-                <div className="profile-info">
-                  <h1 className="profile-display-name">{profile.displayName || profile.username}</h1>
-                  <p className="profile-username">@{profile.username}</p>
-                  {xpData && (
-                    <XpBar level={xpData.level} xpInLevel={xpData.xp_in_level} />
-                  )}
-                  <div className="profile-stats">
-                    <div className="profile-stat-card">
-                      <span className="profile-stat-value">{wins}</span>
-                      <span className="profile-stat-label">Wins</span>
-                    </div>
-                    <div className="profile-stat-card">
-                      <span className="profile-stat-value">{userRankData?.rank ?? '-'}</span>
-                      <span className="profile-stat-label">Rank</span>
-                    </div>
-                    <div className="profile-stat-card">
-                      <span className="profile-stat-value">{matches}</span>
-                      <span className="profile-stat-label">Matches</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
               <div className="profile-two-column">
                 <div className="profile-left-column">
+                  <div className="profile-avatar-wrapper">
+                    <img
+                      src={avatarSrc}
+                      alt="User avatar"
+                      className="profile-avatar"
+                      style={{ filter: avatarPreview ? 'none' : getAvatarFilter(userId) }}
+                    />
+                    {avatarBusy && (
+                      <div className="profile-avatar-spinner" aria-label="Uploading avatar" role="status">
+                        <span className="profile-spinner" />
+                      </div>
+                    )}
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="profile-avatar-file-input"
+                      onChange={handleAvatarPick}
+                      aria-label="Choose avatar image"
+                    />
+                    <div className="profile-avatar-actions">
+                      {!avatarPreview && (
+                        <>
+                          <button
+                            type="button"
+                            className="arcade-btn arcade-btn-secondary profile-avatar-btn"
+                            onClick={() => fileInputRef.current?.click()}
+                            disabled={avatarBusy}
+                          >
+                            Change avatar
+                          </button>
+                          <button
+                            type="button"
+                            className="arcade-btn arcade-btn-danger profile-avatar-btn"
+                            onClick={handleAvatarDelete}
+                            disabled={avatarBusy || !profile?.avatarUrl || profile.avatarUrl === PLACEHOLDER_AVATAR}
+                          >
+                            Remove
+                          </button>
+                        </>
+                      )}
+                      {avatarPreview && (
+                        <>
+                          <button
+                            type="button"
+                            className="arcade-btn arcade-btn-primary profile-avatar-btn"
+                            onClick={handleAvatarUpload}
+                            disabled={avatarBusy}
+                          >
+                            {avatarBusy ? 'Uploading…' : 'Confirm upload'}
+                          </button>
+                          <button
+                            type="button"
+                            className="arcade-btn arcade-btn-secondary profile-avatar-btn"
+                            onClick={clearAvatarSelection}
+                            disabled={avatarBusy}
+                          >
+                            Cancel
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
                   <form className="profile-form" onSubmit={handleSave}>
                     {saveStatus && (
                       <div className={`alert ${saveStatus.includes('successfully') ? 'alert-success' : 'alert-danger'} profile-alert`} role="alert">
@@ -503,6 +479,27 @@ export default function Profile() {
                   </form>
                 </div>
                 <div className="profile-right-column">
+                  <div className="profile-info">
+                    <h1 className="profile-display-name">{profile.displayName || profile.username}</h1>
+                    <p className="profile-username">@{profile.username}</p>
+                    {xpData && (
+                      <XpBar level={xpData.level} xpInLevel={xpData.xp_in_level} />
+                    )}
+                    <div className="profile-stats">
+                      <div className="profile-stat-card">
+                        <span className="profile-stat-value">{wins}</span>
+                        <span className="profile-stat-label">Wins</span>
+                      </div>
+                      <div className="profile-stat-card">
+                        <span className="profile-stat-value">{userRankData?.rank ?? '-'}</span>
+                        <span className="profile-stat-label">Rank</span>
+                      </div>
+                      <div className="profile-stat-card">
+                        <span className="profile-stat-value">{matches}</span>
+                        <span className="profile-stat-label">Matches</span>
+                      </div>
+                    </div>
+                  </div>
                   <h2 className="profile-section-title">Achievements</h2>
                   {achievements.length > 0 ? (
                     <BadgeGrid achievements={achievements} />

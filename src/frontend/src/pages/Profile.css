@@ -43,7 +43,7 @@
 .profile-avatar-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.4rem;
+  gap: 1rem;
   justify-content: center;
 }
 
@@ -125,6 +125,7 @@
   align-items: center;
   justify-content: center;
   min-height: 96px;
+  margin-top: 2rem;;
   border: 1px solid rgba(251, 192, 45, 0.28);
   border-radius: 1rem;
   background: rgba(255, 255, 255, 0.04);
@@ -150,6 +151,7 @@
 /* Form controls on the profile page reuse the existing arcade styling */
 .profile-form-control .form-control {
   min-height: 64px;
+  margin-top: 2rem;
   padding-top: 1.6rem;
   border-radius: 1rem;
   border-width: 2px;
