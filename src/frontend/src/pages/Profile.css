@@ -186,6 +186,25 @@
   margin-top: 1rem;
 }
 
+/* Two-column layout: form (left) | achievements (right) */
+.profile-two-column {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 2rem;
+  margin-top: 1.5rem;
+}
+
+@media (max-width: 900px) {
+  .profile-two-column {
+    grid-template-columns: 1fr;
+  }
+}
+
+.profile-left-column,
+.profile-right-column {
+  min-width: 0;
+}
+
 /* Match history styling */
 .profile-history {
   margin-top: 2.5rem;

@@ -448,57 +448,71 @@ export default function Profile() {
                 </div>
               </div>
 
-              <form className="profile-form" onSubmit={handleSave}>
-                {saveStatus && (
-                  <div className={`alert ${saveStatus.includes('successfully') ? 'alert-success' : 'alert-danger'} profile-alert`} role="alert">
-                    {saveStatus}
-                  </div>
-                )}
-                <div className="form-floating mb-3 arcade-form-control profile-form-control">
-                  <input
-                    type="text"
-                    className="form-control"
-                    id="displayName"
-                    name="displayName"
-                    placeholder="Display name"
-                    value={profile.displayName}
-                    onChange={handleChange}
-                  />
-                  <label htmlFor="displayName">Display name</label>
+              <div className="profile-two-column">
+                <div className="profile-left-column">
+                  <form className="profile-form" onSubmit={handleSave}>
+                    {saveStatus && (
+                      <div className={`alert ${saveStatus.includes('successfully') ? 'alert-success' : 'alert-danger'} profile-alert`} role="alert">
+                        {saveStatus}
+                      </div>
+                    )}
+                    <div className="form-floating mb-3 arcade-form-control profile-form-control">
+                      <input
+                        type="text"
+                        className="form-control"
+                        id="displayName"
+                        name="displayName"
+                        placeholder="Display name"
+                        value={profile.displayName}
+                        onChange={handleChange}
+                      />
+                      <label htmlFor="displayName">Display name</label>
+                    </div>
+                    <div className="form-floating mb-3 arcade-form-control profile-form-control">
+                      <textarea
+                        className="form-control"
+                        id="bio"
+                        name="bio"
+                        placeholder="Your bio"
+                        style={{ height: '100px' }}
+                        value={profile.bio}
+                        onChange={handleChange}
+                      />
+                      <label htmlFor="bio">Bio</label>
+                    </div>
+                    <div className="profile-preferences">
+                      <h2 className="profile-section-title">Preferences</h2>
+                      <GameSettings />
+                      <div className="profile-preference-item form-check arcade-form-check">
+                        <input
+                          className="form-check-input"
+                          type="checkbox"
+                          id="darkMode"
+                          name="darkMode"
+                          checked={profile.darkMode}
+                          onChange={handleChange}
+                        />
+                        <label className="form-check-label" htmlFor="darkMode">
+                          Enable dark mode
+                        </label>
+                      </div>
+                    </div>
+                    <button className="arcade-btn arcade-btn-primary profile-save-btn" type="submit">
+                      Save profile
+                    </button>
+                  </form>
                 </div>
-                <div className="form-floating mb-3 arcade-form-control profile-form-control">
-                  <textarea
-                    className="form-control"
-                    id="bio"
-                    name="bio"
-                    placeholder="Your bio"
-                    style={{ height: '100px' }}
-                    value={profile.bio}
-                    onChange={handleChange}
-                  />
-                  <label htmlFor="bio">Bio</label>
+                <div className="profile-right-column">
+                  <h2 className="profile-section-title">Achievements</h2>
+                  {achievements.length > 0 ? (
+                    <BadgeGrid achievements={achievements} />
+                  ) : (
+                    <p style={{ color: 'var(--metal-silver)', fontFamily: 'VT323, monospace' }}>
+                      No achievements unlocked yet.
+                    </p>
+                  )}
                 </div>
-                <div className="profile-preferences">
-                  <h2 className="profile-section-title">Preferences</h2>
-                  <GameSettings />
-                  <div className="profile-preference-item form-check arcade-form-check">
-                    <input
-                      className="form-check-input"
-                      type="checkbox"
-                      id="darkMode"
-                      name="darkMode"
-                      checked={profile.darkMode}
-                      onChange={handleChange}
-                    />
-                    <label className="form-check-label" htmlFor="darkMode">
-                      Enable dark mode
-                    </label>
-                  </div>
-                </div>
-                <button className="arcade-btn arcade-btn-primary profile-save-btn" type="submit">
-                  Save profile
-                </button>
-              </form>
+              </div>
 
               <div className="profile-history">
                 <h2 className="profile-section-title">Match history</h2>
@@ -536,12 +550,6 @@ export default function Profile() {
           </div>
         </div>
 
-        {achievements.length > 0 && (
-          <section className="profile-gamification" style={{ maxWidth: '800px', margin: '0 auto 2rem', padding: '0 1rem' }}>
-            <h2 style={{ marginBottom: '0.5rem' }}>Achievements</h2>
-            <BadgeGrid achievements={achievements} />
-          </section>
-        )}
       </main>
 
       {achievementQueue.length > 0 && (
