@@ -1256,3 +1256,13 @@ Tests can be configured to run on every PR via GitHub Actions workflow (not yet 
 | **Naming** | `test_endpoint_scenario()` | `test_action_expected_outcome()` |
 | **Coverage** | Aim 80%+ | Aim 70%+ |
 | **Run All Tests** | `make check` | `make check` |
+
+
+## 11. Appendix — How the classification was performed
+
+Rules applied automatically to each test file:
+- **REAL-DB** if file contains any of: `create_async_engine`, `_TestSession`, `NullPool`, `begin_nested`
+- **MOCK** if file contains any of: `MagicMock`, `AsyncMock`, `mock_db_session`, `unittest.mock`, `vi.mock`, `vi.fn`, `vi.spyOn`
+- **MIXED** if both REAL-DB and MOCK indicators present
+- **PURE** if neither indicator (algorithmic / data-only test)
+- Frontend additionally split by whether `render(...)` is invoked → `MOCK+UI` vs plain `MOCK`, and `UI-PURE` for `render(...)` without explicit mocks.
