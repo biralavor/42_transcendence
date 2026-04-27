@@ -116,12 +116,33 @@ async def user_stats(user_id: int, session: SessionDependency):
     return await get_user_stats(session, user_id)
 
 
-@router.get("/leaderboard", response_model=LeaderboardResponse)
+@router.get(
+    "/leaderboard",
+    response_model=LeaderboardResponse,
+    summary="Get the global leaderboard",
+    description=(
+        "Returns a paginated leaderboard. **`limit` is capped at 100** per request "
+        "(use `page=N` to walk further). Results include `xp`, `level`, "
+        "`avatar_url` per row. The `order` query string accepts comma-separated "
+        "`col:dir` pairs (e.g. `xp:desc,points:desc,user_id:asc`). Allowed "
+        "columns: `rank, display_name, user_id, points, total_games, wins, "
+        "losses, goals_scored, goals_conceded, goal_difference, max_streak, "
+        "current_streak, xp, level`. Unknown columns are silently dropped. "
+        "When `order` is empty the default is `xp DESC, points DESC, "
+        "goal_difference DESC, goals_scored DESC, user_id ASC`."
+    ),
+)
 async def leaderboard(
     session: SessionDependency,
-    limit: int = Query(20, ge=1, le=100),
-    page: int = Query(0, ge=0),
-    order: str = Query(''),
+    limit: int = Query(
+        20, ge=1, le=100,
+        description="Rows per page. Hard-capped at 100; pass page=N to walk further.",
+    ),
+    page: int = Query(0, ge=0, description="Zero-based page index."),
+    order: str = Query(
+        '',
+        description="Comma-separated `col:dir` pairs (e.g. `xp:desc,wins:desc`).",
+    ),
     player_id: int | None = Query(None, ge=0)
 ):
     sort_assoc = get_sort_assoc_from_order_query(order)

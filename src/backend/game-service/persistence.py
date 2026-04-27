@@ -1201,36 +1201,59 @@ async def reward_game_achievement_if_should(
         await insert_game_achievement(user_id, achievement, session)
 
     # ── New badge conditions ─────────────────────────────────────────────────
-    total_games = await count_games(user_id, session)
-    if total_games >= 1:
+    # Consolidate the 3 matches-table COUNTs and the user_xp level lookup into
+    # ONE query (4 round-trips → 1) using PostgreSQL FILTER clauses. The
+    # standalone helpers (count_games, won_vs_ai, has_perfect_game) remain
+    # available and tested for callers that need just one of these values.
+    stats_row = (await session.execute(
+        text("""
+            WITH match_stats AS (
+                SELECT
+                    COUNT(*) FILTER (WHERE (player1_id = :uid OR player2_id = :uid)
+                                     AND status = 'finished')                     AS total_games,
+                    COUNT(*) FILTER (WHERE winner_id = :uid AND player2_id = 0
+                                     AND status = 'finished')                     AS ai_wins,
+                    COUNT(*) FILTER (WHERE winner_id = :uid AND status = 'finished'
+                                     AND ((player1_id = :uid AND score_p2 = 0 AND score_p1 >= 10)
+                                       OR (player2_id = :uid AND score_p1 = 0 AND score_p2 >= 10))) AS perfect_games
+                FROM matches
+            )
+            SELECT
+                ms.total_games,
+                ms.ai_wins,
+                ms.perfect_games,
+                ux.level
+            FROM match_stats ms
+            LEFT JOIN user_xp ux ON ux.user_id = :uid
+        """),
+        {"uid": user_id},
+    )).one()
+
+    if stats_row.total_games >= 1:
         await insert_game_achievement(user_id, {
             "a_key": "first_game", "a_name": "Getting Started",
             "a_desc": "Play your first game", "a_icon": "(ง •_•)ง",
         }, session)
 
-    if await won_vs_ai(user_id, session):
+    if stats_row.ai_wins >= 1:
         await insert_game_achievement(user_id, {
             "a_key": "ai_conqueror", "a_name": "AI Conqueror",
             "a_desc": "Beat the AI opponent", "a_icon": "ʕっ•ᴥ•ʔっ",
         }, session)
 
-    if await has_perfect_game(user_id, session):
+    if stats_row.perfect_games >= 1:
         await insert_game_achievement(user_id, {
             "a_key": "perfect_game", "a_name": "Perfect Pong",
             "a_desc": "Win a game 10-0", "a_icon": "¬‿¬",
         }, session)
 
-    xp_result = await session.execute(
-        text("SELECT level FROM user_xp WHERE user_id = :uid"), {"uid": user_id}
-    )
-    level_row = xp_result.one_or_none()
-    if level_row:
-        if level_row.level >= 5:
+    if stats_row.level is not None:
+        if stats_row.level >= 5:
             await insert_game_achievement(user_id, {
                 "a_key": "level_5", "a_name": "Rising Star",
                 "a_desc": "Reach Level 5", "a_icon": "★彡(◕‿◕)",
             }, session)
-        if level_row.level >= 10:
+        if stats_row.level >= 10:
             await insert_game_achievement(user_id, {
                 "a_key": "level_10", "a_name": "Elite Player",
                 "a_desc": "Reach Level 10", "a_icon": "(ﾉ≧∀≦)ﾉ",
@@ -1349,14 +1372,19 @@ async def won_vs_ai(user_id: int, session: AsyncSession) -> bool:
 
 
 async def has_perfect_game(user_id: int, session: AsyncSession) -> bool:
-    """True if user has won any match with opponent scoring 0."""
+    """True if user has won any match 10-0 (winner scored ≥10, opponent scored 0).
+
+    The badge description in the achievements catalog says "Win a game 10-0",
+    so the implementation enforces both halves: the opponent must be shut out
+    AND the winner must have reached the standard 10-point Pong score.
+    """
     result = await session.execute(
         text(
             "SELECT COUNT(*) FROM matches "
             "WHERE winner_id = :uid AND status = 'finished' "
             "AND ("
-            "  (player1_id = :uid AND score_p2 = 0) OR "
-            "  (player2_id = :uid AND score_p1 = 0)"
+            "  (player1_id = :uid AND score_p2 = 0 AND score_p1 >= 10) OR "
+            "  (player2_id = :uid AND score_p1 = 0 AND score_p2 >= 10)"
             ")"
         ),
         {"uid": user_id},
