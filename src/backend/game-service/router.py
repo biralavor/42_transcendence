@@ -26,12 +26,14 @@ from service.persistence import (
     create_tournament,
     delete_tournament,
     finish_match,
+    get_achievements_for_user,
     get_leaderboard,
     get_leaderboard_paginated,
     get_match,
     get_tournament_with_participants,
     get_user_matches,
     get_user_stats,
+    get_xp_for_user,
     join_tournament,
     leave_tournament,
     list_tournaments,
@@ -40,6 +42,7 @@ from service.persistence import (
     withdraw_tournament,
 )
 from service.schemas import (
+    AchievementResponse,
     MatchCreateRequest,
     MatchFinishRequest,
     MatchHistoryItem,
@@ -52,7 +55,8 @@ from service.schemas import (
     TournamentMatchResponse,
     TournamentMatchResultRequest,
     TournamentParticipantResponse,
-    LeaderboardResponse
+    LeaderboardResponse,
+    XpResponse,
 )
 from service.ws.router import (
     manager as ws_manager,
@@ -426,3 +430,32 @@ async def end_match(match_id: int, body: MatchFinishRequest, session: SessionDep
     if body.winner_id not in (match.player1_id, match.player2_id):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="winner_id must be one of the match players")
     return await finish_match(session, match_id, body.winner_id, body.score_p1, body.score_p2)
+
+
+@router.get("/achievements/{user_id}", response_model=list[AchievementResponse])
+async def user_achievements(user_id: int, session: SessionDependency):
+    return await get_achievements_for_user(user_id, session)
+
+
+@router.get("/xp/{user_id}", response_model=XpResponse)
+async def user_xp(user_id: int, session: SessionDependency):
+    data = await get_xp_for_user(user_id, session)
+    if data is None:
+        return XpResponse(user_id=user_id, xp=0, level=1, xp_in_level=0, xp_to_next_level=100)
+    return XpResponse(**data)
+
+
+@router.get("/xp-leaderboard", response_model=list[dict])
+async def xp_leaderboard(session: SessionDependency, limit: int = Query(20, ge=1, le=100)):
+    from sqlalchemy import text as _text
+    result = await session.execute(
+        _text("""
+            SELECT u.id AS user_id, u.username, ux.xp, ux.level
+            FROM user_xp ux
+            JOIN users u ON u.id = ux.user_id
+            ORDER BY ux.xp DESC
+            LIMIT :limit
+        """),
+        {"limit": limit},
+    )
+    return [dict(row) for row in result.mappings()]

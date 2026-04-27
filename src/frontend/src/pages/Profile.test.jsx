@@ -9,6 +9,10 @@ vi.mock('../context/authContext', () => ({
   useAuth: () => ({ auth: mockAuth }),
 }))
 
+vi.mock('../context/notificationContext', () => ({
+  useNotifications: () => ({ achievementQueue: [], dismissAchievement: vi.fn() }),
+}))
+
 vi.mock('../Components/Navbar', () => ({
   default: () => <div data-testid="navbar" />,
 }))
@@ -43,6 +47,8 @@ function mockProfileBoot({ avatarUrl = '/uploads/avatars/1.png' } = {}) {
   // 2) GET /api/users/profile/{id}
   // 3) GET /api/game/matches/history?player_id={id}
   // 4) GET /api/game/leaderboard?player_id={id}&limit=1
+  // 5) GET /api/game/xp/{id}          (fired after core profile loads)
+  // 6) GET /api/game/achievements/{id} (fired after core profile loads)
   vi.spyOn(global, 'fetch')
     .mockResolvedValueOnce(
       new Response(JSON.stringify({ id: 1, username: 'alice' }), {
@@ -91,6 +97,17 @@ function mockProfileBoot({ avatarUrl = '/uploads/avatars/1.png' } = {}) {
         }),
         { status: 200, headers: { 'Content-Type': 'application/json' } }
       )
+    )
+    // XP response (loaded after core profile)
+    .mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ user_id: 1, xp: 25, level: 1, xp_in_level: 25, xp_to_next_level: 100 }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      )
+    )
+    // Achievements response (loaded after core profile)
+    .mockResolvedValueOnce(
+      new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } })
     )
 }
 

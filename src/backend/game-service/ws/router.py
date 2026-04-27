@@ -506,36 +506,19 @@ async def _on_game_over(game_id: str, winner_id: int, score_p1: int, score_p2: i
         async with AsyncSessionLocal() as db:
             match_id = _match_ids.get(game_id)
             if match_id is not None:
-                if winner_id == AI_PLAYER_ID:
-                    # AI has no users row in production, so award_xp would raise
-                    # a FK violation and rollback the whole transaction, leaving
-                    # the match stuck 'ongoing'. Update the row directly instead.
-                    await db.execute(
-                        text(
-                            "UPDATE matches "
-                            "SET status = 'finished', "
-                            "    winner_id = :winner_id, "
-                            "    score_p1 = :score_p1, "
-                            "    score_p2 = :score_p2, "
-                            "    finished_at = NOW() "
-                            "WHERE id = :match_id"
-                        ),
-                        {
-                            "match_id": match_id,
-                            "winner_id": winner_id,
-                            "score_p1": score_p1,
-                            "score_p2": score_p2,
-                        },
-                    )
-                    await db.commit()
-                else:
-                    await finish_match(
-                        db,
-                        match_id,
-                        winner_id,
-                        score_p1,
-                        score_p2
-                    )
+                # finish_match() now skips XP awarding for AI_PLAYER_ID on
+                # either side (see persistence.py), so the previous AI-bypass
+                # raw-UPDATE path is no longer needed and would skip the
+                # human loser's XP/achievements when AI wins. Always go
+                # through finish_match() for consistent behavior across the
+                # REST and WS code paths.
+                await finish_match(
+                    db,
+                    match_id,
+                    winner_id,
+                    score_p1,
+                    score_p2
+                )
     except SQLAlchemyError:
         pass  # best-effort
     finally:

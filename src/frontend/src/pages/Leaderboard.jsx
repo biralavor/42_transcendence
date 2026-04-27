@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import NavbarComponent from '../Components/Navbar'
+import { apiCall } from '../utils/apiClient'
+import './Leaderboard.css'
 
 /**
  * @typedef {Object} LeaderboardEntry
@@ -56,9 +59,27 @@ export default function Leaderboard() {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [sortMode, setSortMode] = useState('xp')      // 'xp' | 'wins'
+  const [currentPage, setCurrentPage] = useState(0)
+  const [currentUserId, setCurrentUserId] = useState(null)
 
   const entries = page.results ?? [];
-  const summary = page.summary
+  const summary = page.summary ?? {
+    max_max_streak: { value: 0, display_name: 'No Data' },
+    max_current_streak: { value: 0, display_name: 'No Data' },
+    max_points: { value: 0, display_name: 'No Data' },
+  }
+
+  // Fetch caller's user_id once on mount for row highlighting.
+  // /leaderboard is a public route — use skipRefreshOn401 so logged-out
+  // visitors don't get redirected to /login by the apiClient's refresh flow.
+  useEffect(() => {
+    apiCall('/api/users/auth/me', { skipRefreshOn401: true })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data && typeof data.id === 'number') setCurrentUserId(data.id) })
+      .catch(() => {})
+  }, [])
+
   useEffect(() => {
     const controller = new AbortController()
     // Flag to track whether the component has been unmounted.  We set this to
@@ -75,7 +96,11 @@ export default function Leaderboard() {
       }
 
       try {
-        const leaderboardResp = await fetch('/api/game/leaderboard?limit=20', {
+        // Include tie-breakers so pagination is stable on equal values
+        // (e.g., many users tied at 0 XP would otherwise shuffle between pages).
+        const orderClause = `${sortMode}:desc,points:desc,goal_difference:desc,user_id:asc`
+        const url = `/api/game/leaderboard?order=${encodeURIComponent(orderClause)}&page=${currentPage}&limit=20`
+        const leaderboardResp = await fetch(url, {
           signal: controller.signal,
         })
         if (!leaderboardResp.ok) {
@@ -86,6 +111,17 @@ export default function Leaderboard() {
         // Skip updates if the request was aborted or the effect was cancelled.
         if (controller.signal.aborted || cancelled) return
         setPage(leaderboardData)
+        // Sync local currentPage to the backend's clamped value. If the
+        // requested page was out of range (e.g., the data set shrunk while
+        // the user was paging), the backend clamps to last_page. Without
+        // this sync, Previous/Next would keep operating on the stale
+        // requested page and could request out-of-range pages indefinitely.
+        if (
+          typeof leaderboardData.page === 'number' &&
+          leaderboardData.page !== currentPage
+        ) {
+          setCurrentPage(leaderboardData.page)
+        }
       } catch (requestError) {
         // Ignore abort errors; otherwise report a generic failure.  Avoid
         // updating state if the component has unmounted or the request was aborted.
@@ -105,7 +141,7 @@ export default function Leaderboard() {
       cancelled = true
       controller.abort()
     }
-  }, [])
+  }, [sortMode, currentPage])
 
   return (
     <div className="arcade-shell">
@@ -157,6 +193,25 @@ export default function Leaderboard() {
               </div>
             </div>
 
+            <div className="leaderboard-sort-toggle" role="group" aria-label="Sort leaderboard by">
+              <button
+                type="button"
+                aria-pressed={sortMode === 'xp'}
+                className={sortMode === 'xp' ? 'active' : ''}
+                onClick={() => { setSortMode('xp'); setCurrentPage(0) }}
+              >
+                XP
+              </button>
+              <button
+                type="button"
+                aria-pressed={sortMode === 'wins'}
+                className={sortMode === 'wins' ? 'active' : ''}
+                onClick={() => { setSortMode('wins'); setCurrentPage(0) }}
+              >
+                Wins
+              </button>
+            </div>
+
             {/* Old-style rankings table */}
             <div className="leaderboard-table-shell">
               {loading && <p className="arcade-copy mb-0">Loading leaderboard...</p>}
@@ -170,26 +225,42 @@ export default function Leaderboard() {
                   <table className="leaderboard-table">
                     <thead>
                       <tr>
-                        <th title='Player position in ranking'>Rank</th>
-                        <th title='Player display name'>Player</th>
-                        <th title='Wins'>W</th>
-                        <th title='Losses'>L</th>
-                        <th title='Games Played'>GP</th>
-                        <th title='Goals For, that is goals scored'>GF</th>
-                        <th title='Goals Against, that is goals conceded'>GA</th>
-                        <th title='Goals Difference, that is the difference between scored and conceded'>GD</th>
-                        <th title='Points'>Pts</th>
-                        <th title='Max Win Streak'>MWS</th>
-                        <th title='Current Win Streak'>CWS</th>
+                        <th>Rank</th>
+                        <th>Player</th>
+                        <th>W<span className="th-subtitle">Wins</span></th>
+                        <th>L<span className="th-subtitle">Losses</span></th>
+                        <th>GP<span className="th-subtitle">Games<br />Played</span></th>
+                        <th>GF<span className="th-subtitle">Goals<br />For</span></th>
+                        <th>GA<span className="th-subtitle">Goals<br />Against</span></th>
+                        <th>GD<span className="th-subtitle">Goal<br />Difference</span></th>
+                        <th>Pts<span className="th-subtitle">Points</span></th>
+                        <th>MWS<span className="th-subtitle">Max Win<br />Streak</span></th>
+                        <th>CWS<span className="th-subtitle">Current<br />Win Streak</span></th>
+                        <th>Lvl<span className="th-subtitle">Level</span></th>
+                        <th>XP</th>
                       </tr>
                     </thead>
                     <tbody>
                       {entries.map((entry) => {
-                        const rowClass = entry.rank <= 3 ? `leaderboard-top-${entry.rank}` : ''
+                        const baseClass = entry.rank <= 3 ? `leaderboard-top-${entry.rank}` : ''
+                        const isMe = currentUserId !== null && entry.user_id === currentUserId
+                        const rowClass = [baseClass, isMe ? 'current-user-row' : ''].filter(Boolean).join(' ')
                         return (
                           <tr key={entry.user_id} className={rowClass}>
                             <td>#{entry.rank}</td>
-                            <td>{entry.display_name || `Player ${entry.user_id}`}</td>
+                            <td>
+                              <img
+                                src={entry.avatar_url || '/avatar_placeholder.jpg'}
+                                alt={`${entry.display_name || `Player ${entry.user_id}`} avatar`}
+                                className="leaderboard-avatar"
+                              />
+                              <Link
+                                to={`/profile/${entry.user_id}`}
+                                className="leaderboard-username-link"
+                              >
+                                {entry.display_name || `Player ${entry.user_id}`}
+                              </Link>
+                            </td>
                             <td>{entry.wins}</td>
                             <td>{entry.losses}</td>
                             <td>{entry.total_games}</td>
@@ -199,6 +270,8 @@ export default function Leaderboard() {
                             <td>{entry.points}</td>
                             <td>{entry.max_streak}</td>
                             <td>{entry.current_streak}</td>
+                            <td>{entry.level ?? '—'}</td>
+                            <td>{entry.xp ?? '—'}</td>
                           </tr>
                         )
                       })}
@@ -206,6 +279,26 @@ export default function Leaderboard() {
                   </table>
                 </div>
               )}
+            </div>
+
+            <div className="leaderboard-pagination">
+              <button
+                type="button"
+                onClick={() => setCurrentPage(p => Math.max(0, p - 1))}
+                disabled={page.page <= 0}
+              >
+                Previous
+              </button>
+              <span>
+                Page {page.page + 1} of {page.last_page + 1} · {page.total} players total
+              </span>
+              <button
+                type="button"
+                onClick={() => setCurrentPage(p => Math.min(page.last_page, p + 1))}
+                disabled={page.page >= page.last_page}
+              >
+                Next
+              </button>
             </div>
           </div>
         </section>

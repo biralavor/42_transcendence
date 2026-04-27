@@ -529,8 +529,16 @@ async def finish_match(
     match.score_p2 = score_p2
     match.finished_at = datetime.now(timezone.utc)
     match.status = "finished"
+    # AI player is represented by user_id = 0 (AI_PLAYER_ID sentinel).
+    # Skip XP/achievement awarding for the AI on either side — it has no
+    # row in the `users` table, so award_xp would violate the FK on user_xp.user_id.
+    AI_PLAYER_ID = 0
+    loser_id = match.player2_id if winner_id == match.player1_id else match.player1_id
     await db.flush()
-    await award_xp(winner_id, 10, db)
+    if winner_id != AI_PLAYER_ID:
+        await award_xp(winner_id, 25, db)
+    if loser_id != AI_PLAYER_ID:
+        await award_xp(loser_id, 5, db)
     await db.commit()
     await db.refresh(match)
     return match
@@ -723,6 +731,7 @@ def leaderboard_order_by_str(sort_assoc: list[tuple[str, str]] | None) -> str | 
     valid_columns = [
         'rank',
         'display_name',
+        'user_id',
         'points',
         'total_games',
         'wins',
@@ -731,7 +740,9 @@ def leaderboard_order_by_str(sort_assoc: list[tuple[str, str]] | None) -> str | 
         'goals_conceded',
         'goal_difference',
         'max_streak',
-        'current_streak'
+        'current_streak',
+        'xp',
+        'level',
     ]
     return get_order_by_str(sort_assoc, valid_columns)
 
@@ -745,6 +756,7 @@ async def get_leaderboard_paginated(
 ) -> dict | None:
     offset = page * limit
     default_sort_string = """
+xp DESC,
 points DESC,
 goal_difference DESC,
 goals_scored DESC,
@@ -752,6 +764,13 @@ user_id ASC
     """
     sort_string = leaderboard_order_by_str(sort_assoc)
     sort_string = sort_string if sort_string is not None else default_sort_string
+    # `rank` is the OUTPUT of ROW_NUMBER; it can't be referenced inside its own
+    # ORDER BY. When the user requests `order=rank:...`, fall back to the default
+    # sort for the ROW_NUMBER computation. Result-list ordering still honors
+    # `sort_string` (so `order=rank:desc` returns lowest-ranked rows first).
+    row_number_sort = (
+        default_sort_string if 'rank' in sort_string.lower() else sort_string
+    )
     statement = text(f"""
 WITH all_matches AS
 (
@@ -874,6 +893,8 @@ WITH all_matches AS
         AS user_id
         , COALESCE(NULLIF(TRIM(users.display_name), ''), users.username)
         AS display_name
+        , users.avatar_url
+        AS avatar_url
         , sum(wins)
         AS wins
         , sum(losses)
@@ -890,20 +911,27 @@ WITH all_matches AS
         AS points
         , current_streak
         , max_streak
+        , COALESCE(user_xp.xp, 0)
+        AS xp
+        , COALESCE(user_xp.level, 1)
+        AS level
     FROM stats_all
         INNER JOIN users
             ON users.id = stats_all.user_id
         INNER JOIN user_win_streak_stats
             ON user_win_streak_stats.user_id = users.id
-    GROUP BY users.id, users.display_name, current_streak, max_streak
+        LEFT JOIN user_xp
+            ON user_xp.user_id = users.id
+    GROUP BY users.id, users.display_name, users.avatar_url, current_streak, max_streak, user_xp.xp, user_xp.level
 )
 , ranking_results AS
 (
     SELECT
-        ROW_NUMBER() OVER (ORDER BY {default_sort_string})
+        ROW_NUMBER() OVER (ORDER BY {row_number_sort})
         AS rank
         , display_name
         , user_id
+        , avatar_url
         , points
         , total_games
         , wins
@@ -913,6 +941,8 @@ WITH all_matches AS
         , goal_difference
         , current_streak
         , max_streak
+        , xp
+        , level
     FROM ranked_stats
 )
 , player_stats AS
@@ -947,7 +977,7 @@ WITH all_matches AS
                     'value', points
                 )
              FROM ranking_results
-             ORDER BY {default_sort_string}
+             ORDER BY points DESC, {default_sort_string}
              LIMIT 1),
             jsonb_build_object(
                 'display_name', 'No Data',
@@ -1170,6 +1200,42 @@ async def reward_game_achievement_if_should(
         }
         await insert_game_achievement(user_id, achievement, session)
 
+    # ── New badge conditions ─────────────────────────────────────────────────
+    total_games = await count_games(user_id, session)
+    if total_games >= 1:
+        await insert_game_achievement(user_id, {
+            "a_key": "first_game", "a_name": "Getting Started",
+            "a_desc": "Play your first game", "a_icon": "(ง •_•)ง",
+        }, session)
+
+    if await won_vs_ai(user_id, session):
+        await insert_game_achievement(user_id, {
+            "a_key": "ai_conqueror", "a_name": "AI Conqueror",
+            "a_desc": "Beat the AI opponent", "a_icon": "ʕっ•ᴥ•ʔっ",
+        }, session)
+
+    if await has_perfect_game(user_id, session):
+        await insert_game_achievement(user_id, {
+            "a_key": "perfect_game", "a_name": "Perfect Pong",
+            "a_desc": "Win a game 10-0", "a_icon": "¬‿¬",
+        }, session)
+
+    xp_result = await session.execute(
+        text("SELECT level FROM user_xp WHERE user_id = :uid"), {"uid": user_id}
+    )
+    level_row = xp_result.one_or_none()
+    if level_row:
+        if level_row.level >= 5:
+            await insert_game_achievement(user_id, {
+                "a_key": "level_5", "a_name": "Rising Star",
+                "a_desc": "Reach Level 5", "a_icon": "★彡(◕‿◕)",
+            }, session)
+        if level_row.level >= 10:
+            await insert_game_achievement(user_id, {
+                "a_key": "level_10", "a_name": "Elite Player",
+                "a_desc": "Reach Level 10", "a_icon": "(ﾉ≧∀≦)ﾉ",
+            }, session)
+
 
 async def insert_game_achievement(
         user_id: int, achievement: dict[str,str], session: AsyncSession):
@@ -1256,6 +1322,88 @@ LIMIT 1
     }
 
     return {**ret}
+
+
+async def count_games(user_id: int, session: AsyncSession) -> int:
+    """Total games played (won or lost) by user_id, including AI games."""
+    result = await session.execute(
+        text(
+            "SELECT COUNT(*) FROM matches "
+            "WHERE (player1_id = :uid OR player2_id = :uid) AND status = 'finished'"
+        ),
+        {"uid": user_id},
+    )
+    return result.scalar_one() or 0
+
+
+async def won_vs_ai(user_id: int, session: AsyncSession) -> bool:
+    """True if user has at least one win against AI (player2_id = 0)."""
+    result = await session.execute(
+        text(
+            "SELECT COUNT(*) FROM matches "
+            "WHERE winner_id = :uid AND player2_id = 0 AND status = 'finished'"
+        ),
+        {"uid": user_id},
+    )
+    return (result.scalar_one() or 0) >= 1
+
+
+async def has_perfect_game(user_id: int, session: AsyncSession) -> bool:
+    """True if user has won any match with opponent scoring 0."""
+    result = await session.execute(
+        text(
+            "SELECT COUNT(*) FROM matches "
+            "WHERE winner_id = :uid AND status = 'finished' "
+            "AND ("
+            "  (player1_id = :uid AND score_p2 = 0) OR "
+            "  (player2_id = :uid AND score_p1 = 0)"
+            ")"
+        ),
+        {"uid": user_id},
+    )
+    return (result.scalar_one() or 0) >= 1
+
+
+async def get_achievements_for_user(user_id: int, session: AsyncSession) -> list[dict]:
+    """Return full achievement catalog with per-user earned status, sorted earned-first."""
+    result = await session.execute(
+        text("""
+            SELECT
+                a.key,
+                a.name,
+                a.description,
+                a.icon,
+                (ua.user_id IS NOT NULL)      AS earned,
+                ua.earned_at
+            FROM achievements a
+            LEFT JOIN user_achievements ua
+                ON ua.achievement_id = a.id AND ua.user_id = :uid
+            ORDER BY
+                earned DESC,
+                ua.earned_at DESC NULLS LAST,
+                a.key ASC
+        """),
+        {"uid": user_id},
+    )
+    return [dict(row) for row in result.mappings()]
+
+
+async def get_xp_for_user(user_id: int, session: AsyncSession) -> dict | None:
+    """Return XP row for user, or None if user has never played."""
+    result = await session.execute(
+        text("SELECT user_id, xp, level FROM user_xp WHERE user_id = :uid"),
+        {"uid": user_id},
+    )
+    row = result.mappings().one_or_none()
+    if row is None:
+        return None
+    return {
+        "user_id": row["user_id"],
+        "xp": row["xp"],
+        "level": row["level"],
+        "xp_in_level": row["xp"] % 100,
+        "xp_to_next_level": 100,
+    }
 
 
 # async def get_leaderboard_paginated(

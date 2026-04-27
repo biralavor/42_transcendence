@@ -10,6 +10,7 @@ export function NotificationProvider({ children }) {
     const { unreadCounts, clearUnread, dmSenders } = useUnread()
     const [userId, setUserId] = useState(null)
     const [notifications, setNotifications] = useState([])
+    const [achievementQueue, setAchievementQueue] = useState([])
     const inviteVisibleRef = useRef(false)
     // Stable first-seen timestamp per DM room slug — set once, never updated, so sort order is stable
     const dmFirstSeenRef = useRef({})
@@ -108,6 +109,7 @@ export function NotificationProvider({ children }) {
         if (!auth.access_token) {
             setUserId(null)
             setNotifications([])
+            setAchievementQueue([])  // prevent stale toasts from leaking across logout/user switch
             dmFirstSeenRef.current = {}
             return
         }
@@ -125,6 +127,7 @@ export function NotificationProvider({ children }) {
                     console.error('[notificationContext] Failed to get user ID:', err.message)
                     setUserId(null)
                     setNotifications([])
+                    setAchievementQueue([])  // prevent stale toasts on /auth/me failure
                     dmFirstSeenRef.current = {}
                 }
             })
@@ -156,6 +159,20 @@ export function NotificationProvider({ children }) {
                 const frame = JSON.parse(event.data)
                 if (frame.type !== 'notification') return
                 const notif = frame.notification
+
+                // Route game_achievement to toast queue instead of main notification list.
+                // Dedupe by notif.id (WS reconnects can resend events) and cap at 20
+                // to match the main notifications list and prevent unbounded growth.
+                if (notif.type === 'game_achievement') {
+                    setAchievementQueue(prev => {
+                        if (notif.id != null && prev.some(a => a.id === notif.id)) {
+                            return prev
+                        }
+                        return [...prev, notif].slice(-20)
+                    })
+                    return
+                }
+
                 // Suppress badge for game_invite when FriendsSidebar is already showing the invite.
                 // Mark as read so totalUnreadCount (derived from list) doesn't count it.
                 const suppressed = notif.type === 'game_invite' && inviteVisibleRef.current
@@ -276,6 +293,10 @@ export function NotificationProvider({ children }) {
         [notifications]
     )
 
+    const dismissAchievement = useCallback((id) => {
+        setAchievementQueue(prev => prev.filter(a => a.id !== id))
+    }, [])
+
     const value = useMemo(() => ({
         notifications: combinedNotifications,
         unreadCount: totalUnreadCount,
@@ -284,7 +305,9 @@ export function NotificationProvider({ children }) {
         markAllRead,
         removeNotification,
         setInviteVisible,
-    }), [combinedNotifications, totalUnreadCount, fetchNotifications, markRead, markAllRead, removeNotification, setInviteVisible])
+        achievementQueue,
+        dismissAchievement,
+    }), [combinedNotifications, totalUnreadCount, fetchNotifications, markRead, markAllRead, removeNotification, setInviteVisible, achievementQueue, dismissAchievement])
 
 
 

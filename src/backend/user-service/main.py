@@ -248,7 +248,15 @@ async def respond_to_request(
     result = await _friends.respond_to_friend_request(current_user.id, request_id, body.action, session)
     if body.action == "decline":
         return Response(status_code=204)
-    
+
+    # Commit the friendship + achievement work BEFORE attempting the notification.
+    # `friends.respond_to_friend_request()` already calls
+    # `reward_friendship_achievement_if_should()` inside its savepoint, so we
+    # must NOT call it again here (it would duplicate friend_count queries +
+    # achievement INSERT attempts). And committing now ensures that a notification
+    # failure doesn't roll back the accepted friendship.
+    await session.commit()
+
     try:
         notif = await _notifications.create_notification(
             session, result.requester_id, "friend_request_accepted",
@@ -258,10 +266,10 @@ async def respond_to_request(
         await notification_manager.broadcast(str(result.requester_id), _notif_payload(notif))
     except ValueError as e:
         # Message length validation failed — log but don't fail the request
-        # (friendship acceptance was already processed)
+        # (friendship acceptance was already committed above)
         import sys
         print(f"[WARNING] Failed to create notification: {e}", file=sys.stderr)
-    
+
     return result
 
 
