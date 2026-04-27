@@ -1290,16 +1290,38 @@ _total_test_files=0
 _mock_files=0
 _smoke_files=0
 _pure_files=0
+_total_test_cases=0
+_mock_cases=0
+_smoke_cases=0
+_pure_cases=0
+
+# count_py_cases <file>: count `def test_*` and `async def test_*` definitions.
+# (Underestimates parametrized tests — pytest expands @parametrize to N cases,
+# but we count the def once. Approximation good enough for pyramid shape.)
+# Using `grep | wc -l` so the function always outputs exactly one integer
+# (grep -c can dual-print when combined with `|| echo 0` on no-match).
+count_py_cases() {
+    grep -E '^(async )?def test_' "$1" 2>/dev/null | wc -l
+}
+# count_js_cases <file>: count `it(...)` and `test(...)` test definitions.
+count_js_cases() {
+    grep -E '^[[:space:]]*(it|test)\(' "$1" 2>/dev/null | wc -l
+}
 
 if [[ -d "$_BACKEND" ]]; then
     while IFS= read -r f; do
         _total_test_files=$((_total_test_files + 1))
+        n=$(count_py_cases "$f")
+        _total_test_cases=$((_total_test_cases + n))
         if grep -lqE "create_async_engine|_TestSession|NullPool|begin_nested" "$f" 2>/dev/null; then
             _smoke_files=$((_smoke_files + 1))
+            _smoke_cases=$((_smoke_cases + n))
         elif grep -lqE "MagicMock|AsyncMock|mock_db_session|unittest.mock" "$f" 2>/dev/null; then
             _mock_files=$((_mock_files + 1))
+            _mock_cases=$((_mock_cases + n))
         else
             _pure_files=$((_pure_files + 1))
+            _pure_cases=$((_pure_cases + n))
         fi
     done < <(find "$_BACKEND" -name "test_*.py" \
                   ! -path "*/__pycache__/*" ! -path "*/outdated/*" 2>/dev/null)
@@ -1308,32 +1330,42 @@ fi
 if [[ -d "$_FRONTEND" ]]; then
     while IFS= read -r f; do
         _total_test_files=$((_total_test_files + 1))
+        n=$(count_js_cases "$f")
+        _total_test_cases=$((_total_test_cases + n))
         if grep -lqE "vi.mock|vi\.fn|vi\.spyOn|MockResolvedValue" "$f" 2>/dev/null; then
             _mock_files=$((_mock_files + 1))
+            _mock_cases=$((_mock_cases + n))
         else
             _pure_files=$((_pure_files + 1))
+            _pure_cases=$((_pure_cases + n))
         fi
     done < <(find "$_FRONTEND" \( -name "*.test.jsx" -o -name "*.test.js" \) 2>/dev/null)
 fi
 
 _api_e2e_files=0
+_api_e2e_cases=0
 if [[ -d "$_API_E2E" ]]; then
     _api_e2e_files=$(find "$_API_E2E" -name "test_*.py" 2>/dev/null | wc -l)
+    while IFS= read -r f; do
+        n=$(count_py_cases "$f")
+        _api_e2e_cases=$((_api_e2e_cases + n))
+    done < <(find "$_API_E2E" -name "test_*.py" 2>/dev/null)
 fi
 
-if [[ $_total_test_files -gt 0 ]]; then
-    _mock_pct=$((_mock_files * 100 / _total_test_files))
-    _smoke_pct=$((_smoke_files * 100 / _total_test_files))
-    _pure_pct=$((_pure_files * 100 / _total_test_files))
+if [[ $_total_test_cases -gt 0 ]]; then
+    _mock_pct=$((_mock_cases * 100 / _total_test_cases))
+    _smoke_pct=$((_smoke_cases * 100 / _total_test_cases))
+    _pure_pct=$((_pure_cases * 100 / _total_test_cases))
 else
     _mock_pct=0; _smoke_pct=0; _pure_pct=0
 fi
 
 printf "  Total test files (unit + smoke):  %d\n" "$_total_test_files"
-printf "  Mock-based tests:                 %d (%d%%)  ${YELLOW}target: 70-80%%${RESET}\n" "$_mock_files" "$_mock_pct"
-printf "  Real-DB smoke tests:              %d (%d%%)  ${YELLOW}target: 10-20%%${RESET}\n" "$_smoke_files" "$_smoke_pct"
-printf "  Pure-logic tests:                 %d (%d%%)\n" "$_pure_files" "$_pure_pct"
-printf "  API E2E test files:               %d        ${YELLOW}target: ≥3${RESET}\n" "$_api_e2e_files"
+printf "  Total test cases (unit + smoke):  %d\n" "$_total_test_cases"
+printf "  Mock-based tests:                 %d cases / %d files (%d%%)  ${YELLOW}target: 70-80%%${RESET}\n" "$_mock_cases" "$_mock_files" "$_mock_pct"
+printf "  Real-DB smoke tests:              %d cases / %d files (%d%%)  ${YELLOW}target: 10-20%%${RESET}\n" "$_smoke_cases" "$_smoke_files" "$_smoke_pct"
+printf "  Pure-logic tests:                 %d cases / %d files (%d%%)\n" "$_pure_cases" "$_pure_files" "$_pure_pct"
+printf "  API E2E:                          %d cases / %d files       ${YELLOW}target: ≥3 files${RESET}\n" "$_api_e2e_cases" "$_api_e2e_files"
 
 # Health verdict
 _warnings=0
