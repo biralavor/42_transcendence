@@ -38,6 +38,10 @@ async def client():
         test_users = [
             (5001, "test_alice"), (5002, "test_bob"), (5003, "test_charlie"),
             (5010, "test_user10"), (5020, "test_user20"), (5030, "test_user30"),
+            (5040, "test_user40"), (5041, "test_user41"), (5042, "test_user42"),
+            (5043, "test_user43"), (5044, "test_user44"), (5045, "test_user45"),
+            (5060, "test_user60"), (5061, "test_user61"), (5062, "test_user62"),
+            (5063, "test_user63"),
             (5099, "test_user99"), (5999, "test_user999")
         ]
         for uid, name in test_users:
@@ -78,6 +82,8 @@ async def auth_client():
         test_users = [
             (5001, "test_alice"), (5002, "test_bob"), (5003, "test_charlie"),
             (5010, "test_user10"), (5020, "test_user20"), (5030, "test_user30"),
+            (5040, "test_user40"), (5041, "test_user41"), (5042, "test_user42"),
+            (5043, "test_user43"), (5044, "test_user44"), (5045, "test_user45"),
             (5099, "test_user99"), (5999, "test_user999")
         ]
         for uid, name in test_users:
@@ -688,3 +694,177 @@ async def test_get_xp_returns_level_and_breakdown(client):
     assert "xp_in_level" in data
     assert data["xp_to_next_level"] == 100
     assert data["xp_in_level"] == data["xp"] % 100
+
+
+# --------------------------------------------------------------------------- #
+# GET /leaderboard — issue #238 enhancements
+# --------------------------------------------------------------------------- #
+
+@pytest.mark.asyncio
+async def test_leaderboard_response_includes_xp_level_avatar_url(client):
+    """Each row in /leaderboard results includes xp, level, avatar_url fields."""
+    resp_create = await client.post("/matches", json={"player1_id": 5040, "player2_id": 5041})
+    match_id = resp_create.json()["id"]
+    await client.post(f"/matches/{match_id}/finish", json={"winner_id": 5040, "score_p1": 5, "score_p2": 2})
+
+    resp = await client.get("/leaderboard")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert isinstance(data["results"], list)
+    assert len(data["results"]) >= 1
+    for row in data["results"]:
+        assert "xp" in row, f"Missing xp in row: {row}"
+        assert "level" in row, f"Missing level in row: {row}"
+        assert "avatar_url" in row, f"Missing avatar_url in row: {row}"
+        assert isinstance(row["xp"], int)
+        assert isinstance(row["level"], int)
+        assert row["avatar_url"] is None or isinstance(row["avatar_url"], str)
+
+
+@pytest.mark.asyncio
+async def test_leaderboard_order_xp_desc_sorts_by_xp(client):
+    """GET /leaderboard?order=xp:desc orders by XP descending.
+
+    This test uses a setup where default-sort (points) and xp-sort disagree, so
+    it actually discriminates whether `order=xp:desc` is being honored:
+      - 5060: 1 win + 6 losses → 55 XP, 3 points
+      - 5061: 2 wins + 0 losses → 50 XP, 6 points
+    Under default (points DESC): 5061 ranks above 5060.
+    Under xp DESC:                5060 ranks above 5061.
+
+    Uses fresh user IDs (5060-5063) untouched by other tests so the scenario
+    actually discriminates regardless of accumulated DB state from prior runs.
+    """
+    # 5060 wins 1 against 5062
+    m_win = await client.post("/matches", json={"player1_id": 5060, "player2_id": 5062})
+    await client.post(
+        f"/matches/{m_win.json()['id']}/finish",
+        json={"winner_id": 5060, "score_p1": 7, "score_p2": 3},
+    )
+    # 5060 loses 6 to 5062
+    for _ in range(6):
+        m_loss = await client.post("/matches", json={"player1_id": 5060, "player2_id": 5062})
+        await client.post(
+            f"/matches/{m_loss.json()['id']}/finish",
+            json={"winner_id": 5062, "score_p1": 3, "score_p2": 7},
+        )
+
+    # 5061 wins 2 against 5063 (separate opponent so 5062's record stays clean)
+    for _ in range(2):
+        m = await client.post("/matches", json={"player1_id": 5061, "player2_id": 5063})
+        await client.post(
+            f"/matches/{m.json()['id']}/finish",
+            json={"winner_id": 5061, "score_p1": 7, "score_p2": 3},
+        )
+
+    resp = await client.get("/leaderboard?order=xp:desc&limit=100")
+    assert resp.status_code == 200
+    rows = resp.json()["results"]
+    # Use position in the returned `results` list to directly verify that
+    # `order=xp:desc` is honored, independent of how `rank` is computed.
+    pos_by_uid = {r["user_id"]: i for i, r in enumerate(rows)}
+    assert 5060 in pos_by_uid and 5061 in pos_by_uid, (
+        f"Expected 5060 and 5061 in response; got {list(pos_by_uid.keys())[:10]}..."
+    )
+    assert pos_by_uid[5060] < pos_by_uid[5061], (
+        f"Expected user 5060 (more XP) to appear before 5061 in the result list "
+        f"under xp:desc; got positions {pos_by_uid[5060]} vs {pos_by_uid[5061]}. "
+        f"If 5060 appears AFTER 5061, the order=xp:desc param is being ignored."
+    )
+
+
+@pytest.mark.asyncio
+async def test_leaderboard_default_sorts_by_xp_desc(client):
+    """GET /leaderboard with no order query param defaults to XP descending.
+
+    Verifies the global ordering invariant — every adjacent pair satisfies xp[i] >= xp[i+1].
+    """
+    # Touch a fresh user so there's at least one row with non-zero XP
+    m = await client.post("/matches", json={"player1_id": 5045, "player2_id": 5044})
+    await client.post(f"/matches/{m.json()['id']}/finish", json={"winner_id": 5045, "score_p1": 7, "score_p2": 1})
+
+    resp = await client.get("/leaderboard?limit=100")
+    assert resp.status_code == 200
+    rows = resp.json()["results"]
+
+    # Verify global ordering invariant — for any two adjacent rows, xp[i] >= xp[i+1]
+    xps = [r["xp"] for r in rows]
+    assert xps == sorted(xps, reverse=True), (
+        f"Default sort should be XP DESC; got xps={xps}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_leaderboard_order_wins_desc_sorts_by_wins(client):
+    """GET /leaderboard?order=wins:desc orders results by wins descending."""
+    resp = await client.get("/leaderboard?order=wins:desc&limit=100")
+    assert resp.status_code == 200
+    rows = resp.json()["results"]
+    if len(rows) < 2:
+        pytest.skip("Not enough rows to verify ordering")
+    wins_list = [r["wins"] for r in rows]
+    assert wins_list == sorted(wins_list, reverse=True), (
+        f"Expected wins DESC; got {wins_list}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_leaderboard_pagination_returns_correct_page(client):
+    """GET /leaderboard?page=1&limit=20 returns the second page with correct metadata."""
+    resp = await client.get("/leaderboard?page=1&limit=20")
+    assert resp.status_code == 200
+    data = resp.json()
+    # When the database has fewer than 21 ranked players, page is clamped to last_page.
+    # The response should still echo a valid page number and a list of results.
+    assert "page" in data
+    assert "last_page" in data
+    assert "per_page" in data
+    assert "total" in data
+    assert data["per_page"] == 20
+    assert isinstance(data["results"], list)
+
+
+@pytest.mark.asyncio
+async def test_leaderboard_rank_matches_list_position(client):
+    """After Issue #238, `rank` is computed using the user-requested sort (not
+    the default), so each row's `rank` should match its position in the
+    returned `results` list (offset by page * limit + 1).
+    """
+    resp = await client.get("/leaderboard?order=wins:desc&limit=100&page=0")
+    assert resp.status_code == 200
+    data = resp.json()
+    rows = data["results"]
+    if len(rows) < 2:
+        pytest.skip("Not enough rows to verify ranking")
+
+    # On page 0 with no prior offset, ranks should start at 1 and be monotonic
+    for i, row in enumerate(rows):
+        expected_rank = i + 1
+        assert row["rank"] == expected_rank, (
+            f"Row at position {i} has rank={row['rank']}, expected {expected_rank}. "
+            f"After Issue #238, rank should match list position when sorted by "
+            f"the user-requested order (here: wins:desc)."
+        )
+
+
+@pytest.mark.asyncio
+async def test_leaderboard_rank_changes_when_sort_changes(client):
+    """The same user can have different rank values under different sort orders,
+    because rank now reflects the user-requested sort (Issue #238 fix #10).
+    This is a sanity check that the rank field is no longer pinned to one fixed
+    sort across all requests.
+    """
+    resp_xp = await client.get("/leaderboard?order=xp:desc&limit=100")
+    resp_wins = await client.get("/leaderboard?order=wins:desc&limit=100")
+    assert resp_xp.status_code == 200 and resp_wins.status_code == 200
+
+    rows_xp = resp_xp.json()["results"]
+    rows_wins = resp_wins.json()["results"]
+    if len(rows_xp) < 2 or len(rows_wins) < 2:
+        pytest.skip("Not enough rows to verify cross-sort ranks")
+
+    # Both responses use position-based ranks (rank = position + 1),
+    # so the user at xp-rank-1 may differ from the user at wins-rank-1.
+    # Assert ranks are monotonic in each response.
+    assert [r["rank"] for r in rows_xp] == sorted([r["rank"] for r in rows_xp])
+    assert [r["rank"] for r in rows_wins] == sorted([r["rank"] for r in rows_wins])

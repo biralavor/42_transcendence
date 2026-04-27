@@ -43,7 +43,7 @@
 .profile-avatar-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.4rem;
+  gap: 1rem;
   justify-content: center;
 }
 
@@ -101,7 +101,7 @@
   margin: 0;
   color: var(--primary);
   font-family: 'Righteous', cursive;
-  font-size: clamp(2rem, 3vw, 2.6rem);
+  font-size: clamp(2.6rem, 3vw, 3rem);
   letter-spacing: 0.05em;
 }
 
@@ -109,7 +109,7 @@
   margin: 0.1rem 0 0.5rem;
   color: rgba(245, 245, 242, 0.8);
   font-family: 'VT323', monospace;
-  font-size: 1.15rem;
+  font-size: 1.2rem;
   letter-spacing: 0.06em;
 }
 
@@ -119,17 +119,20 @@
 }
 
 .profile-stat-card {
-  flex: 1;
+  flex-grow: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 96px;
+  min-height: 50px;
+  min-width: 50px;
+  max-height: 120px;
+  max-width: 120px;
   border: 1px solid rgba(251, 192, 45, 0.28);
   border-radius: 1rem;
   background: rgba(255, 255, 255, 0.04);
   text-align: center;
-  padding: 0.9rem 0.75rem;
+  padding: 2rem;
 }
 
 .profile-stat-value {
@@ -150,6 +153,7 @@
 /* Form controls on the profile page reuse the existing arcade styling */
 .profile-form-control .form-control {
   min-height: 64px;
+  margin-top: 2rem;
   padding-top: 1.6rem;
   border-radius: 1rem;
   border-width: 2px;
@@ -167,7 +171,7 @@
 }
 
 .profile-section-title {
-  margin: 2rem 0 1rem;
+  margin: 0.3rem 0 1rem;
   color: var(--primary);
   font-family: 'Righteous', cursive;
   font-size: 1.6rem;
@@ -184,6 +188,54 @@
   justify-content: center;
   width: 100%;
   margin-top: 1rem;
+}
+
+/* Asymmetric grid: top row has 3 cells (info | avatar | stats),
+   bottom row has 2 cells (prefs | ach). On mobile, all 5 stack vertically
+   in source order: info, avatar, stats, prefs, ach. */
+.profile-two-column {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-areas:
+    "info  info  avatar avatar stats  stats"
+    "prefs prefs prefs  ach    ach    ach";
+  gap: 2rem;
+  margin-top: 1.5rem;
+}
+
+.profile-grid-cell {
+  min-width: 0;
+}
+
+.profile-grid-cell--info   { grid-area: info; }
+.profile-grid-cell--avatar { grid-area: avatar; }
+.profile-grid-cell--stats  { grid-area: stats; }
+.profile-grid-cell--prefs  { grid-area: prefs; }
+.profile-grid-cell--ach    { grid-area: ach; }
+
+@media (max-width: 900px) {
+  .profile-two-column {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "info"
+      "avatar"
+      "stats"
+      "prefs"
+      "ach";
+  }
+}
+
+/* Profile sub-section inside Preferences */
+.profile-preferences-subsection {
+  margin-bottom: 1.25rem;
+}
+
+.profile-preferences-subtitle {
+  margin: 0 0 0.5rem;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  opacity: 0.6;
 }
 
 /* Match history styling */

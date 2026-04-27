@@ -254,6 +254,11 @@ describe('MyForm', () => {
 4. **Coverage:** Aim to cover both "happy paths" and edge cases/error conditions.
 5. **Clean Up:** If you create any temporary data in a real DB (rare), ensure it is cleaned up via teardown fixtures.
 6. **Async/await:** Always mark async tests with `@pytest.mark.asyncio` (though `asyncio_mode = auto` often handles this).
+7. **🚫 NEVER use `TRUNCATE` queries in tests.** Tests share a long-lived database between runs (no per-test reset). `TRUNCATE` would wipe data other tests depend on, breaking the suite. Use these patterns instead:
+   - **Rollback isolation** — see `game-service/tests/test_persistence.py:30` (`db` fixture). Wraps each test in a transaction + savepoint that gets rolled back on teardown. Best for unit-level tests of `persistence.py` functions.
+   - **High-ID seed pattern** — see `game-service/tests/test_router.py:33` (`client` fixture). Pre-seed test users with high IDs (5001+) that don't collide with prod-like data. Best for HTTP/endpoint tests. When adding new tests, pick fresh IDs that no other test has used (check existing fixture seed list).
+   - **Relative assertions** — instead of asserting absolute counts ("user has exactly 1 win"), assert relative ordering ("user X appears before user Y") or use `>=` for accumulated counters. State accumulates across runs, so absolute assertions are flaky.
+   - If you find yourself reaching for `TRUNCATE`, your test design is wrong. Refactor to one of the patterns above. If you genuinely need a clean slate, file an issue to discuss adding a test-only DB schema/container — don't `TRUNCATE` shared state.
 
 ### Frontend
 1. **Mock Modules Early:** Mock external modules (`react-router-dom`, API clients) at the top of the file, before rendering components.

@@ -128,6 +128,9 @@ class PlayerStats(BaseModel):
     current_streak: int
     goals_conceded: int
     goal_difference: int
+    xp: int = 0
+    level: int = 1
+    avatar_url: str | None = None
 
 
 class StatEntry(BaseModel):

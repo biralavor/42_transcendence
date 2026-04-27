@@ -734,7 +734,9 @@ def leaderboard_order_by_str(sort_assoc: list[tuple[str, str]] | None) -> str | 
         'goals_conceded',
         'goal_difference',
         'max_streak',
-        'current_streak'
+        'current_streak',
+        'xp',
+        'level',
     ]
     return get_order_by_str(sort_assoc, valid_columns)
 
@@ -748,6 +750,7 @@ async def get_leaderboard_paginated(
 ) -> dict | None:
     offset = page * limit
     default_sort_string = """
+xp DESC,
 points DESC,
 goal_difference DESC,
 goals_scored DESC,
@@ -755,6 +758,13 @@ user_id ASC
     """
     sort_string = leaderboard_order_by_str(sort_assoc)
     sort_string = sort_string if sort_string is not None else default_sort_string
+    # `rank` is the OUTPUT of ROW_NUMBER; it can't be referenced inside its own
+    # ORDER BY. When the user requests `order=rank:...`, fall back to the default
+    # sort for the ROW_NUMBER computation. Result-list ordering still honors
+    # `sort_string` (so `order=rank:desc` returns lowest-ranked rows first).
+    row_number_sort = (
+        default_sort_string if 'rank' in sort_string.lower() else sort_string
+    )
     statement = text(f"""
 WITH all_matches AS
 (
@@ -877,6 +887,8 @@ WITH all_matches AS
         AS user_id
         , COALESCE(NULLIF(TRIM(users.display_name), ''), users.username)
         AS display_name
+        , users.avatar_url
+        AS avatar_url
         , sum(wins)
         AS wins
         , sum(losses)
@@ -893,20 +905,27 @@ WITH all_matches AS
         AS points
         , current_streak
         , max_streak
+        , COALESCE(user_xp.xp, 0)
+        AS xp
+        , COALESCE(user_xp.level, 1)
+        AS level
     FROM stats_all
         INNER JOIN users
             ON users.id = stats_all.user_id
         INNER JOIN user_win_streak_stats
             ON user_win_streak_stats.user_id = users.id
-    GROUP BY users.id, users.display_name, current_streak, max_streak
+        LEFT JOIN user_xp
+            ON user_xp.user_id = users.id
+    GROUP BY users.id, users.display_name, users.avatar_url, current_streak, max_streak, user_xp.xp, user_xp.level
 )
 , ranking_results AS
 (
     SELECT
-        ROW_NUMBER() OVER (ORDER BY {default_sort_string})
+        ROW_NUMBER() OVER (ORDER BY {row_number_sort})
         AS rank
         , display_name
         , user_id
+        , avatar_url
         , points
         , total_games
         , wins
@@ -916,6 +935,8 @@ WITH all_matches AS
         , goal_difference
         , current_streak
         , max_streak
+        , xp
+        , level
     FROM ranked_stats
 )
 , player_stats AS
@@ -950,7 +971,7 @@ WITH all_matches AS
                     'value', points
                 )
              FROM ranking_results
-             ORDER BY {default_sort_string}
+             ORDER BY points DESC, {default_sort_string}
              LIMIT 1),
             jsonb_build_object(
                 'display_name', 'No Data',

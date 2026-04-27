@@ -361,73 +361,87 @@ export default function Profile() {
                   {avatarToast.message}
                 </div>
               )}
-              <div className="profile-header">
-                <div className="profile-avatar-wrapper">
-                  <img
-                    src={avatarSrc}
-                    alt="User avatar"
-                    className="profile-avatar"
-                    style={{ filter: avatarPreview ? 'none' : getAvatarFilter(userId) }}
-                  />
-                  {avatarBusy && (
-                    <div className="profile-avatar-spinner" aria-label="Uploading avatar" role="status">
-                      <span className="profile-spinner" />
-                    </div>
-                  )}
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    className="profile-avatar-file-input"
-                    onChange={handleAvatarPick}
-                    aria-label="Choose avatar image"
-                  />
-                  <div className="profile-avatar-actions">
-                    {!avatarPreview && (
-                      <>
-                        <button
-                          type="button"
-                          className="arcade-btn arcade-btn-secondary profile-avatar-btn"
-                          onClick={() => fileInputRef.current?.click()}
-                          disabled={avatarBusy}
-                        >
-                          Change avatar
-                        </button>
-                        <button
-                          type="button"
-                          className="arcade-btn arcade-btn-danger profile-avatar-btn"
-                          onClick={handleAvatarDelete}
-                          disabled={avatarBusy || !profile?.avatarUrl || profile.avatarUrl === PLACEHOLDER_AVATAR}
-                        >
-                          Remove
-                        </button>
-                      </>
-                    )}
-                    {avatarPreview && (
-                      <>
-                        <button
-                          type="button"
-                          className="arcade-btn arcade-btn-primary profile-avatar-btn"
-                          onClick={handleAvatarUpload}
-                          disabled={avatarBusy}
-                        >
-                          {avatarBusy ? 'Uploading…' : 'Confirm upload'}
-                        </button>
-                        <button
-                          type="button"
-                          className="arcade-btn arcade-btn-secondary profile-avatar-btn"
-                          onClick={clearAvatarSelection}
-                          disabled={avatarBusy}
-                        >
-                          Cancel
-                        </button>
-                      </>
+              <div className="profile-two-column">
+                {/* Cell (0,0): display name + @username + xpbar */}
+                <div className="profile-grid-cell profile-grid-cell--info">
+                  <div className="profile-info">
+                    <h1 className="profile-display-name">{profile.displayName || profile.username}</h1>
+                    <p className="profile-username">@{profile.username}</p>
+                    {xpData && (
+                      <XpBar level={xpData.level} xpInLevel={xpData.xp_in_level} />
                     )}
                   </div>
                 </div>
-                <div className="profile-info">
-                  <h1 className="profile-display-name">{profile.displayName || profile.username}</h1>
-                  <p className="profile-username">@{profile.username}</p>
+
+                {/* Cell (0,1): avatar */}
+                <div className="profile-grid-cell profile-grid-cell--avatar">
+                  <div className="profile-avatar-wrapper">
+                    <img
+                      src={avatarSrc}
+                      alt="User avatar"
+                      className="profile-avatar"
+                      style={{ filter: avatarPreview ? 'none' : getAvatarFilter(userId) }}
+                    />
+                    {avatarBusy && (
+                      <div className="profile-avatar-spinner" aria-label="Uploading avatar" role="status">
+                        <span className="profile-spinner" />
+                      </div>
+                    )}
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="profile-avatar-file-input"
+                      onChange={handleAvatarPick}
+                      aria-label="Choose avatar image"
+                    />
+                    <div className="profile-avatar-actions">
+                      {!avatarPreview && (
+                        <>
+                          <button
+                            type="button"
+                            className="arcade-btn arcade-btn-secondary profile-avatar-btn"
+                            onClick={() => fileInputRef.current?.click()}
+                            disabled={avatarBusy}
+                          >
+                            Change avatar
+                          </button>
+                          <button
+                            type="button"
+                            className="arcade-btn arcade-btn-danger profile-avatar-btn"
+                            onClick={handleAvatarDelete}
+                            disabled={avatarBusy || !profile?.avatarUrl || profile.avatarUrl === PLACEHOLDER_AVATAR}
+                          >
+                            Remove
+                          </button>
+                        </>
+                      )}
+                      {avatarPreview && (
+                        <>
+                          <button
+                            type="button"
+                            className="arcade-btn arcade-btn-primary profile-avatar-btn"
+                            onClick={handleAvatarUpload}
+                            disabled={avatarBusy}
+                          >
+                            {avatarBusy ? 'Uploading…' : 'Confirm upload'}
+                          </button>
+                          <button
+                            type="button"
+                            className="arcade-btn arcade-btn-secondary profile-avatar-btn"
+                            onClick={clearAvatarSelection}
+                            disabled={avatarBusy}
+                          >
+                            Cancel
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Cell (0,2): stats vertically aligned */}
+                <div className="profile-grid-cell profile-grid-cell--stats">
                   <div className="profile-stats">
                     <div className="profile-stat-card">
                       <span className="profile-stat-value">{wins}</span>
@@ -443,59 +457,80 @@ export default function Profile() {
                     </div>
                   </div>
                 </div>
-              </div>
 
-              <form className="profile-form" onSubmit={handleSave}>
-                {saveStatus && (
-                  <div className={`alert ${saveStatus.includes('successfully') ? 'alert-success' : 'alert-danger'} profile-alert`} role="alert">
-                    {saveStatus}
-                  </div>
-                )}
-                <div className="form-floating mb-3 arcade-form-control profile-form-control">
-                  <input
-                    type="text"
-                    className="form-control"
-                    id="displayName"
-                    name="displayName"
-                    placeholder="Display name"
-                    value={profile.displayName}
-                    onChange={handleChange}
-                  />
-                  <label htmlFor="displayName">Display name</label>
+                {/* Cell (1,0): Preferences (Profile sub-section + Game settings + Dark mode + Save) */}
+                <div className="profile-grid-cell profile-grid-cell--prefs">
+                  <form className="profile-form" onSubmit={handleSave}>
+                    {saveStatus && (
+                      <div className={`alert ${saveStatus.includes('successfully') ? 'alert-success' : 'alert-danger'} profile-alert`} role="alert">
+                        {saveStatus}
+                      </div>
+                    )}
+                    <div className="profile-preferences">
+                      <h2 className="profile-section-title">Preferences</h2>
+
+                      <div className="profile-preferences-subsection">
+                        <p className="profile-preferences-subtitle">Profile</p>
+                        <div className="form-floating mb-3 arcade-form-control profile-form-control">
+                          <input
+                            type="text"
+                            className="form-control"
+                            id="displayName"
+                            name="displayName"
+                            placeholder="Display name"
+                            value={profile.displayName}
+                            onChange={handleChange}
+                          />
+                          <label htmlFor="displayName">Display name</label>
+                        </div>
+                        <div className="form-floating mb-3 arcade-form-control profile-form-control">
+                          <textarea
+                            className="form-control"
+                            id="bio"
+                            name="bio"
+                            placeholder="Your bio"
+                            style={{ height: '100px' }}
+                            value={profile.bio}
+                            onChange={handleChange}
+                          />
+                          <label htmlFor="bio">Bio</label>
+                        </div>
+                      </div>
+
+                      <GameSettings />
+
+                      <div className="profile-preference-item form-check arcade-form-check">
+                        <input
+                          className="form-check-input"
+                          type="checkbox"
+                          id="darkMode"
+                          name="darkMode"
+                          checked={profile.darkMode}
+                          onChange={handleChange}
+                        />
+                        <label className="form-check-label" htmlFor="darkMode">
+                          Enable dark mode
+                        </label>
+                      </div>
+                    </div>
+                    <button className="arcade-btn arcade-btn-primary profile-save-btn" type="submit">
+                      Save profile
+                    </button>
+                  </form>
                 </div>
-                <div className="form-floating mb-3 arcade-form-control profile-form-control">
-                  <textarea
-                    className="form-control"
-                    id="bio"
-                    name="bio"
-                    placeholder="Your bio"
-                    style={{ height: '100px' }}
-                    value={profile.bio}
-                    onChange={handleChange}
-                  />
-                  <label htmlFor="bio">Bio</label>
+
+                {/* Cell (1,1): Achievements */}
+                <div className="profile-grid-cell profile-grid-cell--ach">
+                  <h2 className="profile-section-title">Achievements</h2>
+                  {achievements.length > 0 ? (
+                    <BadgeGrid achievements={achievements} />
+                  ) : (
+                    <p style={{ color: 'var(--metal-silver)', fontFamily: 'VT323, monospace' }}>
+                      No achievements unlocked yet.
+                    </p>
+                  )}
                 </div>
-                <div className="profile-preferences">
-                  <h2 className="profile-section-title">Preferences</h2>
-                  <GameSettings />
-                  <div className="profile-preference-item form-check arcade-form-check">
-                    <input
-                      className="form-check-input"
-                      type="checkbox"
-                      id="darkMode"
-                      name="darkMode"
-                      checked={profile.darkMode}
-                      onChange={handleChange}
-                    />
-                    <label className="form-check-label" htmlFor="darkMode">
-                      Enable dark mode
-                    </label>
-                  </div>
-                </div>
-                <button className="arcade-btn arcade-btn-primary profile-save-btn" type="submit">
-                  Save profile
-                </button>
-              </form>
+              </div>
 
               <div className="profile-history">
                 <h2 className="profile-section-title">Match history</h2>
@@ -533,19 +568,6 @@ export default function Profile() {
           </div>
         </div>
 
-        {xpData && (
-          <section className="profile-gamification" style={{ maxWidth: '800px', margin: '0 auto 2rem', padding: '0 1rem' }}>
-            <h2 style={{ marginBottom: '0.5rem' }}>Progress</h2>
-            <XpBar level={xpData.level} xpInLevel={xpData.xp_in_level} />
-          </section>
-        )}
-
-        {achievements.length > 0 && (
-          <section className="profile-gamification" style={{ maxWidth: '800px', margin: '0 auto 2rem', padding: '0 1rem' }}>
-            <h2 style={{ marginBottom: '0.5rem' }}>Achievements</h2>
-            <BadgeGrid achievements={achievements} />
-          </section>
-        )}
       </main>
 
       {achievementQueue.length > 0 && (
