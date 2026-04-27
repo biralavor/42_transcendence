@@ -1,10 +1,15 @@
-.game-settings { display: flex; flex-direction: column; gap: 1.5rem; }
+.game-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
 
 .game-settings__section-title {
   font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.1em;
   opacity: 0.6;
+  margin-top: 1rem;;
   margin-bottom: 0.5rem;
 }
 

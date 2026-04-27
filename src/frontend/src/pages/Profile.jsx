@@ -362,7 +362,19 @@ export default function Profile() {
                 </div>
               )}
               <div className="profile-two-column">
-                <div className="profile-left-column">
+                {/* Cell (0,0): display name + @username + xpbar */}
+                <div className="profile-grid-cell profile-grid-cell--info">
+                  <div className="profile-info">
+                    <h1 className="profile-display-name">{profile.displayName || profile.username}</h1>
+                    <p className="profile-username">@{profile.username}</p>
+                    {xpData && (
+                      <XpBar level={xpData.level} xpInLevel={xpData.xp_in_level} />
+                    )}
+                  </div>
+                </div>
+
+                {/* Cell (0,1): avatar */}
+                <div className="profile-grid-cell profile-grid-cell--avatar">
                   <div className="profile-avatar-wrapper">
                     <img
                       src={avatarSrc}
@@ -426,39 +438,67 @@ export default function Profile() {
                       )}
                     </div>
                   </div>
+                </div>
+
+                {/* Cell (0,2): stats vertically aligned */}
+                <div className="profile-grid-cell profile-grid-cell--stats">
+                  <div className="profile-stats">
+                    <div className="profile-stat-card">
+                      <span className="profile-stat-value">{wins}</span>
+                      <span className="profile-stat-label">Wins</span>
+                    </div>
+                    <div className="profile-stat-card">
+                      <span className="profile-stat-value">{userRankData?.rank ?? '-'}</span>
+                      <span className="profile-stat-label">Rank</span>
+                    </div>
+                    <div className="profile-stat-card">
+                      <span className="profile-stat-value">{matches}</span>
+                      <span className="profile-stat-label">Matches</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Cell (1,0): Preferences (Profile sub-section + Game settings + Dark mode + Save) */}
+                <div className="profile-grid-cell profile-grid-cell--prefs">
                   <form className="profile-form" onSubmit={handleSave}>
                     {saveStatus && (
                       <div className={`alert ${saveStatus.includes('successfully') ? 'alert-success' : 'alert-danger'} profile-alert`} role="alert">
                         {saveStatus}
                       </div>
                     )}
-                    <div className="form-floating mb-3 arcade-form-control profile-form-control">
-                      <input
-                        type="text"
-                        className="form-control"
-                        id="displayName"
-                        name="displayName"
-                        placeholder="Display name"
-                        value={profile.displayName}
-                        onChange={handleChange}
-                      />
-                      <label htmlFor="displayName">Display name</label>
-                    </div>
-                    <div className="form-floating mb-3 arcade-form-control profile-form-control">
-                      <textarea
-                        className="form-control"
-                        id="bio"
-                        name="bio"
-                        placeholder="Your bio"
-                        style={{ height: '100px' }}
-                        value={profile.bio}
-                        onChange={handleChange}
-                      />
-                      <label htmlFor="bio">Bio</label>
-                    </div>
                     <div className="profile-preferences">
                       <h2 className="profile-section-title">Preferences</h2>
+
+                      <div className="profile-preferences-subsection">
+                        <p className="profile-preferences-subtitle">Profile</p>
+                        <div className="form-floating mb-3 arcade-form-control profile-form-control">
+                          <input
+                            type="text"
+                            className="form-control"
+                            id="displayName"
+                            name="displayName"
+                            placeholder="Display name"
+                            value={profile.displayName}
+                            onChange={handleChange}
+                          />
+                          <label htmlFor="displayName">Display name</label>
+                        </div>
+                        <div className="form-floating mb-3 arcade-form-control profile-form-control">
+                          <textarea
+                            className="form-control"
+                            id="bio"
+                            name="bio"
+                            placeholder="Your bio"
+                            style={{ height: '100px' }}
+                            value={profile.bio}
+                            onChange={handleChange}
+                          />
+                          <label htmlFor="bio">Bio</label>
+                        </div>
+                      </div>
+
                       <GameSettings />
+
                       <div className="profile-preference-item form-check arcade-form-check">
                         <input
                           className="form-check-input"
@@ -478,28 +518,9 @@ export default function Profile() {
                     </button>
                   </form>
                 </div>
-                <div className="profile-right-column">
-                  <div className="profile-info">
-                    <h1 className="profile-display-name">{profile.displayName || profile.username}</h1>
-                    <p className="profile-username">@{profile.username}</p>
-                    {xpData && (
-                      <XpBar level={xpData.level} xpInLevel={xpData.xp_in_level} />
-                    )}
-                    <div className="profile-stats">
-                      <div className="profile-stat-card">
-                        <span className="profile-stat-value">{wins}</span>
-                        <span className="profile-stat-label">Wins</span>
-                      </div>
-                      <div className="profile-stat-card">
-                        <span className="profile-stat-value">{userRankData?.rank ?? '-'}</span>
-                        <span className="profile-stat-label">Rank</span>
-                      </div>
-                      <div className="profile-stat-card">
-                        <span className="profile-stat-value">{matches}</span>
-                        <span className="profile-stat-label">Matches</span>
-                      </div>
-                    </div>
-                  </div>
+
+                {/* Cell (1,1): Achievements */}
+                <div className="profile-grid-cell profile-grid-cell--ach">
                   <h2 className="profile-section-title">Achievements</h2>
                   {achievements.length > 0 ? (
                     <BadgeGrid achievements={achievements} />
