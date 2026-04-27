@@ -1,4 +1,5 @@
 from .user import User
+from .user_login_day import UserLoginDay
 from .credentials import Credentials, Tokens
 from .friendship import Friendship
 from .achievements import (
@@ -9,6 +10,7 @@ from .achievements import (
 
 __all__ = [
     "User",
+    "UserLoginDay",
     "Credentials",
     "Tokens",
     "Friendship",

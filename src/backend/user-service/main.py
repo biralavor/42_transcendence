@@ -1,9 +1,10 @@
 from typing import Annotated
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date, timedelta
 import logging
 
 from fastapi import FastAPI, status, Depends, HTTPException, Query, UploadFile, File
 from fastapi.responses import Response
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -13,7 +14,8 @@ from service.schemas import (
     ProfileResponse, UpdateProfileRequest, MeResponse,
     FriendResponse, FriendRequestResponse, FriendRequestAction,
     NotificationResponse, GameNotificationRequest, GameInviteResponseRequest,
-    PreferencesResponse, PreferencesUpdateRequest, SearchResponse
+    PreferencesResponse, PreferencesUpdateRequest, SearchResponse,
+    AdminActivityResponse, UserActivityResponse, DailyCount,
 
 )
 from service.models.user import User
@@ -436,6 +438,105 @@ async def deliver_game_notification(
     
     await notification_manager.broadcast(str(body.to_user_id), _notif_payload(notif))
     return Response(status_code=204)
+
+
+def _compute_login_streak(login_dates: list[date], today: date) -> int:
+    """Count consecutive calendar days ending at the most recent login_date.
+
+    A streak is "alive" only if the most recent login_date is today or yesterday —
+    otherwise the streak is zero, since the user broke it. login_dates may be in
+    any order; this function sorts internally.
+    """
+    if not login_dates:
+        return 0
+    sorted_dates = sorted(set(login_dates), reverse=True)
+    if (today - sorted_dates[0]).days > 1:
+        return 0
+    streak = 1
+    for i in range(1, len(sorted_dates)):
+        if (sorted_dates[i - 1] - sorted_dates[i]).days == 1:
+            streak += 1
+        else:
+            break
+    return streak
+
+
+@app.get("/admin/activity", response_model=AdminActivityResponse)
+async def admin_activity(
+    session: SessionDependency,
+    current_user: User = Depends(get_current_user),
+):
+    """Site-wide aggregate activity for admin dashboard."""
+    if not current_user.is_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin only")
+
+    # NOTE: messages.created_at is naive TIMESTAMP (server-local), matches.started_at
+    # is tz-aware (UTC). For the demo this is acceptable — flag if revisited.
+    active_users = (await session.execute(text(
+        "SELECT COUNT(*) FROM users WHERE last_login_at >= NOW() - INTERVAL '7 days'"
+    ))).scalar_one()
+    games_today = (await session.execute(text(
+        "SELECT COUNT(*) FROM matches WHERE started_at >= date_trunc('day', NOW())"
+    ))).scalar_one()
+    messages_today = (await session.execute(text(
+        "SELECT COUNT(*) FROM messages WHERE created_at >= date_trunc('day', NOW())"
+    ))).scalar_one()
+
+    return AdminActivityResponse(
+        active_users_last_7d=active_users or 0,
+        games_today=games_today or 0,
+        messages_today=messages_today or 0,
+    )
+
+
+@app.get("/activity", response_model=UserActivityResponse)
+async def user_activity(
+    session: SessionDependency,
+    current_user: User = Depends(get_current_user),
+):
+    """Per-user activity for the authenticated caller. Last 30 days of buckets."""
+    today = datetime.now(timezone.utc).date()
+    window_start = today - timedelta(days=29)  # inclusive: 30-day window ending today
+
+    games_rows = (await session.execute(
+        text(
+            "SELECT date_trunc('day', started_at)::date AS d, COUNT(*) AS c "
+            "FROM matches "
+            "WHERE (player1_id = :uid OR player2_id = :uid) "
+            "  AND started_at >= NOW() - INTERVAL '30 days' "
+            "GROUP BY d ORDER BY d ASC"
+        ),
+        {"uid": current_user.id},
+    )).all()
+    messages_rows = (await session.execute(
+        text(
+            "SELECT date_trunc('day', created_at)::date AS d, COUNT(*) AS c "
+            "FROM messages "
+            "WHERE user_id = :uid "
+            "  AND created_at >= NOW() - INTERVAL '30 days' "
+            "GROUP BY d ORDER BY d ASC"
+        ),
+        {"uid": current_user.id},
+    )).all()
+    login_rows = (await session.execute(
+        text("SELECT login_date FROM user_login_days WHERE user_id = :uid"),
+        {"uid": current_user.id},
+    )).all()
+
+    games_map = {row.d: row.c for row in games_rows}
+    messages_map = {row.d: row.c for row in messages_rows}
+    full_window = [window_start + timedelta(days=i) for i in range(30)]
+    games_per_day = [DailyCount(date=d, count=games_map.get(d, 0)) for d in full_window]
+    messages_per_day = [DailyCount(date=d, count=messages_map.get(d, 0)) for d in full_window]
+
+    streak = _compute_login_streak([row.login_date for row in login_rows], today)
+
+    return UserActivityResponse(
+        last_login_at=current_user.last_login_at,
+        active_streak_days=streak,
+        games_per_day=games_per_day,
+        messages_per_day=messages_per_day,
+    )
 
 
 app.include_router(presence_router)

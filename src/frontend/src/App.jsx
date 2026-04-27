@@ -17,6 +17,7 @@ import GamePage from './pages/GamePage'
 import GameInviteModal from './Components/GameInviteModal'
 import Tournament from './pages/Tournament'
 import Tournaments from './pages/Tournaments'
+import Admin from './pages/Admin'
 
 export default function App() {
   useEffect(() => {
@@ -107,6 +108,15 @@ export default function App() {
           element={(
             <PrivateRoute>
               <Tournaments />
+            </PrivateRoute>
+          )}
+        />
+
+        <Route
+          path="/admin"
+          element={(
+            <PrivateRoute>
+              <Admin />
             </PrivateRoute>
           )}
         />
