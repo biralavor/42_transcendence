@@ -731,6 +731,7 @@ def leaderboard_order_by_str(sort_assoc: list[tuple[str, str]] | None) -> str | 
     valid_columns = [
         'rank',
         'display_name',
+        'user_id',
         'points',
         'total_games',
         'wins',

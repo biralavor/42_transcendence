@@ -109,6 +109,7 @@ export function NotificationProvider({ children }) {
         if (!auth.access_token) {
             setUserId(null)
             setNotifications([])
+            setAchievementQueue([])  // prevent stale toasts from leaking across logout/user switch
             dmFirstSeenRef.current = {}
             return
         }
@@ -126,6 +127,7 @@ export function NotificationProvider({ children }) {
                     console.error('[notificationContext] Failed to get user ID:', err.message)
                     setUserId(null)
                     setNotifications([])
+                    setAchievementQueue([])  // prevent stale toasts on /auth/me failure
                     dmFirstSeenRef.current = {}
                 }
             })
@@ -158,9 +160,16 @@ export function NotificationProvider({ children }) {
                 if (frame.type !== 'notification') return
                 const notif = frame.notification
 
-                // Route game_achievement to toast queue instead of main notification list
+                // Route game_achievement to toast queue instead of main notification list.
+                // Dedupe by notif.id (WS reconnects can resend events) and cap at 20
+                // to match the main notifications list and prevent unbounded growth.
                 if (notif.type === 'game_achievement') {
-                    setAchievementQueue(prev => [...prev, notif])
+                    setAchievementQueue(prev => {
+                        if (notif.id != null && prev.some(a => a.id === notif.id)) {
+                            return prev
+                        }
+                        return [...prev, notif].slice(-20)
+                    })
                     return
                 }
 

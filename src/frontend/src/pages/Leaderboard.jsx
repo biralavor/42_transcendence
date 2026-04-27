@@ -111,6 +111,17 @@ export default function Leaderboard() {
         // Skip updates if the request was aborted or the effect was cancelled.
         if (controller.signal.aborted || cancelled) return
         setPage(leaderboardData)
+        // Sync local currentPage to the backend's clamped value. If the
+        // requested page was out of range (e.g., the data set shrunk while
+        // the user was paging), the backend clamps to last_page. Without
+        // this sync, Previous/Next would keep operating on the stale
+        // requested page and could request out-of-range pages indefinitely.
+        if (
+          typeof leaderboardData.page === 'number' &&
+          leaderboardData.page !== currentPage
+        ) {
+          setCurrentPage(leaderboardData.page)
+        }
       } catch (requestError) {
         // Ignore abort errors; otherwise report a generic failure.  Avoid
         // updating state if the component has unmounted or the request was aborted.
