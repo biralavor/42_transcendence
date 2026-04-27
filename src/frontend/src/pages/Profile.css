@@ -101,7 +101,7 @@
   margin: 0;
   color: var(--primary);
   font-family: 'Righteous', cursive;
-  font-size: clamp(3rem, 3vw, 2.6rem);
+  font-size: clamp(2.6rem, 3vw, 3rem);
   letter-spacing: 0.05em;
 }
 

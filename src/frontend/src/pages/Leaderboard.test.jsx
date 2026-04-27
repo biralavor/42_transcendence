@@ -56,6 +56,8 @@ describe('Leaderboard subtitle captions', () => {
   beforeEach(() => {
     sessionStorage.clear()
     sessionStorage.setItem('access_token', 'fake-token')
+    sessionStorage.setItem('refresh_token', 'fake-refresh-token')
+    sessionStorage.setItem('token_type', 'bearer')
   })
   afterEach(() => {
     vi.restoreAllMocks()
@@ -93,6 +95,8 @@ describe('Leaderboard fetch flow', () => {
   beforeEach(() => {
     sessionStorage.clear()
     sessionStorage.setItem('access_token', 'fake-token')
+    sessionStorage.setItem('refresh_token', 'fake-refresh-token')
+    sessionStorage.setItem('token_type', 'bearer')
   })
   afterEach(() => {
     vi.restoreAllMocks()
@@ -129,6 +133,8 @@ describe('Leaderboard sort toggle', () => {
   beforeEach(() => {
     sessionStorage.clear()
     sessionStorage.setItem('access_token', 'fake-token')
+    sessionStorage.setItem('refresh_token', 'fake-refresh-token')
+    sessionStorage.setItem('token_type', 'bearer')
   })
   afterEach(() => {
     vi.restoreAllMocks()
@@ -179,6 +185,8 @@ describe('Leaderboard pagination', () => {
   beforeEach(() => {
     sessionStorage.clear()
     sessionStorage.setItem('access_token', 'fake-token')
+    sessionStorage.setItem('refresh_token', 'fake-refresh-token')
+    sessionStorage.setItem('token_type', 'bearer')
   })
   afterEach(() => {
     vi.restoreAllMocks()
@@ -274,6 +282,8 @@ describe('Leaderboard current-user highlight', () => {
   beforeEach(() => {
     sessionStorage.clear()
     sessionStorage.setItem('access_token', 'fake-token')
+    sessionStorage.setItem('refresh_token', 'fake-refresh-token')
+    sessionStorage.setItem('token_type', 'bearer')
   })
   afterEach(() => {
     vi.restoreAllMocks()
@@ -312,6 +322,8 @@ describe('Leaderboard player column', () => {
   beforeEach(() => {
     sessionStorage.clear()
     sessionStorage.setItem('access_token', 'fake-token')
+    sessionStorage.setItem('refresh_token', 'fake-refresh-token')
+    sessionStorage.setItem('token_type', 'bearer')
   })
   afterEach(() => {
     vi.restoreAllMocks()

@@ -760,10 +760,8 @@ async def test_leaderboard_order_xp_desc_sorts_by_xp(client):
     resp = await client.get("/leaderboard?order=xp:desc&limit=100")
     assert resp.status_code == 200
     rows = resp.json()["results"]
-    # Use position in the returned `results` list (not the `rank` field):
-    # `rank` is always assigned using the default points-based sort, but the
-    # returned list order is the user-requested sort. We are testing whether
-    # `order=xp:desc` is honored, which only shows up in list position.
+    # Use position in the returned `results` list to directly verify that
+    # `order=xp:desc` is honored, independent of how `rank` is computed.
     pos_by_uid = {r["user_id"]: i for i, r in enumerate(rows)}
     assert 5060 in pos_by_uid and 5061 in pos_by_uid, (
         f"Expected 5060 and 5061 in response; got {list(pos_by_uid.keys())[:10]}..."
@@ -771,9 +769,7 @@ async def test_leaderboard_order_xp_desc_sorts_by_xp(client):
     assert pos_by_uid[5060] < pos_by_uid[5061], (
         f"Expected user 5060 (more XP) to appear before 5061 in the result list "
         f"under xp:desc; got positions {pos_by_uid[5060]} vs {pos_by_uid[5061]}. "
-        f"If 5060 appears AFTER 5061, the order=xp:desc param is being ignored "
-        f"(default sort is points-based, which would put 5061 first since it has "
-        f"more points)."
+        f"If 5060 appears AFTER 5061, the order=xp:desc param is being ignored."
     )
 
 

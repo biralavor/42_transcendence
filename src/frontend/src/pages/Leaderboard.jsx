@@ -70,9 +70,11 @@ export default function Leaderboard() {
     max_points: { value: 0, display_name: 'No Data' },
   }
 
-  // Fetch caller's user_id once on mount for row highlighting
+  // Fetch caller's user_id once on mount for row highlighting.
+  // /leaderboard is a public route — use skipRefreshOn401 so logged-out
+  // visitors don't get redirected to /login by the apiClient's refresh flow.
   useEffect(() => {
-    apiCall('/api/users/auth/me')
+    apiCall('/api/users/auth/me', { skipRefreshOn401: true })
       .then(r => r.ok ? r.json() : null)
       .then(data => { if (data && typeof data.id === 'number') setCurrentUserId(data.id) })
       .catch(() => {})
@@ -94,7 +96,10 @@ export default function Leaderboard() {
       }
 
       try {
-        const url = `/api/game/leaderboard?order=${encodeURIComponent(sortMode + ':desc')}&page=${currentPage}&limit=20`
+        // Include tie-breakers so pagination is stable on equal values
+        // (e.g., many users tied at 0 XP would otherwise shuffle between pages).
+        const orderClause = `${sortMode}:desc,points:desc,goal_difference:desc,user_id:asc`
+        const url = `/api/game/leaderboard?order=${encodeURIComponent(orderClause)}&page=${currentPage}&limit=20`
         const leaderboardResp = await fetch(url, {
           signal: controller.signal,
         })
@@ -177,9 +182,10 @@ export default function Leaderboard() {
               </div>
             </div>
 
-            <div className="leaderboard-sort-toggle">
+            <div className="leaderboard-sort-toggle" role="group" aria-label="Sort leaderboard by">
               <button
                 type="button"
+                aria-pressed={sortMode === 'xp'}
                 className={sortMode === 'xp' ? 'active' : ''}
                 onClick={() => { setSortMode('xp'); setCurrentPage(0) }}
               >
@@ -187,6 +193,7 @@ export default function Leaderboard() {
               </button>
               <button
                 type="button"
+                aria-pressed={sortMode === 'wins'}
                 className={sortMode === 'wins' ? 'active' : ''}
                 onClick={() => { setSortMode('wins'); setCurrentPage(0) }}
               >

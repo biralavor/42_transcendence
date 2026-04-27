@@ -758,6 +758,13 @@ user_id ASC
     """
     sort_string = leaderboard_order_by_str(sort_assoc)
     sort_string = sort_string if sort_string is not None else default_sort_string
+    # `rank` is the OUTPUT of ROW_NUMBER; it can't be referenced inside its own
+    # ORDER BY. When the user requests `order=rank:...`, fall back to the default
+    # sort for the ROW_NUMBER computation. Result-list ordering still honors
+    # `sort_string` (so `order=rank:desc` returns lowest-ranked rows first).
+    row_number_sort = (
+        default_sort_string if 'rank' in sort_string.lower() else sort_string
+    )
     statement = text(f"""
 WITH all_matches AS
 (
@@ -914,7 +921,7 @@ WITH all_matches AS
 , ranking_results AS
 (
     SELECT
-        ROW_NUMBER() OVER (ORDER BY {default_sort_string})
+        ROW_NUMBER() OVER (ORDER BY {row_number_sort})
         AS rank
         , display_name
         , user_id
