@@ -368,3 +368,164 @@ describe('Leaderboard player column', () => {
     expect(avatar).toHaveAttribute('src', '/avatar_placeholder.jpg')
   })
 })
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tests added from PR review (issue #238)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('Leaderboard sort toggle accessibility (aria-pressed)', () => {
+  beforeEach(() => {
+    sessionStorage.clear()
+    sessionStorage.setItem('access_token', 'fake-token')
+    sessionStorage.setItem('refresh_token', 'fake-refresh-token')
+    sessionStorage.setItem('token_type', 'bearer')
+  })
+  afterEach(() => {
+    vi.restoreAllMocks()
+    sessionStorage.clear()
+  })
+
+  it('marks the active sort button with aria-pressed=true and the inactive one with aria-pressed=false', async () => {
+    mockLeaderboardBoot({ results: [SAMPLE_ROW] })
+    renderLeaderboard()
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /^xp$/i })).toHaveAttribute('aria-pressed', 'true')
+      expect(screen.getByRole('button', { name: /^wins$/i })).toHaveAttribute('aria-pressed', 'false')
+    })
+  })
+
+  it('updates aria-pressed when the user toggles to Wins', async () => {
+    mockLeaderboardBoot({ results: [SAMPLE_ROW] })
+    // Mock the post-toggle re-fetch
+    global.fetch.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          page: 0, last_page: 0, per_page: 20, total: 0, results: [],
+          summary: {
+            max_max_streak: { value: 0, display_name: 'No Data' },
+            max_current_streak: { value: 0, display_name: 'No Data' },
+            max_points: { value: 0, display_name: 'No Data' },
+          },
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      )
+    )
+    renderLeaderboard()
+    await waitFor(() => screen.getByRole('button', { name: /^wins$/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^wins$/i }))
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /^xp$/i })).toHaveAttribute('aria-pressed', 'false')
+      expect(screen.getByRole('button', { name: /^wins$/i })).toHaveAttribute('aria-pressed', 'true')
+    })
+  })
+
+  it('groups the sort toggle as a button group with an accessible label', async () => {
+    mockLeaderboardBoot({ results: [SAMPLE_ROW] })
+    const { container } = renderLeaderboard()
+    await waitFor(() => screen.getByRole('button', { name: /^xp$/i }))
+    const group = container.querySelector('.leaderboard-sort-toggle')
+    expect(group).toHaveAttribute('role', 'group')
+    expect(group).toHaveAttribute('aria-label', expect.stringMatching(/sort/i))
+  })
+})
+
+describe('Leaderboard pagination stability (tie-breaker columns)', () => {
+  beforeEach(() => {
+    sessionStorage.clear()
+    sessionStorage.setItem('access_token', 'fake-token')
+    sessionStorage.setItem('refresh_token', 'fake-refresh-token')
+    sessionStorage.setItem('token_type', 'bearer')
+  })
+  afterEach(() => {
+    vi.restoreAllMocks()
+    sessionStorage.clear()
+  })
+
+  it('includes points/goal_difference/user_id tie-breakers in the order param when sorting by XP', async () => {
+    mockLeaderboardBoot({ results: [SAMPLE_ROW] })
+    renderLeaderboard()
+    await waitFor(() => {
+      const calls = global.fetch.mock.calls.map(c => c[0])
+      const lbCall = calls.find(url => typeof url === 'string' && url.includes('/api/game/leaderboard'))
+      expect(lbCall).toBeTruthy()
+      // URL-encoded comma is %2C, colon is %3A
+      expect(lbCall).toContain('xp%3Adesc')
+      expect(lbCall).toContain('points%3Adesc')
+      expect(lbCall).toContain('goal_difference%3Adesc')
+      expect(lbCall).toContain('user_id%3Aasc')
+    })
+  })
+
+  it('includes tie-breakers when sorting by Wins too', async () => {
+    mockLeaderboardBoot({ results: [SAMPLE_ROW] })
+    global.fetch.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          page: 0, last_page: 0, per_page: 20, total: 0, results: [],
+          summary: {
+            max_max_streak: { value: 0, display_name: 'No Data' },
+            max_current_streak: { value: 0, display_name: 'No Data' },
+            max_points: { value: 0, display_name: 'No Data' },
+          },
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      )
+    )
+    renderLeaderboard()
+    await waitFor(() => screen.getByRole('button', { name: /^wins$/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^wins$/i }))
+    await waitFor(() => {
+      const calls = global.fetch.mock.calls.map(c => c[0])
+      const winsCall = calls.find(url =>
+        typeof url === 'string' && url.includes('order=wins%3Adesc')
+      )
+      expect(winsCall).toBeTruthy()
+      expect(winsCall).toContain('points%3Adesc')
+      expect(winsCall).toContain('goal_difference%3Adesc')
+      expect(winsCall).toContain('user_id%3Aasc')
+    })
+  })
+})
+
+describe('Leaderboard auth/me on public route (skipRefreshOn401)', () => {
+  beforeEach(() => {
+    sessionStorage.clear()
+    sessionStorage.setItem('access_token', 'fake-token')
+    sessionStorage.setItem('refresh_token', 'fake-refresh-token')
+    sessionStorage.setItem('token_type', 'bearer')
+  })
+  afterEach(() => {
+    vi.restoreAllMocks()
+    sessionStorage.clear()
+  })
+
+  it('does not trigger a token-refresh request when /auth/me returns 401', async () => {
+    // First call: /auth/me 401 (logged-out visitor)
+    // Second call: /api/game/leaderboard 200 (page should still render)
+    vi.spyOn(global, 'fetch')
+      .mockResolvedValueOnce(new Response('Unauthorized', { status: 401 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            page: 0, last_page: 0, per_page: 20, total: 1, results: [SAMPLE_ROW],
+            summary: {
+              max_max_streak: { value: 0, display_name: 'No Data' },
+              max_current_streak: { value: 0, display_name: 'No Data' },
+              max_points: { value: 0, display_name: 'No Data' },
+            },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        )
+      )
+
+    renderLeaderboard()
+    // Wait for the leaderboard to render (proves the 401 didn't redirect away)
+    await waitFor(() => screen.getByText('Bob'))
+
+    // Verify NO token-refresh endpoint was called as a side-effect of the 401
+    const calls = global.fetch.mock.calls.map(c => c[0])
+    expect(calls.some(url =>
+      typeof url === 'string' && (url.includes('/refresh') || url.includes('/auth/refresh'))
+    )).toBe(false)
+  })
+})

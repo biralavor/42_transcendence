@@ -822,3 +822,49 @@ async def test_leaderboard_pagination_returns_correct_page(client):
     assert "total" in data
     assert data["per_page"] == 20
     assert isinstance(data["results"], list)
+
+
+@pytest.mark.asyncio
+async def test_leaderboard_rank_matches_list_position(client):
+    """After Issue #238, `rank` is computed using the user-requested sort (not
+    the default), so each row's `rank` should match its position in the
+    returned `results` list (offset by page * limit + 1).
+    """
+    resp = await client.get("/leaderboard?order=wins:desc&limit=100&page=0")
+    assert resp.status_code == 200
+    data = resp.json()
+    rows = data["results"]
+    if len(rows) < 2:
+        pytest.skip("Not enough rows to verify ranking")
+
+    # On page 0 with no prior offset, ranks should start at 1 and be monotonic
+    for i, row in enumerate(rows):
+        expected_rank = i + 1
+        assert row["rank"] == expected_rank, (
+            f"Row at position {i} has rank={row['rank']}, expected {expected_rank}. "
+            f"After Issue #238, rank should match list position when sorted by "
+            f"the user-requested order (here: wins:desc)."
+        )
+
+
+@pytest.mark.asyncio
+async def test_leaderboard_rank_changes_when_sort_changes(client):
+    """The same user can have different rank values under different sort orders,
+    because rank now reflects the user-requested sort (Issue #238 fix #10).
+    This is a sanity check that the rank field is no longer pinned to one fixed
+    sort across all requests.
+    """
+    resp_xp = await client.get("/leaderboard?order=xp:desc&limit=100")
+    resp_wins = await client.get("/leaderboard?order=wins:desc&limit=100")
+    assert resp_xp.status_code == 200 and resp_wins.status_code == 200
+
+    rows_xp = resp_xp.json()["results"]
+    rows_wins = resp_wins.json()["results"]
+    if len(rows_xp) < 2 or len(rows_wins) < 2:
+        pytest.skip("Not enough rows to verify cross-sort ranks")
+
+    # Both responses use position-based ranks (rank = position + 1),
+    # so the user at xp-rank-1 may differ from the user at wins-rank-1.
+    # Assert ranks are monotonic in each response.
+    assert [r["rank"] for r in rows_xp] == sorted([r["rank"] for r in rows_xp])
+    assert [r["rank"] for r in rows_wins] == sorted([r["rank"] for r in rows_wins])
