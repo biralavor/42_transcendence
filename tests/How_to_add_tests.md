@@ -615,6 +615,204 @@ wsConnectHandler.onMessage?.({
 // Component should still match String(5) === String('5')
 ```
 
+### Test Harnesses for Canvas + WebSocket Components
+
+Some frontend modules talk to APIs that **jsdom doesn't implement** (canvas 2D context) or that require **bidirectional control during a test** (WebSocket lifecycle). For these, individual `vi.mock(...)` calls aren't enough — you need a small reusable harness that provides a controllable stand-in.
+
+We keep harnesses under a `__test-harness__/` directory next to the consumer:
+
+```
+src/frontend/src/
+├── Components/
+│   ├── __test-harness__/
+│   │   ├── canvasMock.js     # 2D context spy (jsdom doesn't ship one)
+│   │   └── wsMock.js         # Controllable WebSocket class
+│   └── PongCanvasMultiplayer.test.jsx
+└── game/
+    ├── __test-harness__/
+    │   └── rendererMock.js   # 2D context spy + GameState fixture builder
+    └── pongRenderer.test.js
+```
+
+**Why the `__test-harness__/` name:**
+- Files inside it don't end in `.test.*`, so Vitest's default discovery doesn't try to run them as tests
+- The folder name announces "not production code" to anyone scanning the tree
+- Co-located with the consumer (`Components/__test-harness__/` is for `Components/` tests)
+
+**Why a harness instead of inline mocks:**
+- Reuse across multiple test files
+- One place to extend when the underlying API surface grows (e.g., adding a new canvas method)
+- Lets each test file stay focused on *behavior*, not on *constructing fakes*
+
+#### Canvas 2D context spy
+
+```javascript
+// src/Components/__test-harness__/canvasMock.js
+import { vi } from 'vitest'
+
+export function makeMock2DContext() {
+  return {
+    fillStyle: '', strokeStyle: '', lineWidth: 1, font: '',
+    fillRect: vi.fn(),
+    strokeRect: vi.fn(),
+    drawImage: vi.fn(),
+    fillText: vi.fn(),
+    arc: vi.fn(),
+    beginPath: vi.fn(),
+    fill: vi.fn(),
+    stroke: vi.fn(),
+    // ... add methods as the renderer needs them
+  }
+}
+
+export function installCanvasContextStub() {
+  const ctx = makeMock2DContext()
+  HTMLCanvasElement.prototype.getContext = vi.fn(() => ctx)
+  return ctx
+}
+```
+
+**Use in a test:**
+
+```javascript
+import { installCanvasContextStub } from './__test-harness__/canvasMock'
+
+beforeEach(() => {
+  installCanvasContextStub()  // jsdom's <canvas> won't crash; draw calls become no-ops
+})
+```
+
+#### Controllable WebSocket
+
+```javascript
+// src/Components/__test-harness__/wsMock.js
+import { vi } from 'vitest'
+
+export class FakeWebSocket {
+  constructor(url) {
+    this.url = url
+    this.readyState = 0
+    this.sentMessages = []
+    this.send = vi.fn(data => this.sentMessages.push(data))
+    this.close = vi.fn(() => { this.readyState = 3 })
+    FakeWebSocket.instances.push(this)
+  }
+  simulateOpen()    { this.readyState = 1; this.onopen?.({}) }
+  simulateMessage(p){ this.onmessage?.({ data: typeof p === 'string' ? p : JSON.stringify(p) }) }
+  simulateError()   { this.onerror?.({}) }
+  simulateClose()   { this.readyState = 3; this.onclose?.({}) }
+}
+FakeWebSocket.instances = []
+
+export function installWebSocketStub() {
+  FakeWebSocket.instances = []
+  globalThis.WebSocket = FakeWebSocket
+}
+export function lastSocket() {
+  return FakeWebSocket.instances[FakeWebSocket.instances.length - 1]
+}
+```
+
+**Use in a test:**
+
+```javascript
+import { installWebSocketStub, lastSocket } from './__test-harness__/wsMock'
+
+beforeEach(() => {
+  installWebSocketStub()
+})
+
+it('sends game_start once WS opens', () => {
+  render(<MyComponent />)
+  const ws = lastSocket()
+  act(() => ws.simulateOpen())
+  expect(JSON.parse(ws.sentMessages[0])).toMatchObject({ type: 'game_start' })
+})
+
+it('forwards game_over to onGameEnd prop', () => {
+  const onGameEnd = vi.fn()
+  render(<MyComponent onGameEnd={onGameEnd} />)
+  const ws = lastSocket()
+  act(() => ws.simulateOpen())
+  act(() => ws.simulateMessage({ type: 'game_over', winner_id: 1 }))
+  expect(onGameEnd).toHaveBeenCalledWith({ winner_id: 1 })
+})
+```
+
+#### Pure-module harness (renderer + fixture builder)
+
+For pure modules (no React, no DOM), the harness can also include **fixture builders** for the data structures the module consumes — keeps each test from re-typing the same setup:
+
+```javascript
+// src/game/__test-harness__/rendererMock.js
+export function makeContextSpy() { /* 2D context spy */ }
+
+export function makeCanvasStub({ width = 800, height = 450, cssVars = {} } = {}) {
+  return { width, height, __cssVars: { '--primary': '#0f0', ...cssVars } }
+}
+
+export function makeGameState(overrides = {}) {
+  return {
+    player1: { position: { x: 5, y: 40 }, size: { width: 2, height: 12 }, color: '#aaa' },
+    player2: { position: { x: 153, y: 40 }, size: { width: 2, height: 12 }, color: '#bbb' },
+    ball:    { position: { x: 80, y: 45 }, size: { width: 2, height: 2 },  color: '#fff' },
+    score:   { player1: 0, player2: 0 },
+    ...overrides,
+  }
+}
+
+export function stubGetComputedStyle() {
+  return vi.spyOn(window, 'getComputedStyle').mockImplementation(el => ({
+    getPropertyValue: key => el.__cssVars?.[key] || '',
+  }))
+}
+```
+
+**Use in a test:**
+
+```javascript
+import { makeContextSpy, makeCanvasStub, makeGameState, stubGetComputedStyle } from './__test-harness__/rendererMock'
+import { CanvasGameContext, render } from './pongRenderer'
+
+let cssSpy
+beforeEach(() => { cssSpy = stubGetComputedStyle() })
+afterEach(() => { cssSpy.mockRestore() })
+
+it('uses drawImage when themeImages.ball is provided', () => {
+  const ballImg = { __id: 'ball' }
+  const ctx = makeContextSpy()
+  const gameCtx = new CanvasGameContext(makeCanvasStub(), ctx)
+  render(gameCtx, makeGameState(), () => false, { ball: ballImg }, '')
+  expect(ctx.drawImage.mock.calls.some(([img]) => img === ballImg)).toBe(true)
+})
+```
+
+#### When NOT to build a harness
+
+Don't reach for a harness if a couple of `vi.mock(...)` calls cover the test. Build one only when:
+
+- The fake needs **stateful behavior** (a WebSocket that can be opened, closed, and receive messages mid-test)
+- jsdom is **missing the API entirely** (canvas 2D context, WebRTC, MediaStream)
+- Two or more test files need the **same fake** (DRY)
+
+A one-off `vi.fn()` in the test file is almost always the right answer for simpler dependencies.
+
+#### What to assert (and what not to)
+
+Harnesses make it easy to assert on every method call. Resist that — most coordinate-level assertions just lock in the implementation:
+
+| ❌ Don't | ✅ Do |
+|---------|-------|
+| `expect(ctx.fillRect).toHaveBeenCalledWith(35.5, 18.0, 12.5, 30.0)` | `expect(ctx.fillRect).toHaveBeenCalled()` (or check call count) |
+| `expect(ctx.font).toBe('bold 32px Bungee, sans-serif')` | nothing — font strings are cosmetic |
+| `expect(ctx.strokeRect).toHaveBeenNthCalledWith(2, ...)` | `expect(ctx.strokeRect.mock.calls.length).toBeGreaterThanOrEqual(2)` |
+
+Target the **branches** (which `if`/`else if` path ran) and the **interface contract** (correct method called with correct *kind* of argument) — not pixel coordinates.
+
+**Real examples in the repo:**
+- `src/frontend/src/Components/PongCanvasMultiplayer.test.jsx` (13 tests using both harnesses)
+- `src/frontend/src/game/pongRenderer.test.js` (25 tests using the renderer harness)
+
 ---
 
 ## 5. Health Checks
