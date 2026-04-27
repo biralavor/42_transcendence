@@ -866,6 +866,94 @@ else
     info "game-service container not running — skipping match history suite"
 fi
 
+# ── 21b. Leaderboard API Scenarios ────────────────────────────────────────────
+# Exercises the issue #238 leaderboard endpoints end-to-end via wget.
+# Each check is a pure HTTP request → JSON shape verification (no DB direct access).
+section "Leaderboard API Scenarios"
+if container_running game-service; then
+    _GPORT="${GAME_SERVICE_PORT:-8002}"
+
+    # 1. /leaderboard returns rows with xp, level, avatar_url fields
+    lb_body=$(docker exec game-service wget -q -O - \
+        "http://127.0.0.1:${_GPORT}/leaderboard?limit=5" 2>/dev/null || echo "")
+    has_fields=$(echo "$lb_body" | python3 -c \
+        "import sys,json; d=json.load(sys.stdin); rows=d.get('results',[]); \
+         print('ok' if rows and all(k in rows[0] for k in ('xp','level','avatar_url')) else 'fail')" \
+        2>/dev/null || echo "fail")
+    if [[ "$has_fields" == "ok" ]]; then
+        pass "/leaderboard rows include xp, level, avatar_url"
+    else
+        fail "/leaderboard rows missing xp/level/avatar_url (got: '${lb_body:0:120}')"
+    fi
+
+    # 2. /leaderboard?order=xp:desc returns rows sorted by XP descending
+    xp_body=$(docker exec game-service wget -q -O - \
+        "http://127.0.0.1:${_GPORT}/leaderboard?order=xp:desc&limit=10" 2>/dev/null || echo "")
+    xp_sorted=$(echo "$xp_body" | python3 -c \
+        "import sys,json; d=json.load(sys.stdin); xps=[r['xp'] for r in d.get('results',[])]; \
+         print('ok' if xps == sorted(xps, reverse=True) else 'fail')" \
+        2>/dev/null || echo "fail")
+    if [[ "$xp_sorted" == "ok" ]]; then
+        pass "/leaderboard?order=xp:desc returns rows in XP-descending order"
+    else
+        fail "/leaderboard?order=xp:desc returned non-monotonic XP order"
+    fi
+
+    # 3. /leaderboard?order=wins:desc returns rows sorted by Wins descending
+    wins_body=$(docker exec game-service wget -q -O - \
+        "http://127.0.0.1:${_GPORT}/leaderboard?order=wins:desc&limit=10" 2>/dev/null || echo "")
+    wins_sorted=$(echo "$wins_body" | python3 -c \
+        "import sys,json; d=json.load(sys.stdin); ws=[r['wins'] for r in d.get('results',[])]; \
+         print('ok' if ws == sorted(ws, reverse=True) else 'fail')" \
+        2>/dev/null || echo "fail")
+    if [[ "$wins_sorted" == "ok" ]]; then
+        pass "/leaderboard?order=wins:desc returns rows in wins-descending order"
+    else
+        fail "/leaderboard?order=wins:desc returned non-monotonic wins order"
+    fi
+
+    # 4. Pagination metadata present and per_page honored
+    pag_body=$(docker exec game-service wget -q -O - \
+        "http://127.0.0.1:${_GPORT}/leaderboard?page=0&limit=5" 2>/dev/null || echo "")
+    pag_ok=$(echo "$pag_body" | python3 -c \
+        "import sys,json; d=json.load(sys.stdin); \
+         print('ok' if all(k in d for k in ('page','last_page','per_page','total','results')) and d['per_page']==5 else 'fail')" \
+        2>/dev/null || echo "fail")
+    if [[ "$pag_ok" == "ok" ]]; then
+        pass "/leaderboard pagination metadata (page/last_page/per_page/total) is present and per_page=5"
+    else
+        fail "/leaderboard pagination response shape is wrong (got: '${pag_body:0:120}')"
+    fi
+
+    # 5. /xp-leaderboard returns array of {user_id, username, xp, level}
+    xp_lb_body=$(docker exec game-service wget -q -O - \
+        "http://127.0.0.1:${_GPORT}/xp-leaderboard?limit=3" 2>/dev/null || echo "")
+    xp_lb_ok=$(echo "$xp_lb_body" | python3 -c \
+        "import sys,json; d=json.load(sys.stdin); \
+         print('ok' if isinstance(d,list) and (not d or all(k in d[0] for k in ('user_id','username','xp','level'))) else 'fail')" \
+        2>/dev/null || echo "fail")
+    if [[ "$xp_lb_ok" == "ok" ]]; then
+        pass "/xp-leaderboard returns array with user_id/username/xp/level fields"
+    else
+        fail "/xp-leaderboard response shape is wrong (got: '${xp_lb_body:0:120}')"
+    fi
+
+    # 6. /xp/{user_id} returns XP/level breakdown (zeroed for never-played users is OK)
+    xp_alice_body=$(docker exec game-service wget -q -O - \
+        "http://127.0.0.1:${_GPORT}/xp/${alice_id:-1}" 2>/dev/null || echo "")
+    xp_shape_ok=$(echo "$xp_alice_body" | python3 -c \
+        "import sys,json; d=json.load(sys.stdin); \
+         print('ok' if all(k in d for k in ('user_id','xp','level','xp_in_level','xp_to_next_level')) else 'fail')" \
+        2>/dev/null || echo "fail")
+    if [[ "$xp_shape_ok" == "ok" ]]; then
+        pass "/xp/{user_id} returns user_id/xp/level/xp_in_level/xp_to_next_level"
+    else
+        fail "/xp/{user_id} response shape is wrong (got: '${xp_alice_body:0:120}')"
+    fi
+else
+    info "game-service container not running — skipping leaderboard API scenarios"
+fi
+
 # ── 22. User Service Unit Tests ───────────────────────────────────────────────
 suite_name="User Service Unit Tests"
 printf "\n${CYAN}=== $suite_name ===${RESET}\n"
@@ -1102,6 +1190,64 @@ else
     info "curl or python3 not found — skipping E2E integration tests"
 fi
 
+# ── 27. API E2E Tests (multi-service user journeys via pytest) ────────────────
+# Spins up a throwaway python:3.12-slim container that joins the
+# transcendence_network and runs the pytest suite at tests/api_e2e/.
+# These tests drive complete user flows through real HTTP/WS — no mocks.
+suite_name="API E2E Tests"
+printf "\n${CYAN}=== $suite_name ===${RESET}\n"
+
+_E2E_NETWORK="${E2E_DOCKER_NETWORK:-transcendence_network}"
+_E2E_DIR="${E2E_DIR:-$(pwd)/tests/api_e2e}"
+
+if ! command -v docker &>/dev/null; then
+    info "docker not available — skipping API E2E tests"
+    SUITE_PASS["$suite_name"]=0
+    SUITE_FAIL["$suite_name"]=0
+    SUITE_NAMES+=("$suite_name")
+elif [[ ! -d "$_E2E_DIR" ]]; then
+    info "tests/api_e2e/ not found at $_E2E_DIR — skipping API E2E tests"
+    SUITE_PASS["$suite_name"]=0
+    SUITE_FAIL["$suite_name"]=0
+    SUITE_NAMES+=("$suite_name")
+elif ! docker network inspect "$_E2E_NETWORK" &>/dev/null; then
+    info "docker network '$_E2E_NETWORK' not found — skipping API E2E tests"
+    SUITE_PASS["$suite_name"]=0
+    SUITE_FAIL["$suite_name"]=0
+    SUITE_NAMES+=("$suite_name")
+else
+    out=$(docker run --rm \
+        --network "$_E2E_NETWORK" \
+        -v "$_E2E_DIR:/work" \
+        -w /work \
+        python:3.12-slim \
+        bash -c "pip install -q --root-user-action=ignore -r requirements.txt && pytest 2>&1" 2>&1 || true)
+    pass_count=$(echo "$out" | grep -oE '[0-9]+ passed' | awk '{print $1}' | tail -1 || echo "0")
+    fail_count=$(echo "$out" | grep -oE '[0-9]+ failed' | awk '{print $1}' | tail -1 || echo "0")
+    pass_count=${pass_count:-0}
+    fail_count=${fail_count:-0}
+    if [[ "$pass_count" == "0" && "$fail_count" == "0" ]]; then
+        printf "${RED}[FAIL]${RESET} ${suite_name} — no tests collected (suite may have crashed)\n"
+        echo "$out" | tail -20
+        SUITE_PASS["$suite_name"]=0
+        SUITE_FAIL["$suite_name"]=1
+        ((FAIL+=1))
+    elif [[ "$fail_count" != "0" ]]; then
+        printf "${RED}[FAIL]${RESET} ${suite_name} (${pass_count} passed, ${fail_count} failed)\n"
+        echo "$out" | tail -30
+        SUITE_PASS["$suite_name"]=$pass_count
+        SUITE_FAIL["$suite_name"]=$fail_count
+        ((PASS+=pass_count))
+        ((FAIL+=fail_count))
+    else
+        printf "${GREEN}[PASS]${RESET} ${suite_name} (${pass_count} passed)\n"
+        SUITE_PASS["$suite_name"]=$pass_count
+        SUITE_FAIL["$suite_name"]=0
+        ((PASS+=pass_count))
+    fi
+    SUITE_NAMES+=("$suite_name")
+fi
+
 # ── Summary ───────────────────────────────────────────────────────────────────
 printf "\n${YELLOW}══════════════════════════════════════════════════════════════${RESET}\n"
 printf "  ${YELLOW}SUITE RESULTS${RESET}\n"
@@ -1124,6 +1270,91 @@ printf "${YELLOW}═════════════════════
 
 if [[ $FAIL -eq 0 ]]; then
     printf "${GREEN}All mandatory checks passed! Transcendence is healthy.${RESET}\n"
+fi
+
+# ── Test Pyramid Health Metric ────────────────────────────────────────────────
+# Heuristic counts from grepping each test file for mock vs smoke indicators.
+# Targets: ~70-80% mock, ~10-20% smoke, ≥3 API E2E files. See
+# docs/superpowers/specs/2026-04-26-test-landscape-and-e2e-proposal.md §1.
+printf "\n${YELLOW}══════════════════════════════════════════════════════════════${RESET}\n"
+printf "  ${YELLOW}TEST PYRAMID HEALTH${RESET}\n"
+printf "${YELLOW}──────────────────────────────────────────────────────────────${RESET}\n"
+
+_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_REPO_ROOT="${REPO_ROOT:-$(cd "$_SCRIPT_DIR/.." && pwd)}"
+_BACKEND="${_REPO_ROOT}/src/backend"
+_FRONTEND="${_REPO_ROOT}/src/frontend/src"
+_API_E2E="${_REPO_ROOT}/tests/api_e2e"
+
+_total_test_files=0
+_mock_files=0
+_smoke_files=0
+_pure_files=0
+
+if [[ -d "$_BACKEND" ]]; then
+    while IFS= read -r f; do
+        _total_test_files=$((_total_test_files + 1))
+        if grep -lqE "create_async_engine|_TestSession|NullPool|begin_nested" "$f" 2>/dev/null; then
+            _smoke_files=$((_smoke_files + 1))
+        elif grep -lqE "MagicMock|AsyncMock|mock_db_session|unittest.mock" "$f" 2>/dev/null; then
+            _mock_files=$((_mock_files + 1))
+        else
+            _pure_files=$((_pure_files + 1))
+        fi
+    done < <(find "$_BACKEND" -name "test_*.py" \
+                  ! -path "*/__pycache__/*" ! -path "*/outdated/*" 2>/dev/null)
+fi
+
+if [[ -d "$_FRONTEND" ]]; then
+    while IFS= read -r f; do
+        _total_test_files=$((_total_test_files + 1))
+        if grep -lqE "vi.mock|vi\.fn|vi\.spyOn|MockResolvedValue" "$f" 2>/dev/null; then
+            _mock_files=$((_mock_files + 1))
+        else
+            _pure_files=$((_pure_files + 1))
+        fi
+    done < <(find "$_FRONTEND" \( -name "*.test.jsx" -o -name "*.test.js" \) 2>/dev/null)
+fi
+
+_api_e2e_files=0
+if [[ -d "$_API_E2E" ]]; then
+    _api_e2e_files=$(find "$_API_E2E" -name "test_*.py" 2>/dev/null | wc -l)
+fi
+
+if [[ $_total_test_files -gt 0 ]]; then
+    _mock_pct=$((_mock_files * 100 / _total_test_files))
+    _smoke_pct=$((_smoke_files * 100 / _total_test_files))
+    _pure_pct=$((_pure_files * 100 / _total_test_files))
+else
+    _mock_pct=0; _smoke_pct=0; _pure_pct=0
+fi
+
+printf "  Total test files (unit + smoke):  %d\n" "$_total_test_files"
+printf "  Mock-based tests:                 %d (%d%%)  ${YELLOW}target: 70-80%%${RESET}\n" "$_mock_files" "$_mock_pct"
+printf "  Real-DB smoke tests:              %d (%d%%)  ${YELLOW}target: 10-20%%${RESET}\n" "$_smoke_files" "$_smoke_pct"
+printf "  Pure-logic tests:                 %d (%d%%)\n" "$_pure_files" "$_pure_pct"
+printf "  API E2E test files:               %d        ${YELLOW}target: ≥3${RESET}\n" "$_api_e2e_files"
+
+# Health verdict
+_warnings=0
+if [[ $_mock_pct -lt 60 ]]; then
+    printf "  ${YELLOW}⚠ Mock ratio low — suite may be slow / over-relying on integration${RESET}\n"
+    _warnings=$((_warnings + 1))
+fi
+if [[ $_mock_pct -gt 90 ]]; then
+    printf "  ${YELLOW}⚠ Mock ratio very high — may miss integration bugs${RESET}\n"
+    _warnings=$((_warnings + 1))
+fi
+if [[ $_api_e2e_files -lt 3 ]]; then
+    printf "  ${YELLOW}⚠ Few API E2E files — consider one per major user journey${RESET}\n"
+    _warnings=$((_warnings + 1))
+fi
+if [[ $_warnings -eq 0 ]]; then
+    printf "  ${GREEN}✓ Pyramid shape looks healthy${RESET}\n"
+fi
+printf "${YELLOW}══════════════════════════════════════════════════════════════${RESET}\n"
+
+if [[ $FAIL -eq 0 ]]; then
     exit 0
 else
     printf "${RED}%d mandatory check(s) failed. Review the output above.${RESET}\n" "$FAIL"

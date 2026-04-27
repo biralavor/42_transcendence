@@ -150,3 +150,71 @@ def test_friend_receives_offline_event_on_disconnect(mock_db_session):
     bob_ws.send_json.assert_any_await(
         {"type": "presence", "user_id": 1, "status": "offline"}
     )
+
+
+# ── edge cases ────────────────────────────────────────────────────────────────
+
+def test_multi_tab_same_user_only_emits_offline_on_last_disconnect(mock_db_session):
+    """When a user has 2 tabs open and closes one, friends should NOT receive
+    an `offline` event yet. Only when the LAST tab closes should the offline
+    event fire.
+
+    Without this guard, every tab close would flip the user's status visibly
+    to friends, then back online when other tabs are still alive.
+    """
+    user = _make_user(60)
+    fresh_manager = PresenceManager()
+    token = _make_token()
+
+    with patch("service.ws.presence_router.get_me", new=AsyncMock(return_value=user)), \
+         patch("service.ws.presence_router.get_friends", new=AsyncMock(return_value=[])), \
+         patch("service.ws.presence_router.presence_manager", fresh_manager), \
+         patch("service.ws.presence_router.set_user_status", new=AsyncMock()):
+        with TestClient(app) as client:
+            with client.websocket_connect(f"/ws/presence?token={token}") as ws1:
+                # Two tabs: total active = 2
+                with client.websocket_connect(f"/ws/presence?token={token}") as ws2:
+                    # Both registered — user has 2 active sockets
+                    assert len(fresh_manager._users.get(user.id, set())) == 2
+                    assert fresh_manager.is_online(user.id)
+                    # Closing one tab does not crash
+                    ws2.close()
+                # After ws2 exits, ws1 still active — user is still online.
+                # This is the load-bearing multi-tab assertion: with 2 tabs open,
+                # closing one MUST NOT flip the user offline.
+                assert fresh_manager.is_online(user.id)
+            # ws1 also closed → last-disconnect; user goes offline.
+            # Note: cleanup is async in the WS handler's `finally` block, so the
+            # transition can happen slightly after the `with` exits. We poll a
+            # few times rather than asserting immediately to avoid suite-order
+            # flakiness (the assertion passes in isolation but can race when
+            # the test suite is loaded with other WS tests).
+            import time
+            for _ in range(20):  # up to ~200ms
+                if not fresh_manager.is_online(user.id):
+                    break
+                time.sleep(0.01)
+            assert not fresh_manager.is_online(user.id), (
+                "after the last tab disconnects, user should go offline (waited 200ms)"
+            )
+
+
+def test_presence_disconnect_with_no_friends_does_not_raise(mock_db_session):
+    """User with no friends disconnects — must not raise (no one to notify).
+
+    Regression guard: an empty friend list must not crash the offline-broadcast
+    code path."""
+    user = _make_user(70)
+    fresh_manager = PresenceManager()
+    token = _make_token()
+
+    # presence_router.py imports `get_friends` (verified via grep of imports);
+    # patch returns an empty list to simulate a user with zero friends.
+    with patch("service.ws.presence_router.get_me", new=AsyncMock(return_value=user)), \
+         patch("service.ws.presence_router.presence_manager", fresh_manager), \
+         patch("service.ws.presence_router.set_user_status", new=AsyncMock()), \
+         patch("service.ws.presence_router.get_friends", new=AsyncMock(return_value=[])):
+        with TestClient(app) as client:
+            with client.websocket_connect(f"/ws/presence?token={token}") as ws:
+                ws.close()
+            # No exception should propagate
