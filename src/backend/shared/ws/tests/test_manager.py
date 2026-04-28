@@ -82,3 +82,62 @@ async def test_broadcast_does_not_cross_rooms(manager):
     await manager.broadcast("room1", {"msg": "private"})
     ws1.send_json.assert_awaited_once()
     ws2.send_json.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_connect_default_role_is_player(manager):
+    ws = make_ws()
+    await manager.connect("room1", ws)
+    assert manager.player_count("room1") == 1
+    assert manager.spectator_count("room1") == 0
+
+
+@pytest.mark.asyncio
+async def test_connect_with_explicit_role_spectator_is_counted(manager):
+    ws = make_ws()
+    await manager.connect("room1", ws, role="spectator")
+    assert manager.player_count("room1") == 0
+    assert manager.spectator_count("room1") == 1
+    # active_connections still counts both
+    assert manager.active_connections("room1") == 1
+
+
+@pytest.mark.asyncio
+async def test_connect_mixed_roles_in_same_room(manager):
+    p1, p2, s1, s2 = make_ws(), make_ws(), make_ws(), make_ws()
+    await manager.connect("room1", p1, role="player")
+    await manager.connect("room1", p2, role="player")
+    await manager.connect("room1", s1, role="spectator")
+    await manager.connect("room1", s2, role="spectator")
+    assert manager.player_count("room1") == 2
+    assert manager.spectator_count("room1") == 2
+    assert manager.active_connections("room1") == 4
+
+
+@pytest.mark.asyncio
+async def test_disconnect_drops_role_entry(manager):
+    p, s = make_ws(), make_ws()
+    await manager.connect("room1", p, role="player")
+    await manager.connect("room1", s, role="spectator")
+    manager.disconnect("room1", s)
+    assert manager.player_count("room1") == 1
+    assert manager.spectator_count("room1") == 0
+    manager.disconnect("room1", p)
+    # both maps must be empty
+    assert manager.player_count("room1") == 0
+    assert manager.spectator_count("room1") == 0
+    assert manager._rooms == {}
+    assert manager._roles == {}
+
+
+@pytest.mark.asyncio
+async def test_unknown_room_counts_zero(manager):
+    assert manager.player_count("nope") == 0
+    assert manager.spectator_count("nope") == 0
+
+
+@pytest.mark.asyncio
+async def test_invalid_role_raises_value_error(manager):
+    ws = make_ws()
+    with pytest.raises(ValueError):
+        await manager.connect("room1", ws, role="cheater")

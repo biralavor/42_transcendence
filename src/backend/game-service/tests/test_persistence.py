@@ -647,3 +647,78 @@ async def test_finish_match_skips_xp_when_ai_is_loser(db):
         text("SELECT xp FROM user_xp WHERE user_id = 0"),
     )).one_or_none()
     assert row_ai is None, "AI sentinel (user_id=0) should never get a user_xp row"
+
+
+# --------------------------------------------------------------------------- #
+# list_live_matches
+# --------------------------------------------------------------------------- #
+@pytest.mark.asyncio
+async def test_list_live_matches_returns_only_ongoing(db):
+    # Two distinct user pairs to avoid colliding on the same room
+    await _ensure_users(db, 90001, 90002, 90003, 90004)
+    ongoing = await create_match(db, player1_id=90001, player2_id=90002)
+    finished = await create_match(db, player1_id=90003, player2_id=90004)
+    await finish_match(db, finished.id, winner_id=90003, score_p1=10, score_p2=4)
+
+    from persistence import list_live_matches
+    rows = await list_live_matches(db)
+    match_ids = [int(r["match_id"]) for r in rows]
+    assert ongoing.id in match_ids
+    assert finished.id not in match_ids
+
+
+@pytest.mark.asyncio
+async def test_list_live_matches_excludes_ai_games(db):
+    await _ensure_users(db, 90010)
+    # AI sentinel = 0; one side AI → must be excluded
+    ai_match = await create_match(db, player1_id=90010, player2_id=0)
+
+    from persistence import list_live_matches
+    rows = await list_live_matches(db)
+    match_ids = [int(r["match_id"]) for r in rows]
+    assert ai_match.id not in match_ids
+
+
+@pytest.mark.asyncio
+async def test_list_live_matches_projects_player_fields(db):
+    await _ensure_users(db, 90020, 90021)
+    # Set display_name + avatar_url so we can assert projection
+    await db.execute(
+        text("UPDATE users SET display_name='Alice A', avatar_url='/uploads/avatars/90020.png' WHERE id=:i"),
+        {"i": 90020},
+    )
+    await db.execute(
+        text("UPDATE users SET display_name='', avatar_url=NULL WHERE id=:i"),
+        {"i": 90021},
+    )
+    match = await create_match(db, player1_id=90020, player2_id=90021)
+
+    from persistence import list_live_matches
+    rows = await list_live_matches(db)
+    row = next(r for r in rows if int(r["match_id"]) == match.id)
+    assert row["p1_id"] == 90020
+    assert row["p1_username"] == "stats_user_90020"
+    assert row["p1_display_name"] == "Alice A"
+    assert row["p1_avatar_url"] == "/uploads/avatars/90020.png"
+    # Empty display_name falls back to username (COALESCE+NULLIF in SQL)
+    assert row["p2_display_name"] == "stats_user_90021"
+    assert row["p2_avatar_url"] is None
+
+
+@pytest.mark.asyncio
+async def test_list_live_matches_orders_by_started_at_desc(db):
+    await _ensure_users(db, 90030, 90031, 90032, 90033)
+    older = await create_match(db, player1_id=90030, player2_id=90031)
+    newer = await create_match(db, player1_id=90032, player2_id=90033)
+
+    # Ensure deterministic ordering by adjusting started_at
+    await db.execute(
+        text("UPDATE matches SET started_at = started_at - INTERVAL '1 hour' WHERE id=:i"),
+        {"i": older.id},
+    )
+
+    from persistence import list_live_matches
+    rows = await list_live_matches(db)
+    # Filter to the two we just created
+    relevant = [r for r in rows if int(r["match_id"]) in (older.id, newer.id)]
+    assert [int(r["match_id"]) for r in relevant] == [newer.id, older.id]

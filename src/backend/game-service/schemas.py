@@ -178,3 +178,18 @@ class XpResponse(BaseModel):
     level: int
     xp_in_level: int
     xp_to_next_level: int = 100
+
+
+class LiveGamePlayer(BaseModel):
+    id: int
+    username: str
+    display_name: str
+    avatar_url: str | None = None
+
+
+class LiveGameSummary(BaseModel):
+    game_id: str
+    player1: LiveGamePlayer
+    player2: LiveGamePlayer
+    started_at: datetime
+    spectator_count: int
