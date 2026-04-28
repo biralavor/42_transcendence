@@ -50,6 +50,8 @@ const privateLinks = [
   },
 ]
 
+const NAVBAR_SEARCH_LIMIT = 5
+
 export default function NavbarComponent() {
   const location = useLocation()
   const navigate = useNavigate()
@@ -101,7 +103,7 @@ export default function NavbarComponent() {
     const timeoutId = setTimeout(() => {
       setSearchLoading(true)
       setSearchError('')
-      apiCall(`/api/users/search?q=${encodeURIComponent(query)}&page=1&per_page=5&sort=username`, {
+      apiCall(`/api/users/search?q=${encodeURIComponent(query)}&page=1&per_page=${NAVBAR_SEARCH_LIMIT}&sort=username`, {
         signal: controller.signal,
         skipRefreshOn401: true,
       })
@@ -111,7 +113,11 @@ export default function NavbarComponent() {
         })
         .then(data => {
           if (controller.signal.aborted) return
-          setSearchResults(Array.isArray(data.results) ? data.results : [])
+          setSearchResults(
+            Array.isArray(data.results)
+              ? data.results.slice(0, NAVBAR_SEARCH_LIMIT)
+              : []
+          )
           setSearchTotal(Number.isFinite(data.total) ? data.total : 0)
         })
         .catch(err => {
