@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import NavbarComponent from './Navbar'
 
@@ -32,6 +32,7 @@ describe('Navbar — bell and DM badge', () => {
     })
 
     afterEach(() => {
+        vi.useRealTimers()
         vi.restoreAllMocks()
     })
 
@@ -95,6 +96,8 @@ describe('Navbar — bell and DM badge', () => {
     })
 
     it('debounces user search and renders dropdown results', async () => {
+        vi.useFakeTimers()
+
         vi.spyOn(global, 'fetch').mockResolvedValue(
             new Response(JSON.stringify({
                 results: [{ id: 7, username: 'alice', avatar_url: '/avatars/alice.png' }],
@@ -106,10 +109,19 @@ describe('Navbar — bell and DM badge', () => {
 
         renderNavbar()
         const searchInput = screen.getByRole('searchbox', { name: /search users/i })
+
         fireEvent.focus(searchInput)
         fireEvent.change(searchInput, {
             target: { value: 'ali' },
         })
+
+        expect(global.fetch).not.toHaveBeenCalled()
+
+        await act(async () => {
+            vi.advanceTimersByTime(300)
+        })
+
+        vi.useRealTimers()
 
         await waitFor(() => {
             expect(global.fetch).toHaveBeenCalledWith(
@@ -117,6 +129,7 @@ describe('Navbar — bell and DM badge', () => {
                 expect.objectContaining({ signal: expect.any(AbortSignal) })
             )
         })
+
         expect(await screen.findByText('alice')).toBeInTheDocument()
         expect(screen.getByRole('link', { name: /see all results/i })).toHaveAttribute('href', '/search?q=ali')
     })
