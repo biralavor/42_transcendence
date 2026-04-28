@@ -220,6 +220,20 @@ export default function Profile() {
       return
     }
 
+    setLoading(true)
+    setError('')
+    setSaveStatus('')
+    setAvatarFile(null)
+    setAvatarPreview(null)
+    setAvatarBusy(false)
+    setAvatarToast(null)
+    setAvatarVersion(0)
+    setProfile(null)
+    setPaginatedHistory(emptyHistory())
+    setUserRankData(null)
+    setXpData(null)
+    setAchievements([])
+
     const controller = new AbortController()
     const { signal } = controller
 
