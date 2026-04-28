@@ -20,7 +20,8 @@ export default function Search() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const query = searchParams.get('q')?.trim() ?? ''
-  const currentPage = Number(searchParams.get('page') ?? '1')
+  const pageParam = searchParams.get('page')
+  const currentPage = Number.parseInt(pageParam ?? '1', 10)
   const safePage = Number.isFinite(currentPage) && currentPage > 0 ? currentPage : 1
   const [inputValue, setInputValue] = useState(query)
   const [pageData, setPageData] = useState(emptySearchPage(query))
