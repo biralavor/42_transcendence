@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/authContext'
 import { useNotifications } from '../context/notificationContext'
 import { useUnread } from '../context/unreadContext'
+import { apiCall } from '../utils/apiClient'
 import NotificationPanel from './NotificationPanel'
 import './Navbar.css'
 
@@ -51,11 +52,19 @@ const privateLinks = [
 
 export default function NavbarComponent() {
   const location = useLocation()
+  const navigate = useNavigate()
   const { logout, isAuthenticated } = useAuth()
   const { unreadCount } = useNotifications()
   const { unreadCounts } = useUnread()
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isPanelOpen, setIsPanelOpen] = useState(false)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [searchResults, setSearchResults] = useState([])
+  const [searchTotal, setSearchTotal] = useState(0)
+  const [searchLoading, setSearchLoading] = useState(false)
+  const [searchError, setSearchError] = useState('')
+  const [isSearchOpen, setIsSearchOpen] = useState(false)
+  const [isSearchFocused, setIsSearchFocused] = useState(false)
 
   const dmUnreadTotal = Object.values(unreadCounts).reduce((a, b) => a + b, 0)
 
@@ -74,7 +83,54 @@ export default function NavbarComponent() {
 
   useEffect(() => {
     setIsMenuOpen(false)
+    setIsSearchOpen(false)
+    setIsSearchFocused(false)
   }, [location.pathname])
+
+  useEffect(() => {
+    const query = searchTerm.trim()
+    if (!query) {
+      setSearchResults([])
+      setSearchTotal(0)
+      setSearchError('')
+      setSearchLoading(false)
+      return undefined
+    }
+
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => {
+      setSearchLoading(true)
+      setSearchError('')
+      apiCall(`/api/users/search?q=${encodeURIComponent(query)}&page=1&per_page=5&sort=username`, {
+        signal: controller.signal,
+        skipRefreshOn401: true,
+      })
+        .then(r => {
+          if (!r.ok) throw new Error(`Search failed: ${r.status}`)
+          return r.json()
+        })
+        .then(data => {
+          if (controller.signal.aborted) return
+          setSearchResults(Array.isArray(data.results) ? data.results : [])
+          setSearchTotal(Number.isFinite(data.total) ? data.total : 0)
+        })
+        .catch(err => {
+          if (err.name !== 'AbortError') {
+            setSearchResults([])
+            setSearchTotal(0)
+            setSearchError('Search unavailable')
+          }
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setSearchLoading(false)
+        })
+    }, 300)
+
+    return () => {
+      clearTimeout(timeoutId)
+      controller.abort()
+    }
+  }, [searchTerm])
 
   const handleToggleMenu = () => {
     setIsMenuOpen((prev) => !prev)
@@ -84,6 +140,32 @@ export default function NavbarComponent() {
     logout()
     setIsMenuOpen(false)
   }
+
+  const closeSearch = () => {
+    setSearchTerm('')
+    setSearchResults([])
+    setSearchTotal(0)
+    setSearchError('')
+    setIsSearchFocused(false)
+    setIsSearchOpen(false)
+  }
+
+  const goToUserProfile = (userId) => {
+    navigate(`/profile/${userId}`)
+    closeSearch()
+    setIsMenuOpen(false)
+  }
+
+  const goToFullSearch = (event) => {
+    event.preventDefault()
+    const query = searchTerm.trim()
+    if (!query) return
+    navigate(`/search?q=${encodeURIComponent(query)}`)
+    closeSearch()
+    setIsMenuOpen(false)
+  }
+
+  const shouldShowSearchDropdown = isSearchFocused && searchTerm.trim().length > 0
 
   return (
     <header className="pong-nav">
@@ -125,6 +207,67 @@ export default function NavbarComponent() {
 
             {isAuthenticated ? (
               <div className="pong-nav__actions">
+                <div className={`pong-nav__search ${isSearchOpen ? 'is-open' : ''}`}>
+                  <button
+                    type="button"
+                    className="pong-nav__search-toggle"
+                    aria-label={isSearchOpen ? 'Close user search' : 'Open user search'}
+                    onClick={() => setIsSearchOpen(prev => !prev)}
+                  >
+                    🔍
+                  </button>
+                  <form className="pong-nav__search-form" role="search" onSubmit={goToFullSearch}>
+                    <input
+                      type="search"
+                      className="pong-nav__search-input"
+                      aria-label="Search users"
+                      placeholder="Search users"
+                      value={searchTerm}
+                      onFocus={() => setIsSearchFocused(true)}
+                      onChange={(event) => setSearchTerm(event.target.value)}
+                    />
+                  </form>
+                  {shouldShowSearchDropdown && (
+                    <div className="pong-nav__search-dropdown" role="listbox" aria-label="User search results">
+                      {searchLoading && (
+                        <div className="pong-nav__search-status">Searching...</div>
+                      )}
+                      {!searchLoading && searchError && (
+                        <div className="pong-nav__search-status">{searchError}</div>
+                      )}
+                      {!searchLoading && !searchError && searchResults.length === 0 && (
+                        <div className="pong-nav__search-status">No users found</div>
+                      )}
+                      {!searchLoading && !searchError && searchResults.map(user => (
+                        <button
+                          key={user.id}
+                          type="button"
+                          className="pong-nav__search-result"
+                          role="option"
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => goToUserProfile(user.id)}
+                        >
+                          <img
+                            src={user.avatar_url || '/avatar_placeholder.jpg'}
+                            alt=""
+                            className="pong-nav__search-avatar"
+                          />
+                          <span>{user.username}</span>
+                        </button>
+                      ))}
+                      {!searchLoading && !searchError && searchTotal > 0 && (
+                        <Link
+                          to={`/search?q=${encodeURIComponent(searchTerm.trim())}`}
+                          className="pong-nav__search-all"
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={goToFullSearch}
+                        >
+                          See all results
+                        </Link>
+                      )}
+                    </div>
+                  )}
+                </div>
                 <div className="pong-nav__bell-wrap">
                   <button
                     type="button"
