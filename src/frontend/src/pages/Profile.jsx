@@ -38,6 +38,13 @@ function buildHistoryUrl(playerId, filters, page) {
   return `/api/game/matches/history?${params.toString()}`
 }
 
+function formatLocalDateInputValue(date = new Date()) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 function getSafeAvatarUrl(avatarUrl) {
   if (!avatarUrl || typeof avatarUrl !== 'string') {
     return ''
@@ -129,7 +136,7 @@ export default function Profile() {
   const [achievements, setAchievements] = useState([])
   const [historyFilters, setHistoryFilters] = useState(DEFAULT_HISTORY_FILTERS)
   const [historyPage, setHistoryPage] = useState(0)
-  const todayDate = useMemo(() => new Date().toISOString().slice(0, 10), [])
+  const todayDate = formatLocalDateInputValue()
 
   useEffect(() => {
     return () => {
@@ -256,15 +263,11 @@ export default function Profile() {
             if (!r.ok) throw new Error(`Profile fetch failed: ${r.status}`)
             return r.json()
           }),
-          apiCall(buildHistoryUrl(id, historyFilters, historyPage), { signal }).then(r => {
-            if (!r.ok) throw new Error(`Matches History fetch failed: ${r.status}`)
-            return r.json()
-          }),
           apiCall(`/api/game/leaderboard?player_id=${id}&limit=1`, { signal }).then(r => {
             if (!r.ok) throw new Error(`Leaderboard fetch failed: ${r.status}`)
             return r.json()
           }),
-        ]).then(([profileData, historyData, rankData]) => {
+        ]).then(([profileData, rankData]) => {
           setProfile({
             displayName: profileData.display_name ?? '',
             darkMode: profileData.dark_mode ?? false,
@@ -274,7 +277,6 @@ export default function Profile() {
             status: profileData.status,
             createdAt: profileData.created_at,
           })
-          setPaginatedHistory(historyData)
           setUserRankData(rankData.player_stats)
 
           // Fetch XP and achievements after core profile data is loaded (non-blocking)
@@ -297,7 +299,28 @@ export default function Profile() {
       })
 
     return () => controller.abort()
-  }, [auth.access_token, historyFilters, historyPage])
+  }, [auth.access_token])
+
+  useEffect(() => {
+    if (!auth.access_token || !userId) return
+
+    const controller = new AbortController()
+    const { signal } = controller
+
+    apiCall(buildHistoryUrl(userId, historyFilters, historyPage), { signal })
+      .then(r => {
+        if (!r.ok) throw new Error(`Matches History fetch failed: ${r.status}`)
+        return r.json()
+      })
+      .then(data => {
+        if (!signal.aborted) setPaginatedHistory(data)
+      })
+      .catch(err => {
+        if (err.name !== 'AbortError') setError(err.message)
+      })
+
+    return () => controller.abort()
+  }, [auth.access_token, userId, historyFilters, historyPage])
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target
@@ -559,7 +582,7 @@ export default function Profile() {
 
               <div className="profile-history">
                 <h2 className="profile-section-title">Match history</h2>
-                <div className="history-controls" role="group" aria-label="Filter match history by result">
+                <div className="history-controls" role="group" aria-label="Match history filters">
                   {['all', 'win', 'loss'].map((value) => (
                     <label key={value} className="history-filter-option">
                       <input
