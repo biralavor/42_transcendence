@@ -1,4 +1,5 @@
 from __future__ import annotations
+import asyncio
 import logging
 from typing import TYPE_CHECKING, Dict, Set, Optional, Callable, Awaitable
 
@@ -29,13 +30,29 @@ class ConnectionManager:
         if not room:
             self._rooms.pop(room_id, None)
 
+    async def _send_to_client(
+        self,
+        room_id: str,
+        websocket: "WebSocket",
+        message: dict,
+    ) -> tuple["WebSocket", Exception | None]:
+        try:
+            await websocket.send_json(message)
+            return websocket, None
+        except Exception as e:
+            logger.warning(f"Failed to send to client in room {room_id}: {e}")
+            return websocket, e
+
     async def broadcast(self, room_id: str, message: dict) -> None:
-        for ws in list(self._rooms.get(room_id, set())):
-            try:
-                await ws.send_json(message)
-            except Exception as e:
-                logger.warning(f"Failed to send to client in room {room_id}: {e}")
-                self.disconnect(room_id, ws)
+        sockets = list(self._rooms.get(room_id, set()))
+        if sockets:
+            results = await asyncio.gather(
+                *(self._send_to_client(room_id, ws, message) for ws in sockets)
+            )
+
+            for ws, error in results:
+                if error is not None:
+                    self.disconnect(room_id, ws)
 
         # Signal event registry if callback provided (event-driven delivery)
         if self._signal_callback:

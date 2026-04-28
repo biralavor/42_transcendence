@@ -1,4 +1,6 @@
+import asyncio
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # .../src/backend
@@ -72,6 +74,27 @@ async def test_broadcast_continues_after_failed_send(manager):
     ws2.send_json.assert_awaited_once_with({"msg": "hello"})
     # Dead socket is evicted — no repeated exceptions on future broadcasts
     assert manager.active_connections("room1") == 1
+
+
+@pytest.mark.asyncio
+async def test_broadcast_sends_to_room_clients_concurrently(manager):
+    ws1, ws2 = make_ws(), make_ws()
+
+    async def slow_send(_message):
+        await asyncio.sleep(0.05)
+
+    ws1.send_json.side_effect = slow_send
+    ws2.send_json.side_effect = slow_send
+    await manager.connect("room1", ws1)
+    await manager.connect("room1", ws2)
+
+    started_at = time.perf_counter()
+    await manager.broadcast("room1", {"msg": "hello"})
+    elapsed = time.perf_counter() - started_at
+
+    assert elapsed < 0.09
+    ws1.send_json.assert_awaited_once_with({"msg": "hello"})
+    ws2.send_json.assert_awaited_once_with({"msg": "hello"})
 
 
 @pytest.mark.asyncio
