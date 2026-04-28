@@ -229,8 +229,11 @@ export default function Profile() {
         return r.json()
       })
       .then(me => {
-        const routeUserId = Number(profileUserId)
-        const id = Number.isFinite(routeUserId) && routeUserId > 0 ? routeUserId : me.id
+        const routeUserId =
+          typeof profileUserId === 'string' && /^[1-9]\d*$/.test(profileUserId)
+            ? Number.parseInt(profileUserId, 10)
+            : NaN
+        const id = Number.isSafeInteger(routeUserId) && routeUserId > 0 ? routeUserId : me.id
         setCurrentUserId(me.id)
         setUserId(id)
         return Promise.all([
