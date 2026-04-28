@@ -19,16 +19,18 @@ function renderSearch(initialEntry = '/search?q=ali') {
 
 describe('Search page', () => {
   beforeEach(() => {
-    vi.spyOn(global, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({
-        results: [
-          { id: 7, username: 'alice', avatar_url: '/avatars/alice.png' },
-          { id: 8, username: 'alicia', avatar_url: null },
-        ],
-        total: 12,
-        page: 1,
-        per_page: 10,
-      }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    vi.spyOn(global, 'fetch').mockImplementation(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({
+          results: [
+            { id: 7, username: 'alice', avatar_url: '/avatars/alice.png' },
+            { id: 8, username: 'alicia', avatar_url: null },
+          ],
+          total: 12,
+          page: 1,
+          per_page: 10,
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      )
     )
   })
 
