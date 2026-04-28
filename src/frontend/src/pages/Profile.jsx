@@ -16,6 +16,13 @@ const ALLOWED_AVATAR_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024
 const PLACEHOLDER_AVATAR = '/avatar_placeholder.jpg'
 
+const DEFAULT_HISTORY_FILTERS = {
+  dateFrom: '',
+  dateTo: '',
+  result: 'all',
+  sort: 'date:desc',
+}
+
 function buildHistoryUrl(playerId, filters, page) {
   const params = new URLSearchParams({
     player_id: String(playerId),
@@ -120,13 +127,7 @@ export default function Profile() {
   const avatarToastTimer = useRef(null)
   const [xpData, setXpData] = useState(null)
   const [achievements, setAchievements] = useState([])
-
-  const [historyFilters, setHistoryFilters] = useState({
-    dateFrom: '',
-    dateTo: '',
-    result: 'all',
-    sort: 'date:desc',
-  })
+  const [historyFilters, setHistoryFilters] = useState(DEFAULT_HISTORY_FILTERS)
   const [historyPage, setHistoryPage] = useState(0)
   const todayDate = useMemo(() => new Date().toISOString().slice(0, 10), [])
 
@@ -612,6 +613,16 @@ export default function Profile() {
                       <option value="result:asc">Result</option>
                     </select>
                   </label>
+                  <button
+                    type="button"
+                    className="history-clear-button"
+                    onClick={() => {
+                      setHistoryFilters(DEFAULT_HISTORY_FILTERS)
+                      setHistoryPage(0)
+                    }}
+                  >
+                    Clear filters
+                  </button>
                 </div>
                 {paginatedHistory.total === 0 ? (
                   <p style={{ color: 'var(--metal-silver)', fontFamily: 'VT323, monospace' }}>
@@ -642,6 +653,27 @@ export default function Profile() {
                     ))}
                   </div>
                 )}
+                <div className="history-pagination" aria-label="Match history pagination">
+                  <button
+                    type="button"
+                    className="history-page-button"
+                    disabled={paginatedHistory.page <= 0}
+                    onClick={() => setHistoryPage(page => Math.max(0, page - 1))}
+                  >
+                    Previous
+                  </button>
+                  <span className="history-page-summary">
+                    Page {paginatedHistory.page + 1} of {paginatedHistory.last_page + 1} · {paginatedHistory.total} matches
+                  </span>
+                  <button
+                    type="button"
+                    className="history-page-button"
+                    disabled={paginatedHistory.page >= paginatedHistory.last_page}
+                    onClick={() => setHistoryPage(page => page + 1)}
+                  >
+                    Next
+                  </button>
+                </div>
               </div>
             </div>
           </div>
