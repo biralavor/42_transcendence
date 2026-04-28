@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/authContext'
 import { useNotifications } from '../context/notificationContext'
 import { useUnread } from '../context/unreadContext'
+import { apiCall } from '../utils/apiClient'
 import NotificationPanel from './NotificationPanel'
 import './Navbar.css'
 
@@ -49,6 +50,12 @@ const privateLinks = [
   },
 ]
 
+const adminLink = {
+  to: '/admin',
+  label: 'Admin',
+  isActive: (pathname) => pathname.startsWith('/admin'),
+}
+
 export default function NavbarComponent() {
   const location = useLocation()
   const { logout, isAuthenticated } = useAuth()
@@ -56,20 +63,35 @@ export default function NavbarComponent() {
   const { unreadCounts } = useUnread()
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isPanelOpen, setIsPanelOpen] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(false)
 
   const dmUnreadTotal = Object.values(unreadCounts).reduce((a, b) => a + b, 0)
 
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setIsAdmin(false)
+      return
+    }
+    let cancelled = false
+    apiCall('/api/users/auth/me', { skipRefreshOn401: true })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (!cancelled) setIsAdmin(Boolean(data?.is_admin)) })
+      .catch(() => { if (!cancelled) setIsAdmin(false) })
+    return () => { cancelled = true }
+  }, [isAuthenticated])
+
   // Build nav links: for authenticated users, interleave public and private links.
+  const baseAuthedLinks = [
+    publicLinks[0], // Home
+    publicLinks[1], // Arena
+    privateLinks[0], // Chat
+    privateLinks[1], // Tournaments
+    publicLinks[2], // Ranking
+    publicLinks[3], // About
+    privateLinks[2], // Profile
+  ]
   const links = isAuthenticated
-    ? [
-      publicLinks[0], // Home
-      publicLinks[1], // Arena
-      privateLinks[0], // Chat
-      privateLinks[1], // Tournaments
-      publicLinks[2], // Ranking
-      publicLinks[3], // About
-      privateLinks[2], // Profile
-    ]
+    ? (isAdmin ? [...baseAuthedLinks, adminLink] : baseAuthedLinks)
     : publicLinks
 
   useEffect(() => {

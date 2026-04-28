@@ -41,11 +41,12 @@ from shared.database import Base             # noqa: E402
 
 # Import the service models so Alembic can detect them in Base.metadata
 from models.user import User  # noqa: E402, F401
+from models.user_login_day import UserLoginDay  # noqa: E402, F401
 from models.notification import Notification  # noqa: E402, F401
 from models.achievements import Achievement, UserAchievement, UserXP  # noqa: E402, F401
 
 # Tables owned by this service — Alembic will ONLY manage these.
-_SERVICE_TABLES = {"users", "notifications", "achievements", "user_achievements", "user_xp"}
+_SERVICE_TABLES = {"users", "user_login_days", "notifications", "achievements", "user_achievements", "user_xp"}
 
 # Each service gets its own version-tracking table so they don't collide.
 _VERSION_TABLE = "alembic_version_user"

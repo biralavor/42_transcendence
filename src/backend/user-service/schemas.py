@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, date
 from typing import Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -48,6 +48,27 @@ class MeResponse(BaseModel):
     created_at:    Optional[datetime] = None
     bio:           Optional[str] = None
     dark_mode:     bool = False
+    is_admin:      bool = False
+
+
+class AdminActivityResponse(BaseModel):
+    """Site-wide aggregate stats for the admin dashboard."""
+    active_users_last_7d: int
+    games_today: int
+    messages_today: int
+
+
+class DailyCount(BaseModel):
+    date: date
+    count: int
+
+
+class UserActivityResponse(BaseModel):
+    """Per-user activity for the authenticated caller."""
+    last_login_at: Optional[datetime] = None
+    active_streak_days: int
+    games_per_day: list[DailyCount]
+    messages_per_day: list[DailyCount]
 
 
 class UpdateProfileRequest(BaseModel):

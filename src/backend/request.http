@@ -28,6 +28,15 @@ content-type: application/json
     "password": "bira123"
 }
 
+###
+POST https://localhost:8443/api/users/auth/login HTTP/1.1
+content-type: application/json
+
+{
+    "username": "admin",
+    "password": "admin"
+}
+
 ### Refresh (replace <refresh_token> with the refresh_token from login response)
 POST https://localhost:8443/api/users/auth/refresh HTTP/1.1
 content-type: application/json
@@ -63,6 +72,15 @@ content-type: application/json
 {
     "username": "bira",
     "password": "bira123"
+}
+
+###
+POST https://localhost:8443/api/users/auth/register HTTP/1.1
+content-type: application/json
+
+{
+    "username": "admin",
+    "password": "admin"
 }
 
 ### ── AVATAR ────────────────────────────────────────────────────────────────
@@ -145,6 +163,24 @@ GET https://localhost:8443/uploads/avatars/<user_id>.<ext> HTTP/1.1
 ### Delete avatar (replace <access_token>)
 DELETE https://localhost:8443/api/users/avatar HTTP/1.1
 Authorization: Bearer <access_token>
+
+### ── ANALYTICS ─────────────────────────────────────────────────────────────
+
+### Admin aggregate stats — admin only (replace <access_token> with an admin's token).
+### Expect: 200 with { active_users_last_7d, games_today, messages_today }
+GET https://localhost:8443/api/users/admin/activity HTTP/1.1
+Authorization: Bearer <access_token>
+
+### Admin aggregate stats — no auth (expect 401/403)
+GET https://localhost:8443/api/users/admin/activity HTTP/1.1
+
+### Per-user activity — authenticated caller (replace <access_token>).
+### Expect: 200 with { last_login_at, active_streak_days, games_per_day[30], messages_per_day[30] }
+GET https://localhost:8443/api/users/activity HTTP/1.1
+Authorization: Bearer <access_token>
+
+### Per-user activity — no auth (expect 401/403)
+GET https://localhost:8443/api/users/activity HTTP/1.1
 
 ### ── GAME SERVICE ──────────────────────────────────────────────────────────
 
