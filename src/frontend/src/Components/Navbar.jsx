@@ -247,7 +247,7 @@ export default function NavbarComponent() {
                     />
                   </form>
                   {shouldShowSearchDropdown && (
-                    <div className="pong-nav__search-dropdown" role="listbox" aria-label="User search results">
+                    <div className="pong-nav__search-dropdown" aria-label="User search results">
                       {searchLoading && (
                         <div className="pong-nav__search-status">Searching...</div>
                       )}
@@ -262,7 +262,6 @@ export default function NavbarComponent() {
                           key={user.id}
                           type="button"
                           className="pong-nav__search-result"
-                          role="option"
                           onMouseDown={(event) => event.preventDefault()}
                           onClick={() => goToUserProfile(user.id)}
                         >
