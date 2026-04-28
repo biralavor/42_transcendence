@@ -958,7 +958,7 @@ fi
 suite_name="User Service Unit Tests"
 printf "\n${CYAN}=== $suite_name ===${RESET}\n"
 if container_running user-service; then
-    out=$(docker exec user-service sh -c "pip install -q --root-user-action=ignore pytest==9.0.3 httpx==0.28.1 pytest-asyncio==1.3.0 && cd /app && pytest service/tests/ -v 2>&1" || echo "")
+    out=$(docker exec user-service sh -c "pip install -q --root-user-action=ignore pytest==9.0.3 httpx==0.28.1 pytest-asyncio==1.3.0 pytest-timeout==2.1.0 && cd /app && pytest service/tests/ -v --timeout=30 2>&1" || echo "")
     pass_count=$(echo "$out" | grep -oE '[0-9]+ passed' | awk '{print $1}' | tail -1 || echo "0")
     fail_count=$(echo "$out" | grep -oE '[0-9]+ failed' | awk '{print $1}' | tail -1 || echo "0")
     # Fail suite if: no tests found, tests crashed, or any tests failed
@@ -1017,7 +1017,7 @@ SUITE_NAMES+=("$suite_name")
 suite_name="Chat Service Unit Tests"
 printf "\n${CYAN}=== $suite_name ===${RESET}\n"
 if container_running chat-service; then
-    out=$(docker exec chat-service sh -c "pip install -q --root-user-action=ignore pytest==9.0.3 httpx==0.28.1 pytest-asyncio==1.3.0 asyncpg==0.30.0 && cd /app && pytest service/tests/ -v 2>&1" || echo "")
+    out=$(docker exec chat-service sh -c "pip install -q --root-user-action=ignore pytest==9.0.3 httpx==0.28.1 pytest-asyncio==1.3.0 pytest-timeout==2.1.0 asyncpg==0.30.0 && cd /app && pytest service/tests/ -v --timeout=30 2>&1" || echo "")
     pass_count=$(echo "$out" | grep -oE '[0-9]+ passed' | awk '{print $1}' | tail -1 || echo "0")
     fail_count=$(echo "$out" | grep -oE '[0-9]+ failed' | awk '{print $1}' | tail -1 || echo "0")
     if [[ -z "$pass_count" ]] || [[ "$pass_count" == "0" ]] || [[ "$fail_count" -gt 0 ]]; then
