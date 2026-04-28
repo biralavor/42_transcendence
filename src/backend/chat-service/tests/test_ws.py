@@ -151,7 +151,7 @@ def _ws_db_patches(is_blocked_fn=None, sender_uid=None):
     async def mock_get_room_history(db, room_id):
         return []
 
-    async def mock_save_message(db, room_id, sender, content):
+    async def mock_save_message(db, room_id, sender, content, user_id=None):
         pass
 
     @contextlib.asynccontextmanager
@@ -194,7 +194,7 @@ def test_typing_event_not_persisted():
     import contextlib
     save_calls = []
 
-    async def tracking_save(db, room_id, sender, content):
+    async def tracking_save(db, room_id, sender, content, user_id=None):
         save_calls.append(content)
 
     with contextlib.ExitStack() as stack:

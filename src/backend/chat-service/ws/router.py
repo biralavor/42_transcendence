@@ -104,28 +104,26 @@ async def chat_websocket(websocket: WebSocket, room_slug: str, token: str = "") 
 
     dm_participants = _parse_dm_participants(room_slug)
 
-    # DM rooms require a verified identity — decode once at connect, bind for the session
+    # Best-effort identity resolution: decode token at connect time for ALL room
+    # types so persisted messages can carry users.id (drives the per-user activity
+    # dashboard). DM rooms still enforce that resolution succeeded; public rooms
+    # tolerate anonymous senders by leaving sender_uid as None.
     sender_uid: int | None = None
     sender_username: str | None = None
-    if dm_participants is not None:
+    if token:
         credential_id = _uid_from_token(token)
-        if credential_id is None:
-            await websocket.close(code=4001)
-            return
-        
-        # Look up the actual user.id and username from credential_id
-        async with AsyncSessionLocal() as db:
-            result = await db.execute(
-                text("SELECT id, username FROM users WHERE credential_id = :cid"),
-                {"cid": credential_id},
-            )
-            row = result.first()
-            if row:
-                sender_uid = row[0]
-                sender_username = row[1]
-            else:
-                sender_uid = None
-        
+        if credential_id is not None:
+            async with AsyncSessionLocal() as db:
+                result = await db.execute(
+                    text("SELECT id, username FROM users WHERE credential_id = :cid"),
+                    {"cid": credential_id},
+                )
+                row = result.first()
+                if row:
+                    sender_uid = row[0]
+                    sender_username = row[1]
+
+    if dm_participants is not None:
         if sender_uid is None:
             await websocket.close(code=4001)
             return
@@ -181,7 +179,9 @@ async def chat_websocket(websocket: WebSocket, room_slug: str, token: str = "") 
                 message_sender = sender_username if dm_participants is not None else data["sender"]
                 
                 try:
-                    await save_message(db, room_id, message_sender, data["content"])
+                    await save_message(
+                        db, room_id, message_sender, data["content"], user_id=sender_uid
+                    )
                 except SQLAlchemyError:
                     await websocket.send_json({"error": "failed to save message"})
                     continue

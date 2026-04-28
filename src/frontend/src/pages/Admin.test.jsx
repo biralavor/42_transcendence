@@ -64,6 +64,83 @@ describe('Admin page', () => {
     expect(screen.queryByText(/Active users/i)).not.toBeInTheDocument()
   })
 
+  it('polls /admin/activity every 5s and updates the visible stats', async () => {
+    const fetchSpy = vi.spyOn(global, 'fetch')
+      .mockResolvedValueOnce(jsonResponse({ id: 1, username: 'admin', is_admin: true }))
+      .mockResolvedValueOnce(jsonResponse({
+        active_users_last_7d: 12,
+        games_today: 5,
+        messages_today: 34,
+      }))
+      .mockResolvedValueOnce(jsonResponse({
+        active_users_last_7d: 13,
+        games_today: 6,
+        messages_today: 40,
+      }))
+
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true })
+    try {
+      renderAdmin()
+      await waitFor(() => {
+        expect(screen.getByText('5')).toBeInTheDocument()
+      })
+      expect(fetchSpy).toHaveBeenCalledTimes(2)
+
+      await vi.advanceTimersByTimeAsync(5000)
+      await waitFor(() => {
+        expect(screen.getByText('6')).toBeInTheDocument()
+      })
+      expect(screen.getByText('40')).toBeInTheDocument()
+      expect(fetchSpy).toHaveBeenCalledTimes(3)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('pauses polling while the tab is hidden and resumes on visibility change', async () => {
+    const fetchSpy = vi.spyOn(global, 'fetch')
+      .mockResolvedValueOnce(jsonResponse({ id: 1, username: 'admin', is_admin: true }))
+      .mockResolvedValue(jsonResponse({
+        active_users_last_7d: 1,
+        games_today: 1,
+        messages_today: 1,
+      }))
+
+    const visibilityState = { value: 'visible' }
+    Object.defineProperty(document, 'hidden', {
+      configurable: true,
+      get: () => visibilityState.value === 'hidden',
+    })
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => visibilityState.value,
+    })
+
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true })
+    try {
+      renderAdmin()
+      await waitFor(() => {
+        expect(fetchSpy).toHaveBeenCalledTimes(2) // /auth/me + first /activity
+      })
+
+      // Hide the tab; pending timeout is cleared.
+      visibilityState.value = 'hidden'
+      document.dispatchEvent(new Event('visibilitychange'))
+
+      await vi.advanceTimersByTimeAsync(20_000)
+      expect(fetchSpy).toHaveBeenCalledTimes(2)
+
+      // Become visible again; should refetch immediately.
+      visibilityState.value = 'visible'
+      document.dispatchEvent(new Event('visibilitychange'))
+      await waitFor(() => {
+        expect(fetchSpy).toHaveBeenCalledTimes(3)
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('shows the loading state before /auth/me resolves', () => {
     let resolveMe
     vi.spyOn(global, 'fetch').mockImplementationOnce(

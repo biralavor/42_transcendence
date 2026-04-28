@@ -1,5 +1,6 @@
 // src/frontend/src/pages/Profile.jsx
 import { useState, useEffect, useRef, useMemo } from 'react'
+import { Link } from 'react-router-dom'
 import NavbarComponent from '../Components/Navbar'
 import GameSettings from '../Components/GameSettings'
 import { getAvatarFilter } from '../utils/avatarFilter'
@@ -533,7 +534,12 @@ export default function Profile() {
               </div>
 
               <div className="profile-history">
-                <h2 className="profile-section-title">Match history</h2>
+                <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                  <h2 className="profile-section-title mb-0">Match history</h2>
+                  <Link to="/profile/activity" className="arcade-btn arcade-btn-secondary">
+                    View activity
+                  </Link>
+                </div>
                 {paginatedHistory.total === 0 ? (
                   <p style={{ color: 'var(--metal-silver)', fontFamily: 'VT323, monospace' }}>
                     No matches yet.

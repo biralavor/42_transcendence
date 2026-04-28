@@ -4,6 +4,8 @@ import NavbarComponent from '../Components/Navbar'
 import { apiCall } from '../utils/apiClient'
 import './Admin.css'
 
+const ADMIN_POLL_INTERVAL_MS = 5000
+
 function StatCard({ label, value }) {
   return (
     <div className="col-12 col-md-4">
@@ -40,24 +42,53 @@ export default function Admin() {
 
   useEffect(() => {
     if (meStatus !== 'admin') return
-    const controller = new AbortController()
+
     let cancelled = false
+    let timeoutId = null
+    let controller = null
 
     async function load() {
+      if (cancelled) return
+      controller = new AbortController()
       try {
         const resp = await apiCall('/api/users/admin/activity', { signal: controller.signal })
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
         const data = await resp.json()
-        if (!cancelled) setStats(data)
+        if (cancelled) return
+        setStats(data)
+        setError('')
       } catch (err) {
         if (err.name !== 'AbortError' && !cancelled) {
           setError('Failed to load admin stats.')
         }
       }
+      // Schedule the next poll only while the tab is visible. visibilitychange
+      // resumes polling on focus return.
+      if (!cancelled && !document.hidden) {
+        timeoutId = setTimeout(load, ADMIN_POLL_INTERVAL_MS)
+      }
     }
 
+    function onVisibilityChange() {
+      if (document.hidden) {
+        if (timeoutId) {
+          clearTimeout(timeoutId)
+          timeoutId = null
+        }
+      } else if (timeoutId === null) {
+        load()
+      }
+    }
+
+    document.addEventListener('visibilitychange', onVisibilityChange)
     load()
-    return () => { cancelled = true; controller.abort() }
+
+    return () => {
+      cancelled = true
+      if (controller) controller.abort()
+      if (timeoutId) clearTimeout(timeoutId)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+    }
   }, [meStatus])
 
   if (meStatus === 'forbidden') {

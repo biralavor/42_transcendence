@@ -18,6 +18,7 @@ import GameInviteModal from './Components/GameInviteModal'
 import Tournament from './pages/Tournament'
 import Tournaments from './pages/Tournaments'
 import Admin from './pages/Admin'
+import ActivityDashboard from './pages/ActivityDashboard'
 
 export default function App() {
   useEffect(() => {
@@ -60,6 +61,15 @@ export default function App() {
           element={(
             <PrivateRoute>
               <Profile />
+            </PrivateRoute>
+          )}
+        />
+
+        <Route
+          path="/profile/activity"
+          element={(
+            <PrivateRoute>
+              <ActivityDashboard />
             </PrivateRoute>
           )}
         />
