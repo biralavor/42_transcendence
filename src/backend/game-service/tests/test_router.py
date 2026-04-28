@@ -868,3 +868,102 @@ async def test_leaderboard_rank_changes_when_sort_changes(client):
     # Assert ranks are monotonic in each response.
     assert [r["rank"] for r in rows_xp] == sorted([r["rank"] for r in rows_xp])
     assert [r["rank"] for r in rows_wins] == sorted([r["rank"] for r in rows_wins])
+
+
+# --------------------------------------------------------------------------- #
+# GET /games/live (public, no auth)
+# --------------------------------------------------------------------------- #
+
+@pytest.mark.asyncio
+async def test_get_live_games_response_is_well_formed_list(client):
+    """Shape-only check: the response is a JSON list and each entry conforms
+    to the LiveGameSummary contract regardless of how many ongoing matches
+    happen to be in the DB at the time."""
+    resp = await client.get("/games/live")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert isinstance(body, list)
+    for entry in body:
+        assert {"game_id", "player1", "player2", "started_at", "spectator_count"} <= entry.keys()
+        assert isinstance(entry["spectator_count"], int)
+
+
+@pytest.mark.asyncio
+async def test_get_live_games_returns_envelope_for_active_match(client):
+    from service.ws.router import _bind_match, _unbind_match
+
+    # Create an ongoing match between two seeded test users
+    create = await client.post(
+        "/matches", json={"player1_id": 5001, "player2_id": 5002}
+    )
+    assert create.status_code == 201, create.text[:200]
+    match_id = create.json()["id"]
+
+    # /games/live only lists matches with a live WS session bound — simulate
+    # one by binding a synthetic game_id to this match_id.
+    test_game_id = f"test-live-{match_id}"
+    _bind_match(test_game_id, match_id)
+
+    try:
+        resp = await client.get("/games/live")
+        assert resp.status_code == 200
+        rows = resp.json()
+        found = next((r for r in rows if r["game_id"] == test_game_id), None)
+        assert found is not None, f"bound match {match_id} should appear in live list"
+        assert found["player1"]["id"] == 5001
+        assert found["player2"]["id"] == 5002
+        assert "started_at" in found
+        # No active spectator WS for this synthetic room → spectator_count == 0
+        assert found["spectator_count"] == 0
+    finally:
+        _unbind_match(test_game_id)
+
+    # Clean up: finish the match so it doesn't leak into subsequent tests
+    finish = await client.post(
+        f"/matches/{match_id}/finish",
+        json={"winner_id": 5001, "score_p1": 7, "score_p2": 0},
+    )
+    assert finish.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_get_live_games_is_publicly_accessible(client):
+    """No Authorization header → 200, never 401/403."""
+    # The `client` fixture intentionally sets NO auth headers.
+    resp = await client.get("/games/live")
+    assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_get_live_games_skips_matches_without_live_ws_session(client):
+    """A match that exists in the DB as 'ongoing' but has no live WS session
+    bound should NOT appear in /games/live (the endpoint lists watchable
+    games only)."""
+    create = await client.post(
+        "/matches", json={"player1_id": 5003, "player2_id": 5010}
+    )
+    assert create.status_code == 201
+    match_id = create.json()["id"]
+
+    try:
+        resp = await client.get("/games/live")
+        assert resp.status_code == 200
+        rows = resp.json()
+        # The match has no _bind_match call — it should be filtered out.
+        # We don't know the shape of bound game_ids ahead of time, so check
+        # that no entry's underlying match_id matches ours by querying the
+        # reverse map directly.
+        from service.ws.router import _match_ids
+        for entry in rows:
+            mapped_match_id = _match_ids.get(entry["game_id"])
+            assert mapped_match_id != match_id, (
+                f"unbound match {match_id} should not appear in live list, "
+                f"but found entry: {entry}"
+            )
+    finally:
+        # Clean up
+        finish = await client.post(
+            f"/matches/{match_id}/finish",
+            json={"winner_id": 5003, "score_p1": 7, "score_p2": 0},
+        )
+        assert finish.status_code == 200

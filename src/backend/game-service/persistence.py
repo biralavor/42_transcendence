@@ -727,6 +727,42 @@ async def get_user_matches(db: AsyncSession, user_id: int) -> list[Match]:
     )
     return list(result.scalars().all())
 
+
+async def list_live_matches(db: AsyncSession) -> list[dict]:
+    """Return all human-vs-human matches currently in 'ongoing' status,
+    with both players' usernames + display names + avatars.
+
+    AI matches (player_id = 0) are excluded — the AI is not a watchable player.
+    Spectator counts are NOT included here; they are sourced live from the
+    in-memory ConnectionManager by the route handler.
+    """
+    result = await db.execute(
+        text(
+            """
+            SELECT
+                m.id::text                                                      AS match_id,
+                m.player1_id                                                    AS p1_id,
+                u1.username                                                     AS p1_username,
+                COALESCE(NULLIF(TRIM(u1.display_name), ''), u1.username)        AS p1_display_name,
+                u1.avatar_url                                                   AS p1_avatar_url,
+                m.player2_id                                                    AS p2_id,
+                u2.username                                                     AS p2_username,
+                COALESCE(NULLIF(TRIM(u2.display_name), ''), u2.username)        AS p2_display_name,
+                u2.avatar_url                                                   AS p2_avatar_url,
+                m.started_at                                                    AS started_at
+            FROM matches m
+            JOIN users u1 ON u1.id = m.player1_id
+            JOIN users u2 ON u2.id = m.player2_id
+            WHERE m.status = 'ongoing'
+              AND m.player1_id <> 0
+              AND m.player2_id <> 0
+            ORDER BY m.started_at DESC
+            """
+        )
+    )
+    return [dict(row) for row in result.mappings()]
+
+
 def leaderboard_order_by_str(sort_assoc: list[tuple[str, str]] | None) -> str | None:
     valid_columns = [
         'rank',

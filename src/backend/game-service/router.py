@@ -36,6 +36,7 @@ from service.persistence import (
     get_xp_for_user,
     join_tournament,
     leave_tournament,
+    list_live_matches,
     list_tournaments,
     record_tournament_match_result,
     start_tournament,
@@ -43,6 +44,8 @@ from service.persistence import (
 )
 from service.schemas import (
     AchievementResponse,
+    LiveGamePlayer,
+    LiveGameSummary,
     MatchCreateRequest,
     MatchFinishRequest,
     MatchHistoryItem,
@@ -59,7 +62,9 @@ from service.schemas import (
     XpResponse,
 )
 from service.ws.router import (
+    game_id_for_match,
     manager as ws_manager,
+    spectator_count,
     sync_tournament_ready_timeouts,
 )
 from shared.database import get_db
@@ -480,3 +485,41 @@ async def xp_leaderboard(session: SessionDependency, limit: int = Query(20, ge=1
         {"limit": limit},
     )
     return [dict(row) for row in result.mappings()]
+
+
+@router.get(
+    "/games/live",
+    response_model=list[LiveGameSummary],
+    summary="List currently-active matches (public, no auth)",
+)
+async def list_live_games(session: SessionDependency):
+    rows = await list_live_matches(session)
+    out: list[dict] = []
+    for row in rows:
+        match_id_int = int(row["match_id"])
+        # Only list matches that are actually watchable — i.e., have a live WS
+        # session bound in `_match_id_to_game_id`. A DB row in 'ongoing' status
+        # without a bound session is in a transient state (e.g., between match
+        # creation and the both-players-connected handshake) and isn't yet a
+        # live game.
+        game_id = game_id_for_match(match_id_int)
+        if game_id is None:
+            continue
+        out.append({
+            "game_id": game_id,
+            "player1": {
+                "id": row["p1_id"],
+                "username": row["p1_username"],
+                "display_name": row["p1_display_name"],
+                "avatar_url": row["p1_avatar_url"],
+            },
+            "player2": {
+                "id": row["p2_id"],
+                "username": row["p2_username"],
+                "display_name": row["p2_display_name"],
+                "avatar_url": row["p2_avatar_url"],
+            },
+            "started_at": row["started_at"],
+            "spectator_count": spectator_count(game_id),
+        })
+    return out
