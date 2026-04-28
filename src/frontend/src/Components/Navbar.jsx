@@ -224,6 +224,16 @@ export default function NavbarComponent() {
                       placeholder="Search users"
                       value={searchTerm}
                       onFocus={() => setIsSearchFocused(true)}
+                      onBlur={(event) => {
+                        const nextFocusedElement = event.relatedTarget
+                        const searchContainer = event.currentTarget.closest('.pong-nav__search')
+
+                        if (searchContainer?.contains(nextFocusedElement)) {
+                          return
+                        }
+
+                        setIsSearchFocused(false)
+                      }}
                       onChange={(event) => setSearchTerm(event.target.value)}
                     />
                   </form>
