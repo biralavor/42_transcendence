@@ -16,6 +16,21 @@ const ALLOWED_AVATAR_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024
 const PLACEHOLDER_AVATAR = '/avatar_placeholder.jpg'
 
+function buildHistoryUrl(playerId, filters, page) {
+  const params = new URLSearchParams({
+    player_id: String(playerId),
+    limit: '10',
+    page: String(page),
+    result: filters.result,
+    order: filters.sort,
+  })
+
+  if (filters.dateFrom) params.set('date_from', filters.dateFrom)
+  if (filters.dateTo) params.set('date_to', filters.dateTo)
+
+  return `/api/game/matches/history?${params.toString()}`
+}
+
 function getSafeAvatarUrl(avatarUrl) {
   if (!avatarUrl || typeof avatarUrl !== 'string') {
     return ''
@@ -105,6 +120,14 @@ export default function Profile() {
   const avatarToastTimer = useRef(null)
   const [xpData, setXpData] = useState(null)
   const [achievements, setAchievements] = useState([])
+
+  const [historyFilters, setHistoryFilters] = useState({
+    dateFrom: '',
+    dateTo: '',
+    result: 'all',
+    sort: 'date:desc',
+  })
+  const [historyPage, setHistoryPage] = useState(0)
 
   useEffect(() => {
     return () => {
@@ -231,7 +254,7 @@ export default function Profile() {
             if (!r.ok) throw new Error(`Profile fetch failed: ${r.status}`)
             return r.json()
           }),
-          apiCall(`/api/game/matches/history?player_id=${id}`, { signal }).then(r => {
+          apiCall(buildHistoryUrl(id, historyFilters, historyPage), { signal }).then(r => {
             if (!r.ok) throw new Error(`Matches History fetch failed: ${r.status}`)
             return r.json()
           }),
@@ -272,7 +295,7 @@ export default function Profile() {
       })
 
     return () => controller.abort()
-  }, [auth.access_token])
+  }, [auth.access_token, historyFilters, historyPage])
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target
@@ -534,6 +557,23 @@ export default function Profile() {
 
               <div className="profile-history">
                 <h2 className="profile-section-title">Match history</h2>
+                <div className="history-controls" role="group" aria-label="Filter match history by result">
+                  {['all', 'win', 'loss'].map((value) => (
+                    <label key={value} className="history-filter-option">
+                      <input
+                        type="radio"
+                        name="historyResult"
+                        value={value}
+                        checked={historyFilters.result === value}
+                        onChange={(e) => {
+                          setHistoryFilters(prev => ({ ...prev, result: e.target.value }))
+                          setHistoryPage(0)
+                        }}
+                      />
+                      {value === 'all' ? 'All' : value === 'win' ? 'Wins' : 'Losses'}
+                    </label>
+                  ))}
+                </div>
                 {paginatedHistory.total === 0 ? (
                   <p style={{ color: 'var(--metal-silver)', fontFamily: 'VT323, monospace' }}>
                     No matches yet.
