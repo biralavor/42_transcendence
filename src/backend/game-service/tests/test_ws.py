@@ -587,3 +587,98 @@ def test_ws_anonymous_invite_url_probe_does_not_register_or_leak_state(monkeypat
     assert router_module.manager._roles == before_roles, (
         "anonymous probe must not register a role in the manager"
     )
+
+
+@pytest.mark.timeout(5)
+def test_ws_authenticated_third_party_probe_to_invite_url_without_session_closes_4004(monkeypatch):
+    """A logged-in user (valid token, but not one of the invite's players)
+    probing an `invite-X-Y-…` URL when no GameSession exists must ALSO close
+    with 4004 — the spectator gate is on session existence, NOT on whether
+    the caller is anonymous. Otherwise any authenticated user could probe
+    arbitrary invite rooms and inflate spectator counts on phantom games.
+    """
+    import service.ws.router as router_module
+    from datetime import timedelta
+
+    # Issue a valid token for a real third-party user_id (not 99991/99992).
+    from jose import jwt
+    from shared.config.settings import settings
+    third_party_credential_id = 88880
+    third_party_user_id = 88881
+    token = jwt.encode(
+        {"credential_id": third_party_credential_id},
+        settings.JWT_SECRET_KEY,
+        algorithm="HS256",
+    )
+
+    # Stub the credentials lookup so the classifier resolves caller_user_id
+    # without hitting the DB. Patch `text` is intrusive; easier to patch
+    # AsyncSessionLocal so the SELECT yields a row with our user_id.
+    fake_row = (third_party_user_id,)
+    fake_result = MagicMock()
+    fake_result.fetchone = MagicMock(return_value=fake_row)
+
+    class _FakeDb:
+        async def execute(self, *_args, **_kwargs):
+            return fake_result
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *_a):
+            return False
+
+    monkeypatch.setattr(router_module, "AsyncSessionLocal", lambda: _FakeDb())
+
+    # No live session and no setup/waiting state for this game_id.
+    monkeypatch.setattr(
+        router_module.game_manager, "get_session", MagicMock(return_value=None)
+    )
+
+    fake_game_id = "invite-99991-99992-cafef00d"
+    before_roles = dict(router_module.manager._roles)
+    before_waiting = dict(router_module._waiting_room_players)
+
+    client = TestClient(app)
+    with pytest.raises(WebSocketDisconnect) as exc_info:
+        with client.websocket_connect(f"/ws/game/{fake_game_id}?token={token}"):
+            pass
+    # The third-party user is not in (99991, 99992) so they fall to the
+    # spectator branch; the gate then sees no session and closes 4004.
+    assert exc_info.value.code == 4004
+
+    # The probe must not have leaked any state.
+    assert router_module.manager._roles == before_roles, (
+        "authenticated third-party probe must not register a role"
+    )
+    assert router_module._waiting_room_players == before_waiting, (
+        "authenticated third-party probe must not seed _waiting_room_players"
+    )
+
+
+@pytest.mark.timeout(5)
+def test_resolve_room_player_ids_is_read_only_for_invite_urls():
+    """Direct unit test for the read-only contract of _resolve_room_player_ids:
+    parsing an `invite-{p1}-{p2}-…` URL must NOT seed _waiting_room_players.
+    Seeding is the player-path's responsibility (via _ensure_waiting_room_players),
+    NOT the resolver's.
+    """
+    import service.ws.router as router_module
+
+    fake_game_id = "invite-77771-77772-beadbead"
+
+    # Sanity: no pre-existing entry for our test id.
+    before_waiting = dict(router_module._waiting_room_players)
+    assert fake_game_id not in router_module._waiting_room_players
+
+    parsed = router_module._resolve_room_player_ids(fake_game_id)
+
+    # The function still returns the parsed pair so the player path can use it.
+    assert parsed == (77771, 77772), (
+        f"resolver should parse invite-URL into (77771, 77772), got {parsed}"
+    )
+    # …but it must NOT have seeded _waiting_room_players.
+    assert fake_game_id not in router_module._waiting_room_players, (
+        "_resolve_room_player_ids must be read-only — seeding is the player path's job"
+    )
+    assert router_module._waiting_room_players == before_waiting, (
+        "_resolve_room_player_ids must not mutate _waiting_room_players at all"
+    )
