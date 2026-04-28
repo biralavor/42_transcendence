@@ -28,7 +28,9 @@ export default function Search() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  const lastPage = Math.max(1, Math.ceil((pageData.total || 0) / PER_PAGE))
+  const effectivePerPage =
+    Number.isFinite(pageData.per_page) && pageData.per_page > 0 ? pageData.per_page : PER_PAGE
+  const lastPage = Math.max(1, Math.ceil((pageData.total || 0) / effectivePerPage))
 
   useEffect(() => {
     setInputValue(query)
