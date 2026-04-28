@@ -84,15 +84,26 @@ def _resolve_room_player_ids(game_id: str) -> tuple[int, int] | None:
 
     Sources, in priority order:
       1. live GameSession (post game-start)
-      2. _ensure_waiting_room_players, which checks _waiting_room_players,
-         _setup_sessions, and as a fallback parses invite-URL room IDs of the
-         form `invite-{p1}-{p2}-{nonce}-…` into _waiting_room_players.
-    Returns None if no source can identify the players.
+      2. _waiting_room_players (already-seeded waiting room)
+      3. _setup_sessions
+      4. _parse_invite_room_players (read-only parse of `invite-{p1}-{p2}-…`)
+
+    READ-ONLY: this function does NOT seed _waiting_room_players. Seeding
+    happens later in the player path via _ensure_waiting_room_players(),
+    only after the caller has been confirmed as a player. That prevents an
+    anonymous probe to an arbitrary `invite-X-Y-…` URL from inflating the
+    in-memory dicts.
     """
     session = game_manager.get_session(game_id)
     if session is not None:
         return (session.player1_id, session.player2_id)
-    return _ensure_waiting_room_players(game_id)
+    waiting = _waiting_room_players.get(game_id)
+    if waiting is not None:
+        return waiting
+    setup = _setup_sessions.get(game_id)
+    if setup is not None:
+        return setup
+    return _parse_invite_room_players(game_id)
 
 
 async def _spectator_loop(websocket: WebSocket, game_id: str) -> None:
@@ -839,8 +850,11 @@ async def game_websocket(websocket: WebSocket, game_id: str, token: str | None =
     )
 
     if not is_player:
-        # Spectator path. If there is no active room, refuse with 4004.
-        if player_ids is None:
+        # Spectator path: only admit when a live GameSession exists. A match
+        # row without a running session, or an arbitrary invite-URL probe,
+        # is not a watchable game — refuse with 4004 to avoid inflating
+        # spectator_count and growing in-memory maps.
+        if game_manager.get_session(game_id) is None:
             await websocket.close(code=4004, reason="Game not found")
             return
         await _spectator_loop(websocket, game_id)

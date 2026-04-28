@@ -549,3 +549,41 @@ def test_ws_spectator_input_closes_with_4003_via_testclient(monkeypatch):
             # Server now receives the input and closes 4003
             ws.receive_text()  # raises WebSocketDisconnect
     assert exc_info.value.code == 4003
+
+
+@pytest.mark.timeout(5)
+def test_ws_anonymous_invite_url_probe_does_not_register_or_leak_state(monkeypatch):
+    """Anonymous client probes an arbitrary invite-{p1}-{p2}-… URL with no
+    live game session. Must close 4004 and must NOT seed _waiting_room_players
+    or register a role in the manager — otherwise an attacker can grow the
+    in-memory maps indefinitely and inflate spectator counts on phantom rooms.
+    """
+    import service.ws.router as router_module
+
+    # Make sure the room is unknown to every state source.
+    monkeypatch.setattr(
+        router_module.game_manager, "get_session", MagicMock(return_value=None)
+    )
+
+    fake_game_id = "invite-99991-99992-deadbeef"
+    # Snapshot pre-state so we can assert no growth.
+    before_waiting = dict(router_module._waiting_room_players)
+    before_setup = dict(router_module._setup_sessions)
+    before_roles = dict(router_module.manager._roles)
+
+    client = TestClient(app)
+    with pytest.raises(WebSocketDisconnect) as exc_info:
+        with client.websocket_connect(f"/ws/game/{fake_game_id}"):
+            pass
+    assert exc_info.value.code == 4004
+
+    # No state should have been seeded by the probe.
+    assert router_module._waiting_room_players == before_waiting, (
+        "anonymous probe must not seed _waiting_room_players"
+    )
+    assert router_module._setup_sessions == before_setup, (
+        "anonymous probe must not seed _setup_sessions"
+    )
+    assert router_module.manager._roles == before_roles, (
+        "anonymous probe must not register a role in the manager"
+    )

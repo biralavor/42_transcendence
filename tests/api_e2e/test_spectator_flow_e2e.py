@@ -65,6 +65,27 @@ async def _drain_until(ws, predicate, *, timeout: float = 3.0):
             return frame
 
 
+async def _poll_for_spectator_count(api, game_id, expected_min: int, *, timeout: float = 3.0, interval: float = 0.05):
+    """Poll GET /api/games/live until a row matching `game_id` has
+    `spectator_count >= expected_min`, or the deadline expires.
+
+    Returns the matching entry on success, None on timeout. Replaces fixed
+    `asyncio.sleep` waits so the test passes on slow CI without artificial delay.
+    """
+    deadline = asyncio.get_event_loop().time() + timeout
+    last_entry = None
+    while asyncio.get_event_loop().time() < deadline:
+        resp = await api.get("/api/games/live")
+        if resp.status_code == 200:
+            entry = next((e for e in resp.json() if e["game_id"] == game_id), None)
+            if entry is not None:
+                last_entry = entry
+                if entry["spectator_count"] >= expected_min:
+                    return entry
+        await asyncio.sleep(interval)
+    return last_entry
+
+
 @pytest.mark.asyncio
 async def test_anonymous_visitor_can_list_live_games(api):
     """No Authorization header -> 200 + a JSON array (possibly empty)."""
@@ -153,21 +174,14 @@ async def test_spectator_count_increments_on_anonymous_ws_join(api):
 
         # 3. Anonymous spectator joins the same room (no token).
         async with websockets.connect(anon_url, ssl=ssl_ctx) as spec:
-            # Allow the count broadcast to round-trip and the manager to
-            # register the spectator role before we hit the HTTP endpoint.
-            await asyncio.sleep(0.5)
-
-            # 4. GET /api/games/live → match listed with spectator_count >= 1.
-            resp = await api.get("/api/games/live")
-            assert resp.status_code == 200, resp.text[:200]
-            entries = resp.json()
-            ours = next((e for e in entries if e["game_id"] == game_id), None)
+            # Poll /api/games/live until the spectator role is registered and
+            # the HTTP endpoint reflects spectator_count >= 1. Deterministic
+            # alternative to a fixed sleep — fails only when the behaviour
+            # is actually broken.
+            ours = await _poll_for_spectator_count(api, game_id, expected_min=1, timeout=3.0)
             assert ours is not None, (
-                f"game_id {game_id} (match {match_id}) not in /games/live. "
-                f"Entries: {[e['game_id'] for e in entries]}"
-            )
-            assert ours["spectator_count"] >= 1, (
-                f"expected spectator_count >= 1, got {ours['spectator_count']}"
+                f"game_id {game_id} (match {match_id}) never reached "
+                f"spectator_count >= 1 within poll window"
             )
             assert ours["player1"]["id"] == alice["user_id"]
             assert ours["player2"]["id"] == bob["user_id"]

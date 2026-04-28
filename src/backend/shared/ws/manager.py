@@ -24,6 +24,12 @@ class ConnectionManager:
     def __init__(self, signal_callback: Optional[Callable[[str], Awaitable[None]]] = None) -> None:
         self._rooms: Dict[str, Set["WebSocket"]] = {}
         self._roles: Dict[Tuple[str, "WebSocket"], str] = {}
+        # Per-room role counters maintained in lockstep with `_rooms` / `_roles` so
+        # `player_count(room)` / `spectator_count(room)` are O(1) instead of
+        # O(total connections). Hot paths: GET /api/games/live (per-row) and
+        # the spectator join/leave broadcast.
+        self._player_counts: Dict[str, int] = {}
+        self._spectator_counts: Dict[str, int] = {}
         self._signal_callback = signal_callback
 
     async def connect(self, room_id: str, websocket: "WebSocket", role: str = "player") -> None:
@@ -32,11 +38,27 @@ class ConnectionManager:
         await websocket.accept()
         self._rooms.setdefault(room_id, set()).add(websocket)
         self._roles[(room_id, websocket)] = role
+        if role == "player":
+            self._player_counts[room_id] = self._player_counts.get(room_id, 0) + 1
+        else:  # spectator (already validated by _VALID_ROLES)
+            self._spectator_counts[room_id] = self._spectator_counts.get(room_id, 0) + 1
 
     def disconnect(self, room_id: str, websocket: "WebSocket") -> None:
+        role = self._roles.pop((room_id, websocket), None)
         room = self._rooms.get(room_id, set())
         room.discard(websocket)
-        self._roles.pop((room_id, websocket), None)
+        if role == "player":
+            new = self._player_counts.get(room_id, 0) - 1
+            if new <= 0:
+                self._player_counts.pop(room_id, None)
+            else:
+                self._player_counts[room_id] = new
+        elif role == "spectator":
+            new = self._spectator_counts.get(room_id, 0) - 1
+            if new <= 0:
+                self._spectator_counts.pop(room_id, None)
+            else:
+                self._spectator_counts[room_id] = new
         if not room:
             self._rooms.pop(room_id, None)
 
@@ -60,13 +82,7 @@ class ConnectionManager:
         return len(self._rooms.get(room_id, set()))
 
     def player_count(self, room_id: str) -> int:
-        return sum(
-            1 for (rid, _ws), role in self._roles.items()
-            if rid == room_id and role == "player"
-        )
+        return self._player_counts.get(room_id, 0)
 
     def spectator_count(self, room_id: str) -> int:
-        return sum(
-            1 for (rid, _ws), role in self._roles.items()
-            if rid == room_id and role == "spectator"
-        )
+        return self._spectator_counts.get(room_id, 0)
