@@ -150,6 +150,15 @@ export default function NavbarComponent() {
     setIsSearchOpen(false)
   }
 
+  const handleToggleSearch = () => {
+    if (isSearchOpen) {
+      closeSearch()
+      return
+    }
+
+    setIsSearchOpen(true)
+  }
+
   const goToUserProfile = (userId) => {
     navigate(`/profile/${userId}`)
     closeSearch()
@@ -212,7 +221,7 @@ export default function NavbarComponent() {
                     type="button"
                     className="pong-nav__search-toggle"
                     aria-label={isSearchOpen ? 'Close user search' : 'Open user search'}
-                    onClick={() => setIsSearchOpen(prev => !prev)}
+                    onClick={handleToggleSearch}
                   >
                     🔍
                   </button>
