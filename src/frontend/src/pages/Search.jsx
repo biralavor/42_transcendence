@@ -50,7 +50,6 @@ export default function Search() {
 
     apiCall(`/api/users/search?q=${encodeURIComponent(query)}&page=${safePage}&per_page=${PER_PAGE}&sort=username`, {
       signal: controller.signal,
-      skipRefreshOn401: true,
     })
       .then(r => {
         if (!r.ok) throw new Error(`Search failed: ${r.status}`)
