@@ -4,8 +4,10 @@ These tests run against the LIVE running services through nginx (or directly
 against service containers when joining the docker-compose network). They
 exercise complete user journeys via real HTTP/WS — no Python/JS mocks.
 
-Run from the repo root with `make e2e-api`, which mounts this directory into
-a small Python container that joins the transcendence_net docker network.
+Run from the repo root with `make check` (or `make e2e`), which invokes
+tests/TranscendenceHealthCheck.sh; that script spins up a throwaway python
+container, joins it to the `transcendence_network` docker network, and
+executes the pytest suite in this directory.
 
 NOTE: Tests share the same long-lived database as the rest of the suite.
 Use HIGH user IDs (60000+) when registering ad-hoc users so you don't collide
@@ -15,7 +17,7 @@ with seeded fixtures (alice=1, bob=2, ...) or other suite users (5001-5999,
 from __future__ import annotations
 
 import os
-import time
+import uuid
 import pytest
 import pytest_asyncio
 import httpx
@@ -51,11 +53,11 @@ async def api():
 def _unique_username(prefix: str = "e2e") -> str:
     """Return a username unique to this test run.
 
-    Uses ms-precision timestamp so concurrent test files / parallel runs don't
-    collide. Username length stays within whatever the registration validator
-    allows (typically 32 chars).
+    Uses uuid4 hex (12 chars of entropy) so concurrent test files and parallel
+    runs (pytest-xdist) cannot collide on a 409 "User already exists". Total
+    length stays within the 32-char registration validator.
     """
-    return f"{prefix}_{int(time.time() * 1000) % 10_000_000}"
+    return f"{prefix}_{uuid.uuid4().hex[:12]}"
 
 
 async def register_user(api: httpx.AsyncClient, username: str | None = None,

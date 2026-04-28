@@ -117,6 +117,9 @@ async def test_tournament_join_full_returns_409(api):
         json={"name": f"Full-{creator['user_id']}", "max_participants": 4},
         headers=auth_headers(creator["token"]),
     )
+    assert create.status_code == 201, (
+        f"tournament create failed: {create.status_code} {create.text[:200]}"
+    )
     tournament_id = create.json()["id"]
 
     for player in (p2, p3, p4):

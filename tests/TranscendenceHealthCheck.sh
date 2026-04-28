@@ -1300,7 +1300,7 @@ _pure_cases=0
 # Using `grep | wc -l` so the function always outputs exactly one integer
 # (grep -c can dual-print when combined with `|| echo 0` on no-match).
 count_py_cases() {
-    grep -E '^(async )?def test_' "$1" 2>/dev/null | wc -l
+    grep -E '^[[:space:]]*(async[[:space:]]+)?def[[:space:]]+test_' "$1" 2>/dev/null | wc -l
 }
 # count_js_cases <file>: count `it(...)` and `test(...)` test definitions.
 count_js_cases() {
@@ -1311,10 +1311,10 @@ if [[ -d "$_BACKEND" ]]; then
     while IFS= read -r f; do
         n=$(count_py_cases "$f")
         _total_test_cases=$((_total_test_cases + n))
-        if grep -lqE "create_async_engine|_TestSession|NullPool|begin_nested" "$f" 2>/dev/null; then
+        if grep -qE "create_async_engine|_TestSession|NullPool|begin_nested" "$f" 2>/dev/null; then
             _smoke_files=$((_smoke_files + 1))
             _smoke_cases=$((_smoke_cases + n))
-        elif grep -lqE "MagicMock|AsyncMock|mock_db_session|unittest.mock" "$f" 2>/dev/null; then
+        elif grep -qE "MagicMock|AsyncMock|mock_db_session|unittest.mock" "$f" 2>/dev/null; then
             _mock_files=$((_mock_files + 1))
             _mock_cases=$((_mock_cases + n))
         else
@@ -1329,7 +1329,7 @@ if [[ -d "$_FRONTEND" ]]; then
     while IFS= read -r f; do
         n=$(count_js_cases "$f")
         _total_test_cases=$((_total_test_cases + n))
-        if grep -lqE "vi.mock|vi\.fn|vi\.spyOn|MockResolvedValue" "$f" 2>/dev/null; then
+        if grep -qE "vi.mock|vi\.fn|vi\.spyOn|MockResolvedValue" "$f" 2>/dev/null; then
             _mock_files=$((_mock_files + 1))
             _mock_cases=$((_mock_cases + n))
         else

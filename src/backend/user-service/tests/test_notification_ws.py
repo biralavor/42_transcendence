@@ -4,6 +4,7 @@ Endpoint integration tests for /ws/notifications/{user_id}.
 DB mocked via conftest.py override_get_db (autouse).
 ConnectionManager used as real instance (not mocked).
 """
+import time
 from datetime import timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -112,25 +113,38 @@ def test_multi_tab_same_user_keeps_registry_alive_until_last_disconnect(mock_db_
     fresh_manager = ConnectionManager()
     token = _make_token()
 
+    def _wait_until(cond, timeout=2.0):
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if cond():
+                return True
+            time.sleep(0.05)
+        return cond()
+
     with patch("service.ws.notification_router.get_me", new=AsyncMock(return_value=user)), \
          patch("service.ws.notification_router.notification_manager", fresh_manager):
         with TestClient(app) as client:
-            # Tab 1 connects
             with client.websocket_connect(f"/ws/notifications/50?token={token}") as ws1:
-                # Tab 2 connects (same user)
                 with client.websocket_connect(f"/ws/notifications/50?token={token}") as ws2:
-                    # Both should be active
                     assert fresh_manager.active_connections("50") == 2
-                    # Close tab 1
+                    assert "50" in notification_event_registry._events, (
+                        "registry should hold an event while tabs are connected"
+                    )
                     ws1.close()
-                # ws1 cleanup happens during exit; tab 2 still inside its `with`
-                # Tab 2 still active; the event registry should still have the entry
-                # (cleanup_event only fires when active_connections == 0)
-            # After both exit, registry should be cleaned
-            # (We don't assert on registry internals here because the cleanup is async
-            # and may complete after the sync assertion. The behavior we care about
-            # — no exceptions during multi-tab disconnect — is validated by the test
-            # not raising.)
+                    # Server-side disconnect runs in portal thread — poll for it.
+                    assert _wait_until(lambda: fresh_manager.active_connections("50") == 1), (
+                        f"after ws1.close expected 1 active conn, got "
+                        f"{fresh_manager.active_connections('50')}"
+                    )
+                    # Regression guard: registry entry must persist while ws2 is open.
+                    # cleanup_event must only fire when active_connections drops to 0.
+                    assert "50" in notification_event_registry._events, (
+                        "registry entry was cleaned while a tab is still connected"
+                    )
+                # ws2 closed by with-exit; both tabs now gone.
+            assert _wait_until(lambda: "50" not in notification_event_registry._events), (
+                "registry entry should be cleaned after the last tab disconnected"
+            )
 
 
 def test_multiple_concurrent_broadcasts_do_not_crash(mock_db_session):
