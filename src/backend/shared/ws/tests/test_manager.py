@@ -1,6 +1,5 @@
 import asyncio
 import sys
-import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # .../src/backend
@@ -79,20 +78,33 @@ async def test_broadcast_continues_after_failed_send(manager):
 @pytest.mark.asyncio
 async def test_broadcast_sends_to_room_clients_concurrently(manager):
     ws1, ws2 = make_ws(), make_ws()
+    sends_started = 0
+    all_sends_started = asyncio.Event()
+    release_sends = asyncio.Event()
 
-    async def slow_send(_message):
-        await asyncio.sleep(0.05)
+    async def blocked_send(_message):
+        nonlocal sends_started
+        sends_started += 1
+        if sends_started == 2:
+            all_sends_started.set()
+        await release_sends.wait()
 
-    ws1.send_json.side_effect = slow_send
-    ws2.send_json.side_effect = slow_send
+    ws1.send_json.side_effect = blocked_send
+    ws2.send_json.side_effect = blocked_send
     await manager.connect("room1", ws1)
     await manager.connect("room1", ws2)
 
-    started_at = time.perf_counter()
-    await manager.broadcast("room1", {"msg": "hello"})
-    elapsed = time.perf_counter() - started_at
+    broadcast_task = asyncio.create_task(manager.broadcast("room1", {"msg": "hello"}))
+    try:
+        await asyncio.wait_for(all_sends_started.wait(), timeout=1)
+    except asyncio.TimeoutError as exc:
+        release_sends.set()
+        await broadcast_task
+        raise AssertionError("broadcast did not start all sends concurrently") from exc
 
-    assert elapsed < 0.09
+    assert not broadcast_task.done()
+    release_sends.set()
+    await broadcast_task
     ws1.send_json.assert_awaited_once_with({"msg": "hello"})
     ws2.send_json.assert_awaited_once_with({"msg": "hello"})
 
