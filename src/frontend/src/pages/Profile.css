@@ -265,6 +265,26 @@
   accent-color: var(--primary);
 }
 
+.history-filter-date input {
+  min-height: 2rem;
+  border: 1px solid rgba(251, 192, 45, 0.35);
+  border-radius: 0.35rem;
+  background: rgba(10, 10, 10, 0.45);
+  color: rgba(245, 245, 242, 0.92);
+  font: inherit;
+  padding: 0.2rem 0.45rem;
+}
+
+.history-filter-select select {
+  min-height: 2rem;
+  border: 1px solid rgba(251, 192, 45, 0.35);
+  border-radius: 0.35rem;
+  background: rgba(10, 10, 10, 0.45);
+  color: rgba(245, 245, 242, 0.92);
+  font: inherit;
+  padding: 0.2rem 0.45rem;
+}
+
 .history-table {
   width: 100%;
   border: 1px solid rgba(251, 192, 45, 0.3);

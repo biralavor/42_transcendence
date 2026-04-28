@@ -25,8 +25,8 @@ function buildHistoryUrl(playerId, filters, page) {
     order: filters.sort,
   })
 
-  if (filters.dateFrom) params.set('date_from', filters.dateFrom)
-  if (filters.dateTo) params.set('date_to', filters.dateTo)
+  if (filters.dateFrom) params.set('date_from', `${filters.dateFrom}T00:00:00`)
+  if (filters.dateTo) params.set('date_to', `${filters.dateTo}T23:59:59.999999`)
 
   return `/api/game/matches/history?${params.toString()}`
 }
@@ -128,6 +128,7 @@ export default function Profile() {
     sort: 'date:desc',
   })
   const [historyPage, setHistoryPage] = useState(0)
+  const todayDate = useMemo(() => new Date().toISOString().slice(0, 10), [])
 
   useEffect(() => {
     return () => {
@@ -573,6 +574,44 @@ export default function Profile() {
                       {value === 'all' ? 'All' : value === 'win' ? 'Wins' : 'Losses'}
                     </label>
                   ))}
+                  <label className="history-filter-option history-filter-date">
+                    From
+                    <input
+                      type="date"
+                      value={historyFilters.dateFrom}
+                      max={historyFilters.dateTo || todayDate}
+                      onChange={(e) => {
+                        setHistoryFilters(prev => ({ ...prev, dateFrom: e.target.value }))
+                        setHistoryPage(0)
+                      }}
+                    />
+                  </label>
+                  <label className="history-filter-option history-filter-date">
+                    To
+                    <input
+                      type="date"
+                      value={historyFilters.dateTo}
+                      min={historyFilters.dateFrom}
+                      max={todayDate}
+                      onChange={(e) => {
+                        setHistoryFilters(prev => ({ ...prev, dateTo: e.target.value }))
+                        setHistoryPage(0)
+                      }}
+                    />
+                  </label>
+                  <label className="history-filter-option history-filter-select">
+                    Sort
+                    <select
+                      value={historyFilters.sort}
+                      onChange={(e) => {
+                        setHistoryFilters(prev => ({ ...prev, sort: e.target.value }))
+                        setHistoryPage(0)
+                      }}
+                    >
+                      <option value="date:desc">Date</option>
+                      <option value="result:asc">Result</option>
+                    </select>
+                  </label>
                 </div>
                 {paginatedHistory.total === 0 ? (
                   <p style={{ color: 'var(--metal-silver)', fontFamily: 'VT323, monospace' }}>
