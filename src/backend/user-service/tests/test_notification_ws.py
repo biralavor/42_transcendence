@@ -4,6 +4,7 @@ Endpoint integration tests for /ws/notifications/{user_id}.
 DB mocked via conftest.py override_get_db (autouse).
 ConnectionManager used as real instance (not mocked).
 """
+import time
 from datetime import timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -81,3 +82,84 @@ def test_connect_then_disconnect_does_not_raise(mock_db_session):
         with TestClient(app) as client:
             with client.websocket_connect(f"/ws/notifications/5?token={token}") as ws:
                 ws.close()
+
+
+# ── edge cases ────────────────────────────────────────────────────────────────
+
+def test_broadcast_to_user_with_no_active_connection_does_not_raise(mock_db_session):
+    """A broadcast to a user_id that has zero active WS connections must
+    silently drop — never raise. This is the offline-user case."""
+    from service.ws.notification_router import notification_manager
+    import asyncio
+
+    # No connections registered for user 99
+    # Calling broadcast on an empty room must complete cleanly
+    async def _try_broadcast():
+        await notification_manager.broadcast("99", {"type": "notification", "id": 1})
+
+    # Should not raise
+    asyncio.run(_try_broadcast())
+
+
+def test_multi_tab_same_user_keeps_registry_alive_until_last_disconnect(mock_db_session):
+    """When a user has 2 tabs open and closes one, the event registry entry
+    must NOT be cleaned up until the LAST tab disconnects.
+
+    Without this, the second tab would lose its event reference and stop
+    receiving broadcasts.
+    """
+    from service.ws.notification_router import notification_manager, notification_event_registry
+    user = _make_user(50)
+    fresh_manager = ConnectionManager()
+    token = _make_token()
+
+    def _wait_until(cond, timeout=2.0):
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if cond():
+                return True
+            time.sleep(0.05)
+        return cond()
+
+    with patch("service.ws.notification_router.get_me", new=AsyncMock(return_value=user)), \
+         patch("service.ws.notification_router.notification_manager", fresh_manager):
+        with TestClient(app) as client:
+            with client.websocket_connect(f"/ws/notifications/50?token={token}") as ws1:
+                with client.websocket_connect(f"/ws/notifications/50?token={token}") as ws2:
+                    assert fresh_manager.active_connections("50") == 2
+                    assert "50" in notification_event_registry._events, (
+                        "registry should hold an event while tabs are connected"
+                    )
+                    ws1.close()
+                    # Server-side disconnect runs in portal thread — poll for it.
+                    assert _wait_until(lambda: fresh_manager.active_connections("50") == 1), (
+                        f"after ws1.close expected 1 active conn, got "
+                        f"{fresh_manager.active_connections('50')}"
+                    )
+                    # Regression guard: registry entry must persist while ws2 is open.
+                    # cleanup_event must only fire when active_connections drops to 0.
+                    assert "50" in notification_event_registry._events, (
+                        "registry entry was cleaned while a tab is still connected"
+                    )
+                # ws2 closed by with-exit; both tabs now gone.
+            assert _wait_until(lambda: "50" not in notification_event_registry._events), (
+                "registry entry should be cleaned after the last tab disconnected"
+            )
+
+
+def test_multiple_concurrent_broadcasts_do_not_crash(mock_db_session):
+    """Firing several broadcasts to the same room in rapid succession should
+    not crash the handler or the manager. This is a smoke-level guard against
+    obvious race conditions."""
+    from service.ws.notification_router import notification_manager
+    import asyncio
+
+    async def _fire_many():
+        # No active connection — calls should all complete without raising
+        tasks = [
+            notification_manager.broadcast("123", {"type": "notification", "id": i})
+            for i in range(10)
+        ]
+        await asyncio.gather(*tasks)
+
+    asyncio.run(_fire_many())

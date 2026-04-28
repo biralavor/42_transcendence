@@ -156,7 +156,20 @@ def _ws_db_patches(is_blocked_fn=None, sender_uid=None):
 
     @contextlib.asynccontextmanager
     async def mock_session():
-        yield MagicMock()
+        # ws/router.py runs two credential_id → user lookups:
+        #   - chat endpoint (line ~125): SELECT id, username FROM users WHERE credential_id = :cid
+        #   - notifications endpoint (line ~230): SELECT id FROM users WHERE credential_id = :cid
+        # Return a (id, username) tuple — the notifications path takes row[0]
+        # and ignores the rest, so the same shape satisfies both queries.
+        # user.id is mapped to credential_id (transparent) and username is stub.
+        async def fake_execute(stmt, params=None, *args, **kwargs):
+            cid = (params or {}).get("cid")
+            fake_result = MagicMock()
+            fake_result.first.return_value = (cid, f"user{cid}") if cid is not None else None
+            return fake_result
+        db = MagicMock()
+        db.execute = AsyncMock(side_effect=fake_execute)
+        yield db
 
     patches = [
         patch("service.ws.router.get_or_create_room", side_effect=mock_get_or_create_room),

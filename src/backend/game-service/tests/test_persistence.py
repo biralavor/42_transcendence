@@ -515,6 +515,65 @@ async def test_perfect_game_badge_unlocked_on_10_0_win(db):
     assert row is not None, "perfect_game badge should unlock on 10-0 win"
 
 
+@pytest.mark.asyncio
+async def test_has_perfect_game_returns_false_for_partial_shutout(db):
+    """A 5-0 win is a shutout but NOT a perfect game (badge requires winner ≥10).
+
+    Regression guard for the description-vs-implementation fix: previously
+    `has_perfect_game` returned True for any shutout regardless of winner score.
+    """
+    # Use a fresh user pair so prior shutouts don't affect the assertion
+    match = await create_match(db, player1_id=42, player2_id=99)
+    await finish_match(db, match.id, winner_id=42, score_p1=5, score_p2=0)
+    # We can't directly assert has_perfect_game(42) is False because earlier
+    # tests in the same DB may have given user 42 a real 10-0 win. Instead
+    # check that THIS specific 5-0 match was not enough to unlock the badge
+    # via SELECT against the matches table directly using the same predicate.
+    from persistence import has_perfect_game
+    # ── First, verify the predicate-level behavior using a fresh user (3) ──
+    # User 3 has no prior matches in our test seed.
+    count_user3 = (await db.execute(
+        text(
+            "SELECT COUNT(*) FROM matches "
+            "WHERE winner_id = 3 AND status = 'finished' AND ("
+            "  (player1_id = 3 AND score_p2 = 0 AND score_p1 >= 10) OR "
+            "  (player2_id = 3 AND score_p1 = 0 AND score_p2 >= 10)"
+            ")"
+        ),
+    )).scalar_one()
+    # Build a 5-0 win for user 3
+    m_partial = await create_match(db, player1_id=3, player2_id=99)
+    await finish_match(db, m_partial.id, winner_id=3, score_p1=5, score_p2=0)
+    after_partial = (await db.execute(
+        text(
+            "SELECT COUNT(*) FROM matches "
+            "WHERE winner_id = 3 AND status = 'finished' AND ("
+            "  (player1_id = 3 AND score_p2 = 0 AND score_p1 >= 10) OR "
+            "  (player2_id = 3 AND score_p1 = 0 AND score_p2 >= 10)"
+            ")"
+        ),
+    )).scalar_one()
+    assert after_partial == count_user3, (
+        f"5-0 should NOT count as a perfect game (count went {count_user3} → {after_partial}). "
+        f"perfect_game requires winner score ≥10."
+    )
+    # And the helper itself should agree (no prior matches → still False)
+    assert await has_perfect_game(3, db) is False
+
+
+@pytest.mark.asyncio
+async def test_has_perfect_game_returns_true_for_10_0_win(db):
+    """A 10-0 win DOES qualify (winner reached the standard Pong score)."""
+    from persistence import has_perfect_game
+    # Snapshot: did user 50 already have a perfect game?
+    pre = await has_perfect_game(50, db)
+    m = await create_match(db, player1_id=50, player2_id=51)
+    await finish_match(db, m.id, winner_id=50, score_p1=10, score_p2=0)
+    assert await has_perfect_game(50, db) is True, (
+        f"10-0 should unlock perfect_game (was perfect_game={pre} before)"
+    )
+
+
 # ── Task 2: XP amount tests ───────────────────────────────────────────────────
 
 @pytest.mark.asyncio
