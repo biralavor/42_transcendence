@@ -199,6 +199,7 @@ describe('Tournament page realtime sync', () => {
     await screen.findByText(/1 \/ 4 participants/i)
 
     await act(async () => {
+      vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible')
       document.dispatchEvent(new Event('visibilitychange'))
     })
 
