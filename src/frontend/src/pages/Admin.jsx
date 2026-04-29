@@ -1,10 +1,33 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import NavbarComponent from '../Components/Navbar'
+import {
+  ChartA11yTable,
+  GamesPerDayChart,
+  MessagesPerDayChart,
+} from '../Components/ActivityCharts'
 import { apiCall } from '../utils/apiClient'
 import './Admin.css'
 
 const ADMIN_POLL_INTERVAL_MS = 5000
+const MAX_WINDOW_DAYS = 30
+
+function todayUtcIso() {
+  const d = new Date()
+  const y = d.getUTCFullYear()
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0')
+  const day = String(d.getUTCDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+function isoDaysAgo(days) {
+  const d = new Date()
+  d.setUTCDate(d.getUTCDate() - days)
+  const y = d.getUTCFullYear()
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0')
+  const day = String(d.getUTCDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
 
 function StatCard({ label, value }) {
   return (
@@ -24,6 +47,13 @@ export default function Admin() {
   const [stats, setStats] = useState(null)
   const [error, setError] = useState('')
 
+  const today = useMemo(() => todayUtcIso(), [])
+  const minStart = useMemo(() => isoDaysAgo(MAX_WINDOW_DAYS - 1), [])
+  const defaultStart = minStart
+  const defaultEnd = today
+  const [start, setStart] = useState(defaultStart)
+  const [end, setEnd] = useState(defaultEnd)
+
   useEffect(() => {
     let cancelled = false
     apiCall('/api/users/auth/me')
@@ -42,6 +72,11 @@ export default function Admin() {
 
   useEffect(() => {
     if (meStatus !== 'admin') return
+    if (start > end) {
+      setError('Start date must be on or before end date.')
+      setStats(null)
+      return
+    }
 
     let cancelled = false
     let timeoutId = null
@@ -51,7 +86,8 @@ export default function Admin() {
       if (cancelled) return
       controller = new AbortController()
       try {
-        const resp = await apiCall('/api/users/admin/activity', { signal: controller.signal })
+        const url = `/api/users/admin/activity?start=${start}&end=${end}`
+        const resp = await apiCall(url, { signal: controller.signal })
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
         const data = await resp.json()
         if (cancelled) return
@@ -62,8 +98,6 @@ export default function Admin() {
           setError('Failed to load admin stats.')
         }
       }
-      // Schedule the next poll only while the tab is visible. visibilitychange
-      // resumes polling on focus return.
       if (!cancelled && !document.hidden) {
         timeoutId = setTimeout(load, ADMIN_POLL_INTERVAL_MS)
       }
@@ -89,11 +123,14 @@ export default function Admin() {
       if (timeoutId) clearTimeout(timeoutId)
       document.removeEventListener('visibilitychange', onVisibilityChange)
     }
-  }, [meStatus])
+  }, [meStatus, start, end])
 
   if (meStatus === 'forbidden') {
     return <Navigate to="/" replace />
   }
+
+  const games = stats?.games_per_day ?? []
+  const messages = stats?.messages_per_day ?? []
 
   return (
     <div className="arcade-shell">
@@ -107,8 +144,8 @@ export default function Admin() {
                 <span className="arcade-display mb-3">Operations</span>
                 <h1 className="arcade-title mb-2">Admin</h1>
                 <p className="arcade-copy mb-0">
-                  Site-wide activity at a glance. Active users count anyone who logged
-                  in within the last 7 days.
+                  Site-wide activity for the selected window. Pick any range up to
+                  the last {MAX_WINDOW_DAYS} days.
                 </p>
               </div>
             </div>
@@ -117,20 +154,72 @@ export default function Admin() {
               <p className="arcade-copy mb-0">Loading admin stats...</p>
             )}
 
-            {meStatus === 'admin' && error && (
-              <p className="arcade-copy mb-0 text-danger">{error}</p>
-            )}
+            {meStatus === 'admin' && (
+              <>
+                <div className="admin-filters">
+                  <label>
+                    Start
+                    <input
+                      type="date"
+                      value={start}
+                      min={minStart}
+                      max={end}
+                      onChange={e => setStart(e.target.value)}
+                    />
+                  </label>
+                  <label>
+                    End
+                    <input
+                      type="date"
+                      value={end}
+                      min={start}
+                      max={today}
+                      onChange={e => setEnd(e.target.value)}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="arcade-btn arcade-btn-secondary"
+                    onClick={() => { setStart(defaultStart); setEnd(defaultEnd) }}
+                  >
+                    Reset (last {MAX_WINDOW_DAYS} days)
+                  </button>
+                </div>
 
-            {meStatus === 'admin' && !error && !stats && (
-              <p className="arcade-copy mb-0">Loading admin stats...</p>
-            )}
+                {error && (
+                  <p className="arcade-copy mb-0 text-danger">{error}</p>
+                )}
 
-            {meStatus === 'admin' && stats && (
-              <div className="row g-4 admin-stats">
-                <StatCard label="Active users (last 7 days)" value={stats.active_users_last_7d} />
-                <StatCard label="Games today" value={stats.games_today} />
-                <StatCard label="Messages today" value={stats.messages_today} />
-              </div>
+                {!error && !stats && (
+                  <p className="arcade-copy mb-0">Loading admin stats...</p>
+                )}
+
+                {!error && stats && (
+                  <>
+                    <p className="admin-filter-caption">
+                      Showing {stats.range_start} → {stats.range_end}
+                    </p>
+
+                    <div className="row g-4 admin-stats">
+                      <StatCard label="Active users" value={stats.active_users} />
+                      <StatCard label="Games" value={stats.games_total} />
+                      <StatCard label="Messages" value={stats.messages_total} />
+                    </div>
+
+                    <div className="activity-chart-block">
+                      <h2 className="arcade-kicker mb-2">Games per day</h2>
+                      <GamesPerDayChart points={games} />
+                      <ChartA11yTable caption="Games played per day (selected window)" rows={games} />
+                    </div>
+
+                    <div className="activity-chart-block">
+                      <h2 className="arcade-kicker mb-2">Messages per day</h2>
+                      <MessagesPerDayChart points={messages} />
+                      <ChartA11yTable caption="Messages sent per day (selected window)" rows={messages} />
+                    </div>
+                  </>
+                )}
+              </>
             )}
           </div>
         </section>

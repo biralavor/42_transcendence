@@ -461,31 +461,83 @@ def _compute_login_streak(login_dates: list[date], today: date) -> int:
     return streak
 
 
+ADMIN_ACTIVITY_MAX_WINDOW_DAYS = 30
+
+
 @app.get("/admin/activity", response_model=AdminActivityResponse)
 async def admin_activity(
     session: SessionDependency,
     current_user: User = Depends(get_current_user),
+    start: date | None = Query(default=None),
+    end: date | None = Query(default=None),
 ):
-    """Site-wide aggregate activity for admin dashboard."""
+    """Site-wide aggregate activity for the admin dashboard, scoped to a date
+    range. Without query params the response covers the last 30 days."""
     if not current_user.is_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin only")
 
-    # NOTE: messages.created_at is naive TIMESTAMP (server-local), matches.started_at
-    # is tz-aware (UTC). For the demo this is acceptable — flag if revisited.
-    active_users = (await session.execute(text(
-        "SELECT COUNT(*) FROM users WHERE last_login_at >= NOW() - INTERVAL '7 days'"
-    ))).scalar_one()
-    games_today = (await session.execute(text(
-        "SELECT COUNT(*) FROM matches WHERE started_at >= date_trunc('day', NOW())"
-    ))).scalar_one()
-    messages_today = (await session.execute(text(
-        "SELECT COUNT(*) FROM messages WHERE created_at >= date_trunc('day', NOW())"
-    ))).scalar_one()
+    today = datetime.now(timezone.utc).date()
+    if end is None:
+        end = today
+    if start is None:
+        start = end - timedelta(days=ADMIN_ACTIVITY_MAX_WINDOW_DAYS - 1)
+
+    if start > end:
+        raise HTTPException(status_code=400, detail="start must be on or before end")
+    if end > today:
+        raise HTTPException(status_code=400, detail="end cannot be in the future")
+    if (today - start).days > ADMIN_ACTIVITY_MAX_WINDOW_DAYS - 1:
+        raise HTTPException(
+            status_code=400,
+            detail=f"start cannot be more than {ADMIN_ACTIVITY_MAX_WINDOW_DAYS - 1} days ago",
+        )
+
+    # Half-open upper bound (>= start, < end+1d) keeps the query consistent across
+    # the naive `messages.created_at` and tz-aware `matches.started_at` columns.
+    end_excl = end + timedelta(days=1)
+    params = {"start": start, "end_excl": end_excl}
+
+    active_users = (await session.execute(
+        text(
+            "SELECT COUNT(*) FROM users "
+            "WHERE last_login_at >= :start AND last_login_at < :end_excl"
+        ),
+        params,
+    )).scalar_one()
+    games_rows = (await session.execute(
+        text(
+            "SELECT date_trunc('day', started_at)::date AS d, COUNT(*) AS c "
+            "FROM matches "
+            "WHERE started_at >= :start AND started_at < :end_excl "
+            "GROUP BY d ORDER BY d ASC"
+        ),
+        params,
+    )).all()
+    messages_rows = (await session.execute(
+        text(
+            "SELECT date_trunc('day', created_at)::date AS d, COUNT(*) AS c "
+            "FROM messages "
+            "WHERE created_at >= :start AND created_at < :end_excl "
+            "GROUP BY d ORDER BY d ASC"
+        ),
+        params,
+    )).all()
+
+    games_map = {row.d: row.c for row in games_rows}
+    messages_map = {row.d: row.c for row in messages_rows}
+    span = (end - start).days + 1
+    full_window = [start + timedelta(days=i) for i in range(span)]
+    games_per_day = [DailyCount(date=d, count=games_map.get(d, 0)) for d in full_window]
+    messages_per_day = [DailyCount(date=d, count=messages_map.get(d, 0)) for d in full_window]
 
     return AdminActivityResponse(
-        active_users_last_7d=active_users or 0,
-        games_today=games_today or 0,
-        messages_today=messages_today or 0,
+        range_start=start,
+        range_end=end,
+        active_users=active_users or 0,
+        games_total=sum(p.count for p in games_per_day),
+        messages_total=sum(p.count for p in messages_per_day),
+        games_per_day=games_per_day,
+        messages_per_day=messages_per_day,
     )
 
 

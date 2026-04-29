@@ -167,8 +167,14 @@ Authorization: Bearer <access_token>
 ### ── ANALYTICS ─────────────────────────────────────────────────────────────
 
 ### Admin aggregate stats — admin only (replace <access_token> with an admin's token).
-### Expect: 200 with { active_users_last_7d, games_today, messages_today }
+### Default range is the last 30 days. Add ?start=YYYY-MM-DD&end=YYYY-MM-DD to override.
+### Expect: 200 with { range_start, range_end, active_users, games_total,
+###                   messages_total, games_per_day[], messages_per_day[] }
 GET https://localhost:8443/api/users/admin/activity HTTP/1.1
+Authorization: Bearer <access_token>
+
+### Admin aggregate stats — custom range (max 30-day window)
+GET https://localhost:8443/api/users/admin/activity?start=2026-04-21&end=2026-04-28 HTTP/1.1
 Authorization: Bearer <access_token>
 
 ### Admin aggregate stats — no auth (expect 401/403)

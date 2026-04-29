@@ -1,31 +1,15 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  PointElement,
-  LineElement,
-  Tooltip,
-  Legend,
-} from 'chart.js'
-import { Bar, Line } from 'react-chartjs-2'
 import NavbarComponent from '../Components/Navbar'
+import {
+  ChartA11yTable,
+  GamesPerDayChart,
+  MessagesPerDayChart,
+} from '../Components/ActivityCharts'
 import { apiCall } from '../utils/apiClient'
 import './ActivityDashboard.css'
 
 const ACTIVITY_POLL_INTERVAL_MS = 5000
-
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  PointElement,
-  LineElement,
-  Tooltip,
-  Legend,
-)
 
 function StatCard({ label, value }) {
   return (
@@ -38,52 +22,11 @@ function StatCard({ label, value }) {
   )
 }
 
-function formatDateLabel(iso) {
-  // Short label (MM-DD) for chart axis. The full date stays in the a11y table.
-  const d = new Date(`${iso}T00:00:00Z`)
-  if (Number.isNaN(d.getTime())) return iso
-  const m = String(d.getUTCMonth() + 1).padStart(2, '0')
-  const day = String(d.getUTCDate()).padStart(2, '0')
-  return `${m}-${day}`
-}
-
 function formatLastLogin(iso) {
   if (!iso) return 'Never'
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return iso
   return d.toLocaleString()
-}
-
-const baseChartOptions = {
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: {
-    legend: { display: false },
-    tooltip: { intersect: false, mode: 'index' },
-  },
-  scales: {
-    x: { ticks: { maxRotation: 0, autoSkipPadding: 12 } },
-    y: { beginAtZero: true, ticks: { precision: 0 } },
-  },
-}
-
-function ChartA11yTable({ caption, rows }) {
-  return (
-    <table className="visually-hidden">
-      <caption>{caption}</caption>
-      <thead>
-        <tr><th scope="col">Date</th><th scope="col">Count</th></tr>
-      </thead>
-      <tbody>
-        {rows.map(r => (
-          <tr key={r.date}>
-            <td>{r.date}</td>
-            <td>{r.count}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  )
 }
 
 export default function ActivityDashboard() {
@@ -139,35 +82,6 @@ export default function ActivityDashboard() {
 
   const games = data?.games_per_day ?? []
   const messages = data?.messages_per_day ?? []
-  const labels = games.map(p => formatDateLabel(p.date))
-
-  const gamesData = {
-    labels,
-    datasets: [{
-      label: 'Games',
-      data: games.map(p => p.count),
-      // Striped pattern via borderWidth keeps the chart readable without
-      // relying on color alone (a11y requirement of the analytics module).
-      backgroundColor: 'rgba(94, 234, 212, 0.55)',
-      borderColor: 'rgba(94, 234, 212, 1)',
-      borderWidth: 1,
-    }],
-  }
-
-  const messagesData = {
-    labels: messages.map(p => formatDateLabel(p.date)),
-    datasets: [{
-      label: 'Messages',
-      data: messages.map(p => p.count),
-      borderColor: 'rgba(244, 114, 182, 1)',
-      backgroundColor: 'rgba(244, 114, 182, 0.25)',
-      borderWidth: 2,
-      tension: 0.25,
-      pointRadius: 3,
-      pointStyle: 'rectRot',
-      fill: true,
-    }],
-  }
 
   return (
     <div className="arcade-shell">
@@ -212,25 +126,19 @@ export default function ActivityDashboard() {
 
                 <div className="activity-chart-block">
                   <h2 className="arcade-kicker mb-2">Games per day</h2>
-                  <div
-                    className="activity-chart"
-                    role="img"
-                    aria-label={`Bar chart of games played per day over the last 30 days. Total: ${games.reduce((a, p) => a + p.count, 0)}.`}
-                  >
-                    <Bar data={gamesData} options={baseChartOptions} />
-                  </div>
+                  <GamesPerDayChart
+                    points={games}
+                    ariaLabelPrefix="Bar chart of games played per day over the last 30 days"
+                  />
                   <ChartA11yTable caption="Games played per day (30-day window)" rows={games} />
                 </div>
 
                 <div className="activity-chart-block">
                   <h2 className="arcade-kicker mb-2">Messages per day</h2>
-                  <div
-                    className="activity-chart"
-                    role="img"
-                    aria-label={`Line chart of messages sent per day over the last 30 days. Total: ${messages.reduce((a, p) => a + p.count, 0)}.`}
-                  >
-                    <Line data={messagesData} options={baseChartOptions} />
-                  </div>
+                  <MessagesPerDayChart
+                    points={messages}
+                    ariaLabelPrefix="Line chart of messages sent per day over the last 30 days"
+                  />
                   <ChartA11yTable caption="Messages sent per day (30-day window)" rows={messages} />
                 </div>
               </>
