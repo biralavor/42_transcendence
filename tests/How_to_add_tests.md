@@ -46,6 +46,128 @@ Transcendence uses a **layered test strategy**:
 make check  # Runs: Backend Unit → Frontend Unit → E2E Integration → Health Checks
 ```
 
+The end of `make check` prints a **Test Pyramid Health** summary: mock %, smoke %, pure-logic %, API E2E file count. Aim for **70-80% mock / 10-20% smoke / ≥3 API E2E files**. Anyone running the full suite can see whether we're drifting.
+
+---
+
+## 0. Mock tests vs Smoke tests — pick the right tool
+
+Within every layer above (Backend Unit, Frontend Unit, etc.) each individual test falls into one of two broad categories. Knowing which you're writing — and **why** — keeps the suite balanced.
+
+### Mock tests
+Run the system under test (SUT) **in isolation**. All its dependencies (DB, network, file I/O, other services, time) are replaced with stand-ins (mocks/stubs/fakes) that return programmable responses.
+
+**How to recognize one in this codebase:**
+- Backend (Python/pytest): `MagicMock`, `AsyncMock`, `unittest.mock`, the `mock_db_session` fixture (auto-injected by `conftest.py`), `app.dependency_overrides[get_db] = ...`
+- Frontend (Vitest): `vi.mock(...)`, `vi.fn()`, `vi.spyOn(global, 'fetch')`, mocked `useAuth`/`useNotifications` contexts, `MemoryRouter` in place of the real router
+
+**Strengths**
+- Fast — no I/O, runs in milliseconds
+- Deterministic — no flaky DB/network state
+- Hermetic — each test isolated; failures point to one unit
+- Cheap to run on every commit/CI iteration
+
+**Weaknesses**
+- Tests the contract you *think* a dependency has, not its real behavior. Mock drift is a common bug class (e.g., mock returns a shape that no longer matches the real DB).
+- Doesn't catch integration bugs: wrong SQL, wrong serializer, wrong route registration, wrong CORS, wrong WS frame format.
+- Encourages over-fitting to implementation details — tests can pass while the user-visible feature is broken.
+
+**Use a mock test when:**
+- You're testing branching logic, validation, or pure transformations
+- The real dependency is slow, flaky, or has side effects you don't want
+- You need to simulate failure modes the real dep makes hard to reproduce (timeout, malformed response, race condition)
+
+### Smoke tests (a.k.a. integration / system / live tests)
+Run the SUT against **real dependencies** — real DB, real HTTP transport, real WebSocket connection. Set up just enough state to exercise an end-to-end path within a *single service or a small group of services*.
+
+**How to recognize one in this codebase:**
+- Backend: `create_async_engine(...)`, `_TestSession`, `NullPool`, `async with engine.begin()`, real PostgreSQL connection from inside the Docker container
+- The `db` fixture in `game-service/tests/test_persistence.py:30` (savepoint-rollback isolation against real DB)
+- The `client` fixture in `game-service/tests/test_router.py:33` (real `AsyncClient` hitting a real DB-backed FastAPI app)
+- The `tests/TranscendenceHealthCheck.sh` script (cross-service event-driven smoke test through the actual nginx + multiple services)
+
+**Strengths**
+- Catches real-world bugs: SQL syntax errors, FK violations, JSON shape mismatches, missing indexes, route typos, CORS misconfig
+- Validates the actual ORM/SQL/HTTP/WS contracts — no drift
+- High signal: a passing smoke test is strong evidence the feature really works
+
+**Weaknesses**
+- Slow (seconds per test, full suite can be minutes)
+- Stateful — DB state accumulates across runs (see the no-`TRUNCATE` rule below)
+- Order-sensitive — relative-assertion patterns required
+- Need real infrastructure (Docker containers, DB) — harder to run from a fresh checkout
+
+**Use a smoke test when:**
+- The SQL query, JSON shape, or HTTP route is itself the thing you want to verify
+- You're verifying inter-service contracts (e.g., game-service writes to the `notifications` table, user-service reads it)
+- You're testing a WebSocket frame format or event sequence
+- A passing mock test would still leave you uncertain whether the feature works end-to-end
+
+### Test pyramid — the healthy ratio
+
+A healthy suite is mostly mock (fast, many) with a smaller layer of smoke (slow, focused):
+
+```
+        ▲
+       ╱ ╲       E2E (browser-driven, full stack)
+      ╱   ╲      → small number of golden-path tests
+     ╱─────╲
+    ╱       ╲    Smoke / Integration (real DB, real HTTP)
+   ╱─────────╲   → critical paths per service
+  ╱           ╲
+ ╱─────────────╲ Mock / Unit (isolated logic)
+                 → bulk of the suite, runs on every commit
+```
+
+**Default to mock.** Only reach for smoke when a mock test wouldn't tell you what you actually need to know.
+
+### Decision tree — "I just wrote X, what test do I add?"
+
+Use this when adding tests alongside a feature:
+
+```
+What did you just write?
+│
+├── A pure function with no I/O (utilities, formatters, validators, math)
+│   └── PURE test (no mocks, no DB, no network)
+│       Example: tests/test_order_util.py, utils/jwtUtils.test.js
+│
+├── A new SQLAlchemy persistence helper (`get_*`, `save_*`, `find_*`)
+│   └── REAL-DB test in test_persistence.py using the savepoint `db` fixture
+│       Example: game-service/tests/test_persistence.py, chat-service/tests/test_persistence.py
+│
+├── A new FastAPI REST endpoint
+│   ├── If the endpoint just calls a persistence helper (thin layer):
+│   │   └── REAL-DB test in test_router.py using the `client` fixture
+│   │       Example: game-service/tests/test_router.py
+│   └── If the endpoint has branching logic / validation / mocking-friendly deps:
+│       └── MOCK test using `mock_db_session` autouse fixture
+│           Example: user-service/tests/test_authenticate.py
+│
+├── A new WebSocket handler / event
+│   └── MOCK test using `make_ws()` pattern from shared/ws/tests/test_manager.py
+│       Wrap callback invocations in act() for React; use AsyncMock for backend
+│
+├── A new React component (no fetch, no WS, no router)
+│   └── MOCK+UI test rendering with @testing-library/react
+│       Example: Components/XpBar.test.jsx, Components/BadgeGrid.test.jsx
+│
+├── A new React page (uses fetch, useNavigate, contexts)
+│   └── MOCK+UI test mocking external modules at the top of the file
+│       Mock `useAuth`, `useNotifications`, vi.spyOn(global, 'fetch')
+│       Example: pages/Profile.test.jsx, pages/Leaderboard.test.jsx
+│
+├── A multi-service flow (game finish writes XP, user-service reads it)
+│   └── API E2E test in tests/api_e2e/
+│       Use register_user(api) helper, capture pre-state, assert on observable side effects
+│       Example: tests/api_e2e/test_match_flow_e2e.py
+│
+└── Everything else (dispatching, registry, hooks, contexts)
+    └── MOCK test — start with mocks, escalate to REAL-DB only if a mock would lie
+```
+
+**The most common mistake:** writing a MOCK test for SQL-heavy code. If your test is mostly `mock.execute.return_value = ...` and asserts on shape, a real schema change won't break it. Use REAL-DB instead.
+
 ---
 
 ## 1. Backend Tests (Python/Pytest)
@@ -269,6 +391,24 @@ describe('MyForm', () => {
 6. **Avoid Fragile Tests:** Don't assert on internal implementation details (e.g., variable names); assert on user-visible behavior.
 7. **Normalize Data Types:** When comparing IDs from different sources (string vs number), normalize to the same type.
 
+### Pre-PR test checklist
+
+Before opening a PR, run through this list. It takes ~2 minutes and catches the most common review feedback.
+
+- [ ] **Did I add tests for the new code?** Use the decision tree in §0.
+- [ ] **Does my test actually verify the behavior?** A test that asserts on mock-call-counts but never exercises the real code path is a no-op.
+- [ ] **Will my test fail if someone deletes my implementation?** TDD-style red→green confirms the test discriminates. (See `test_leaderboard_order_xp_desc_sorts_by_xp` for the canonical example.)
+- [ ] **No `TRUNCATE` in any new test.** If you needed to clean up state, refactor to use the high-ID seed pattern or savepoint isolation. See §3 backend rule #7.
+- [ ] **High-ID convention respected for new test users.** Pick fresh IDs in your service's range (5001+, 70000+, 80000+, 90000+) that no other test has used. Add them to the `client` fixture seed list if your test creates them.
+- [ ] **Relative assertions for accumulated state.** Never assert "user has exactly N wins" — use `>=` or capture pre-state and assert the delta. State accumulates across runs.
+- [ ] **`make check` passes locally.** Run the full thing once, not just your new test. The 4 known-flaky tests (Chat History Persistence, Match History) are documented; anything else is on you.
+- [ ] **Pyramid health didn't regress.** The summary at the end of `make check` shows mock %, smoke %, API E2E count. If your PR pushed mock % above 90% or removed an API E2E file, justify it in the PR description.
+- [ ] **Naming follows convention.** `test_<unit_being_tested>` — file matches the source name when possible (`order.py` → `test_order_util.py`; the `_util` suffix is fine for disambiguation).
+- [ ] **Tests are isolated from other tests.** Each test sets up its own data; no `assert previous_test_did_X` patterns.
+- [ ] **For frontend: the test file lives next to the source.** `Foo.jsx` → `Foo.test.jsx` in the same directory.
+
+If a checkbox doesn't apply (e.g., you didn't change any behavior, only renamed a CSS class), say so in the PR description.
+
 ---
 
 ## 4. Advanced Frontend Testing Patterns
@@ -411,6 +551,204 @@ wsConnectHandler.onMessage?.({
 // Component should still match String(5) === String('5')
 ```
 
+### Test Harnesses for Canvas + WebSocket Components
+
+Some frontend modules talk to APIs that **jsdom doesn't implement** (canvas 2D context) or that require **bidirectional control during a test** (WebSocket lifecycle). For these, individual `vi.mock(...)` calls aren't enough — you need a small reusable harness that provides a controllable stand-in.
+
+We keep harnesses under a `__test-harness__/` directory next to the consumer:
+
+```
+src/frontend/src/
+├── Components/
+│   ├── __test-harness__/
+│   │   ├── canvasMock.js     # 2D context spy (jsdom doesn't ship one)
+│   │   └── wsMock.js         # Controllable WebSocket class
+│   └── PongCanvasMultiplayer.test.jsx
+└── game/
+    ├── __test-harness__/
+    │   └── rendererMock.js   # 2D context spy + GameState fixture builder
+    └── pongRenderer.test.js
+```
+
+**Why the `__test-harness__/` name:**
+- Files inside it don't end in `.test.*`, so Vitest's default discovery doesn't try to run them as tests
+- The folder name announces "not production code" to anyone scanning the tree
+- Co-located with the consumer (`Components/__test-harness__/` is for `Components/` tests)
+
+**Why a harness instead of inline mocks:**
+- Reuse across multiple test files
+- One place to extend when the underlying API surface grows (e.g., adding a new canvas method)
+- Lets each test file stay focused on *behavior*, not on *constructing fakes*
+
+#### Canvas 2D context spy
+
+```javascript
+// src/Components/__test-harness__/canvasMock.js
+import { vi } from 'vitest'
+
+export function makeMock2DContext() {
+  return {
+    fillStyle: '', strokeStyle: '', lineWidth: 1, font: '',
+    fillRect: vi.fn(),
+    strokeRect: vi.fn(),
+    drawImage: vi.fn(),
+    fillText: vi.fn(),
+    arc: vi.fn(),
+    beginPath: vi.fn(),
+    fill: vi.fn(),
+    stroke: vi.fn(),
+    // ... add methods as the renderer needs them
+  }
+}
+
+export function installCanvasContextStub() {
+  const ctx = makeMock2DContext()
+  HTMLCanvasElement.prototype.getContext = vi.fn(() => ctx)
+  return ctx
+}
+```
+
+**Use in a test:**
+
+```javascript
+import { installCanvasContextStub } from './__test-harness__/canvasMock'
+
+beforeEach(() => {
+  installCanvasContextStub()  // jsdom's <canvas> won't crash; draw calls become no-ops
+})
+```
+
+#### Controllable WebSocket
+
+```javascript
+// src/Components/__test-harness__/wsMock.js
+import { vi } from 'vitest'
+
+export class FakeWebSocket {
+  constructor(url) {
+    this.url = url
+    this.readyState = 0
+    this.sentMessages = []
+    this.send = vi.fn(data => this.sentMessages.push(data))
+    this.close = vi.fn(() => { this.readyState = 3 })
+    FakeWebSocket.instances.push(this)
+  }
+  simulateOpen()    { this.readyState = 1; this.onopen?.({}) }
+  simulateMessage(p){ this.onmessage?.({ data: typeof p === 'string' ? p : JSON.stringify(p) }) }
+  simulateError()   { this.onerror?.({}) }
+  simulateClose()   { this.readyState = 3; this.onclose?.({}) }
+}
+FakeWebSocket.instances = []
+
+export function installWebSocketStub() {
+  FakeWebSocket.instances = []
+  globalThis.WebSocket = FakeWebSocket
+}
+export function lastSocket() {
+  return FakeWebSocket.instances[FakeWebSocket.instances.length - 1]
+}
+```
+
+**Use in a test:**
+
+```javascript
+import { installWebSocketStub, lastSocket } from './__test-harness__/wsMock'
+
+beforeEach(() => {
+  installWebSocketStub()
+})
+
+it('sends game_start once WS opens', () => {
+  render(<MyComponent />)
+  const ws = lastSocket()
+  act(() => ws.simulateOpen())
+  expect(JSON.parse(ws.sentMessages[0])).toMatchObject({ type: 'game_start' })
+})
+
+it('forwards game_over to onGameEnd prop', () => {
+  const onGameEnd = vi.fn()
+  render(<MyComponent onGameEnd={onGameEnd} />)
+  const ws = lastSocket()
+  act(() => ws.simulateOpen())
+  act(() => ws.simulateMessage({ type: 'game_over', winner_id: 1 }))
+  expect(onGameEnd).toHaveBeenCalledWith({ winner_id: 1 })
+})
+```
+
+#### Pure-module harness (renderer + fixture builder)
+
+For pure modules (no React, no DOM), the harness can also include **fixture builders** for the data structures the module consumes — keeps each test from re-typing the same setup:
+
+```javascript
+// src/game/__test-harness__/rendererMock.js
+export function makeContextSpy() { /* 2D context spy */ }
+
+export function makeCanvasStub({ width = 800, height = 450, cssVars = {} } = {}) {
+  return { width, height, __cssVars: { '--primary': '#0f0', ...cssVars } }
+}
+
+export function makeGameState(overrides = {}) {
+  return {
+    player1: { position: { x: 5, y: 40 }, size: { width: 2, height: 12 }, color: '#aaa' },
+    player2: { position: { x: 153, y: 40 }, size: { width: 2, height: 12 }, color: '#bbb' },
+    ball:    { position: { x: 80, y: 45 }, size: { width: 2, height: 2 },  color: '#fff' },
+    score:   { player1: 0, player2: 0 },
+    ...overrides,
+  }
+}
+
+export function stubGetComputedStyle() {
+  return vi.spyOn(window, 'getComputedStyle').mockImplementation(el => ({
+    getPropertyValue: key => el.__cssVars?.[key] || '',
+  }))
+}
+```
+
+**Use in a test:**
+
+```javascript
+import { makeContextSpy, makeCanvasStub, makeGameState, stubGetComputedStyle } from './__test-harness__/rendererMock'
+import { CanvasGameContext, render } from './pongRenderer'
+
+let cssSpy
+beforeEach(() => { cssSpy = stubGetComputedStyle() })
+afterEach(() => { cssSpy.mockRestore() })
+
+it('uses drawImage when themeImages.ball is provided', () => {
+  const ballImg = { __id: 'ball' }
+  const ctx = makeContextSpy()
+  const gameCtx = new CanvasGameContext(makeCanvasStub(), ctx)
+  render(gameCtx, makeGameState(), () => false, { ball: ballImg }, '')
+  expect(ctx.drawImage.mock.calls.some(([img]) => img === ballImg)).toBe(true)
+})
+```
+
+#### When NOT to build a harness
+
+Don't reach for a harness if a couple of `vi.mock(...)` calls cover the test. Build one only when:
+
+- The fake needs **stateful behavior** (a WebSocket that can be opened, closed, and receive messages mid-test)
+- jsdom is **missing the API entirely** (canvas 2D context, WebRTC, MediaStream)
+- Two or more test files need the **same fake** (DRY)
+
+A one-off `vi.fn()` in the test file is almost always the right answer for simpler dependencies.
+
+#### What to assert (and what not to)
+
+Harnesses make it easy to assert on every method call. Resist that — most coordinate-level assertions just lock in the implementation:
+
+| ❌ Don't | ✅ Do |
+|---------|-------|
+| `expect(ctx.fillRect).toHaveBeenCalledWith(35.5, 18.0, 12.5, 30.0)` | `expect(ctx.fillRect).toHaveBeenCalled()` (or check call count) |
+| `expect(ctx.font).toBe('bold 32px Bungee, sans-serif')` | nothing — font strings are cosmetic |
+| `expect(ctx.strokeRect).toHaveBeenNthCalledWith(2, ...)` | `expect(ctx.strokeRect.mock.calls.length).toBeGreaterThanOrEqual(2)` |
+
+Target the **branches** (which `if`/`else if` path ran) and the **interface contract** (correct method called with correct *kind* of argument) — not pixel coordinates.
+
+**Real examples in the repo:**
+- `src/frontend/src/Components/PongCanvasMultiplayer.test.jsx` (13 tests using both harnesses)
+- `src/frontend/src/game/pongRenderer.test.js` (25 tests using the renderer harness)
+
 ---
 
 ## 5. Health Checks
@@ -420,6 +758,162 @@ We also have a global health check script that verifies all services are up and 
 make check
 ```
 This script runs `tests/TranscendenceHealthCheck.sh` and saves the report to `release.txt`.
+
+---
+
+## 5b. API-Level E2E Tests (`tests/api_e2e/`)
+
+This is a layer **between** per-service smoke tests and full browser-driven E2E. The tests run against the **live running stack** through real HTTP/WebSocket — no Python or JS mocks. They drive complete user journeys (register → login → play → verify side effects) and run as part of `make check`.
+
+### When to add an API E2E test (vs the alternatives)
+
+Pick the right layer for what you're testing:
+
+| You want to verify... | Use this layer | Where |
+|----------------------|----------------|-------|
+| One function's logic in isolation | Mock unit test | `<service>/tests/test_*.py` (MOCK) or vitest test |
+| One endpoint's SQL / response shape against real DB | Backend smoke test | `<service>/tests/test_router.py` (REAL-DB) |
+| A multi-service flow (game-service writes → user-service reads) | **API E2E** | `tests/api_e2e/` |
+| The same flow as a user clicking through the UI | Browser E2E (Playwright) | not yet implemented — see `docs/superpowers/specs/2026-04-26-test-landscape-and-e2e-proposal.md` |
+
+The test pyramid still applies: most of your tests should be MOCK, fewer should be REAL-DB, even fewer should be API E2E. A good rule of thumb: **one API E2E test per major user journey**, not one per endpoint.
+
+### Conventions
+
+Follow these or future tests will collide with each other.
+
+#### 1. Use `register_user(api)` for fresh test users
+Don't reuse seeded users (`alice=1`, `bob=2`) or other suite users (5001-5999, 9000+). The helper picks a unique high-ID username per call (`e2e_<ms_timestamp>`):
+
+```python
+from conftest import register_user
+
+async def test_my_flow(api):
+    alice = await register_user(api)         # {'username': 'e2e_1234567', 'user_id': 60001, 'token': '...', 'password': '...'}
+    bob = await register_user(api)           # different user, different id
+    # ... use alice['token'] for authenticated requests
+```
+
+This avoids cross-test interference: state accumulates in the long-lived database, but each test only touches its own users.
+
+#### 2. Capture pre-state before assertions
+Because state accumulates across runs, **never assert absolute counts** ("user has exactly 1 win"). Instead:
+- Snapshot the value before the action
+- Perform the action
+- Assert the **delta** or use `>=`
+
+```python
+# ✗ Bad — fails as soon as the test runs twice
+assert (await api.get(f"/api/game/xp/{user_id}")).json()["xp"] == 25
+
+# ✓ Good — robust across runs
+pre_xp = (await api.get(f"/api/game/xp/{user_id}")).json()["xp"]
+# ... finish a match ...
+post_xp = (await api.get(f"/api/game/xp/{user_id}")).json()["xp"]
+assert post_xp - pre_xp == 25
+```
+
+#### 3. Hit the public API only
+Tests use `https://nginx` (the public TLS-terminated endpoint), not `http://game-service:8002` directly. This keeps the tests testing the **same stack a user hits**, including nginx routing, TLS, and CORS.
+
+#### 4. Drop the assertion to a relative one when reaching far into shared state
+If you must assert against the leaderboard or global stats, page through up to a few pages and find your user. Don't assume you'll be at rank 1.
+
+```python
+# Walk pages until we find our test user (or hit last_page)
+for page_idx in range(5):
+    lb = await api.get(f"/api/game/leaderboard?order=xp:desc&limit=100&page={page_idx}")
+    body = lb.json()
+    found = next((r for r in body["results"] if r["user_id"] == alice["user_id"]), None)
+    if found is not None or page_idx >= body["last_page"]:
+        break
+assert found is not None
+```
+
+### File layout
+
+```
+tests/api_e2e/
+├── conftest.py            # `api` fixture, register_user/login/whoami_id helpers
+├── pytest.ini             # asyncio_mode=auto, terse output
+├── requirements.txt       # pytest, pytest-asyncio, httpx, websockets
+├── test_match_flow_e2e.py # ← example: 2-tests covering register→match→XP→leaderboard
+└── README.md              # how to run + write conventions
+```
+
+When adding a new feature:
+1. Create `test_<feature>_e2e.py` with one focused user journey
+2. Use the `api` fixture and `register_user(api)` helper from `conftest.py`
+3. Keep tests under ~50 lines each — if you need more, split into multiple `test_*` functions
+
+### Running
+
+API E2E tests run automatically as part of `make check` (under the "API E2E Tests" suite name). For faster local iteration:
+
+```bash
+docker run --rm \
+  --network transcendence_network \
+  -v "$(pwd)/tests/api_e2e:/work" \
+  -w /work \
+  python:3.12-slim \
+  bash -c "pip install -q -r requirements.txt && pytest"
+```
+
+See `tests/api_e2e/README.md` for more.
+
+### Recipe: writing your first API E2E test
+
+The goal is **one test per major user journey**. Here's a fill-in-the-blank skeleton so you don't need to start from scratch:
+
+```python
+"""End-to-end test of the <FEATURE> flow."""
+import pytest
+from conftest import register_user, auth_headers
+
+
+@pytest.mark.asyncio
+async def test_<feature>_<observable_outcome>(api):
+    # 1. Set up the test users (use fresh registrations to avoid collisions)
+    alice = await register_user(api)
+    bob = await register_user(api)
+
+    # 2. Capture pre-state — anything you'll assert on later
+    pre_state = await api.get(f"/api/<some-endpoint>/{alice['user_id']}")
+    pre_value = pre_state.json().get("<key>", 0)
+
+    # 3. Perform the user-visible action through the public API
+    resp = await api.post("/api/<endpoint>", json={...},
+                          headers=auth_headers(alice["token"]))
+    assert resp.status_code == 200, f"action failed: {resp.text[:200]}"
+
+    # 4. Verify the side effect via a separate endpoint (proves it persisted)
+    post_state = await api.get(f"/api/<some-endpoint>/{alice['user_id']}")
+    post_value = post_state.json().get("<key>", 0)
+    delta = post_value - pre_value
+    assert delta == <expected_change>, (
+        f"expected <key> to change by <expected_change>, got {delta} "
+        f"(pre={pre_value}, post={post_value})"
+    )
+```
+
+### What journeys are worth a dedicated API E2E?
+
+A test belongs in `tests/api_e2e/` if it satisfies **at least two** of these:
+
+1. **Crosses service boundaries** (game-service writes, user-service reads — or vice versa)
+2. **Has observable side effects** that aren't visible from the request itself (achievement unlock, leaderboard rank change, notification fires)
+3. **Is part of a documented module** in the project subject (chat, friends, tournaments, leaderboard, gamification, spectator mode)
+
+If a test only exercises one service's endpoints, it's a **backend smoke test** (`<service>/tests/test_router.py`), not an API E2E.
+
+### Concrete journey ideas (open backlog)
+
+These are documented in detail in §"📋 What to test next" near the top of this doc — pick one to grab next:
+
+- **Friend lifecycle E2E** — request → accept → achievement unlock → remove
+- **Chat DM with block enforcement** — message → block → blocked message dropped
+- **Tournament bracket advance** — create → join → finish round → advance → winner
+- **Game invite flow** — invite → notification → accept → game starts → finish → XP awarded
 
 ---
 
@@ -698,3 +1192,13 @@ Tests can be configured to run on every PR via GitHub Actions workflow (not yet 
 | **Naming** | `test_endpoint_scenario()` | `test_action_expected_outcome()` |
 | **Coverage** | Aim 80%+ | Aim 70%+ |
 | **Run All Tests** | `make check` | `make check` |
+
+
+## 11. Appendix — How the classification was performed
+
+Rules applied automatically to each test file:
+- **REAL-DB** if file contains any of: `create_async_engine`, `_TestSession`, `NullPool`, `begin_nested`
+- **MOCK** if file contains any of: `MagicMock`, `AsyncMock`, `mock_db_session`, `unittest.mock`, `vi.mock`, `vi.fn`, `vi.spyOn`
+- **MIXED** if both REAL-DB and MOCK indicators present
+- **PURE** if neither indicator (algorithmic / data-only test)
+- Frontend additionally split by whether `render(...)` is invoked → `MOCK+UI` vs plain `MOCK`, and `UI-PURE` for `render(...)` without explicit mocks.
