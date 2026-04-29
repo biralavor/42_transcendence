@@ -31,6 +31,8 @@ class ConnectionManager:
         if not room:
             self._rooms.pop(room_id, None)
 
+    _SEND_TIMEOUT = 0.5  # seconds; slow clients are disconnected rather than blocking the loop
+
     async def _send_to_client(
         self,
         room_id: str,
@@ -38,7 +40,7 @@ class ConnectionManager:
         message: dict,
     ) -> tuple["WebSocket", Exception | None]:
         try:
-            await websocket.send_json(message)
+            await asyncio.wait_for(websocket.send_json(message), timeout=self._SEND_TIMEOUT)
             return websocket, None
         except Exception as e:
             logger.warning(f"Failed to send to client in room {room_id}: {e}")
