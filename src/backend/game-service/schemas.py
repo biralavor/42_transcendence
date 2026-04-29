@@ -185,6 +185,7 @@ class LiveGamePlayer(BaseModel):
     username: str
     display_name: str
     avatar_url: str | None = None
+    rank: int | None = None
 
 
 class LiveGameSummary(BaseModel):
@@ -193,3 +194,5 @@ class LiveGameSummary(BaseModel):
     player2: LiveGamePlayer
     started_at: datetime
     spectator_count: int
+    score1: int = 0
+    score2: int = 0

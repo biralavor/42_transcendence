@@ -830,31 +830,19 @@ def leaderboard_order_by_str(sort_assoc: list[tuple[str, str]] | None) -> str | 
     return get_order_by_str(sort_assoc, valid_columns)
 
 
-async def get_leaderboard_paginated(
-        db: AsyncSession,
-        player_id: int | None = None,
-        limit: int = 20,
-        page: int = 0,
-        sort_assoc: list[tuple[str, str]] | None = None
-) -> dict | None:
-    offset = page * limit
-    default_sort_string = """
-xp DESC,
-points DESC,
-goal_difference DESC,
-goals_scored DESC,
-user_id ASC
-    """
-    sort_string = leaderboard_order_by_str(sort_assoc)
-    sort_string = sort_string if sort_string is not None else default_sort_string
-    # `rank` is the OUTPUT of ROW_NUMBER; it can't be referenced inside its own
-    # ORDER BY. When the user requests `order=rank:...`, fall back to the default
-    # sort for the ROW_NUMBER computation. Result-list ordering still honors
-    # `sort_string` (so `order=rank:desc` returns lowest-ranked rows first).
-    row_number_sort = (
-        default_sort_string if 'rank' in sort_string.lower() else sort_string
-    )
-    statement = text(f"""
+# ---------------------------------------------------------------------------
+# Shared CTE prefix used by both get_leaderboard_paginated and
+# get_ranks_for_user_ids so they always agree on rank ordering.
+#
+# Contains: all_matches, stats_away, stats_home, stats_all, user_distinct,
+#           user_count, match_streaks, user_win_streaks, user_win_streak_stats,
+#           ranked_stats, ranking_results.
+#
+# IMPORTANT: keep the {row_number_sort} placeholder so callers can override
+# the ORDER BY (the leaderboard endpoint uses this); the rank helper passes
+# the default sort string for it.
+# ---------------------------------------------------------------------------
+_LEADERBOARD_RANKING_CTE_SQL = """
 WITH all_matches AS
 (
     SELECT
@@ -1028,6 +1016,34 @@ WITH all_matches AS
         , level
     FROM ranked_stats
 )
+"""
+
+# Default ordering used by both the leaderboard endpoint and the rank helper.
+_DEFAULT_RANK_ORDER_SQL = (
+    "xp DESC, points DESC, goal_difference DESC, goals_scored DESC, user_id ASC"
+)
+
+
+async def get_leaderboard_paginated(
+        db: AsyncSession,
+        player_id: int | None = None,
+        limit: int = 20,
+        page: int = 0,
+        sort_assoc: list[tuple[str, str]] | None = None
+) -> dict | None:
+    offset = page * limit
+    default_sort_string = _DEFAULT_RANK_ORDER_SQL
+    sort_string = leaderboard_order_by_str(sort_assoc)
+    sort_string = sort_string if sort_string is not None else default_sort_string
+    # `rank` is the OUTPUT of ROW_NUMBER; it can't be referenced inside its own
+    # ORDER BY. When the user requests `order=rank:...`, fall back to the default
+    # sort for the ROW_NUMBER computation. Result-list ordering still honors
+    # `sort_string` (so `order=rank:desc` returns lowest-ranked rows first).
+    row_number_sort = (
+        default_sort_string if 'rank' in sort_string.lower() else sort_string
+    )
+    cte_prefix = _LEADERBOARD_RANKING_CTE_SQL.format(row_number_sort=row_number_sort)
+    statement = text(cte_prefix + f"""
 , player_stats AS
 (
     SELECT
@@ -1123,6 +1139,33 @@ FROM page_ranking_results
         }
     )
     return result.mappings().one_or_none()
+
+
+async def get_ranks_for_user_ids(
+    db: AsyncSession,
+    user_ids: list[int],
+) -> dict[int, int | None]:
+    """Return {user_id: rank or None} for each input ID.
+
+    Uses the same ROW_NUMBER ordering as the leaderboard. Users with no
+    stats row, the AI sentinel (user_id=0), and unknown IDs map to None —
+    the returned dict always contains every input key, so callers can do a
+    simple `.get(uid)` without a default.
+    """
+    if not user_ids:
+        return {}
+
+    cte_prefix = _LEADERBOARD_RANKING_CTE_SQL.format(
+        row_number_sort=_DEFAULT_RANK_ORDER_SQL,
+    )
+    sql = text(cte_prefix + """
+        SELECT user_id, rank
+        FROM ranking_results
+        WHERE user_id = ANY(:ids)
+    """)
+    result = await db.execute(sql, {"ids": user_ids})
+    found = {row.user_id: int(row.rank) for row in result}
+    return {uid: found.get(uid) for uid in user_ids}
 
 
 async def get_leaderboard(db: AsyncSession, limit: int = 20) -> list[dict]:

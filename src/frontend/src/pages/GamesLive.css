@@ -80,13 +80,6 @@
   max-width: 100%;
 }
 
-.live-game-vs {
-  font-family: monospace;
-  font-size: 0.85rem;
-  color: var(--muted-foreground, #999);
-  text-transform: uppercase;
-}
-
 .live-game-meta {
   display: flex;
   justify-content: space-between;
@@ -102,4 +95,21 @@
   width: 100%;
   text-align: center;
   text-decoration: none;
+}
+
+.live-game-rank {
+  font-family: monospace;
+  font-size: 0.75rem;
+  color: var(--muted, #9aa);
+  letter-spacing: 0.06em;
+  display: block;
+  margin-top: 2px;
+}
+
+.live-game-score {
+  font-family: monospace;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--accent, #ffaa00);
+  white-space: nowrap;
 }

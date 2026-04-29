@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import NavbarComponent from '../Components/Navbar'
 import './GamesLive.css'
+import { formatRank } from '../utils/formatRank'
 
-const POLL_INTERVAL_MS = 10_000
+const POLL_INTERVAL_MS = 5_000
+const fmtName = (p) => p?.display_name || p?.username || '—'
 
 function formatElapsed(startedAt) {
   if (!startedAt) return '--:--'
@@ -72,7 +74,7 @@ export default function GamesLive() {
 
         {!loading && error && games.length === 0 && (
           <p className="games-live-empty games-live-empty--error">
-            Couldn't load live games. Retrying every 10 s.
+            Couldn't load live games. Retrying every 5 s.
           </p>
         )}
 
@@ -92,11 +94,12 @@ export default function GamesLive() {
                       className="live-game-avatar"
                     />
                     <span className="live-game-name">
-                      {g.player1?.display_name || g.player1?.username}
+                      {fmtName(g.player1)}
                     </span>
+                    <span className="live-game-rank">{formatRank(g.player1?.rank)}</span>
                   </div>
 
-                  <span className="live-game-vs">vs</span>
+                  <span className="live-game-score">{g.score1 ?? 0} : {g.score2 ?? 0}</span>
 
                   <div className="live-game-player">
                     <img
@@ -105,8 +108,9 @@ export default function GamesLive() {
                       className="live-game-avatar"
                     />
                     <span className="live-game-name">
-                      {g.player2?.display_name || g.player2?.username}
+                      {fmtName(g.player2)}
                     </span>
+                    <span className="live-game-rank">{formatRank(g.player2?.rank)}</span>
                   </div>
                 </div>
 

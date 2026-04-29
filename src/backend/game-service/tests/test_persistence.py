@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sess
 from sqlalchemy.pool import NullPool
 
 from shared.config.settings import settings
+from service.persistence import get_ranks_for_user_ids, get_leaderboard_paginated
 from persistence import (
     InvalidWinner,
     TournamentMatchAlreadyFinished,
@@ -836,3 +837,69 @@ async def test_mark_match_finished_if_ongoing_respects_grace_window(db):
     row = result.scalars().one()
     assert row.status == "finished"
     assert row.finished_at is not None
+
+
+# ---------------------------------------------------------------------------
+# get_ranks_for_user_ids
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_get_ranks_for_user_ids_returns_dict_keyed_by_user_id(db):
+    """Two users with at least one finished match each must come back with
+    positive integer ranks keyed by user_id."""
+    p1, p2 = 30101, 30102
+    await _ensure_users(db, p1, p2)
+    m = await create_match(db, player1_id=p1, player2_id=p2)
+    await finish_match(db, m.id, winner_id=p1, score_p1=7, score_p2=3)
+
+    ranks = await get_ranks_for_user_ids(db, [p1, p2])
+    assert isinstance(ranks, dict)
+    assert ranks.get(p1) is not None and isinstance(ranks[p1], int)
+    assert ranks.get(p2) is not None and isinstance(ranks[p2], int)
+    assert ranks[p1] >= 1 and ranks[p2] >= 1
+
+
+@pytest.mark.asyncio
+async def test_get_ranks_for_user_ids_returns_none_for_unknown_user(db):
+    """Unknown user IDs map to None — the dict always contains every input
+    key, even when the CTE produced no row."""
+    ranks = await get_ranks_for_user_ids(db, [999_999])
+    assert ranks == {999_999: None}
+
+
+@pytest.mark.asyncio
+async def test_get_ranks_for_user_ids_returns_none_for_ai_sentinel(db):
+    """user_id=0 is the AI sentinel — it has no row in `users` and therefore
+    no rank."""
+    ranks = await get_ranks_for_user_ids(db, [0])
+    assert ranks == {0: None}
+
+
+@pytest.mark.asyncio
+async def test_get_ranks_for_user_ids_handles_empty_list(db):
+    ranks = await get_ranks_for_user_ids(db, [])
+    assert ranks == {}
+
+
+@pytest.mark.asyncio
+async def test_get_ranks_for_user_ids_matches_leaderboard_order(db):
+    """If user X outranks user Y on the leaderboard endpoint, the rank dict
+    must reflect that (X's rank < Y's rank)."""
+    p1, p2, p3 = 30201, 30202, 30203
+    await _ensure_users(db, p1, p2, p3)
+
+    # p1 wins 2 matches; p2 wins 1; p3 wins 0 — p1 > p2 > p3 on leaderboard
+    m1 = await create_match(db, player1_id=p1, player2_id=p3)
+    await finish_match(db, m1.id, winner_id=p1, score_p1=7, score_p2=0)
+    m2 = await create_match(db, player1_id=p1, player2_id=p2)
+    await finish_match(db, m2.id, winner_id=p1, score_p1=7, score_p2=0)
+    m3 = await create_match(db, player1_id=p2, player2_id=p3)
+    await finish_match(db, m3.id, winner_id=p2, score_p1=5, score_p2=0)
+
+    page = await get_leaderboard_paginated(db, None, 100, 0, None)
+    rows = page["results"] if page else []
+    if len(rows) < 2:
+        pytest.skip("need at least 2 ranked users in the seed for this test")
+
+    ranks = await get_ranks_for_user_ids(db, [p1, p2, p3])
+    assert ranks[p1] < ranks[p2] < ranks[p3]

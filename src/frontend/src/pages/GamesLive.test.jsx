@@ -17,17 +17,21 @@ function jsonResponse(body, status = 200) {
 const sampleGames = [
   {
     game_id: 'invite-101-202-aaa',
-    player1: { id: 101, username: 'alice', display_name: 'Alice A', avatar_url: '/uploads/avatars/101.png' },
-    player2: { id: 202, username: 'bob',   display_name: 'Bob B',   avatar_url: null },
-    started_at: new Date(Date.now() - 90_000).toISOString(),  // 1:30 elapsed
+    player1: { id: 101, username: 'alice', display_name: 'Alice A', avatar_url: '/uploads/avatars/101.png', rank: 4 },
+    player2: { id: 202, username: 'bob',   display_name: 'Bob B',   avatar_url: null,                       rank: 9 },
+    started_at: new Date(Date.now() - 90_000).toISOString(),
     spectator_count: 3,
+    score1: 8,
+    score2: 6,
   },
   {
     game_id: 'invite-303-404-bbb',
-    player1: { id: 303, username: 'carol', display_name: 'Carol',  avatar_url: null },
-    player2: { id: 404, username: 'dave',  display_name: 'Dave',   avatar_url: null },
+    player1: { id: 303, username: 'carol', display_name: 'Carol',  avatar_url: null, rank: null },
+    player2: { id: 404, username: 'dave',  display_name: 'Dave',   avatar_url: null, rank: 12 },
     started_at: new Date().toISOString(),
     spectator_count: 0,
+    score1: 0,
+    score2: 0,
   },
 ]
 
@@ -89,20 +93,19 @@ describe('GamesLive page', () => {
     })
   })
 
-  it('polls /api/games/live every 10 s', async () => {
+  it('polls /api/games/live every 5 s', async () => {
     const spy = vi.spyOn(global, 'fetch').mockResolvedValue(jsonResponse([]))
     renderPage()
     await waitFor(() => expect(spy).toHaveBeenCalledTimes(1))
 
     await act(async () => {
-      vi.advanceTimersByTime(10_000)
-      // flush any pending promises queued by the fake timer tick
+      vi.advanceTimersByTime(5_000)
       await Promise.resolve()
     })
     await waitFor(() => expect(spy).toHaveBeenCalledTimes(2))
 
     await act(async () => {
-      vi.advanceTimersByTime(10_000)
+      vi.advanceTimersByTime(5_000)
       await Promise.resolve()
     })
     await waitFor(() => expect(spy).toHaveBeenCalledTimes(3))
@@ -129,6 +132,33 @@ describe('GamesLive page', () => {
     renderPage()
     await waitFor(() => {
       expect(screen.getByText('alice')).toBeInTheDocument()
+    })
+  })
+
+  it('renders the live score in place of "vs"', async () => {
+    vi.spyOn(global, 'fetch').mockResolvedValue(jsonResponse([sampleGames[0]]))
+    renderPage()
+    await waitFor(() => {
+      expect(screen.getByText('8 : 6')).toBeInTheDocument()
+    })
+    expect(screen.queryByText(/^vs$/i)).not.toBeInTheDocument()
+  })
+
+  it('renders rank under each player name', async () => {
+    vi.spyOn(global, 'fetch').mockResolvedValue(jsonResponse([sampleGames[0]]))
+    renderPage()
+    await waitFor(() => {
+      expect(screen.getByText('Rank #04')).toBeInTheDocument()
+      expect(screen.getByText('Rank #09')).toBeInTheDocument()
+    })
+  })
+
+  it('renders "Rank —" when a player has no rank (AI / unranked)', async () => {
+    vi.spyOn(global, 'fetch').mockResolvedValue(jsonResponse([sampleGames[1]]))
+    renderPage()
+    await waitFor(() => {
+      expect(screen.getByText('Rank —')).toBeInTheDocument()
+      expect(screen.getByText('Rank #12')).toBeInTheDocument()
     })
   })
 })

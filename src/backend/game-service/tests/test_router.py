@@ -1097,3 +1097,114 @@ async def test_get_live_games_does_not_finish_recently_created_matches(client, s
     row = result.scalars().one()
     assert row.status == "finished"
     assert row.finished_at is not None
+
+
+@pytest.mark.asyncio
+async def test_get_live_games_includes_score_and_rank_fields(client):
+    """Each entry must expose score1, score2, player1.rank, player2.rank
+    (rank may be int or null; score is always int). Ensures the loop body
+    actually runs by binding at least one synthetic live game."""
+    from service.ws.router import _bind_match, _unbind_match
+
+    create = await client.post(
+        "/matches", json={"player1_id": 5001, "player2_id": 5002}
+    )
+    assert create.status_code == 201
+    match_id = create.json()["id"]
+    test_game_id = f"test-shape-{match_id}"
+    _bind_match(test_game_id, match_id)
+
+    try:
+        resp = await client.get("/games/live")
+        assert resp.status_code == 200
+        rows = resp.json()
+        assert len(rows) >= 1, "expected at least the synthetic live game"
+        for entry in rows:
+            assert "score1" in entry and isinstance(entry["score1"], int)
+            assert "score2" in entry and isinstance(entry["score2"], int)
+            assert "rank" in entry["player1"]
+            assert "rank" in entry["player2"]
+            assert entry["player1"]["rank"] is None or isinstance(entry["player1"]["rank"], int)
+            assert entry["player2"]["rank"] is None or isinstance(entry["player2"]["rank"], int)
+    finally:
+        _unbind_match(test_game_id)
+
+    finish = await client.post(
+        f"/matches/{match_id}/finish",
+        json={"winner_id": 5001, "score_p1": 7, "score_p2": 0},
+    )
+    assert finish.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_get_live_games_score_defaults_to_zero_when_no_session_bound(client):
+    """When a match row is bound to a synthetic game_id but no live
+    GameSession exists in `game_manager`, the score must default to (0, 0)
+    rather than raising or returning null."""
+    from service.ws.router import _bind_match, _unbind_match
+
+    create = await client.post(
+        "/matches", json={"player1_id": 5001, "player2_id": 5002}
+    )
+    assert create.status_code == 201
+    match_id = create.json()["id"]
+
+    test_game_id = f"test-score-{match_id}"
+    _bind_match(test_game_id, match_id)
+    try:
+        resp = await client.get("/games/live")
+        rows = resp.json()
+        found = next((r for r in rows if r["game_id"] == test_game_id), None)
+        assert found is not None
+        assert found["score1"] == 0
+        assert found["score2"] == 0
+    finally:
+        _unbind_match(test_game_id)
+
+    finish = await client.post(
+        f"/matches/{match_id}/finish",
+        json={"winner_id": 5001, "score_p1": 7, "score_p2": 0},
+    )
+    assert finish.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_get_live_games_score_reflects_active_session(client, monkeypatch):
+    """When a GameSession exists for the bound game_id, score1/score2 must
+    reflect that session's `score.p1` / `score.p2`."""
+    from service.ws.router import _bind_match, _unbind_match
+    import service.game_manager as gm_module
+
+    create = await client.post(
+        "/matches", json={"player1_id": 5001, "player2_id": 5002}
+    )
+    assert create.status_code == 201
+    match_id = create.json()["id"]
+    test_game_id = f"test-live-score-{match_id}"
+    _bind_match(test_game_id, match_id)
+
+    class _FakeScore:
+        p1 = 6
+        p2 = 3
+    class _FakeSession:
+        score = _FakeScore()
+    monkeypatch.setitem(gm_module.game_manager._sessions, test_game_id, _FakeSession())
+
+    try:
+        resp = await client.get("/games/live")
+        rows = resp.json()
+        found = next((r for r in rows if r["game_id"] == test_game_id), None)
+        assert found is not None
+        assert found["score1"] == 6
+        assert found["score2"] == 3
+    finally:
+        gm_module.game_manager._sessions.pop(test_game_id, None)
+        _unbind_match(test_game_id)
+
+    finish = await client.post(
+        f"/matches/{match_id}/finish",
+        json={"winner_id": 5001, "score_p1": 7, "score_p2": 0},
+    )
+    assert finish.status_code == 200
+
+

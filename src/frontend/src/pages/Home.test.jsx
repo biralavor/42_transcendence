@@ -67,12 +67,21 @@ function jsonResp(body, status = 200) {
   })
 }
 
-const game = (id, spectators, startedAtOffsetMs = 0) => ({
+const game = (id, spectators, startedAtOffsetMs = 0, opts = {}) => ({
   game_id: id,
-  player1: { id: 1, username: 'alice', display_name: 'Alice', avatar_url: null },
-  player2: { id: 2, username: 'bob',   display_name: 'Bob',   avatar_url: null },
+  player1: {
+    id: 1, username: 'alice', display_name: 'Alice', avatar_url: null,
+    // 'key' in opts (not ??): an explicit null rank must pass through (unranked players)
+    rank: 'p1Rank' in opts ? opts.p1Rank : 4,
+  },
+  player2: {
+    id: 2, username: 'bob', display_name: 'Bob', avatar_url: null,
+    rank: 'p2Rank' in opts ? opts.p2Rank : 9,
+  },
   started_at: new Date(Date.now() + startedAtOffsetMs).toISOString(),
   spectator_count: spectators,
+  score1: opts.score1 ?? 0,
+  score2: opts.score2 ?? 0,
 })
 
 describe('Home Live Match pill', () => {
@@ -112,7 +121,7 @@ describe('Home Live Match pill', () => {
     expect(linkA).toHaveAttribute('href', '/game/g-1?spectate=true')
 
     await act(async () => {
-      vi.advanceTimersByTime(10_000)
+      vi.advanceTimersByTime(5_000)
       await Promise.resolve()
     })
     await waitFor(() => {
@@ -132,5 +141,56 @@ describe('Home Live Match pill', () => {
       await Promise.resolve()
     })
     expect(spy).toHaveBeenCalledTimes(1)
+  })
+
+  it('renders the live score in the arena topbar (natural format)', async () => {
+    const games = [game('g-1', 5, 0, { score1: 8, score2: 6 })]
+    vi.spyOn(global, 'fetch').mockResolvedValue(jsonResp(games))
+    renderHome()
+    await waitFor(() => {
+      expect(screen.getByText('8 : 6')).toBeInTheDocument()
+    })
+  })
+
+  it('renders "— : —" score when there is no live match', async () => {
+    vi.spyOn(global, 'fetch').mockResolvedValue(jsonResp([]))
+    renderHome()
+    await waitFor(() => {
+      expect(screen.getByText('— : —')).toBeInTheDocument()
+    })
+  })
+
+  it('renders the topGame player names and ranks in the arena footer', async () => {
+    const games = [game('g-1', 5, 0, { score1: 1, score2: 0 })]
+    vi.spyOn(global, 'fetch').mockResolvedValue(jsonResp(games))
+    renderHome()
+    await waitFor(() => {
+      expect(screen.getByText('Alice')).toBeInTheDocument()
+      expect(screen.getByText('Bob')).toBeInTheDocument()
+      expect(screen.getByText('Rank #04')).toBeInTheDocument()
+      expect(screen.getByText('Rank #09')).toBeInTheDocument()
+    })
+  })
+
+  it('renders "Rank —" when a player has no rank (AI / unranked)', async () => {
+    const games = [game('g-1', 5, 0, { p2Rank: null })]
+    vi.spyOn(global, 'fetch').mockResolvedValue(jsonResp(games))
+    renderHome()
+    await waitFor(() => {
+      expect(screen.getByText('Rank #04')).toBeInTheDocument()
+      expect(screen.getByText('Rank —')).toBeInTheDocument()
+    })
+  })
+
+  it('polls /api/games/live every 5 s', async () => {
+    const spy = vi.spyOn(global, 'fetch').mockResolvedValue(jsonResp([]))
+    renderHome()
+    await waitFor(() => expect(spy).toHaveBeenCalledTimes(1))
+
+    await act(async () => {
+      vi.advanceTimersByTime(5_000)
+      await Promise.resolve()
+    })
+    await waitFor(() => expect(spy).toHaveBeenCalledTimes(2))
   })
 })

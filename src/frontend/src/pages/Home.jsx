@@ -2,8 +2,11 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import './Home.css'
 import NavbarComponent from '../Components/Navbar'
+import { formatRank } from '../utils/formatRank'
 
-const POLL_INTERVAL_MS = 10_000
+const POLL_INTERVAL_MS = 5_000
+
+const fmtName = (p) => p?.display_name || p?.username || '—'
 
 function pickTopGame(games) {
   if (!Array.isArray(games) || games.length === 0) return null
@@ -109,12 +112,14 @@ export default function Home() {
                           to={`/game/${topGame.game_id}?spectate=true`}
                           className="arena-pill arena-pill--live"
                         >
-                          Live Match · {topGame.player1?.username} vs {topGame.player2?.username} · 👁 {topGame.spectator_count}
+                          Live Match · {fmtName(topGame.player1)} vs {fmtName(topGame.player2)} · 👁 {topGame.spectator_count}
                         </Link>
                       ) : (
                         <span className="arena-pill arena-pill--idle">No live match</span>
                       )}
-                      <span className="arena-score">08 : 06</span>
+                      <span className="arena-score">
+                        {topGame ? `${topGame.score1} : ${topGame.score2}` : '— : —'}
+                      </span>
                     </div>
 
                     <div className="pong-preview">
@@ -126,13 +131,21 @@ export default function Home() {
 
                     <div className="arena-footer">
                       <div>
-                        <p className="arena-player">bgomes-l</p>
-                        <span className="arena-rank">Rank #04</span>
+                        <p className="arena-player">
+                          {topGame ? fmtName(topGame.player1) : '—'}
+                        </p>
+                        <span className="arena-rank">
+                          {topGame ? formatRank(topGame.player1?.rank) : ''}
+                        </span>
                       </div>
 
                       <div className="text-end">
-                        <p className="arena-player">opponent_42</p>
-                        <span className="arena-rank">Rank #09</span>
+                        <p className="arena-player">
+                          {topGame ? fmtName(topGame.player2) : '—'}
+                        </p>
+                        <span className="arena-rank">
+                          {topGame ? formatRank(topGame.player2?.rank) : ''}
+                        </span>
                       </div>
                     </div>
                   </div>
