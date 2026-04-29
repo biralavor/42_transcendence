@@ -7,9 +7,9 @@ export default function Home() {
     <div className="arcade-shell">
       <NavbarComponent />
 
-      <main className="home-page">
-        <section className="hero-section">
-          <div className="hero-screen arcade-screen">
+      <main className="home-page container-fluid">
+        <section className="hero-section row">
+          <div className="hero-screen arcade-screen col-12">
             <div className="arcade-panel row align-items-center g-4 g-lg-5">
               <div className="col-12 col-lg-6">
                 <div className="hero-copy">
@@ -29,33 +29,33 @@ export default function Home() {
                     classic arcade rooms.
                   </p>
 
-                  <div className="hero-actions d-flex flex-wrap gap-3">
-                    <Link to="/play" className="arcade-btn arcade-btn-primary">
+                  <div className="hero-actions row d-flex flex-wrap gap-4">
+                    <Link to="/play" className="arcade-btn arcade-btn-primary col-12 col-lg-6">
                       Play now
                     </Link>
 
-                    <Link to="/leaderboard" className="arcade-btn arcade-btn-ghost">
+                    <Link to="/leaderboard" className="arcade-btn arcade-btn-ghost col-12 col-lg-5">
                       View leaderboard
                     </Link>
                   </div>
 
-                  <div className="hero-stats row g-3 mt-4">
-                    <div className="col-12 col-sm-4">
-                      <div className="stat-card">
+                  <div className="hero-stats row mt-4 g-4">
+                    <div className="col-12 col-lg-6" >
+                      <div className="stat-card p-4">
                         <span className="stat-value">24/7</span>
                         <span className="stat-label">Open arena</span>
                       </div>
                     </div>
 
-                    <div className="col-12 col-sm-4">
-                      <div className="stat-card">
+                    <div className="col-12 col-lg-6">
+                      <div className="stat-card p-4">
                         <span className="stat-value">Ranked</span>
                         <span className="stat-label">Competitive play</span>
                       </div>
                     </div>
 
-                    <div className="col-12 col-sm-4">
-                      <div className="stat-card">
+                    <div className="col-12 col-lg-12">
+                      <div className="stat-card p-4">
                         <span className="stat-value">Fast</span>
                         <span className="stat-label">Instant matches</span>
                       </div>
@@ -117,7 +117,7 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="features-section">
+        <section className="features-section row">
           <div className="row g-4">
             <div className="col-12 col-md-6 col-xl-4">
               <article className="feature-card">
@@ -154,7 +154,7 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="cta-section">
+        <section className="cta-section row">
           <div className="cta-box">
             <div>
               <p className="cta-kicker arcade-kicker">Ready to enter the arena?</p>
