@@ -17,9 +17,14 @@ class ConnectionManager:
     Designed for dependency injection: each service provides its own signal callback.
     """
 
-    def __init__(self, signal_callback: Optional[Callable[[str], Awaitable[None]]] = None) -> None:
+    def __init__(
+        self,
+        signal_callback: Optional[Callable[[str], Awaitable[None]]] = None,
+        send_timeout: float | None = None,
+    ) -> None:
         self._rooms: Dict[str, Set[WebSocket]] = {}
         self._signal_callback = signal_callback
+        self._send_timeout = send_timeout
 
     async def connect(self, room_id: str, websocket: "WebSocket") -> None:
         await websocket.accept()
@@ -31,8 +36,6 @@ class ConnectionManager:
         if not room:
             self._rooms.pop(room_id, None)
 
-    _SEND_TIMEOUT = 0.5  # seconds; slow clients are disconnected rather than blocking the loop
-
     async def _send_to_client(
         self,
         room_id: str,
@@ -40,8 +43,18 @@ class ConnectionManager:
         message: dict,
     ) -> tuple["WebSocket", Exception | None]:
         try:
-            await asyncio.wait_for(websocket.send_json(message), timeout=self._SEND_TIMEOUT)
+            if self._send_timeout is None:
+                await websocket.send_json(message)
+            else:
+                await asyncio.wait_for(
+                    websocket.send_json(message), timeout=self._send_timeout
+                )
             return websocket, None
+        except asyncio.TimeoutError as e:
+            logger.warning(
+                f"Send to client in room {room_id} exceeded {self._send_timeout}s; disconnecting slow client"
+            )
+            return websocket, e
         except Exception as e:
             logger.warning(f"Failed to send to client in room {room_id}: {e}")
             return websocket, e

@@ -96,7 +96,7 @@ async def test_broadcast_sends_to_room_clients_concurrently(manager):
 
     broadcast_task = asyncio.create_task(manager.broadcast("room1", {"msg": "hello"}))
     try:
-        await asyncio.wait_for(all_sends_started.wait(), timeout=5)
+        await asyncio.wait_for(all_sends_started.wait(), timeout=1)
     except asyncio.TimeoutError as exc:
         release_sends.set()
         await broadcast_task
