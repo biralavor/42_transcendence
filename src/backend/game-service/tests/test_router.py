@@ -937,33 +937,105 @@ async def test_get_live_games_is_publicly_accessible(client):
 @pytest.mark.asyncio
 async def test_get_live_games_skips_matches_without_live_ws_session(client):
     """A match that exists in the DB as 'ongoing' but has no live WS session
-    bound should NOT appear in /games/live (the endpoint lists watchable
-    games only)."""
+    bound is treated as stale: it must NOT appear in /games/live, AND the
+    endpoint reconciles it by marking status='finished' (no manual cleanup
+    needed in the test — the endpoint IS the cleanup)."""
     create = await client.post(
         "/matches", json={"player1_id": 5003, "player2_id": 5010}
     )
     assert create.status_code == 201
     match_id = create.json()["id"]
 
-    try:
-        resp = await client.get("/games/live")
-        assert resp.status_code == 200
-        rows = resp.json()
-        # The match has no _bind_match call — it should be filtered out.
-        # We don't know the shape of bound game_ids ahead of time, so check
-        # that no entry's underlying match_id matches ours by querying the
-        # reverse map directly.
-        from service.ws.router import _match_ids
-        for entry in rows:
-            mapped_match_id = _match_ids.get(entry["game_id"])
-            assert mapped_match_id != match_id, (
-                f"unbound match {match_id} should not appear in live list, "
-                f"but found entry: {entry}"
-            )
-    finally:
-        # Clean up
-        finish = await client.post(
-            f"/matches/{match_id}/finish",
-            json={"winner_id": 5003, "score_p1": 7, "score_p2": 0},
+    resp = await client.get("/games/live")
+    assert resp.status_code == 200
+    rows = resp.json()
+    from service.ws.router import _match_ids
+    for entry in rows:
+        mapped_match_id = _match_ids.get(entry["game_id"])
+        assert mapped_match_id != match_id, (
+            f"unbound match {match_id} should not appear in live list, "
+            f"but found entry: {entry}"
         )
-        assert finish.status_code == 200
+    # Cleanup is implicit: the reconciliation in /games/live already marked
+    # this match as finished. Asserting that explicitly is the job of
+    # test_get_live_games_marks_unbound_match_finished_and_excludes_it.
+
+
+@pytest.mark.asyncio
+async def test_get_live_games_marks_unbound_match_finished_and_excludes_it(client, session):
+    """A match that is 'ongoing' in the DB but has NO live WS session bound is
+    a stale row left over from a crashed game. Hitting /games/live must mark
+    it status='finished' (idempotently, only if still 'ongoing') and exclude
+    it from the response."""
+    from sqlalchemy import select
+    from service.models.match import Match
+    from service.ws.router import _match_id_to_game_id, _match_ids
+
+    create = await client.post(
+        "/matches", json={"player1_id": 5001, "player2_id": 5002}
+    )
+    assert create.status_code == 201, create.text[:200]
+    match_id = create.json()["id"]
+
+    # Sanity: the row is currently 'ongoing' and has NO binding.
+    assert match_id not in _match_id_to_game_id
+
+    resp = await client.get("/games/live")
+    assert resp.status_code == 200
+    rows = resp.json()
+
+    # Response excludes this match (no binding → filtered).
+    for entry in rows:
+        mapped = _match_ids.get(entry["game_id"])
+        assert mapped != match_id, (
+            f"stale match {match_id} must NOT appear in live list, "
+            f"but found entry: {entry}"
+        )
+
+    # DB row now status='finished' with finished_at populated; winner_id and
+    # scores are untouched (NULL / 0).
+    result = await session.execute(select(Match).where(Match.id == match_id))
+    row = result.scalars().one()
+    assert row.status == "finished", (
+        f"reconciliation must mark stale match finished, got status={row.status}"
+    )
+    assert row.finished_at is not None
+    assert row.winner_id is None
+    assert row.score_p1 == 0
+    assert row.score_p2 == 0
+
+
+@pytest.mark.asyncio
+async def test_get_live_games_does_not_touch_already_finished_rows(client, session):
+    """If a row is already 'finished', the endpoint must not bump finished_at
+    or otherwise modify it."""
+    from datetime import datetime, timezone
+    from sqlalchemy import select
+    from service.models.match import Match
+
+    earlier = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    m = Match(
+        player1_id=5001,
+        player2_id=5002,
+        status="finished",
+        finished_at=earlier,
+        winner_id=5001,
+        score_p1=7,
+        score_p2=3,
+    )
+    session.add(m)
+    await session.commit()
+    match_id = m.id
+
+    resp = await client.get("/games/live")
+    assert resp.status_code == 200
+
+    # Re-read the row through a fresh query (don't trust ORM-cached state).
+    session.expire_all()
+    result = await session.execute(select(Match).where(Match.id == match_id))
+    row = result.scalars().one()
+    assert row.status == "finished"
+    assert row.finished_at == earlier  # NOT bumped
+    assert row.winner_id == 5001
+    assert row.score_p1 == 7
+    assert row.score_p2 == 3

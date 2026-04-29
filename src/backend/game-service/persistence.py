@@ -763,6 +763,34 @@ async def list_live_matches(db: AsyncSession) -> list[dict]:
     return [dict(row) for row in result.mappings()]
 
 
+async def mark_match_finished_if_ongoing(db: AsyncSession, match_id: int) -> bool:
+    """Mark a single match as finished, idempotently and atomically.
+
+    Sets status='finished' and finished_at=NOW() ONLY if the row is currently
+    `ongoing`. Leaves winner_id and scores untouched — the caller (live-games
+    reconciliation) has no data to reconstruct them honestly.
+
+    Returns True if the row was updated, False if the row was already finished
+    or did not exist. Caller is responsible for committing.
+    """
+    result = await db.execute(
+        text(
+            """
+            UPDATE matches
+               SET status = 'finished',
+                   finished_at = NOW()
+             WHERE id = :match_id
+               AND status = 'ongoing'
+            """
+        ),
+        {"match_id": match_id},
+    )
+    # The raw-SQL UPDATE bypasses the ORM identity map; expire any cached
+    # Match instances so subsequent ORM reads see the new status/finished_at.
+    db.expire_all()
+    return result.rowcount > 0
+
+
 def leaderboard_order_by_str(sort_assoc: list[tuple[str, str]] | None) -> str | None:
     valid_columns = [
         'rank',

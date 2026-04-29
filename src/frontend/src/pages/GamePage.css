@@ -189,14 +189,14 @@
 }
 
 .audience-banner {
-  border: 1px solid #4caf50;
-  background: rgba(76, 175, 80, 0.08);
+  border: 1px solid #9e3bc5;
+  background: rgba(153, 56, 218, 0.08);
 }
 
 .audience-banner-text {
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: #4caf50;
+  color: #ae4bc7;
 }
 
 .spectator-count-badge {

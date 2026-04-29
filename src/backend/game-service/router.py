@@ -38,6 +38,7 @@ from service.persistence import (
     leave_tournament,
     list_live_matches,
     list_tournaments,
+    mark_match_finished_if_ongoing,
     record_tournament_match_result,
     start_tournament,
     withdraw_tournament,
@@ -495,16 +496,24 @@ async def xp_leaderboard(session: SessionDependency, limit: int = Query(20, ge=1
 async def list_live_games(session: SessionDependency):
     rows = await list_live_matches(session)
     out: list[dict] = []
+    stale_marked = False
     for row in rows:
         match_id_int = int(row["match_id"])
-        # Only list matches that are actually watchable — i.e., have a live WS
-        # session bound in `_match_id_to_game_id`. A DB row in 'ongoing' status
-        # without a bound session is in a transient state (e.g., between match
-        # creation and the both-players-connected handshake) and isn't yet a
-        # live game.
         game_id = game_id_for_match(match_id_int)
         if game_id is None:
-            continue
+            # No live WS session is bound to this match. Treat it as a stale
+            # 'ongoing' row left over from a crashed game and reconcile it:
+            # mark status='finished' + finished_at=NOW (idempotent, gated on
+            # status='ongoing' so a concurrent legitimate finish wins).
+            #
+            # Race-tolerant re-check: a player handshake may have completed
+            # between list_live_matches() and now, populating the binding.
+            # If so, treat this as a live row instead.
+            game_id = game_id_for_match(match_id_int)
+            if game_id is None:
+                updated = await mark_match_finished_if_ongoing(session, match_id_int)
+                stale_marked = stale_marked or updated
+                continue
         out.append({
             "game_id": game_id,
             "player1": {
@@ -522,4 +531,6 @@ async def list_live_games(session: SessionDependency):
             "started_at": row["started_at"],
             "spectator_count": spectator_count(game_id),
         })
+    if stale_marked:
+        await session.commit()
     return out
