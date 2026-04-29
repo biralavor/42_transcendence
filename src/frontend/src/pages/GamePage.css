@@ -163,3 +163,31 @@
     gap: 12px;
   }
 }
+
+.spectator-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 16px;
+  margin: 8px 0 12px;
+  border: 1px solid var(--accent, #ffaa00);
+  border-radius: 6px;
+  background: rgba(255, 170, 0, 0.08);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.spectator-banner-text {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--accent, #ffaa00);
+}
+
+.spectator-count-badge {
+  font-family: monospace;
+  background: rgba(0, 0, 0, 0.35);
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+}

@@ -2,11 +2,17 @@ import { render, screen, fireEvent, act } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import GamePage from './GamePage'
 import { apiJson } from '../utils/apiClient'
+import { useAuth } from '../context/authContext'
 
 // apiJson rejects by default so profile fetches fail silently and names
 // fall back to location.state values. Override per-test for fetch assertions.
 vi.mock('../utils/apiClient', () => ({
   apiJson: vi.fn().mockRejectedValue(new Error('no server in tests')),
+}))
+
+// Default: authenticated. Spectator + auth-gate tests override per-test.
+vi.mock('../context/authContext', () => ({
+  useAuth: vi.fn(() => ({ isAuthenticated: true, isAuthReady: true })),
 }))
 
 // Two buttons so tests can fire either player winning
@@ -139,5 +145,90 @@ describe('GamePage game over overlay', () => {
     await screen.findByRole('heading', { name: /you won/i })
     expect(screen.getByTestId('p1-name').textContent).toBe('alice')
     expect(screen.getByTestId('p2-name').textContent).toBe('bob')
+  })
+})
+
+function renderSpectator(roomId = 'invite-101-202-aaa') {
+  return render(
+    <MemoryRouter initialEntries={[`/game/${roomId}?spectate=true`]}>
+      <Routes>
+        <Route path="/game/:roomId" element={<GamePage />} />
+        <Route path="/play" element={<div>Play page</div>} />
+        <Route path="/login" element={<div>Login page</div>} />
+      </Routes>
+    </MemoryRouter>
+  )
+}
+
+describe('GamePage spectator branch', () => {
+  beforeEach(() => {
+    apiJson.mockRejectedValue(new Error('no server in tests'))
+    useAuth.mockReturnValue({ isAuthenticated: false, isAuthReady: true })
+    vi.spyOn(global, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify([
+          {
+            game_id: 'invite-101-202-aaa',
+            player1: { id: 101, username: 'alice', display_name: 'Alice A', avatar_url: null },
+            player2: { id: 202, username: 'bob',   display_name: 'Bob B',   avatar_url: null },
+            started_at: new Date().toISOString(),
+            spectator_count: 2,
+          },
+        ]),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      )
+    )
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('renders the "Watching as spectator" banner', async () => {
+    renderSpectator()
+    expect(await screen.findByText(/watching as spectator/i)).toBeInTheDocument()
+  })
+
+  it('does NOT redirect to /play even though location.state has no player IDs', async () => {
+    renderSpectator()
+    await screen.findByText(/watching as spectator/i)
+    expect(screen.queryByText(/play page/i)).not.toBeInTheDocument()
+  })
+
+  it('shows initial spectator count from /api/games/live', async () => {
+    renderSpectator()
+    await screen.findByText(/watching as spectator/i)
+    expect(await screen.findByText(/👁 2/)).toBeInTheDocument()
+  })
+
+  it("hides the GameOverOverlay even if a game_over arrives (spectators don't replay)", async () => {
+    renderSpectator()
+    await screen.findByText(/watching as spectator/i)
+    fireEvent.click(screen.getByText('Simulate Game End'))
+    expect(screen.queryByRole('heading', { name: /you won/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: /you lost/i })).not.toBeInTheDocument()
+  })
+})
+
+describe('GamePage non-spectator auth gate', () => {
+  beforeEach(() => {
+    apiJson.mockRejectedValue(new Error('no server in tests'))
+    useAuth.mockReturnValue({ isAuthenticated: false, isAuthReady: true })
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('redirects to /login when not authenticated and not a spectator', async () => {
+    render(
+      <MemoryRouter initialEntries={[`/game/some-room`]}>
+        <Routes>
+          <Route path="/game/:roomId" element={<GamePage />} />
+          <Route path="/login" element={<div>Login page</div>} />
+        </Routes>
+      </MemoryRouter>
+    )
+    expect(await screen.findByText(/login page/i)).toBeInTheDocument()
   })
 })
