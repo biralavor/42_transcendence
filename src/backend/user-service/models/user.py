@@ -1,4 +1,4 @@
-from sqlalchemy import Column, ForeignKey, Integer, String, TIMESTAMP, Boolean
+from sqlalchemy import Column, ForeignKey, Integer, String, TIMESTAMP, Boolean, JSON
 from sqlalchemy.sql import func
 
 from shared.database import Base
@@ -16,3 +16,4 @@ class User(Base):
     created_at   = Column(TIMESTAMP, default=func.now())
     bio          = Column(String, nullable=True)
     dark_mode    = Column(Boolean, server_default='false', nullable=False)
+    game_preferences = Column(JSON, nullable=True)   # {"theme": str, "ball_speed_multiplier": float}

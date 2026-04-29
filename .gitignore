@@ -1,10 +1,10 @@
 .claude
 CLAUDE.md
+GEMINI.md
 
 # 42 Subject files
 42_Transcendence-subject-version-19-0.pdf
 42-Trancendence-Evaluation-version-19.pdf
-release.txt
 
 # Environment files
 .env
@@ -19,6 +19,16 @@ __pycache__/
 
 # Frontend Vite files
 .vite/
+package-lock.json
 
 # Alembic backups
-*.bak
+*.bak.codex
+.npm-cache/
+
+# Tem result tests logs
+make_check_results.txt
+.codex/
+.codex
+release.txt
+# Test result logs
+make_check_results.txt

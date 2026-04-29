@@ -3,6 +3,9 @@ events {
 }
 
 http {
+    gzip off;
+    tcp_nodelay on;
+
     # Correctly handles both WebSocket upgrades and plain HTTP:
     # - $http_upgrade non-empty (e.g. "websocket") → Connection: upgrade
     # - $http_upgrade empty (regular request)       → Connection: close
@@ -44,16 +47,34 @@ http {
         ssl_certificate_key /etc/nginx/ssl/nginx.key;
         ssl_protocols       TLSv1.2 TLSv1.3;
 
+        # WebSocket timeouts: prevent premature connection drops
+        proxy_read_timeout    3600s;
+        proxy_send_timeout    3600s;
+        proxy_connect_timeout 60s;
+
         # NOTE: trailing slash on proxy_pass strips the location prefix.
         # /api/users/profile → /profile at user-service
         # FastAPI routes must NOT include the /api/<service> prefix.
         location /api/users/ {
+            # Headroom over the 2 MB file cap so multipart framing doesn't
+            # trip nginx before the backend's exact-size check runs.
+            client_max_body_size   3m;
             proxy_pass             http://user-service/;
             proxy_http_version     1.1;
             proxy_set_header       Host $host;
             proxy_set_header       X-Real-IP $remote_addr;
             proxy_set_header       Upgrade $http_upgrade;
             proxy_set_header       Connection $connection_upgrade;
+            proxy_read_timeout     3600s;
+            proxy_send_timeout     3600s;
+            proxy_buffering        off;
+        }
+
+        location /uploads/avatars/ {
+            root                   /var/www;
+            autoindex              off;
+            add_header             Cache-Control "max-age=3600";
+            try_files              $uri =404;
         }
 
         location /api/game/ {
@@ -63,6 +84,9 @@ http {
             proxy_set_header       X-Real-IP $remote_addr;
             proxy_set_header       Upgrade $http_upgrade;
             proxy_set_header       Connection $connection_upgrade;
+            proxy_read_timeout     3600s;
+            proxy_send_timeout     3600s;
+            proxy_buffering        off;
         }
 
         location /api/chat/ {
@@ -72,6 +96,9 @@ http {
             proxy_set_header       X-Real-IP $remote_addr;
             proxy_set_header       Upgrade $http_upgrade;
             proxy_set_header       Connection $connection_upgrade;
+            proxy_read_timeout     3600s;
+            proxy_send_timeout     3600s;
+            proxy_buffering        off;
         }
 
         location / {

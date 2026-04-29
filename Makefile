@@ -56,12 +56,26 @@ wait:
 
 .PHONY: seed
 seed:
+	@echo "Waiting 5 seconds for seed operations to complete..."
+	@sleep 5
 	@docker compose cp tests/seed_dev.py user-service:/app/seed_dev.py
-	@docker compose exec user-service python3 /app/seed_dev.py
+	@docker compose exec -e WS_LOG_DEBUG=true user-service python3 /app/seed_dev.py
+
+.PHONY: e2e
+e2e: wait seed
+	@echo "Waiting 5 seconds for seed operations to complete..."
+	@sleep 5
+	@echo "Running E2E integration tests..."
+	@PAGER=cat GIT_PAGER=cat bash tests/TranscendenceHealthCheck.sh | tee >(sed 's/\x1b\[[0-9;]*m//g' > release.txt) | cat
 
 .PHONY: check
 check: wait seed
-	PAGER=cat GIT_PAGER=cat bash tests/TranscendenceHealthCheck.sh | tee >(sed 's/\x1b\[[0-9;]*m//g' > release.txt) | cat
+	PAGER=cat GIT_PAGER=cat bash tests/TranscendenceHealthCheck.sh | tee >(sed 's/\x1b\[[0-9;]*m//g' > make_check_results.txt) | cat
+
+# check-no-wait: Run tests without re-checking service health (used in CI/CD after container verification)
+.PHONY: check-no-wait
+check-no-wait: seed
+	PAGER=cat GIT_PAGER=cat bash tests/TranscendenceHealthCheck.sh | tee >(sed 's/\x1b\[[0-9;]*m//g' > make_check_results.txt) | cat
 
 # --- alembic migrations ---
 # Usage: make migrate-user MSG=add_avatar_url_to_users
@@ -160,7 +174,7 @@ show-table-contents:
 
 .PHONY: show-tables-full
 show-tables-full:
-	docker compose exec db sh -c \
+	@docker compose exec db sh -c \
 		'psql -U $$POSTGRES_USER -d $$POSTGRES_DB -c \
 		"SELECT t.table_name, c.column_name, c.data_type, c.is_nullable, c.column_default \
 		FROM information_schema.tables t \

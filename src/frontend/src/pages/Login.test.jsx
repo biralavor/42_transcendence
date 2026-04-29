@@ -10,6 +10,18 @@ vi.mock('../utils/jwtUtils', () => ({
   isTokenValid: vi.fn(() => true),
 }))
 
+vi.mock('../context/unreadContext', () => ({
+  useUnread: vi.fn(() => ({ unreadCounts: {}, clearUnread: vi.fn() })),
+}))
+
+vi.mock('../context/notificationContext', () => ({
+  useNotifications: vi.fn(() => ({
+    setInviteVisible: vi.fn(),
+    notifications: [],
+    unreadCount: 0,
+  })),
+}))
+
 function renderLogin() {
   return render(
     <AuthProvider>

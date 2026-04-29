@@ -56,7 +56,13 @@ describe('UserProfileModal — with data', () => {
     vi.spyOn(global, 'fetch')
       // search call → resolves username to id
       .mockResolvedValueOnce(
-        new Response(JSON.stringify([{ id: 7, username: 'alice' }]), { status: 200 })
+        new Response(JSON.stringify({
+          results: [{ id: 7, username: 'alice' }],
+          total: 1,
+          page: 0,
+          per_page: 1,
+          last_page: 0,
+        }), { status: 200 })
       )
       // profile call
       .mockResolvedValueOnce(
@@ -68,7 +74,36 @@ describe('UserProfileModal — with data', () => {
       // history call
       .mockResolvedValueOnce(
         new Response(
-          JSON.stringify([{ id: 1, result: 'Win' }, { id: 2, result: 'Loss' }]),
+          JSON.stringify(
+            {
+              "results": [
+                {
+                  "id": 1,
+                  "opponent_id": 99,
+                  "result": "Win",
+                  "score": "3-0",
+                  "date": "2026-04-23T02:09:02.687892"
+                },
+                {
+                  "id": 1,
+                  "opponent_id": 99,
+                  "result": "Loss",
+                  "score": "0-3",
+                  "date": "2026-05-23T02:09:02.687892"
+                }
+              ],
+              "summary": {
+                "player_id": 1,
+                "wins": 1,
+                "losses": 1,
+                "total_matches": 2
+              },
+              "total": 2,
+              "page": 0,
+              "per_page": 1,
+              "last_page": 0
+            }
+          ),
           { status: 200 }
         )
       )
@@ -119,7 +154,13 @@ describe('UserProfileModal — with data', () => {
 
   it('calls friend request endpoint when Add Friend is clicked', async () => {
     vi.spyOn(global, 'fetch')
-      .mockResolvedValueOnce(new Response(JSON.stringify([{ id: 7, username: 'alice' }]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        results: [{ id: 7, username: 'alice' }],
+        total: 1,
+        page: 0,
+        per_page: 1,
+        last_page: 0,
+      }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ display_name: 'Alice', username: 'alice', avatar_url: '/av.jpg' }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
       .mockResolvedValueOnce(new Response(null, { status: 200 })) // friend request
@@ -127,14 +168,20 @@ describe('UserProfileModal — with data', () => {
     const btn = await screen.findByRole('button', { name: /add friend/i })
     btn.click()
     expect(global.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/users/friends/99/request/7'),
+      expect.stringContaining('/api/users/friends/request/7'),
       expect.objectContaining({ method: 'POST' })
     )
   })
 
   it('calls block endpoint when Block is clicked', async () => {
     vi.spyOn(global, 'fetch')
-      .mockResolvedValueOnce(new Response(JSON.stringify([{ id: 7, username: 'alice' }]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        results: [{ id: 7, username: 'alice' }],
+        total: 1,
+        page: 0,
+        per_page: 1,
+        last_page: 0,
+      }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ display_name: 'Alice', username: 'alice', avatar_url: '/av.jpg' }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
       .mockResolvedValueOnce(new Response(null, { status: 204 })) // block

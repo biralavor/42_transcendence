@@ -1,0 +1,65 @@
+.th-subtitle {
+  display: block;
+  font-size: 0.65rem;
+  opacity: 0.7;
+  font-weight: 400;
+  margin-top: 0.1rem;
+}
+
+.leaderboard-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  vertical-align: middle;
+  margin-right: 0.5rem;
+  object-fit: cover;
+}
+
+.leaderboard-username-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.leaderboard-username-link:hover {
+  text-decoration: underline;
+}
+
+.current-user-row {
+  background-color: rgba(74, 222, 128, 0.15);
+  font-weight: 600;
+}
+
+.leaderboard-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.leaderboard-pagination button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.leaderboard-sort-toggle {
+  display: inline-flex;
+  gap: 0.25rem;
+  margin-bottom: 1rem;
+}
+
+.leaderboard-sort-toggle button {
+  padding: 0.4rem 0.85rem;
+  border-radius: 6px;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.1);
+  color: inherit;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.leaderboard-sort-toggle button.active {
+  background: #4ade80;
+  color: #1a1a2e;
+  font-weight: 700;
+  border-color: #4ade80;
+}

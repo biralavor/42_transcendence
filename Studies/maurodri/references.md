@@ -23,3 +23,10 @@
 
 ### requestAnimationFrame
 - https://css-tricks.com/using-requestanimationframe-with-react-hooks/
+
+## python
+
+### pytest
+- [basico pytest](https://www.youtube.com/watch?v=MjQCvJmc31A)
+- [pytest + debugger pdb](https://betterstack.com/community/questions/how-to-debug-pytest-with-pdb-breakpoints/)
+- [pytest fixtures](https://www.youtube.com/watch?v=MjQCvJmc31A)

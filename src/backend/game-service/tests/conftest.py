@@ -13,10 +13,12 @@ so tests can run without a real PostgreSQL connection.
 """
 import sys
 import types
+import asyncio
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+import pytest_asyncio
 
 _service_dir = Path(__file__).resolve().parents[1]  # .../game-service
 _backend_dir = _service_dir.parent                   # .../src/backend
@@ -65,3 +67,26 @@ def override_get_db(mock_db_session):
     app.dependency_overrides[get_db] = _fake_get_db
     yield
     app.dependency_overrides.pop(get_db, None)
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def cleanup_game_manager():
+    """Clean up all GameManager tasks after each test to prevent hangs."""
+    yield
+    # Cleanup: Cancel all pending tasks from the GameManager
+    from service.game_manager import game_manager
+    
+    # Delete all active sessions to stop their game loops
+    sessions_to_delete = list(game_manager._sessions.keys())
+    for game_id in sessions_to_delete:
+        await game_manager.delete_session(game_id)
+    
+    # Cancel any remaining tasks (but not the current test task)
+    current_task = asyncio.current_task()
+    for task in asyncio.all_tasks():
+        if task is not current_task and not task.done():
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass

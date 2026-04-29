@@ -1,7 +1,7 @@
 from datetime import datetime
-from typing import Literal
+from typing import Literal, Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class MatchResponse(BaseModel):
@@ -26,20 +26,6 @@ class StatsResponse(BaseModel):
     goals_scored: int
     goals_conceded: int
 
-
-class LeaderboardEntryResponse(BaseModel):
-    rank: int
-    user_id: int
-    username: str
-    wins: int
-    losses: int
-    total_games: int
-    goals_scored: int
-    goals_conceded: int
-    goal_difference: int
-    points: int
-
-
 class MatchCreateRequest(BaseModel):
     player1_id: int
     player2_id: int
@@ -51,17 +37,39 @@ class MatchFinishRequest(BaseModel):
     score_p2: int
 
 
+class TournamentMatchResultRequest(BaseModel):
+    winner_id: int
+    score_p1: int = 0
+    score_p2: int = 0
+
+
 class MatchHistoryItem(BaseModel):
-    id: int
+    match_id: int
+    player_id: int
     opponent_id: int
+    opponent_display_name: str | None
     result: str   # "Win" | "Loss"
     score: str    # e.g. "11-3" (user score first, ASCII hyphen)
     date: str     # finished_at ISO string, "" if null
 
+class MatchHistorySummary(BaseModel):
+    player_id: int
+    wins: int
+    losses: int
+    total_matches: int
+
+class MatchHistoryPage(BaseModel):
+    results: list[MatchHistoryItem]
+    summary: MatchHistorySummary
+    total: int
+    page: int
+    per_page: int
+    last_page: int
+
 
 class TournamentCreateRequest(BaseModel):
     name: str
-    max_participants: Literal[4, 8]
+    max_participants: int = Field(ge=4, le=8)
 
 
 class TournamentCreateResponse(BaseModel):
@@ -88,6 +96,9 @@ class TournamentMatchResponse(BaseModel):
     player2_id: int | None
     winner_id: int | None
     status: str
+    score_p1: int = 0
+    score_p2: int = 0
+    started_at: datetime | None = None
 
 
 class TournamentDetailResponse(BaseModel):
@@ -101,3 +112,69 @@ class TournamentDetailResponse(BaseModel):
     created_at: datetime
     participants: list[TournamentParticipantResponse]
     matches: list[TournamentMatchResponse] = []
+
+
+# Leaderboard
+class PlayerStats(BaseModel):
+    rank: int
+    wins: int
+    losses: int
+    points: int
+    user_id: int
+    max_streak: int
+    total_games: int
+    display_name: str
+    goals_scored: int
+    current_streak: int
+    goals_conceded: int
+    goal_difference: int
+    xp: int = 0
+    level: int = 1
+    avatar_url: str | None = None
+
+
+class StatEntry(BaseModel):
+    value: int
+    display_name: str
+
+
+class Summary(BaseModel):
+    max_points: StatEntry
+    max_max_streak: StatEntry
+    max_current_streak: StatEntry
+
+
+class LeaderboardResponse(BaseModel):
+    page: int
+    last_page: int
+    per_page: int
+    total: int
+    results: list[PlayerStats]
+    player_stats: PlayerStats | None
+    summary: Summary
+
+
+# AI Game
+class AiGameRequest(BaseModel):
+    difficulty: Literal["easy", "medium", "hard"] = "medium"
+
+
+class AiGameResponse(BaseModel):
+    game_id: str
+
+
+class AchievementResponse(BaseModel):
+    key: str
+    name: str
+    description: str
+    icon: Optional[str] = None
+    earned: bool
+    earned_at: Optional[datetime] = None
+
+
+class XpResponse(BaseModel):
+    user_id: int
+    xp: int
+    level: int
+    xp_in_level: int
+    xp_to_next_level: int = 100

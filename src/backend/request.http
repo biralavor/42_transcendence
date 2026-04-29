@@ -65,6 +65,87 @@ content-type: application/json
     "password": "bira123"
 }
 
+### ── AVATAR ────────────────────────────────────────────────────────────────
+
+### Upload avatar — JPEG (replace <access_token> and the filename after "<" with a real path)
+POST https://localhost:8443/api/users/avatar HTTP/1.1
+Authorization: Bearer <access_token>
+Content-Type: multipart/form-data; boundary=----avatarboundary
+
+------avatarboundary
+Content-Disposition: form-data; name="file"; filename="avatar.jpg"
+Content-Type: image/jpeg
+
+< ./avatar.jpg
+------avatarboundary--
+
+### Upload avatar — PNG
+POST https://localhost:8443/api/users/avatar HTTP/1.1
+Authorization: Bearer <access_token>
+Content-Type: multipart/form-data; boundary=----avatarboundary
+
+------avatarboundary
+Content-Disposition: form-data; name="file"; filename="avatar.png"
+Content-Type: image/png
+
+< ./avatar.png
+------avatarboundary--
+
+### Upload avatar — WebP
+POST https://localhost:8443/api/users/avatar HTTP/1.1
+Authorization: Bearer <access_token>
+Content-Type: multipart/form-data; boundary=----avatarboundary
+
+------avatarboundary
+Content-Disposition: form-data; name="file"; filename="avatar.webp"
+Content-Type: image/webp
+
+< ./avatar.webp
+------avatarboundary--
+
+
+### Upload avatar — spoofed MIME (PNG header, JPEG bytes → expect 415)
+POST https://localhost:8443/api/users/avatar HTTP/1.1
+Authorization: Bearer <access_token>
+Content-Type: multipart/form-data; boundary=----avatarboundary
+
+------avatarboundary
+Content-Disposition: form-data; name="file"; filename="fake.png"
+Content-Type: image/png
+
+< ./avatar.jpg
+------avatarboundary--
+
+### Upload avatar — wrong MIME (expect 415)
+POST https://localhost:8443/api/users/avatar HTTP/1.1
+Authorization: Bearer <access_token>
+Content-Type: multipart/form-data; boundary=----avatarboundary
+
+------avatarboundary
+Content-Disposition: form-data; name="file"; filename="note.txt"
+Content-Type: text/plain
+
+not an image
+------avatarboundary--
+
+### Upload avatar — no auth (expect 401/403)
+POST https://localhost:8443/api/users/avatar HTTP/1.1
+Content-Type: multipart/form-data; boundary=----avatarboundary
+
+------avatarboundary
+Content-Disposition: form-data; name="file"; filename="avatar.jpg"
+Content-Type: image/jpeg
+
+< ./avatar.jpg
+------avatarboundary--
+
+### Fetch avatar via nginx static (replace <user_id>.<ext> with what /auth/me returns in avatar_url)
+GET https://localhost:8443/uploads/avatars/<user_id>.<ext> HTTP/1.1
+
+### Delete avatar (replace <access_token>)
+DELETE https://localhost:8443/api/users/avatar HTTP/1.1
+Authorization: Bearer <access_token>
+
 ### ── GAME SERVICE ──────────────────────────────────────────────────────────
 
 ### Health check
@@ -116,3 +197,23 @@ Authorization: Bearer <access_token>
 ### Start tournament (creator only — replace 1 with tournament id, replace <access_token>)
 POST https://localhost:8443/api/game/tournaments/1/start HTTP/1.1
 Authorization: Bearer <access_token>
+
+### Record tournament match result (replace 1 with tournament id, 1 with match id, replace <access_token>)
+POST https://localhost:8443/api/game/tournaments/1/matches/1/result HTTP/1.1
+content-type: application/json
+Authorization: Bearer <access_token>
+
+{
+    "winner_id": 1,
+    "score_p1": 3,
+    "score_p2": 5
+}
+
+##
+GET https://localhost:8443/api/game/leaderboard?limit=4&page=1&order=wins:desc,display_name:asc HTTP/1.1
+
+
+##
+GET https://localhost:8443/api/game/matches/history?player_id=1&limit=1&page=10 
+
+

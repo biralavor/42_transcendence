@@ -1,8 +1,8 @@
 import asyncio
-import time
-from typing import Optional, Callable, Any
+from typing import Optional, Callable
 from dataclasses import asdict
 from service.game_session import GameSession
+from service.ai import update_ai_paddle
 
 
 class GameManager:
@@ -21,12 +21,15 @@ class GameManager:
         player2_id: int,
         broadcast_callback: Callable,
         on_game_over_callback: Optional[Callable] = None,
+        ai_params: dict | None = None,
+        speed_multiplier: float = 1.0,
     ) -> GameSession:
-        
+
         async with self._session_lock:
             if game_id in self._sessions:
                 raise ValueError(f"Game {game_id} already exists")
-            session = GameSession(player1_id, player2_id)
+            session = GameSession(player1_id, player2_id, speed_multiplier=speed_multiplier)
+            session.ai_params = ai_params
             self._sessions[game_id] = session
             self._broadcast_callbacks[game_id] = broadcast_callback
             self._game_over_callbacks[game_id] = on_game_over_callback
@@ -61,21 +64,28 @@ class GameManager:
         session = self.get_session(game_id)
         if not session:
             return
+
         direction = message.get("direction", "stop")
-        client_ts = message.get("client_ts")
         if direction not in ("up", "down", "stop"):
             return
-        server_now = int(time.time() * 1000)  # Current server time in ms
-        if client_ts is not None:
-            if not isinstance(client_ts, (int, float)):
-                return
-            if abs(server_now - client_ts) > 300:
-                return
+
+        # Do not gate input on the client's wall clock. In LAN multiplayer, two
+        # real PCs can easily differ by >300ms, which would freeze that paddle.
         if player_id == session.player1_id:
             session.p1_direction = direction
         elif player_id == session.player2_id:
             session.p2_direction = direction
-    
+
+    def pause_session(self, game_id: str) -> None:
+        session = self._sessions.get(game_id)
+        if session:
+            session.is_paused = True
+
+    def resume_session(self, game_id: str) -> None:
+        session = self._sessions.get(game_id)
+        if session:
+            session.is_paused = False
+
     async def _run_game_loop(self, game_id: str) -> None:
         session = self.get_session(game_id)
         if not session:
@@ -88,28 +98,31 @@ class GameManager:
         next_tick = loop.time() + tick_interval
         try:
             while session.is_active:
-                session.tick()
-                state_snapshot = session.get_state_snapshot()
-                await broadcast_callback(game_id, asdict(state_snapshot))
-                
-                has_winner, winner_id = session.check_victory()
-                if has_winner:
-                    # Game over - mark session as inactive
-                    session.is_active = False
-                    
-                    # Trigger the server-driven game over callback
-                    game_over_cb = self._game_over_callbacks.get(game_id)
-                    if game_over_cb:
-                        asyncio.create_task(
-                            game_over_cb(game_id, winner_id, session.score.p1, session.score.p2)
-                        )
-                    break
-                
+                if not session.is_paused:
+                    if session.ai_params is not None:
+                        update_ai_paddle(session, **session.ai_params)
+                    session.tick()
+                    state_snapshot = session.get_state_snapshot()
+                    await broadcast_callback(game_id, asdict(state_snapshot))
+
+                    has_winner, winner_id = session.check_victory()
+                    if has_winner:
+                        # Game over - mark session as inactive
+                        session.is_active = False
+
+                        # Trigger the server-driven game over callback
+                        game_over_cb = self._game_over_callbacks.get(game_id)
+                        if game_over_cb:
+                            asyncio.create_task(
+                                game_over_cb(game_id, winner_id, session.score.p1, session.score.p2)
+                            )
+                        break
+
                 now = loop.time()
                 sleep_time = max(0.0, next_tick - now)
                 await asyncio.sleep(sleep_time)
                 next_tick += tick_interval
-        
+
         except asyncio.CancelledError:
             pass
         except Exception as e:

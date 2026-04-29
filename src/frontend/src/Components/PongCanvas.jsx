@@ -5,6 +5,11 @@ import System from '../game/pongSystem.js';
 import { Callbacks } from '../game/pongExternal.js';
 import { CanvasGameContext, heightRatio } from '../game/pongRenderer.js';
 import { Player, Position } from '../game/pongEntities.js';
+import { useGameSettings } from '../context/gameSettingsContext';
+import { THEMES } from '../game/themes';
+import { loadThemeImages } from '../game/themeLoader';
+
+const WIN_SCORE = 10
 
 function getLocalInput(keyState, keyUp, keyDown) {
     let velY = keyState[keyDown] ? 1 : 0;
@@ -32,7 +37,6 @@ function getRemotePlayerPosition(gameState, remotePlayer) {
 
 function getRemoteBallPosition(ballFrame, gameState, canvasContext) {
   // copilot this implementation is transitory, please don´t complain about this function
-  console.log(`ball frame ${ballFrame} vs ${gameState.frameCount}`)
   if (ballFrame % 5n < 3n && Math.random() < 0.5) {
     return null;
   }
@@ -49,6 +53,8 @@ export default function PongCanvas(props)
 {
   const player1Kind = props?.player1Kind || 'local';
   const player2Kind = props?.player2Kind || 'local';
+  const { theme, ballSpeedMultiplier } = useGameSettings();
+  const themeImagesRef = useRef(null);
   const canvasRef = useRef(null);
   const keyStateRef = useRef(null);
   const gameStateRef = useRef(null);
@@ -67,15 +73,40 @@ export default function PongCanvas(props)
 
   if (gameStateRef.current == null) {
     gameStateRef.current = new GameState(player1Kind, player2Kind);
+    gameStateRef.current.speedMultiplier = ballSpeedMultiplier;
+    gameStateRef.current.ball.position.velX = 4 * ballSpeedMultiplier;
   }
 
+  useEffect(() => {
+    loadThemeImages(THEMES[theme] ?? THEMES.classic)
+      .then(images => { themeImagesRef.current = images; })
+      .catch(() => { themeImagesRef.current = null; });
+  }, [theme]);
+
   function onGoal() {
-    kickoffRef.current = true;
-    setShowGoal(true);
+    kickoffRef.current = true
+    setShowGoal(true)
     goalTimerRef.current = setTimeout(() => {
-      kickoffRef.current = false;
-      setShowGoal(false);
-    }, 2000);
+      kickoffRef.current = false
+      setShowGoal(false)
+    }, 2000)
+
+    const { player1, player2 } = gameStateRef.current.score
+    if (player1 >= WIN_SCORE) {
+      cancelAnimationFrame(loopRef.current)
+      clearTimeout(goalTimerRef.current)
+      goalTimerRef.current = null
+      kickoffRef.current = false
+      setShowGoal(false)
+      props.onGameEnd?.({ winner: 'p1', score_p1: player1, score_p2: player2 })
+    } else if (player2 >= WIN_SCORE) {
+      cancelAnimationFrame(loopRef.current)
+      clearTimeout(goalTimerRef.current)
+      goalTimerRef.current = null
+      kickoffRef.current = false
+      setShowGoal(false)
+      props.onGameEnd?.({ winner: 'p2', score_p1: player1, score_p2: player2 })
+    }
   }
 
   const isKickoff = () => kickoffRef.current;
@@ -146,8 +177,8 @@ export default function PongCanvas(props)
           );
 
     function loop() {
-      gameLoop(canvasContext, gameStateRef.current, callbacks);
       loopRef.current = requestAnimationFrame(loop);
+      gameLoop(canvasContext, gameStateRef.current, callbacks, themeImagesRef.current, theme);
     }
 
     window.addEventListener('resize', onResize);

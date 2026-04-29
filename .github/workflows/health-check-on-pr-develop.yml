@@ -1,0 +1,181 @@
+name: Health Check on PR to develop
+
+on:
+    pull_request:
+        branches:
+            - develop
+        types:
+            - opened
+            - reopened
+            - synchronize
+            - ready_for_review
+
+permissions:
+    contents: read
+    pull-requests: write
+
+jobs:
+    health-check:
+        name: Run make check
+        runs-on: ubuntu-latest
+        timeout-minutes: 9
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+
+            - name: Verify Docker and Docker Compose
+              run: |
+                  echo "Docker version:"
+                  docker --version
+                  echo "Docker Compose version:"
+                  docker compose version
+
+            - name: Create .env file
+              env:
+                  DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+                  JWT_SECRET_KEY: ${{ secrets.JWT_SECRET_KEY }}
+              run: |
+                  cat > .env <<EOF
+                  DB_HOST=db
+                  DB_PORT=5432
+                  DB_USER=transcendence_user
+                  DB_PASSWORD=${DB_PASSWORD}
+                  DB_NAME=transcendence_db
+                  USER_SERVICE_PORT=8001
+                  GAME_SERVICE_PORT=8002
+                  CHAT_SERVICE_PORT=8003
+                  FRONTEND_PORT=3000
+                  JWT_SECRET_KEY=${JWT_SECRET_KEY}
+                  DOMAIN=localhost
+                  EOF
+
+            - name: Build and start all services (make)
+              run: |
+                  export DOMAIN=localhost
+                  make
+                  # make wait (inside make check) polls only user/game/chat endpoints.
+                  # Adminer depends solely on db and may still be joining the network.
+                  # A brief wait ensures all containers are fully connected before make check runs.
+                  echo "Waiting 10s for adminer to fully join transcendence_network..."
+                  sleep 10
+
+            - name: Run full health check (make check)
+              id: health_check
+              continue-on-error: true
+              run: |
+                  export DOMAIN=localhost
+                  set +e
+                  # Run wait + seed separately so we can re-verify stability after the
+                  # TRUNCATE TABLE CASCADE in seed_dev.py. That truncation acquires an
+                  # ACCESS EXCLUSIVE lock on all tables and can disrupt uvicorn's DB
+                  # connection pool, causing a brief container restart. The second
+                  # 'make wait' ensures all three services are back up before the test
+                  # script runs the docker network inspect check.
+                  make wait
+                  make seed
+                  make wait
+                  PAGER=cat GIT_PAGER=cat bash tests/TranscendenceHealthCheck.sh \
+                    | tee >(sed 's/\x1b\[[0-9;]*m//g' > make_check_results.txt) | cat
+                  echo "make_check_exit_code=$?" >> $GITHUB_OUTPUT
+
+            - name: Parse test results
+              id: parse_results
+              if: always()
+              run: |
+                  if [[ -f "make_check_results.txt" ]]; then
+                    FAILED=$(grep "TOTAL.*FAILED:" make_check_results.txt | sed 's/.*FAILED: \([0-9]*\).*/\1/' || echo "0")
+                    PASSED=$(grep "TOTAL.*PASSED:" make_check_results.txt | sed 's/.*PASSED: \([0-9]*\).*/\1/' || echo "0")
+                  else
+                    FAILED="0"
+                    PASSED="0"
+                  fi
+
+                  echo "Test Results Summary:"
+                  echo "  PASSED: $PASSED"
+                  echo "  FAILED: $FAILED"
+                  echo "passed=$PASSED" >> $GITHUB_OUTPUT
+                  echo "failed=$FAILED" >> $GITHUB_OUTPUT
+
+                  if [[ "$FAILED" -gt 0 ]]; then
+                    echo "❌ Health check FAILED: $FAILED test(s) failing"
+                    exit 1
+                  else
+                    echo "✅ Health check PASSED: All tests passing"
+                    exit 0
+                  fi
+
+            - name: Upload health check results
+              if: always()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: health-check-results
+                  path: |
+                      make_check_results.txt
+                      health_check.log
+                  retention-days: 30
+
+            - name: Comment PR with results
+              if: always()
+              uses: actions/github-script@v7
+              with:
+                  script: |
+                      const fs = require('fs');
+                      let resultsContent = "⚠️ Health check output not found";
+
+                      if (fs.existsSync('make_check_results.txt')) {
+                        resultsContent = fs.readFileSync('make_check_results.txt', 'utf8');
+                      } else if (fs.existsSync('health_check.log')) {
+                        resultsContent = fs.readFileSync('health_check.log', 'utf8');
+                      }
+
+                      // Extract summary section
+                      const summaryMatch = resultsContent.match(/SUITE RESULTS[\s\S]*?══+/);
+                      const summaryContent = summaryMatch ? summaryMatch[0] : resultsContent.slice(-2000);
+
+                      const passed = parseInt('${{ steps.parse_results.outputs.passed }}') || 0;
+                      const failed = parseInt('${{ steps.parse_results.outputs.failed }}') || 0;
+
+                      const statusEmoji = failed > 0 ? '❌' : '✅';
+                      const statusText = failed > 0 ? 'FAILED' : 'PASSED';
+
+                      const comment = [
+                        `## ${statusEmoji} Health Check ${statusText}`,
+                        '',
+                        '**Summary:**',
+                        `- **Passed:** ${passed}`,
+                        `- **Failed:** ${failed}`,
+                        '',
+                        '<details>',
+                        '<summary>Full Results</summary>',
+                        '',
+                        '```',
+                        summaryContent,
+                        '```',
+                        '',
+                        '</details>'
+                      ].join('\n');
+
+                      try {
+                        github.rest.issues.createComment({
+                          issue_number: context.issue.number,
+                          owner: context.repo.owner,
+                          repo: context.repo.repo,
+                          body: comment
+                        });
+                      } catch (error) {
+                        console.log('Warning: Could not post comment to PR:', error.message);
+                      }
+
+            - name: Report job status
+              if: always()
+              run: |
+                  FAILED="${{ steps.parse_results.outputs.failed }}"
+
+                  if [[ "$FAILED" -gt 0 ]]; then
+                    echo "❌ JOB FAILED: $FAILED test(s) are failing"
+                    exit 1
+                  else
+                    echo "✅ JOB PASSED: All mandatory checks passed"
+                    exit 0
+                  fi

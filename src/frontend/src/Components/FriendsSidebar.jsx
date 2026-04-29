@@ -10,10 +10,22 @@ import {
 import { usePresence } from '../context/presenceContext'
 import { useAuth } from '../context/authContext'
 import { useUnread } from '../context/unreadContext'
+import { useNotifications } from '../context/notificationContext'
+import { apiCall, apiJson } from '../utils/apiClient'
 import './FriendsSidebar.css'
 
 const INVITE_TIMEOUT_MS = 60_000
 const DEFAULT_AVATAR = '/avatar_placeholder.jpg'
+
+function emptySearchResult() {
+  return {
+    results: [],
+    total: 0,
+    page: 0,
+    per_page: 0,
+    last_page: 0,
+  }
+}
 
 function dmSlug(a, b) {
   const [lo, hi] = [Number(a), Number(b)].sort((x, y) => x - y)
@@ -34,7 +46,7 @@ export default function FriendsSidebar({ userId, username, currentUser, onViewPr
   const [friends, setFriends] = useState([])
   const [requests, setRequests] = useState([])
   const [searchQuery, setSearchQuery] = useState('')
-  const [searchResults, setSearchResults] = useState([])
+  const [searchResults, setSearchResults] = useState(emptySearchResult())
   const [pendingSent, setPendingSent] = useState([])
   const [outgoingInvite, setOutgoingInvite] = useState(null)
   const [incomingInvite, setIncomingInvite] = useState(null)
@@ -45,8 +57,10 @@ export default function FriendsSidebar({ userId, username, currentUser, onViewPr
   const outgoingInviteTimer = useRef(null)
   const toastTimer = useRef(null)
   const outgoingInviteRef = useRef(null)
+  const lastProcessedNotifId = useRef(null)
   const presenceMap = usePresence()
   const { unreadCounts, clearUnread } = useUnread()
+  const { notifications, setInviteVisible, markRead } = useNotifications()
 
   const { auth } = useAuth()
   const selfId = currentUser?.id ?? userId
@@ -56,6 +70,11 @@ export default function FriendsSidebar({ userId, username, currentUser, onViewPr
   useEffect(() => {
     outgoingInviteRef.current = outgoingInvite
   }, [outgoingInvite])
+
+  useEffect(() => {
+    setInviteVisible(!!incomingInvite)
+    return () => setInviteVisible(false)
+  }, [incomingInvite, setInviteVisible])
 
   const showInviteToast = useCallback((message, tone = 'info', duration = 4200) => {
     clearTimeout(toastTimer.current)
@@ -93,30 +112,86 @@ export default function FriendsSidebar({ userId, username, currentUser, onViewPr
   }, [navigate, selfId, selfUsername, selfAvatarUrl])
 
   const sendInviteEvent = useCallback(async (targetUserId, payload) => {
-    await sendGameChannelMessage(getGameChannelIdForUser(targetUserId), payload, auth.access_token)
-  }, [auth.access_token])
+    await sendGameChannelMessage(getGameChannelIdForUser(targetUserId), payload)
+  }, [])
+
+  const fetchFriendsData = useCallback(async (signal) => {
+    if (!selfId) return
+    try {
+      const [f, r, s] = await Promise.all([
+        apiCall('/api/users/friends/me', { signal }).then(res => res.json()),
+        apiCall('/api/users/friends/me/requests', { signal }).then(res => res.json()),
+        apiCall('/api/users/friends/me/sent', { signal }).then(res => res.json()),
+      ])
+      setFriends(Array.isArray(f) ? f : [])
+      setRequests(Array.isArray(r) ? r : [])
+      setPendingSent(Array.isArray(s) ? s.map(req => ({ id: req.addressee_id, username: req.addressee_username })) : [])
+    } catch (err) {
+      if (err.name !== 'AbortError') console.error('Failed to fetch friends data:', err)
+    }
+  }, [selfId])
 
   useEffect(() => {
-    if (!selfId)
-      return undefined
-
     const controller = new AbortController()
-
-    Promise.all([
-      fetch(`/api/users/friends/${selfId}`, { signal: controller.signal }).then(r => r.json()),
-      fetch(`/api/users/friends/${selfId}/requests`, { signal: controller.signal }).then(r => r.json()),
-      fetch(`/api/users/friends/${selfId}/sent`, { signal: controller.signal }).then(r => r.json()),
-    ]).then(([f, r, s]) => {
-      setFriends(f)
-      setRequests(r)
-      setPendingSent(s.map(req => ({ id: req.addressee_id, username: req.addressee_username })))
-    }).catch(err => { if (err.name !== 'AbortError') console.error(err) })
-
+    fetchFriendsData(controller.signal)
     return () => {
       controller.abort()
       clearTimeout(searchTimer.current)
     }
-  }, [selfId])
+  }, [fetchFriendsData])
+
+  // Watch for friend-related notifications to refresh lists
+  useEffect(() => {
+    if (!notifications.length) return
+
+    // Find the newest "real" (non-DM) notification of interest
+    const latestRelevant = notifications.find(n =>
+      n.type === 'friend_request' || n.type === 'friend_request_accepted'
+    )
+
+    if (latestRelevant && latestRelevant.id !== lastProcessedNotifId.current) {
+      lastProcessedNotifId.current = latestRelevant.id
+      fetchFriendsData()
+    }
+  }, [notifications, fetchFriendsData])
+
+  // Watch for game invite responses (accept/decline notifications from recipients)
+  useEffect(() => {
+    if (!notifications.length || !outgoingInviteRef.current) return
+
+    const activeInvite = outgoingInviteRef.current
+
+    // Find game_invite_response notification that matches the active invite
+    // Filter by from_user_id to ensure it's from the recipient of our invite
+    const response = notifications.find(n =>
+      n.type === 'game_invite_response' &&
+      !n.read &&
+      n.from_user_id === activeInvite.friendId  // Ensure it's from the right person
+    )
+
+    if (response) {
+      // Check if this response is about our active invite
+      if (response.message.includes('accepted')) {
+        resetOutgoingInvite()
+        // Mark response as read so it doesn't trigger GameInviteModal later
+        markRead(response.id)
+        showInviteToast(`${activeInvite.friendUsername} accepted your invite.`, 'success', 2200)
+        navigateToWaitingRoom(activeInvite.roomId, {
+          id: activeInvite.friendId,
+          username: activeInvite.friendUsername,
+          avatarUrl: activeInvite.friendAvatarUrl,
+        })
+        return
+      }
+      if (response.message.includes('declined')) {
+        resetOutgoingInvite()
+        // Mark response as read so it doesn't trigger GameInviteModal later
+        markRead(response.id)
+        showInviteToast(`${activeInvite.friendUsername} declined the match invite.`, 'warning')
+        return
+      }
+    }
+  }, [notifications, showInviteToast, resetOutgoingInvite, navigateToWaitingRoom, markRead])
 
   useEffect(() => () => {
     clearOutgoingInviteTimer()
@@ -182,69 +257,105 @@ export default function FriendsSidebar({ userId, username, currentUser, onViewPr
     setSearchQuery(q)
     clearTimeout(searchTimer.current)
     if (q.length < 2) {
-      setSearchResults([])
+      setSearchResults(emptySearchResult())
       return
     }
     searchTimer.current = setTimeout(() => {
-      fetch(`/api/users/search?q=${encodeURIComponent(q)}`)
-        .then(r => r.json())
-        .then(setSearchResults)
+      apiCall(`/api/users/search?q=${encodeURIComponent(q)}`)
+        .then(r => {
+          if (!r.ok) {
+            console.error('user search failed')
+            return emptySearchResult()
+          }
+
+          return r.json() })
+        .then(pagedSearchResults => { setSearchResults(pagedSearchResults) })
         .catch(console.error)
     }, 300)
   }
 
   const handleAddFriend = async (friendId) => {
-    const res = await fetch(`/api/users/friends/${selfId}/request/${friendId}`, { method: 'POST' })
-    if (!res.ok) return
-    const user = searchResults.find(u => u.id === friendId)
-    setSearchResults(prev => prev.filter(u => u.id !== friendId))
-    if (user) setPendingSent(prev => [...prev, user])
+    try {
+      const res = await apiCall(`/api/users/friends/request/${friendId}`, { method: 'POST' })
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}))
+        showInviteToast(errorData.detail || 'Could not send friend request.', 'danger')
+        return
+      }
+      const user = searchResults.results.find(u => u.id === friendId)
+      setSearchResults(prev => {
+        return {
+          ...prev,
+          results: prev.results.filter(u => u.id !== friendId),
+        }
+      })
+
+      // Refresh sent requests to ensure UI stays in sync with server state
+      await fetchFriendsData()
+      showInviteToast('Friend request sent!', 'success', 3000)
+    } catch (error) {
+      console.error('Failed to add friend:', error)
+      showInviteToast('Network error while adding friend.', 'danger')
+    }
   }
 
   const handleAccept = async (req) => {
-    const res = await fetch(`/api/users/friends/${selfId}/requests/${req.id}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${auth.access_token}`,
-      },
-      body: JSON.stringify({ action: 'accept' }),
-    })
-    if (!res.ok) return
-    setRequests(prev => prev.filter(r => r.id !== req.id))
-    const profileRes = await fetch(`/api/users/profile/${req.requester_id}`)
-    if (profileRes.ok) {
-      const newFriend = await profileRes.json()
+    try {
+      await apiJson(`/api/users/friends/requests/${req.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ action: 'accept' }),
+      })
+      setRequests(prev => prev.filter(r => r.id !== req.id))
+      const newFriend = await apiJson(`/api/users/profile/${req.requester_id}`)
       setFriends(prev => [...prev, newFriend])
+      showInviteToast('Friend request accepted!', 'success', 3000)
+    } catch (error) {
+      console.error('Failed to accept request:', error)
+      showInviteToast(error.message || 'Could not accept request.', 'danger')
     }
   }
 
   const handleDecline = async (req) => {
-    const res = await fetch(`/api/users/friends/${selfId}/requests/${req.id}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${auth.access_token}`,
-      },
-      body: JSON.stringify({ action: 'decline' }),
-    })
-    if (!res.ok) return
-    setRequests(prev => prev.filter(r => r.id !== req.id))
+    try {
+      const res = await apiCall(`/api/users/friends/requests/${req.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'decline' }),
+      })
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}))
+        showInviteToast(errorData.detail || 'Could not decline request.', 'danger')
+        return
+      }
+      setRequests(prev => prev.filter(r => r.id !== req.id))
+      showInviteToast('Friend request declined.', 'info', 3000)
+    } catch (error) {
+      console.error('Failed to decline request:', error)
+      showInviteToast('Network error while declining request.', 'danger')
+    }
   }
 
   const handleRemoveFriend = async (friendId) => {
-    const res = await fetch(`/api/users/friends/${selfId}/${friendId}`, { method: 'DELETE' })
-    if (!res.ok) return
-    setFriends(prev => prev.filter(f => f.id !== friendId))
+    try {
+      const res = await apiCall(`/api/users/friends/${friendId}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}))
+        showInviteToast(errorData.detail || 'Could not remove friend.', 'danger')
+        return
+      }
+      setFriends(prev => prev.filter(f => f.id !== friendId))
+      showInviteToast('Friend removed.', 'info', 3000)
+    } catch (error) {
+      console.error('Failed to remove friend:', error)
+      showInviteToast('Network error while removing friend.', 'danger')
+    }
   }
 
   const handleChat = async (friendId, friendUsername) => {
     const slug = dmSlug(selfId, friendId)
     let friendIsInRoom = true
     try {
-      const res = await fetch(`/api/chat/room/${slug}/active`, {
-        headers: { Authorization: `Bearer ${auth.access_token}` },
-      })
+      const res = await apiCall(`/api/chat/room/${slug}/active`)
       if (res.ok) {
         const data = await res.json()
         friendIsInRoom = data.active_connections > 0
@@ -328,15 +439,28 @@ export default function FriendsSidebar({ userId, username, currentUser, onViewPr
     const senderAvatarUrl = incomingInvite.fromAvatarUrl
     const roomId = incomingInvite.roomId
     try {
-      await sendInviteEvent(senderId, {
-        type: 'game_invite_response',
-        status: 'accepted',
-        room_id: roomId,
-        from_user_id: selfId,
-        from_username: selfUsername,
-        from_avatar_url: selfAvatarUrl,
-        to_user_id: senderId,
+      // Create notification for the inviter so they see accept in GameInviteModal
+      // (The backend will handle WebSocket broadcasting via the dedicated endpoint)
+      console.debug('[FriendsSidebar] Sending accept with room_id:', { senderId, roomId })
+      const res = await apiCall('/api/users/game-invite/response', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to_user_id: senderId,
+          status: 'accepted',
+          room_id: roomId,  // Include room_id so inviter can navigate
+        }),
       })
+
+      // Check if backend accepted the response
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}))
+        console.error('[FriendsSidebar] Accept API error:', { status: res.status, error: errorData })
+        showInviteToast('Failed to accept invite. Please try again.', 'danger')
+        return
+      }
+
+      console.debug('[FriendsSidebar] Accept response sent successfully')
       setIncomingInvite(null)
       navigateToWaitingRoom(roomId, {
         id: senderId,
@@ -344,7 +468,7 @@ export default function FriendsSidebar({ userId, username, currentUser, onViewPr
         avatarUrl: senderAvatarUrl,
       })
     } catch (error) {
-      console.error(error)
+      console.error('[FriendsSidebar] Error accepting invite:', error)
       showInviteToast('Could not accept the invite right now. Please try again.', 'danger')
     }
   }
@@ -355,20 +479,32 @@ export default function FriendsSidebar({ userId, username, currentUser, onViewPr
     const senderId = incomingInvite.fromUserId
     const roomId = incomingInvite.roomId
     try {
-      await sendInviteEvent(senderId, {
-        type: 'game_invite_response',
-        status: 'declined',
-        room_id: roomId,
-        from_user_id: selfId,
-        from_username: selfUsername,
-        from_avatar_url: selfAvatarUrl,
-        to_user_id: senderId,
+      // Create notification for the inviter so they see decline in GameInviteModal
+      // (The backend will handle WebSocket broadcasting via the dedicated endpoint)
+      const res = await apiCall('/api/users/game-invite/response', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to_user_id: senderId,
+          status: 'declined',
+        }),
       })
+
+      // Check if backend accepted the response
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}))
+        console.error('[FriendsSidebar] Decline API error:', { status: res.status, error: errorData })
+        showInviteToast('Failed to decline invite. Please try again.', 'danger')
+        return
+      }
+
+      // Only clear state if response was successful
+      setIncomingInvite(null)
+      showInviteToast('Invite declined.', 'warning')
     } catch (error) {
-      console.error(error)
+      console.error('[FriendsSidebar] Error declining invite:', error)
+      showInviteToast('Network error while declining invite. Please try again.', 'danger')
     }
-    setIncomingInvite(null)
-    showInviteToast('Invite declined.', 'warning')
   }
 
   const excludedIds = new Set([
@@ -377,8 +513,7 @@ export default function FriendsSidebar({ userId, username, currentUser, onViewPr
     ...requests.map(r => r.requester_id),
     ...pendingSent.map(p => p.id),
   ])
-  const visibleResults = searchResults.filter(u => !excludedIds.has(u.id))
-
+  const visibleResults = searchResults.results.filter(u => !excludedIds.has(u.id))
   return (
     <>
       <aside className="friends-sidebar arcade-screen">

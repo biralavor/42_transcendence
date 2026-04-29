@@ -26,6 +26,7 @@ async def db():
             "AND datname = current_database() "
             "AND pid <> pg_backend_pid()"
         ))
+        # Only truncate chat-specific tables, NOT users/credentials (seeded data)
         await conn.execute(text("TRUNCATE TABLE messages, chat_rooms, blocks RESTART IDENTITY CASCADE"))
     async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     async with async_session() as session:

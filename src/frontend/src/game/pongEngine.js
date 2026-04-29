@@ -22,7 +22,8 @@ export class GameState {
     this.player2 = new Player(Player.Type.TWO, player2Kind);
     /** @type {Ball} */
     this.ball = new Ball();
-    this.ball.position.velX = 4;
+    this.speedMultiplier = 1.0;           // set by PongCanvas after construction
+    this.ball.position.velX = 4 * this.speedMultiplier;
     this.ball.position.velY = 0;
     /** @type {{ player1: number, player2: number }} */
     this.score = { player1: 0, player2: 0 };
@@ -95,7 +96,7 @@ export class GameState {
  * @param {GameState} gameState
  * @param {Callbacks} callbacks
  */
-export function gameLoop(canvasContext, gameState, callbacks) {
+export function gameLoop(canvasContext, gameState, callbacks, themeImages = null, themeKey = '') {
   const time = performance.now();
 
   while (gameState.shouldAddFrame(time)) {
@@ -103,7 +104,6 @@ export function gameLoop(canvasContext, gameState, callbacks) {
     System.playersMovement(gameState, canvasContext, callbacks);
     if (!callbacks.isKickoff()) {
       if (gameState.isLocalDefending || gameState.isLocalCourt) {
-        console.log('local defending')
         const remoteBallPosition = callbacks
               .getRemoteBallPosition(gameState.ball.position.frame);
         let ballAfterColision;
@@ -117,13 +117,11 @@ export function gameLoop(canvasContext, gameState, callbacks) {
         const scored = System.goalDetection(gameState, canvasContext);
         if (scored) callbacks.onGoal();
       } else {
-        console.log('remote defending')
         const remoteBallPosition = callbacks
               .getRemoteBallPosition(gameState.ball.position.frame);
         let ballAfterColision;
         if (remoteBallPosition == null) {
-          console.log('skip ball frame')
-          // do not update, keep frame count, frame skip
+            // do not update, keep frame count, frame skip
           ballAfterColision = gameState.ball;
           // TODO check if should freeze game due to lag
           // check gameState frame vs ball frame
@@ -144,5 +142,5 @@ export function gameLoop(canvasContext, gameState, callbacks) {
       // ball bounces into local player / goal
     }
   }
-  render(canvasContext, gameState, callbacks.isKickoff);
+  render(canvasContext, gameState, callbacks.isKickoff, themeImages, themeKey);
 }

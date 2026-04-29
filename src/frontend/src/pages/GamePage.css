@@ -1,18 +1,165 @@
-/* Game Page Styles */
-
 .game-page {
+  padding: 24px 16px;
+}
+
+.game-page-screen {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+.game-page-panel {
   width: 100%;
-  height: calc(100vh - var(--nav-height)); /* Subtract navbar height */
-  margin-top: var(--nav-height);
+  max-width: 1160px;
+  margin: 0 auto;
+  padding: 18px;
+}
+
+/* 3-column header: left player card | title | right player card.
+   All three are vertically centered relative to each other. */
+.game-page-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  margin: 0px 0px 20px 0px;
+}
+
+.game-page-header-title {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.game-page-kicker {
+  display: inline-block;
+}
+
+.game-page-title {
+  margin: 0;
+}
+
+.game-page-stage {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr;
+  justify-items: center;
+  align-items: start;
+  margin-bottom: 14px;
+  overflow: visible;
+}
+
+.game-page-canvas-shell {
+  width: 100%;
+  max-width: 840px;
+  margin: 0 auto;
+}
+
+.tournament-side-panel {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
-  overflow: hidden;
+  gap: 10px;
+  padding: 14px 12px;
+  border: 1px solid rgba(220, 220, 220, 0.24);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.07);
+  backdrop-filter: blur(8px);
+  min-width: 0;
+  min-height: 132px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.18);
 }
 
-.game-page > * {
+/* Side panels are now in-flow grid items inside the 3-column header. */
+.game-page-side-panel {
+  width: 100%;
+  max-width: clamp(180px, 18vw, 160px);
+  margin: 0 2rem;
+}
+
+.game-page-side-left {
+  justify-self: end;
+}
+
+.game-page-side-right {
+  justify-self: start;
+}
+
+.tournament-side-panel.is-you {
+  border-color: rgba(76, 175, 80, 0.75);
+  box-shadow: 0 0 0 1px rgba(76, 175, 80, 0.25) inset;
+}
+
+.tournament-side-avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid rgba(255, 255, 255, 0.18);
+  flex: 0 0 auto;
+}
+
+.tournament-side-name {
+  font-weight: 700;
+  color: #fff;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.game-page-canvas-shell .pong-canvas-container {
+  width: 100%;
+  max-width: 840px;
+  margin: 0 auto;
+}
+
+.game-page-canvas-shell .pong-canvas-wrapper {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+}
+
+.game-page-canvas-shell canvas {
+  display: block;
   width: 100%;
   height: 100%;
+}
+
+@media (max-width: 768px) {
+  .game-page {
+    padding: 16px 10px;
+  }
+
+  .game-page-panel {
+    padding: 12px;
+  }
+
+  .game-page-canvas-shell,
+  .game-page-canvas-shell .pong-canvas-container {
+    max-width: 100%;
+  }
+
+  .tournament-side-panel {
+    width: 100%;
+    min-height: 0;
+  }
+
+  /* On mobile, stack the 3-column header into a single column:
+     left player → title → right player. */
+  .game-page-header {
+    grid-template-columns: 1fr;
+  }
+
+  .game-page-side-left,
+  .game-page-side-right {
+    justify-self: stretch;
+    max-width: 100%;
+  }
+
+  .game-page-stage {
+    gap: 12px;
+  }
 }
