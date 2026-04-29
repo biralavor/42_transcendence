@@ -1,3 +1,4 @@
+import asyncio
 import sys
 from pathlib import Path
 
@@ -72,6 +73,40 @@ async def test_broadcast_continues_after_failed_send(manager):
     ws2.send_json.assert_awaited_once_with({"msg": "hello"})
     # Dead socket is evicted — no repeated exceptions on future broadcasts
     assert manager.active_connections("room1") == 1
+
+
+@pytest.mark.asyncio
+async def test_broadcast_sends_to_room_clients_concurrently(manager):
+    ws1, ws2 = make_ws(), make_ws()
+    sends_started = 0
+    all_sends_started = asyncio.Event()
+    release_sends = asyncio.Event()
+
+    async def blocked_send(_message):
+        nonlocal sends_started
+        sends_started += 1
+        if sends_started == 2:
+            all_sends_started.set()
+        await release_sends.wait()
+
+    ws1.send_json.side_effect = blocked_send
+    ws2.send_json.side_effect = blocked_send
+    await manager.connect("room1", ws1)
+    await manager.connect("room1", ws2)
+
+    broadcast_task = asyncio.create_task(manager.broadcast("room1", {"msg": "hello"}))
+    try:
+        await asyncio.wait_for(all_sends_started.wait(), timeout=1)
+    except asyncio.TimeoutError as exc:
+        release_sends.set()
+        await broadcast_task
+        raise AssertionError("broadcast did not start all sends concurrently") from exc
+
+    assert not broadcast_task.done()
+    release_sends.set()
+    await broadcast_task
+    ws1.send_json.assert_awaited_once_with({"msg": "hello"})
+    ws2.send_json.assert_awaited_once_with({"msg": "hello"})
 
 
 @pytest.mark.asyncio
