@@ -236,6 +236,21 @@ export default function GamePage() {
               <div className="game-page-header-title">
                 <span className="arcade-display game-page-kicker">Live Match</span>
                 <h1 id="game-page-title" className="arcade-title game-page-title">Pong Arena</h1>
+                {isSpectator ? (
+                  <div className="spectator-banner" role="status" aria-live="polite">
+                    <span className="spectator-banner-text">Watching as spectator</span>
+                    <span className="spectator-count-badge" aria-label="spectators watching">
+                      👁 {spectatorCount}
+                    </span>
+                  </div>
+                ) : spectatorCount > 0 ? (
+                  <div className="audience-banner" role="status" aria-live="polite">
+                    <span className="audience-banner-text">Audience</span>
+                    <span className="spectator-count-badge" aria-label="spectators watching">
+                      👁 {spectatorCount}
+                    </span>
+                  </div>
+                ) : null}
               </div>
 
               <aside className={`tournament-side-panel game-page-side-panel game-page-side-right ${!isMyLeftSide ? 'is-you' : ''}`}>
@@ -247,15 +262,6 @@ export default function GamePage() {
                 <span className="tournament-side-name">{p2Name}</span>
               </aside>
             </div>
-
-            {isSpectator && (
-              <div className="spectator-banner" role="status" aria-live="polite">
-                <span className="spectator-banner-text">Watching as spectator</span>
-                <span className="spectator-count-badge" aria-label="spectators watching">
-                  👁 {spectatorCount}
-                </span>
-              </div>
-            )}
 
             <div className="game-page-stage" role="group" aria-labelledby="game-page-title">
               <div className="game-page-canvas-shell" style={{ position: 'relative' }}>

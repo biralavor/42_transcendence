@@ -884,7 +884,16 @@ async def game_websocket(websocket: WebSocket, game_id: str, token: str | None =
         status_payload["player2_id"] = waiting_players[1]
 
     await websocket.send_json(status_payload)
-    
+
+    # Send the current spectator count directly to this player so the audience
+    # banner can render even when the player connects after spectators are
+    # already watching. Direct send (not broadcast): other clients already know
+    # the count and a re-broadcast would be noise.
+    await websocket.send_json({
+        "type": "spectator_count",
+        "count": manager.spectator_count(game_id),
+    })
+
     # Log connection
     import logging
     logger = logging.getLogger(__name__)
@@ -921,6 +930,13 @@ async def game_websocket(websocket: WebSocket, game_id: str, token: str | None =
                 "type": "state",
                 **asdict(snapshot),
             })
+
+        # Re-send the current spectator_count to the reconnecting player — they
+        # missed any join/leave broadcasts during the disconnect grace window.
+        await websocket.send_json({
+            "type": "spectator_count",
+            "count": manager.spectator_count(game_id),
+        })
 
         # Broadcast to all (including the reconnecting player). Both players
         # benefit: the reconnecting player can show "connection restored" and

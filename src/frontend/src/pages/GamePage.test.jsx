@@ -17,7 +17,7 @@ vi.mock('../context/authContext', () => ({
 
 // Two buttons so tests can fire either player winning
 vi.mock('../Components/PongCanvasMultiplayer', () => ({
-  default: ({ onGameEnd }) => (
+  default: ({ onGameEnd, onSpectatorCount }) => (
     <>
       <button onClick={() => onGameEnd?.({ winner_id: 1, score_p1: 10, score_p2: 3 })}>
         Simulate Game End
@@ -25,6 +25,8 @@ vi.mock('../Components/PongCanvasMultiplayer', () => ({
       <button onClick={() => onGameEnd?.({ winner_id: 2, score_p1: 3, score_p2: 10 })}>
         Simulate Opponent Win
       </button>
+      <button onClick={() => onSpectatorCount?.(0)}>Set Spectators 0</button>
+      <button onClick={() => onSpectatorCount?.(3)}>Set Spectators 3</button>
     </>
   ),
 }))
@@ -230,5 +232,60 @@ describe('GamePage non-spectator auth gate', () => {
       </MemoryRouter>
     )
     expect(await screen.findByText(/login page/i)).toBeInTheDocument()
+  })
+})
+
+describe('GamePage player audience banner', () => {
+  beforeEach(() => {
+    apiJson.mockRejectedValue(new Error('no server in tests'))
+    useAuth.mockReturnValue({ isAuthenticated: true, isAuthReady: true })
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  function renderPlayer() {
+    return render(
+      <MemoryRouter
+        initialEntries={[
+          {
+            pathname: '/game/room-1',
+            state: { player1_id: 1, player2_id: 2 },
+          },
+        ]}
+      >
+        <Routes>
+          <Route path="/game/:roomId" element={<GamePage />} />
+        </Routes>
+      </MemoryRouter>
+    )
+  }
+
+  it('does NOT render the audience banner when spectator count is 0', () => {
+    renderPlayer()
+    expect(screen.queryByText(/live audience/i)).not.toBeInTheDocument()
+  })
+
+  it('renders the "Live audience" banner when count > 0', () => {
+    renderPlayer()
+    fireEvent.click(screen.getByText('Set Spectators 3'))
+    expect(screen.getByText(/live audience/i)).toBeInTheDocument()
+    expect(screen.getByText(/👁 3/)).toBeInTheDocument()
+  })
+
+  it('hides the audience banner again when count returns to 0', () => {
+    renderPlayer()
+    fireEvent.click(screen.getByText('Set Spectators 3'))
+    expect(screen.getByText(/live audience/i)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('Set Spectators 0'))
+    expect(screen.queryByText(/live audience/i)).not.toBeInTheDocument()
+  })
+
+  it('does NOT render the spectator banner for a player', () => {
+    renderPlayer()
+    fireEvent.click(screen.getByText('Set Spectators 3'))
+    expect(screen.queryByText(/watching as spectator/i)).not.toBeInTheDocument()
   })
 })
