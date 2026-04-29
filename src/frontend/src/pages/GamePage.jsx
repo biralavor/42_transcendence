@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { useParams, useNavigate, useLocation } from 'react-router-dom'
+import { useParams, useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import NavbarComponent from '../Components/Navbar'
 import PongCanvasMultiplayer from '../Components/PongCanvasMultiplayer'
 import GameOverOverlay from '../Components/GameOverOverlay'
 import './GamePage.css'
 import { apiJson } from '../utils/apiClient'
+import { useAuth } from '../context/authContext'
 import {
   buildInviteRoomId,
   sendGameChannelMessage,
@@ -14,6 +15,9 @@ export default function GamePage() {
   const { roomId } = useParams()
   const navigate = useNavigate()
   const location = useLocation()
+  const [searchParams] = useSearchParams()
+  const isSpectator = searchParams.get('spectate') === 'true'
+  const { isAuthenticated, isAuthReady } = useAuth()
 
   const currentUser = location.state?.currentUser ?? { id: location.state?.player1_id, username: 'Player 1', avatar_url: null }
   const opponent = location.state?.opponent ?? null
@@ -34,13 +38,15 @@ export default function GamePage() {
   const [myName, setMyName] = useState(currentUser?.username ?? 'Player 1')
 
   useEffect(() => {
+    if (isSpectator) return
+    if (!isAuthReady || !isAuthenticated) return
     apiJson('/api/users/auth/me')
       .then(me => {
         setMyId(me.id)
         setMyName(me.display_name ?? me.username)
       })
       .catch(() => { })
-  }, [])
+  }, [isSpectator, isAuthReady, isAuthenticated])
 
   useEffect(() => {
     if (player1Id != null) {
@@ -74,18 +80,52 @@ export default function GamePage() {
   const difficulty = location.state?.difficulty ?? 'medium'
 
   const [gameOverResult, setGameOverResult] = useState(null)
+  const [spectatorCount, setSpectatorCount] = useState(0)
   const submittingRef = useRef(false)
 
   useEffect(() => {
-    // Redirect to play if no room context or missing player IDs
+    // Spectators don't have player IDs in location.state — they reach this
+    // route via /games/live's Watch link. Skip the redirect for them.
+    if (isSpectator) return
+
+    // Players: require auth (route is no longer wrapped in PrivateRoute) and
+    // the room/player IDs we need to drive the canvas.
+    if (isAuthReady && !isAuthenticated) {
+      navigate('/login', { replace: true })
+      return
+    }
     if (!roomId || player1Id == null || player2Id == null) {
       navigate('/play')
     }
-  }, [roomId, player1Id, player2Id, navigate])
+  }, [isSpectator, isAuthReady, isAuthenticated, roomId, player1Id, player2Id, navigate])
 
-  if (!roomId || player1Id == null || player2Id == null) {
-    return null // Prevent rendering the canvas with missing IDs while navigating away
-  }
+  // Spectators arrive without location.state, so pull the game's player
+  // names/avatars + initial spectator_count from /api/games/live.
+  useEffect(() => {
+    if (!isSpectator || !roomId) return
+    let cancelled = false
+    fetch('/api/games/live')
+      .then(r => (r.ok ? r.json() : []))
+      .then((games) => {
+        if (cancelled || !Array.isArray(games)) return
+        const g = games.find(x => x.game_id === roomId)
+        if (!g) return
+        setP1Name(g.player1?.display_name || g.player1?.username || 'Player 1')
+        setP2Name(g.player2?.display_name || g.player2?.username || 'Player 2')
+        setP1Avatar(g.player1?.avatar_url || '/avatar_placeholder.jpg')
+        setP2Avatar(g.player2?.avatar_url || '/avatar_placeholder.jpg')
+        if (typeof g.spectator_count === 'number') {
+          setSpectatorCount(g.spectator_count)
+        }
+      })
+      .catch(() => { /* ignore — banner still renders */ })
+    return () => { cancelled = true }
+  }, [isSpectator, roomId])
+
+  if (!roomId) return null
+  if (!isSpectator && !isAuthReady) return null
+  if (!isSpectator && (player1Id == null || player2Id == null)) return null
+  if (!isSpectator && isAuthReady && !isAuthenticated) return null
 
   async function handleGameEnd(result) {
     if (tournamentId && matchId && !submittingRef.current) {
@@ -199,6 +239,21 @@ export default function GamePage() {
               <div className="game-page-header-title">
                 <span className="arcade-display game-page-kicker">Live Match</span>
                 <h1 id="game-page-title" className="arcade-title game-page-title">Pong Arena</h1>
+                {isSpectator ? (
+                  <div className="spectator-banner" role="status" aria-live="polite">
+                    <span className="spectator-banner-text">Watching as spectator</span>
+                    <span className="spectator-count-badge" aria-label="spectators watching">
+                      👁 {spectatorCount}
+                    </span>
+                  </div>
+                ) : spectatorCount > 0 ? (
+                  <div className="audience-banner" role="status" aria-live="polite">
+                    <span className="audience-banner-text">Audience</span>
+                    <span className="spectator-count-badge" aria-label="spectators watching">
+                      👁 {spectatorCount}
+                    </span>
+                  </div>
+                ) : null}
               </div>
 
               <aside className={`tournament-side-panel game-page-side-panel game-page-side-right ${!isMyLeftSide ? 'is-you' : ''}`}>
@@ -219,8 +274,10 @@ export default function GamePage() {
                   player1Id={player1Id}
                   player2Id={player2Id}
                   onGameEnd={handleGameEnd}
+                  spectator={isSpectator}
+                  onSpectatorCount={setSpectatorCount}
                 />
-                {gameOverResult && (
+                {gameOverResult && !isSpectator && (
                   <GameOverOverlay
                     winnerName={myName}
                     scoreP1={scoreP1}

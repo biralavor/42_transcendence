@@ -1,0 +1,105 @@
+.games-live-page {
+  padding: 4rem 1rem 4rem;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+@media (max-width: 1024px) {
+  .games-live-page {
+    padding-top: 4rem;
+  }
+}
+
+.games-live-header {
+  margin-bottom: 24px;
+  text-align: center;
+}
+
+.games-live-empty {
+  text-align: center;
+  padding: 32px 16px;
+  color: var(--muted-foreground, #999);
+  font-style: italic;
+}
+
+.games-live-empty--error {
+  color: #d97a7a;
+  font-style: normal;
+}
+
+.live-games-grid {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.live-game-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--border, #333);
+  border-radius: 8px;
+  background: var(--card, rgba(255, 255, 255, 0.03));
+}
+
+.live-game-players {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.live-game-player {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+}
+
+.live-game-avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--border, #444);
+}
+
+.live-game-name {
+  font-size: 0.95rem;
+  font-weight: 600;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.live-game-vs {
+  font-family: monospace;
+  font-size: 0.85rem;
+  color: var(--muted-foreground, #999);
+  text-transform: uppercase;
+}
+
+.live-game-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.85rem;
+  color: var(--muted-foreground, #aaa);
+}
+
+.live-game-elapsed {
+  font-family: monospace;
+}
+
+.live-game-watch {
+  width: 100%;
+  text-align: center;
+  text-decoration: none;
+}

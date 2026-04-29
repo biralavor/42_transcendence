@@ -28,6 +28,8 @@ function PongCanvasMultiplayer(props) {
   const player1Id = props?.player1Id
   const player2Id = props?.player2Id
   const onGameEnd = props?.onGameEnd || (() => { })
+  const spectator = Boolean(props?.spectator)
+  const onSpectatorCount = props?.onSpectatorCount || (() => { })
   const { auth } = useAuth()
   const { theme } = useGameSettings()
   const themeImagesRef = useRef(null)
@@ -105,12 +107,15 @@ function PongCanvasMultiplayer(props) {
       console.log('[WS] Connected to game server')
       setConnStatus('connected')
 
-      // Send game_start to initialize the session
-      ws.send(JSON.stringify({
-        type: 'game_start',
-        player1_id: parseInt(player1Id, 10),
-        player2_id: parseInt(player2Id, 10),
-      }))
+      // Spectators must NOT send game_start — server's spectator branch closes
+      // 4003 on any inbound message. Players still need it to bootstrap.
+      if (!spectator) {
+        ws.send(JSON.stringify({
+          type: 'game_start',
+          player1_id: parseInt(player1Id, 10),
+          player2_id: parseInt(player2Id, 10),
+        }))
+      }
     }
 
     ws.onmessage = (event) => {
@@ -141,6 +146,8 @@ function PongCanvasMultiplayer(props) {
           }
         } else if (message.type === 'game_over') {
           handleGameEnd(message.winner_id, message.score_p1, message.score_p2)
+        } else if (message.type === 'spectator_count' && Number.isFinite(message.count)) {
+          onSpectatorCount(message.count)
         }
       } catch (err) {
         console.error('[WS] Message parse error:', err)
@@ -202,16 +209,18 @@ function PongCanvasMultiplayer(props) {
       updateCanvasDimensions()
     }
     window.addEventListener('resize', onResize)
-    window.addEventListener('keydown', onKeydown)
-    window.addEventListener('keyup', onKeyup)
+    if (!spectator) {
+      window.addEventListener('keydown', onKeydown)
+      window.addEventListener('keyup', onKeyup)
+    }
 
     // Render loop - just display server state, no client simulation
     function renderLoop() {
       // Get current input
       const direction = getInput()
 
-      // Send input to server only if it changed to avoid WS spam
-      if (direction !== lastDirectionRef.current) {
+      // Spectators must never send input (server closes 4003).
+      if (!spectator && direction !== lastDirectionRef.current) {
         sendInput(direction)
         lastDirectionRef.current = direction
       }
@@ -228,14 +237,19 @@ function PongCanvasMultiplayer(props) {
       cancelAnimationFrame(loopRef.current)
       clearTimeout(goalTimerRef.current)
       window.removeEventListener('resize', onResize)
-      window.removeEventListener('keydown', onKeydown)
-      window.removeEventListener('keyup', onKeyup)
+      if (!spectator) {
+        window.removeEventListener('keydown', onKeydown)
+        window.removeEventListener('keyup', onKeyup)
+      }
 
       // Close WebSocket
       if (webSocketRef.current) {
         webSocketRef.current.close()
       }
     }
+    // Intentional: `spectator` is captured at mount and not in the dep array
+    // because callers do not toggle this prop mid-match. Adding it would tear
+    // down and rebuild the WebSocket on every prop change.
   }, [])
 
   return (

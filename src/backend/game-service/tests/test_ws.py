@@ -358,6 +358,147 @@ async def test_reconnect_cancels_timer_resumes_and_sends_snapshot():
 
 
 # --------------------------------------------------------------------------- #
+# Audience banner (Tasks 1 + 3)
+# --------------------------------------------------------------------------- #
+
+@pytest.mark.timeout(5)
+def test_player_receives_spectator_count_after_waiting_room_status(monkeypatch):
+    """A connecting player must receive a `spectator_count` message right after
+    `waiting_room_status`, so the audience banner can render the current count
+    even when no spectator joins/leaves while they're connected."""
+    import service.ws.router as router_module
+    from jose import jwt
+    from shared.config.settings import settings
+
+    # Issue a valid token for player 7001 (one of the invite players).
+    credential_id = 7000
+    player_user_id = 7001
+    token = jwt.encode(
+        {"credential_id": credential_id},
+        settings.JWT_SECRET_KEY,
+        algorithm="HS256",
+    )
+
+    # Stub credentials → user_id resolution.
+    fake_row = (player_user_id,)
+    fake_result = MagicMock()
+    fake_result.fetchone = MagicMock(return_value=fake_row)
+    fake_db = AsyncMock()
+    fake_db.execute = AsyncMock(return_value=fake_result)
+    fake_session_ctx = AsyncMock()
+    fake_session_ctx.__aenter__.return_value = fake_db
+    fake_session_ctx.__aexit__.return_value = None
+    monkeypatch.setattr(
+        router_module, "AsyncSessionLocal", MagicMock(return_value=fake_session_ctx)
+    )
+
+    # Mark the room as a known invite room with this player.
+    game_id = f"invite-{player_user_id}-7002-deadbeef"
+    monkeypatch.setitem(
+        router_module._waiting_room_players, game_id, (player_user_id, 7002)
+    )
+
+    # Stub manager.spectator_count so the assertion is deterministic.
+    monkeypatch.setattr(
+        router_module.manager,
+        "spectator_count",
+        MagicMock(return_value=3),
+    )
+
+    client = TestClient(app)
+    with client.websocket_connect(f"/ws/game/{game_id}?token={token}") as ws:
+        # First frame: waiting_room_status (existing behavior).
+        first = ws.receive_json()
+        assert first["type"] == "waiting_room_status"
+
+        # New: second frame must be the current spectator_count.
+        second = ws.receive_json()
+        assert second == {"type": "spectator_count", "count": 3}
+
+
+@pytest.mark.timeout(5)
+def test_player_reconnect_receives_spectator_count_after_state_snapshot(monkeypatch):
+    """Reconnecting player must receive `spectator_count` directly after the
+    state snapshot, so the audience banner re-appears immediately if spectators
+    were watching while the player was briefly offline."""
+    import service.ws.router as router_module
+    from jose import jwt
+    from shared.config.settings import settings
+    from dataclasses import dataclass
+
+    credential_id = 8000
+    player_user_id = 8001
+    token = jwt.encode(
+        {"credential_id": credential_id},
+        settings.JWT_SECRET_KEY,
+        algorithm="HS256",
+    )
+
+    fake_row = (player_user_id,)
+    fake_result = MagicMock()
+    fake_result.fetchone = MagicMock(return_value=fake_row)
+    fake_db = AsyncMock()
+    fake_db.execute = AsyncMock(return_value=fake_result)
+    fake_session_ctx = AsyncMock()
+    fake_session_ctx.__aenter__.return_value = fake_db
+    fake_session_ctx.__aexit__.return_value = None
+    monkeypatch.setattr(
+        router_module, "AsyncSessionLocal", MagicMock(return_value=fake_session_ctx)
+    )
+
+    game_id = f"invite-{player_user_id}-8002-cafebabe"
+    monkeypatch.setitem(
+        router_module._waiting_room_players, game_id, (player_user_id, 8002)
+    )
+
+    # Mark this player as currently disconnected so the reconnect branch fires.
+    monkeypatch.setitem(router_module._disconnected_players, game_id, player_user_id)
+
+    # Stub a session so the snapshot branch fires.
+    @dataclass
+    class FakeSnap:
+        ball: dict
+        paddles: dict
+        score: dict
+
+    fake_session = MagicMock()
+    fake_session.player1_id = player_user_id
+    fake_session.player2_id = 8002
+    fake_session.get_state_snapshot = MagicMock(
+        return_value=FakeSnap(ball={"x": 0}, paddles={"p1": 0, "p2": 0}, score={"p1": 0, "p2": 0})
+    )
+    monkeypatch.setattr(
+        router_module.game_manager, "get_session", MagicMock(return_value=fake_session)
+    )
+    monkeypatch.setattr(
+        router_module.game_manager, "resume_session", MagicMock()
+    )
+    monkeypatch.setattr(
+        router_module.manager,
+        "spectator_count",
+        MagicMock(return_value=4),
+    )
+
+    client = TestClient(app)
+    with client.websocket_connect(f"/ws/game/{game_id}?token={token}") as ws:
+        # Drain pre-input frames in expected order.
+        first = ws.receive_json()
+        assert first["type"] == "waiting_room_status"
+
+        # Task 2 added this on the connect path:
+        second = ws.receive_json()
+        assert second == {"type": "spectator_count", "count": 4}
+
+        # Reconnect branch — state snapshot.
+        third = ws.receive_json()
+        assert third["type"] == "state"
+
+        # NEW: spectator_count must be sent again on reconnect path too.
+        fourth = ws.receive_json()
+        assert fourth == {"type": "spectator_count", "count": 4}
+
+
+# --------------------------------------------------------------------------- #
 # Spectator classification (Task 7 + 8)
 # --------------------------------------------------------------------------- #
 

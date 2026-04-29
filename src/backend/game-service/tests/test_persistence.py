@@ -722,3 +722,117 @@ async def test_list_live_matches_orders_by_started_at_desc(db):
     # Filter to the two we just created
     relevant = [r for r in rows if int(r["match_id"]) in (older.id, newer.id)]
     assert [int(r["match_id"]) for r in relevant] == [newer.id, older.id]
+
+
+@pytest.mark.asyncio
+async def test_mark_match_finished_if_ongoing_marks_ongoing_row_and_returns_true(db):
+    """An 'ongoing' row gets status='finished' + finished_at populated, and
+    the helper returns True."""
+    from datetime import datetime, timedelta, timezone
+    from sqlalchemy import select
+    from service.persistence import mark_match_finished_if_ongoing
+    from service.models.match import Match
+
+    m = Match(
+        player1_id=42,
+        player2_id=50,
+        status="ongoing",
+        started_at=datetime.now(timezone.utc) - timedelta(hours=1),
+    )
+    db.add(m)
+    await db.flush()
+    match_id = m.id
+
+    updated = await mark_match_finished_if_ongoing(db, match_id)
+    await db.commit()
+    assert updated is True
+
+    result = await db.execute(
+        select(Match).where(Match.id == match_id)
+    )
+    row = result.scalars().one()
+    assert row.status == "finished"
+    assert row.finished_at is not None
+    # We deliberately do NOT touch winner_id or scores — caller has no data.
+    assert row.winner_id is None
+    assert row.score_p1 == 0
+    assert row.score_p2 == 0
+
+
+@pytest.mark.asyncio
+async def test_mark_match_finished_if_ongoing_is_idempotent_on_finished_row(db):
+    """Calling the helper on a row that's already finished returns False and
+    leaves all fields untouched."""
+    from datetime import datetime, timezone
+    from sqlalchemy import select
+    from service.persistence import mark_match_finished_if_ongoing
+    from service.models.match import Match
+
+    earlier = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    m = Match(
+        player1_id=42,
+        player2_id=50,
+        status="finished",
+        finished_at=earlier,
+        winner_id=42,
+        score_p1=7,
+        score_p2=3,
+    )
+    db.add(m)
+    await db.flush()
+    match_id = m.id
+
+    updated = await mark_match_finished_if_ongoing(db, match_id)
+    await db.commit()
+    assert updated is False
+
+    result = await db.execute(
+        select(Match).where(Match.id == match_id)
+    )
+    row = result.scalars().one()
+    assert row.status == "finished"
+    assert row.finished_at == earlier  # not bumped
+    assert row.winner_id == 42
+    assert row.score_p1 == 7
+    assert row.score_p2 == 3
+
+
+@pytest.mark.asyncio
+async def test_mark_match_finished_if_ongoing_respects_grace_window(db):
+    """A freshly-created match (started_at = NOW) is too young to reconcile
+    under the default 30-second grace window. Passing min_age_seconds=0
+    bypasses the gate and finishes it immediately."""
+    from datetime import datetime, timezone
+    from sqlalchemy import select
+    from service.persistence import mark_match_finished_if_ongoing
+    from service.models.match import Match
+
+    m = Match(
+        player1_id=42,
+        player2_id=50,
+        status="ongoing",
+        started_at=datetime.now(timezone.utc),
+    )
+    db.add(m)
+    await db.flush()
+    match_id = m.id
+
+    # Default grace window — too young, helper returns False, row unchanged.
+    updated_default = await mark_match_finished_if_ongoing(db, match_id)
+    await db.commit()
+    assert updated_default is False
+
+    result = await db.execute(select(Match).where(Match.id == match_id))
+    row = result.scalars().one()
+    assert row.status == "ongoing"
+    assert row.finished_at is None
+
+    # Override window to 0 — gate is bypassed, helper finishes the row.
+    updated_override = await mark_match_finished_if_ongoing(db, match_id, min_age_seconds=0)
+    await db.commit()
+    assert updated_override is True
+
+    result = await db.execute(select(Match).where(Match.id == match_id))
+    row = result.scalars().one()
+    assert row.status == "finished"
+    assert row.finished_at is not None

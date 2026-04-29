@@ -163,3 +163,51 @@
     gap: 12px;
   }
 }
+
+.spectator-banner,
+.audience-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 16px;
+  margin: 8px 0 12px;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.spectator-banner {
+  border: 1px solid var(--accent, #ffaa00);
+  background: rgba(255, 170, 0, 0.08);
+}
+
+.spectator-banner-text {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--accent, #ffaa00);
+}
+
+.audience-banner {
+  border: 1px solid #9e3bc5;
+  background: rgba(153, 56, 218, 0.08);
+}
+
+.audience-banner-text {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #ae4bc7;
+}
+
+.spectator-count-badge {
+  font-family: monospace;
+  background: rgba(0, 0, 0, 0.35);
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+}
+
+.game-page-header-title .spectator-banner,
+.game-page-header-title .audience-banner {
+  margin: 0;
+}

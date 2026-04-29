@@ -1,8 +1,44 @@
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import './Home.css'
 import NavbarComponent from '../Components/Navbar'
 
+const POLL_INTERVAL_MS = 10_000
+
+function pickTopGame(games) {
+  if (!Array.isArray(games) || games.length === 0) return null
+  return games.reduce((best, g) => {
+    if (best == null) return g
+    if (g.spectator_count > best.spectator_count) return g
+    if (g.spectator_count === best.spectator_count) {
+      const ga = new Date(g.started_at).getTime()
+      const ba = new Date(best.started_at).getTime()
+      if (ga > ba) return g
+    }
+    return best
+  }, null)
+}
+
 export default function Home() {
+  const [topGame, setTopGame] = useState(null)
+
+  useEffect(() => {
+    let cancelled = false
+    async function tick() {
+      try {
+        const r = await fetch('/api/games/live')
+        const games = r.ok ? await r.json() : []
+        if (cancelled) return
+        setTopGame(pickTopGame(games))
+      } catch {
+        if (!cancelled) setTopGame(null)
+      }
+    }
+    tick()
+    const id = setInterval(tick, POLL_INTERVAL_MS)
+    return () => { cancelled = true; clearInterval(id) }
+  }, [])
+
   return (
     <div className="arcade-shell">
       <NavbarComponent />
@@ -68,7 +104,16 @@ export default function Home() {
                 <div className="arena-wrapper">
                   <div className="arena-card">
                     <div className="arena-topbar">
-                      <span className="arena-pill">Live match</span>
+                      {topGame ? (
+                        <Link
+                          to={`/game/${topGame.game_id}?spectate=true`}
+                          className="arena-pill arena-pill--live"
+                        >
+                          Live Match · {topGame.player1?.username} vs {topGame.player2?.username} · 👁 {topGame.spectator_count}
+                        </Link>
+                      ) : (
+                        <span className="arena-pill arena-pill--idle">No live match</span>
+                      )}
                       <span className="arena-score">08 : 06</span>
                     </div>
 
