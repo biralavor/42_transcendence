@@ -63,13 +63,6 @@
   line-height: 1.7;
 }
 
-.hero-actions {
-  display: flex;
-  gap: 1rem;
-  flex-wrap: wrap;
-  margin-bottom: 2rem;
-}
-
 .arcade-btn-ghost {
   background: transparent;
   color: var(--primary);
@@ -227,23 +220,6 @@
 
   .hero-title {
     font-size: 1.5rem;
-  }
-
-  .hero-section {
-    padding-top: 1rem;
-  }
-
-  .hero-screen {
-    padding: 1.5rem;
-  }
-
-  .features-grid {
-    grid-template-columns: 1fr;
-    gap: 1.5rem;
-  }
-
-  .hero-actions {
-    flex-direction: column;
   }
 
   .cta-box {
