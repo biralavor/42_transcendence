@@ -264,23 +264,23 @@ describe('GamePage player audience banner', () => {
 
   it('does NOT render the audience banner when spectator count is 0', () => {
     renderPlayer()
-    expect(screen.queryByText(/live audience/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/audience/i)).not.toBeInTheDocument()
   })
 
-  it('renders the "Live audience" banner when count > 0', () => {
+  it('renders the "Audience" banner when count > 0', () => {
     renderPlayer()
     fireEvent.click(screen.getByText('Set Spectators 3'))
-    expect(screen.getByText(/live audience/i)).toBeInTheDocument()
+    expect(screen.getByText(/audience/i)).toBeInTheDocument()
     expect(screen.getByText(/👁 3/)).toBeInTheDocument()
   })
 
   it('hides the audience banner again when count returns to 0', () => {
     renderPlayer()
     fireEvent.click(screen.getByText('Set Spectators 3'))
-    expect(screen.getByText(/live audience/i)).toBeInTheDocument()
+    expect(screen.getByText(/audience/i)).toBeInTheDocument()
 
     fireEvent.click(screen.getByText('Set Spectators 0'))
-    expect(screen.queryByText(/live audience/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/audience/i)).not.toBeInTheDocument()
   })
 
   it('does NOT render the spectator banner for a player', () => {
