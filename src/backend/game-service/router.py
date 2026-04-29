@@ -501,19 +501,20 @@ async def list_live_games(session: SessionDependency):
         match_id_int = int(row["match_id"])
         game_id = game_id_for_match(match_id_int)
         if game_id is None:
-            # No live WS session is bound to this match. Treat it as a stale
-            # 'ongoing' row left over from a crashed game and reconcile it:
-            # mark status='finished' + finished_at=NOW (idempotent, gated on
-            # status='ongoing' so a concurrent legitimate finish wins).
+            # No live WS session is bound to this match. Lazy-reconcile by
+            # marking it finished — but only if the row is older than the
+            # helper's grace window, so we don't prematurely finish a match
+            # that's mid-handshake (the WS path commits the match row before
+            # binding the in-memory game_id, leaving a brief unbound window).
             #
-            # Race-tolerant re-check: a player handshake may have completed
-            # between list_live_matches() and now, populating the binding.
-            # If so, treat this as a live row instead.
-            game_id = game_id_for_match(match_id_int)
-            if game_id is None:
-                updated = await mark_match_finished_if_ongoing(session, match_id_int)
-                stale_marked = stale_marked or updated
-                continue
+            # Concurrency note: the SQL gates on status='ongoing' AND age, so
+            # a legitimate concurrent finish or a just-bound match always
+            # wins — no extra in-loop re-check needed (and an in-loop dict
+            # re-read couldn't help anyway since there's no await between it
+            # and the first lookup within the same asyncio task).
+            updated = await mark_match_finished_if_ongoing(session, match_id_int)
+            stale_marked = stale_marked or updated
+            continue
         out.append({
             "game_id": game_id,
             "player1": {

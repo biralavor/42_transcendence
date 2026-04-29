@@ -763,30 +763,49 @@ async def list_live_matches(db: AsyncSession) -> list[dict]:
     return [dict(row) for row in result.mappings()]
 
 
-async def mark_match_finished_if_ongoing(db: AsyncSession, match_id: int) -> bool:
-    """Mark a single match as finished, idempotently and atomically.
+async def mark_match_finished_if_ongoing(
+    db: AsyncSession,
+    match_id: int,
+    *,
+    min_age_seconds: int = 30,
+) -> bool:
+    """Mark a single match as finished, idempotently and atomically, only if
+    the row is older than ``min_age_seconds``.
 
-    Sets status='finished' and finished_at=NOW() ONLY if the row is currently
-    `ongoing`. Leaves winner_id and scores untouched — the caller (live-games
-    reconciliation) has no data to reconstruct them honestly.
+    The age gate prevents a race where ``create_match`` (which commits the
+    row as ``ongoing``) and the WS ``_bind_match`` call are separated by an
+    ``await`` window. A ``/games/live`` poll arriving in that window would
+    otherwise see the row unbound and prematurely finish a real game. The
+    30-second default comfortably exceeds the typical create-to-bind gap
+    (sub-100 ms) and matches the project's other "give players time"
+    constants such as ``DISCONNECT_GRACE_SECONDS``.
 
-    Returns True if the row was updated, False if the row was already finished
-    or did not exist. Caller is responsible for committing.
+    Leaves ``winner_id`` and scores untouched — the caller has no data to
+    reconstruct them honestly.
+
+    Returns True if the row was updated, False if the row was already
+    finished, too young, or did not exist. Caller is responsible for
+    committing.
     """
+    # Use clock_timestamp() (real wall-clock) instead of NOW() (transaction
+    # start). In SAVEPOINT-based test fixtures the outer transaction is
+    # long-lived, so NOW() doesn't advance and the age gate would compare
+    # against a stale anchor. clock_timestamp() always reflects real time
+    # and behaves identically in production (where this helper runs in a
+    # short-lived request transaction).
     result = await db.execute(
         text(
             """
             UPDATE matches
                SET status = 'finished',
-                   finished_at = NOW()
+                   finished_at = clock_timestamp()
              WHERE id = :match_id
                AND status = 'ongoing'
+               AND started_at < clock_timestamp() - make_interval(secs => :min_age_seconds)
             """
         ),
-        {"match_id": match_id},
+        {"match_id": match_id, "min_age_seconds": min_age_seconds},
     )
-    # The raw-SQL UPDATE bypasses the ORM identity map; expire any cached
-    # Match instances so subsequent ORM reads see the new status/finished_at.
     db.expire_all()
     return result.rowcount > 0
 

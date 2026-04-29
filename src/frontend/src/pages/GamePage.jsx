@@ -38,13 +38,15 @@ export default function GamePage() {
   const [myName, setMyName] = useState(currentUser?.username ?? 'Player 1')
 
   useEffect(() => {
+    if (isSpectator) return
+    if (!isAuthReady || !isAuthenticated) return
     apiJson('/api/users/auth/me')
       .then(me => {
         setMyId(me.id)
         setMyName(me.display_name ?? me.username)
       })
       .catch(() => { })
-  }, [])
+  }, [isSpectator, isAuthReady, isAuthenticated])
 
   useEffect(() => {
     if (player1Id != null) {
@@ -121,6 +123,7 @@ export default function GamePage() {
   }, [isSpectator, roomId])
 
   if (!roomId) return null
+  if (!isSpectator && !isAuthReady) return null
   if (!isSpectator && (player1Id == null || player2Id == null)) return null
   if (!isSpectator && isAuthReady && !isAuthenticated) return null
 

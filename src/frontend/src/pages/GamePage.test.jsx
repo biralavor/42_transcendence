@@ -289,3 +289,50 @@ describe('GamePage player audience banner', () => {
     expect(screen.queryByText(/watching as spectator/i)).not.toBeInTheDocument()
   })
 })
+
+describe('GamePage auth guards (review batch)', () => {
+  beforeEach(() => {
+    apiJson.mockReset()
+    apiJson.mockRejectedValue(new Error('no server in tests'))
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('does NOT render the canvas before auth is ready for non-spectators', () => {
+    useAuth.mockReturnValue({ isAuthenticated: false, isAuthReady: false })
+    render(
+      <MemoryRouter
+        initialEntries={[
+          {
+            pathname: '/game/room-1',
+            state: { player1_id: 1, player2_id: 2 },
+          },
+        ]}
+      >
+        <Routes>
+          <Route path="/game/:roomId" element={<GamePage />} />
+        </Routes>
+      </MemoryRouter>
+    )
+    // The canvas mock renders a "Simulate Game End" button. If the page
+    // suppresses rendering before auth is ready, the button is absent.
+    expect(screen.queryByText('Simulate Game End')).not.toBeInTheDocument()
+  })
+
+  it('does NOT call /api/users/auth/me for spectators', async () => {
+    useAuth.mockReturnValue({ isAuthenticated: false, isAuthReady: true })
+    render(
+      <MemoryRouter initialEntries={[{ pathname: '/game/room-1', search: '?spectate=true' }]}>
+        <Routes>
+          <Route path="/game/:roomId" element={<GamePage />} />
+        </Routes>
+      </MemoryRouter>
+    )
+    // Yield once so any pending effects flush.
+    await act(async () => { await Promise.resolve() })
+    const calls = apiJson.mock.calls.map((args) => args[0])
+    expect(calls).not.toContain('/api/users/auth/me')
+  })
+})

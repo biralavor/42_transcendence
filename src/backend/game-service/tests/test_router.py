@@ -980,6 +980,16 @@ async def test_get_live_games_marks_unbound_match_finished_and_excludes_it(clien
     # Sanity: the row is currently 'ongoing' and has NO binding.
     assert match_id not in _match_id_to_game_id
 
+    # Backdate started_at past the helper's 30-second grace window so the
+    # endpoint reconciles this row immediately (we're testing reconciliation,
+    # not the grace window — that's covered separately below).
+    from sqlalchemy import text as sql_text
+    await session.execute(
+        sql_text("UPDATE matches SET started_at = NOW() - INTERVAL '1 hour' WHERE id = :id"),
+        {"id": match_id},
+    )
+    await session.commit()
+
     resp = await client.get("/games/live")
     assert resp.status_code == 200
     rows = resp.json()
@@ -1039,3 +1049,51 @@ async def test_get_live_games_does_not_touch_already_finished_rows(client, sessi
     assert row.winner_id == 5001
     assert row.score_p1 == 7
     assert row.score_p2 == 3
+
+
+@pytest.mark.asyncio
+async def test_get_live_games_does_not_finish_recently_created_matches(client, session):
+    """A match created seconds ago without a WS binding (e.g. during the
+    create-to-_bind_match window in the player handshake) must NOT be
+    prematurely reconciled. Once the row ages past the grace window, it
+    becomes eligible for reconciliation."""
+    from sqlalchemy import select, text as sql_text
+    from service.models.match import Match
+    from service.ws.router import _match_id_to_game_id
+
+    create = await client.post(
+        "/matches", json={"player1_id": 5001, "player2_id": 5002}
+    )
+    assert create.status_code == 201, create.text[:200]
+    match_id = create.json()["id"]
+    assert match_id not in _match_id_to_game_id
+
+    # First poll: row is fresh (started_at ≈ now), within the grace window.
+    # The endpoint must NOT mark it finished.
+    resp = await client.get("/games/live")
+    assert resp.status_code == 200
+
+    session.expire_all()
+    result = await session.execute(select(Match).where(Match.id == match_id))
+    row = result.scalars().one()
+    assert row.status == "ongoing", (
+        f"recently-created match must not be reconciled within the grace "
+        f"window, got status={row.status}"
+    )
+    assert row.finished_at is None
+
+    # Backdate started_at past the grace window. The next poll reconciles.
+    await session.execute(
+        sql_text("UPDATE matches SET started_at = NOW() - INTERVAL '1 hour' WHERE id = :id"),
+        {"id": match_id},
+    )
+    await session.commit()
+
+    resp = await client.get("/games/live")
+    assert resp.status_code == 200
+
+    session.expire_all()
+    result = await session.execute(select(Match).where(Match.id == match_id))
+    row = result.scalars().one()
+    assert row.status == "finished"
+    assert row.finished_at is not None
