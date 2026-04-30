@@ -705,6 +705,39 @@ async def _disconnect_countdown(game_id: str, winner_id: int) -> None:
         _disconnect_timers.pop(game_id, None)
 
 
+async def _both_disconnect_grace(game_id: str) -> None:
+    """Grace period for when both players disconnect simultaneously.
+
+    Protects the waiting-room → game-page navigation transition: both old
+    WS connections close before the new GamePage WS connections open. The
+    session is kept alive so reconnecting players are not locked out.
+
+    If nobody reconnects within the grace window the session is deleted.
+    """
+    logger = logging.getLogger(__name__)
+    try:
+        await asyncio.sleep(DISCONNECT_GRACE_SECONDS)
+    except asyncio.CancelledError:
+        return
+
+    if manager.active_connections(game_id) > 0:
+        # Someone reconnected while the timer was running — nothing to do.
+        _disconnect_timers.pop(game_id, None)
+        return
+
+    logger.info(
+        "[BOTH_DISCONNECT] Grace period expired for %s with no reconnects; cleaning up.",
+        game_id,
+    )
+    session = game_manager.get_session(game_id)
+    if session is not None:
+        await game_manager.delete_session(game_id)
+    _setup_sessions.pop(game_id, None)
+    _unbind_match(game_id)
+    _cleanup_waiting_room(game_id)
+    _disconnect_timers.pop(game_id, None)
+
+
 @router.post("/ai", status_code=201, response_model=AiGameResponse)
 async def start_ai_game(
     body: AiGameRequest,
@@ -1092,6 +1125,25 @@ async def game_websocket(websocket: WebSocket, game_id: str, token: str | None =
                     player2_id,
                     existing_match_id=existing_match_id,
                 )
+
+                # If the session was paused because both players disconnected
+                # simultaneously (waiting-room → game-page navigation), resume
+                # it now that a player has reconnected and confirmed the game IDs.
+                resumed_session = game_manager.get_session(game_id)
+                if resumed_session is not None and resumed_session.is_paused:
+                    grace_timer = _disconnect_timers.pop(game_id, None)
+                    if grace_timer is not None and not grace_timer.done():
+                        grace_timer.cancel()
+                        try:
+                            await asyncio.shield(grace_timer)
+                        except (asyncio.CancelledError, Exception):
+                            pass
+                    game_manager.resume_session(game_id)
+                    ws_logger.session_state(
+                        game_id,
+                        {"status": "resumed_after_both_disconnect", "player_id": player_id},
+                    )
+
                 ws_logger.latency(f"game_start_to_session_created_{game_id}", flow_start)
 
             # Handle player input (with latency filtering)
@@ -1203,11 +1255,32 @@ async def game_websocket(websocket: WebSocket, game_id: str, token: str | None =
             # via create_task while both players are simultaneously disconnecting.
             # If the session is already inactive, _on_game_over owns the DB write
             # and cleanup — skip here to avoid clearing _match_ids before it runs.
-            if session is None or session.is_active:
+            if session is None:
+                # No active session — waiting-room phase, clean up routing state.
+                _setup_sessions.pop(game_id, None)
+                _unbind_match(game_id)
+                _cleanup_waiting_room(game_id)
+            elif session.is_active and session.player2_id == AI_PLAYER_ID:
+                # AI game: human forfeited (DB update done above), delete session.
                 await game_manager.delete_session(game_id)
                 _setup_sessions.pop(game_id, None)
                 _unbind_match(game_id)
                 _cleanup_waiting_room(game_id)
+            elif session.is_active:
+                # Non-AI active session: both players disconnected simultaneously.
+                # This is the waiting-room → game-page navigation transition —
+                # both old WS connections close before the new GamePage WS opens.
+                # Start a grace period so players can reconnect without losing the session.
+                game_manager.pause_session(game_id)
+                timer = asyncio.create_task(_both_disconnect_grace(game_id))
+                _disconnect_timers[game_id] = timer
+                logger.info(
+                    "[BOTH_DISCONNECT] Both players left %s with active session; "
+                    "%ds grace period started.",
+                    game_id,
+                    DISCONNECT_GRACE_SECONDS,
+                )
+            # else: session.is_active == False — _on_game_over owns cleanup, skip.
 
         else:
             # One player still connected — pause and start countdown for remote games only
