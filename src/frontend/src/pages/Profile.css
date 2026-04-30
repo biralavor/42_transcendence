@@ -243,6 +243,102 @@
   margin-top: 2.5rem;
 }
 
+.history-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.history-filter-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: rgba(245, 245, 242, 0.85);
+  font-family: 'VT323', monospace;
+  font-size: 1.15rem;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+}
+
+.history-filter-option input {
+  accent-color: var(--primary);
+}
+
+.history-filter-date input {
+  min-height: 2rem;
+  border: 1px solid rgba(251, 192, 45, 0.35);
+  border-radius: 0.35rem;
+  background: rgba(10, 10, 10, 0.45);
+  color: rgba(245, 245, 242, 0.92);
+  font: inherit;
+  padding: 0.2rem 0.45rem;
+}
+
+.history-filter-select select {
+  min-height: 2rem;
+  border: 1px solid rgba(251, 192, 45, 0.35);
+  border-radius: 0.35rem;
+  background: rgba(10, 10, 10, 0.45);
+  color: rgba(245, 245, 242, 0.92);
+  font: inherit;
+  padding: 0.2rem 0.45rem;
+}
+
+.history-clear-button {
+  min-height: 2rem;
+  border: 1px solid rgba(251, 192, 45, 0.45);
+  border-radius: 0.35rem;
+  background: rgba(251, 192, 45, 0.08);
+  color: var(--primary);
+  font-family: 'VT323', monospace;
+  font-size: 1.15rem;
+  letter-spacing: 0.05em;
+  padding: 0.2rem 0.7rem;
+  cursor: pointer;
+}
+
+.history-clear-button:hover {
+  background: rgba(251, 192, 45, 0.16);
+}
+
+.history-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.history-page-button {
+  min-height: 2rem;
+  border: 1px solid rgba(251, 192, 45, 0.45);
+  border-radius: 0.35rem;
+  background: rgba(251, 192, 45, 0.08);
+  color: var(--primary);
+  font-family: 'VT323', monospace;
+  font-size: 1.15rem;
+  letter-spacing: 0.05em;
+  padding: 0.2rem 0.7rem;
+  cursor: pointer;
+}
+
+.history-page-button:hover:not(:disabled) {
+  background: rgba(251, 192, 45, 0.16);
+}
+
+.history-page-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.history-page-summary {
+  color: rgba(245, 245, 242, 0.85);
+  font-family: 'VT323', monospace;
+  font-size: 1.15rem;
+  letter-spacing: 0.05em;
+}
+
 .history-table {
   width: 100%;
   border: 1px solid rgba(251, 192, 45, 0.3);

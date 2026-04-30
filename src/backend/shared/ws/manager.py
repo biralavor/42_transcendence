@@ -1,4 +1,6 @@
 from __future__ import annotations
+
+import asyncio
 import logging
 from typing import TYPE_CHECKING, Awaitable, Callable, Dict, Optional, Set, Tuple
 
@@ -21,7 +23,11 @@ class ConnectionManager:
     in lockstep with `_rooms`, so disconnects always clean both.
     """
 
-    def __init__(self, signal_callback: Optional[Callable[[str], Awaitable[None]]] = None) -> None:
+    def __init__(
+        self,
+        signal_callback: Optional[Callable[[str], Awaitable[None]]] = None,
+        send_timeout: float | None = None,
+    ) -> None:
         self._rooms: Dict[str, Set["WebSocket"]] = {}
         self._roles: Dict[Tuple[str, "WebSocket"], str] = {}
         # Per-room role counters maintained in lockstep with `_rooms` / `_roles` so
@@ -31,6 +37,7 @@ class ConnectionManager:
         self._player_counts: Dict[str, int] = {}
         self._spectator_counts: Dict[str, int] = {}
         self._signal_callback = signal_callback
+        self._send_timeout = send_timeout
 
     async def connect(self, room_id: str, websocket: "WebSocket", role: str = "player") -> None:
         if role not in _VALID_ROLES:
@@ -62,13 +69,39 @@ class ConnectionManager:
         if not room:
             self._rooms.pop(room_id, None)
 
+    async def _send_to_client(
+        self,
+        room_id: str,
+        websocket: "WebSocket",
+        message: dict,
+    ) -> tuple["WebSocket", Exception | None]:
+        try:
+            if self._send_timeout is None:
+                await websocket.send_json(message)
+            else:
+                await asyncio.wait_for(
+                    websocket.send_json(message), timeout=self._send_timeout
+                )
+            return websocket, None
+        except asyncio.TimeoutError as e:
+            logger.warning(
+                f"Send to client in room {room_id} exceeded {self._send_timeout}s; disconnecting slow client"
+            )
+            return websocket, e
+        except Exception as e:
+            logger.warning(f"Failed to send to client in room {room_id}: {e}")
+            return websocket, e
+
     async def broadcast(self, room_id: str, message: dict) -> None:
-        for ws in list(self._rooms.get(room_id, set())):
-            try:
-                await ws.send_json(message)
-            except Exception as e:
-                logger.warning(f"Failed to send to client in room {room_id}: {e}")
-                self.disconnect(room_id, ws)
+        sockets = list(self._rooms.get(room_id, set()))
+        if sockets:
+            results = await asyncio.gather(
+                *(self._send_to_client(room_id, ws, message) for ws in sockets)
+            )
+
+            for ws, error in results:
+                if error is not None:
+                    self.disconnect(room_id, ws)
 
         # Signal event registry if callback provided (event-driven delivery)
         if self._signal_callback:
