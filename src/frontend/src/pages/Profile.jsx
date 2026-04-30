@@ -17,6 +17,35 @@ const ALLOWED_AVATAR_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024
 const PLACEHOLDER_AVATAR = '/avatar_placeholder.jpg'
 
+const DEFAULT_HISTORY_FILTERS = {
+  dateFrom: '',
+  dateTo: '',
+  result: 'all',
+  sort: 'date:desc',
+}
+
+function buildHistoryUrl(playerId, filters, page) {
+  const params = new URLSearchParams({
+    player_id: String(playerId),
+    limit: '10',
+    page: String(page),
+    result: filters.result,
+    order: filters.sort,
+  })
+
+  if (filters.dateFrom) params.set('date_from', `${filters.dateFrom}T00:00:00`)
+  if (filters.dateTo) params.set('date_to', `${filters.dateTo}T23:59:59.999999`)
+
+  return `/api/game/matches/history?${params.toString()}`
+}
+
+function formatLocalDateInputValue(date = new Date()) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 function getSafeAvatarUrl(avatarUrl) {
   if (!avatarUrl || typeof avatarUrl !== 'string') {
     return ''
@@ -108,6 +137,9 @@ export default function Profile() {
   const avatarToastTimer = useRef(null)
   const [xpData, setXpData] = useState(null)
   const [achievements, setAchievements] = useState([])
+  const [historyFilters, setHistoryFilters] = useState(DEFAULT_HISTORY_FILTERS)
+  const [historyPage, setHistoryPage] = useState(0)
+  const todayDate = formatLocalDateInputValue()
   const isOwnProfile = userId !== null && currentUserId !== null && userId === currentUserId
 
   useEffect(() => {
@@ -255,15 +287,11 @@ export default function Profile() {
             if (!r.ok) throw new Error(`Profile fetch failed: ${r.status}`)
             return r.json()
           }),
-          apiCall(`/api/game/matches/history?player_id=${id}`, { signal }).then(r => {
-            if (!r.ok) throw new Error(`Matches History fetch failed: ${r.status}`)
-            return r.json()
-          }),
           apiCall(`/api/game/leaderboard?player_id=${id}&limit=1`, { signal }).then(r => {
             if (!r.ok) throw new Error(`Leaderboard fetch failed: ${r.status}`)
             return r.json()
           }),
-        ]).then(([profileData, historyData, rankData]) => {
+        ]).then(([profileData, rankData]) => {
           setProfile({
             displayName: profileData.display_name ?? '',
             darkMode: profileData.dark_mode ?? false,
@@ -273,7 +301,6 @@ export default function Profile() {
             status: profileData.status,
             createdAt: profileData.created_at,
           })
-          setPaginatedHistory(historyData)
           setUserRankData(rankData.player_stats)
 
           // Fetch XP and achievements after core profile data is loaded (non-blocking)
@@ -297,6 +324,27 @@ export default function Profile() {
 
     return () => controller.abort()
   }, [auth.access_token, profileUserId])
+
+  useEffect(() => {
+    if (!auth.access_token || !userId) return
+
+    const controller = new AbortController()
+    const { signal } = controller
+
+    apiCall(buildHistoryUrl(userId, historyFilters, historyPage), { signal })
+      .then(r => {
+        if (!r.ok) throw new Error(`Matches History fetch failed: ${r.status}`)
+        return r.json()
+      })
+      .then(data => {
+        if (!signal.aborted) setPaginatedHistory(data)
+      })
+      .catch(err => {
+        if (err.name !== 'AbortError') setError(err.message)
+      })
+
+    return () => controller.abort()
+  }, [auth.access_token, userId, historyFilters, historyPage])
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target
@@ -567,6 +615,71 @@ export default function Profile() {
 
               <div className="profile-history">
                 <h2 className="profile-section-title">Match history</h2>
+                <div className="history-controls" role="group" aria-label="Match history filters">
+                  {['all', 'win', 'loss'].map((value) => (
+                    <label key={value} className="history-filter-option">
+                      <input
+                        type="radio"
+                        name="historyResult"
+                        value={value}
+                        checked={historyFilters.result === value}
+                        onChange={(e) => {
+                          setHistoryFilters(prev => ({ ...prev, result: e.target.value }))
+                          setHistoryPage(0)
+                        }}
+                      />
+                      {value === 'all' ? 'All' : value === 'win' ? 'Wins' : 'Losses'}
+                    </label>
+                  ))}
+                  <label className="history-filter-option history-filter-date">
+                    From
+                    <input
+                      type="date"
+                      value={historyFilters.dateFrom}
+                      max={historyFilters.dateTo || todayDate}
+                      onChange={(e) => {
+                        setHistoryFilters(prev => ({ ...prev, dateFrom: e.target.value }))
+                        setHistoryPage(0)
+                      }}
+                    />
+                  </label>
+                  <label className="history-filter-option history-filter-date">
+                    To
+                    <input
+                      type="date"
+                      value={historyFilters.dateTo}
+                      min={historyFilters.dateFrom}
+                      max={todayDate}
+                      onChange={(e) => {
+                        setHistoryFilters(prev => ({ ...prev, dateTo: e.target.value }))
+                        setHistoryPage(0)
+                      }}
+                    />
+                  </label>
+                  <label className="history-filter-option history-filter-select">
+                    Sort
+                    <select
+                      value={historyFilters.sort}
+                      onChange={(e) => {
+                        setHistoryFilters(prev => ({ ...prev, sort: e.target.value }))
+                        setHistoryPage(0)
+                      }}
+                    >
+                      <option value="date:desc">Date</option>
+                      <option value="result:asc">Result</option>
+                    </select>
+                  </label>
+                  <button
+                    type="button"
+                    className="history-clear-button"
+                    onClick={() => {
+                      setHistoryFilters(DEFAULT_HISTORY_FILTERS)
+                      setHistoryPage(0)
+                    }}
+                  >
+                    Clear filters
+                  </button>
+                </div>
                 {paginatedHistory.total === 0 ? (
                   <p style={{ color: 'var(--metal-silver)', fontFamily: 'VT323, monospace' }}>
                     No matches yet.
@@ -596,6 +709,27 @@ export default function Profile() {
                     ))}
                   </div>
                 )}
+                <div className="history-pagination" aria-label="Match history pagination">
+                  <button
+                    type="button"
+                    className="history-page-button"
+                    disabled={paginatedHistory.page <= 0}
+                    onClick={() => setHistoryPage(page => Math.max(0, page - 1))}
+                  >
+                    Previous
+                  </button>
+                  <span className="history-page-summary">
+                    Page {paginatedHistory.page + 1} of {paginatedHistory.last_page + 1} · {paginatedHistory.total} matches
+                  </span>
+                  <button
+                    type="button"
+                    className="history-page-button"
+                    disabled={paginatedHistory.page >= paginatedHistory.last_page}
+                    onClick={() => setHistoryPage(page => page + 1)}
+                  >
+                    Next
+                  </button>
+                </div>
               </div>
             </div>
           </div>

@@ -26,7 +26,9 @@ from service.schemas import AiGameRequest, AiGameResponse
 from sqlalchemy.exc import SQLAlchemyError
 
 router = APIRouter()
-manager = ConnectionManager()
+# 0.5s send timeout: a slow client must not stall the 30Hz game broadcast loop.
+# Other services (chat, notifications, presence) use the default (no timeout).
+manager = ConnectionManager(send_timeout=0.5)
 
 # Maps game_id (str) → (player1_id, player2_id) for sessions being set up
 _setup_sessions: dict[str, tuple[int, int]] = {}
