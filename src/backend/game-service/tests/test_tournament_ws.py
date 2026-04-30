@@ -60,6 +60,7 @@ def clear_ws_state():
     ws_router._waiting_room_timeout_tasks.clear()
     ws_router._waiting_room_timeout_deadline.clear()
     ws_router._tournament_ready_timeout_tasks.clear()
+    ws_router._tournament_ready_timeout_locks.clear()
     yield
 
     for task in list(ws_router._waiting_room_timeout_tasks.values()):
@@ -79,6 +80,7 @@ def clear_ws_state():
     ws_router._waiting_room_timeout_tasks.clear()
     ws_router._waiting_room_timeout_deadline.clear()
     ws_router._tournament_ready_timeout_tasks.clear()
+    ws_router._tournament_ready_timeout_locks.clear()
 
 
 @pytest.fixture
@@ -306,3 +308,51 @@ async def test_tournament_ready_timeout_with_no_ready_players(monkeypatch, seede
     )
     assert timeout_payload["winner_id"] is None
     assert ready_key not in ws_router._tournament_ready
+
+
+@pytest.mark.asyncio
+async def test_tournament_ready_timeouts_for_same_tournament_are_serialized(monkeypatch):
+    tournament_id = 1
+    rows = [
+        SimpleNamespace(id=10, status="in_progress", player1_id=1, player2_id=2),
+        SimpleNamespace(id=11, status="in_progress", player1_id=3, player2_id=4),
+    ]
+    ws_router._tournament_ready[(tournament_id, 10)] = set()
+    ws_router._tournament_ready[(tournament_id, 11)] = set()
+
+    active_calls = 0
+    max_active_calls = 0
+    original_sleep = ws_router.asyncio.sleep
+
+    async def fake_get_tournament_with_participants(_db, _tournament_id):
+        return SimpleNamespace(id=tournament_id), [], rows
+
+    async def fake_record_timeout_result(*, db, tournament_id, tournament_match_id, winner_id):
+        nonlocal active_calls, max_active_calls
+        active_calls += 1
+        max_active_calls = max(max_active_calls, active_calls)
+        await original_sleep(0)
+        row = next(row for row in rows if row.id == tournament_match_id)
+        row.status = "finished"
+        active_calls -= 1
+        return SimpleNamespace(id=tournament_id), False, []
+
+    async def fake_sleep(_seconds):
+        return None
+
+    monkeypatch.setattr(ws_router, "READY_TIMEOUT_SECONDS", 0)
+    monkeypatch.setattr(ws_router, "AsyncSessionLocal", lambda: _NoopSession())
+    monkeypatch.setattr(ws_router, "get_tournament_with_participants", fake_get_tournament_with_participants)
+    monkeypatch.setattr(ws_router, "record_tournament_match_timeout_result", fake_record_timeout_result)
+    monkeypatch.setattr(ws_router, "sync_tournament_ready_timeouts", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(ws_router.asyncio, "sleep", fake_sleep)
+    monkeypatch.setattr(ws_router.manager, "broadcast", AsyncMock())
+
+    await original_sleep(0)
+    await ws_router.asyncio.gather(
+        ws_router._handle_tournament_ready_timeout(tournament_id, 10),
+        ws_router._handle_tournament_ready_timeout(tournament_id, 11),
+    )
+
+    assert max_active_calls == 1
+    assert [row.status for row in rows] == ["finished", "finished"]
