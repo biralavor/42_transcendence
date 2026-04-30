@@ -7,9 +7,9 @@ export default function Home() {
     <div className="arcade-shell">
       <NavbarComponent />
 
-      <main className="home-page">
-        <section className="hero-section">
-          <div className="hero-screen arcade-screen">
+      <main className="home-page container-fluid">
+        <section className="hero-section row">
+          <div className="hero-screen arcade-screen col-12">
             <div className="arcade-panel row align-items-center g-4 g-lg-5">
               <div className="col-12 col-lg-6">
                 <div className="hero-copy">
@@ -29,33 +29,33 @@ export default function Home() {
                     classic arcade rooms.
                   </p>
 
-                  <div className="hero-actions d-flex flex-wrap gap-3">
-                    <Link to="/play" className="arcade-btn arcade-btn-primary">
+                  <div className="hero-actions row d-flex flex-wrap gap-4">
+                    <Link to="/play" className="arcade-btn arcade-btn-primary col-12 col-lg-6">
                       Play now
                     </Link>
 
-                    <Link to="/leaderboard" className="arcade-btn arcade-btn-ghost">
+                    <Link to="/leaderboard" className="arcade-btn arcade-btn-ghost col-12 col-lg-5">
                       View leaderboard
                     </Link>
                   </div>
 
-                  <div className="hero-stats row g-3 mt-4">
-                    <div className="col-12 col-sm-4">
-                      <div className="stat-card">
+                  <div className="hero-stats row mt-4 g-4">
+                    <div className="col-12 col-lg-6">
+                      <div className="stat-card p-4">
                         <span className="stat-value">24/7</span>
                         <span className="stat-label">Open arena</span>
                       </div>
                     </div>
 
-                    <div className="col-12 col-sm-4">
-                      <div className="stat-card">
+                    <div className="col-12 col-lg-6">
+                      <div className="stat-card p-4">
                         <span className="stat-value">Ranked</span>
                         <span className="stat-label">Competitive play</span>
                       </div>
                     </div>
 
-                    <div className="col-12 col-sm-4">
-                      <div className="stat-card">
+                    <div className="col-12 col-lg-12">
+                      <div className="stat-card p-4">
                         <span className="stat-value">Fast</span>
                         <span className="stat-label">Instant matches</span>
                       </div>
@@ -117,45 +117,43 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="features-section">
-          <div className="row g-4">
-            <div className="col-12 col-md-6 col-xl-4">
-              <article className="feature-card">
-                <span className="feature-tag">01</span>
-                <h2>Arcade energy</h2>
-                <p>
-                  A dark interface with neon highlights and a competitive
-                  atmosphere inspired by classic Pong machines.
-                </p>
-              </article>
-            </div>
+        <section className="features-section row g-4">
+          <div className="col-12 col-md-6 col-xl-4">
+            <article className="feature-card">
+              <span className="feature-tag">01</span>
+              <h2>Arcade energy</h2>
+              <p>
+                A dark interface with neon highlights and a competitive
+                atmosphere inspired by classic Pong machines.
+              </p>
+            </article>
+          </div>
 
-            <div className="col-12 col-md-6 col-xl-4">
-              <article className="feature-card">
-                <span className="feature-tag">02</span>
-                <h2>Instant competition</h2>
-                <p>
-                  Jump into matches quickly, challenge opponents, and keep your
-                  focus on gameplay and progression.
-                </p>
-              </article>
-            </div>
+          <div className="col-12 col-md-6 col-xl-4">
+            <article className="feature-card">
+              <span className="feature-tag">02</span>
+              <h2>Instant competition</h2>
+              <p>
+                Jump into matches quickly, challenge opponents, and keep your
+                focus on gameplay and progression.
+              </p>
+            </article>
+          </div>
 
-            <div className="col-12 col-md-6 col-xl-4">
-              <article className="feature-card">
-                <span className="feature-tag">03</span>
-                <h2>Leaderboard mindset</h2>
-                <p>
-                  Follow rankings, evolve your performance, and build a profile
-                  worthy of the ft_transcendence arena.
-                </p>
-              </article>
-            </div>
+          <div className="col-12 col-md-6 col-xl-4">
+            <article className="feature-card">
+              <span className="feature-tag">03</span>
+              <h2>Leaderboard mindset</h2>
+              <p>
+                Follow rankings, evolve your performance, and build a profile
+                worthy of the ft_transcendence arena.
+              </p>
+            </article>
           </div>
         </section>
 
-        <section className="cta-section">
-          <div className="cta-box">
+        <section className="cta-section row">
+          <div className="cta-box col-12">
             <div>
               <p className="cta-kicker arcade-kicker">Ready to enter the arena?</p>
               <h2>Create your account and start your run.</h2>

@@ -63,13 +63,6 @@
   line-height: 1.7;
 }
 
-.hero-actions {
-  display: flex;
-  gap: 1rem;
-  flex-wrap: wrap;
-  margin-bottom: 2rem;
-}
-
 .arcade-btn-ghost {
   background: transparent;
   color: var(--primary);
@@ -83,15 +76,7 @@
   box-shadow: 0 0 20px var(--primary);
 }
 
-.hero-stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 1rem;
-  margin-top: 2rem;
-}
-
 .stat-card {
-  padding: 1.5rem;
   border: 2px solid var(--primary);
   border-radius: 0;
   background: var(--input-background);
@@ -127,12 +112,6 @@
 
 .features-section {
   padding: 3rem 0;
-}
-
-.features-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 2rem;
 }
 
 .feature-card {
@@ -241,27 +220,6 @@
 
   .hero-title {
     font-size: 1.5rem;
-  }
-
-  .hero-section {
-    padding-top: 1rem;
-  }
-
-  .hero-screen {
-    padding: 1.5rem;
-  }
-
-  .features-grid {
-    grid-template-columns: 1fr;
-    gap: 1.5rem;
-  }
-
-  .hero-actions {
-    flex-direction: column;
-  }
-
-  .btn-arcade {
-    width: 100%;
   }
 
   .cta-box {
