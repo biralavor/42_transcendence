@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import NavbarComponent from './Navbar'
 
@@ -29,6 +29,11 @@ describe('Navbar — bell and DM badge', () => {
         useAuth.mockReturnValue({ isAuthenticated: true, logout: vi.fn() })
         useNotifications.mockReturnValue({ unreadCount: 0 })
         useUnread.mockReturnValue({ unreadCounts: {} })
+    })
+
+    afterEach(() => {
+        vi.useRealTimers()
+        vi.restoreAllMocks()
     })
 
     it('shows bell button when authenticated', () => {
@@ -88,5 +93,89 @@ describe('Navbar — bell and DM badge', () => {
         useUnread.mockReturnValue({ unreadCounts: { 'DM-1-2': 2, 'DM-1-3': 1 } })
         renderNavbar()
         expect(screen.queryByTestId('dm-badge')).toBeNull()
+    })
+
+    it('debounces user search and renders dropdown results', async () => {
+        vi.useFakeTimers()
+
+        vi.spyOn(global, 'fetch').mockResolvedValue(
+            new Response(JSON.stringify({
+                results: [{ id: 7, username: 'alice', avatar_url: '/avatars/alice.png' }],
+                total: 1,
+                page: 1,
+                per_page: 5,
+            }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        )
+
+        renderNavbar()
+        fireEvent.click(screen.getByRole('button', { name: /open user search/i }))
+        const searchInput = screen.getByRole('searchbox', { name: /search users/i })
+
+        fireEvent.focus(searchInput)
+        fireEvent.change(searchInput, {
+            target: { value: 'ali' },
+        })
+
+        expect(global.fetch).not.toHaveBeenCalled()
+
+        await act(async () => {
+            vi.advanceTimersByTime(300)
+        })
+
+        vi.useRealTimers()
+
+        await waitFor(() => {
+            expect(global.fetch).toHaveBeenCalledWith(
+                '/api/users/search?q=ali&page=1&per_page=5&sort=username',
+                expect.objectContaining({ signal: expect.any(AbortSignal) })
+            )
+        })
+
+        expect(await screen.findByText('alice')).toBeInTheDocument()
+        expect(screen.getByRole('link', { name: /see all results/i })).toHaveAttribute('href', '/search?q=ali')
+    })
+
+    it('shows the search toggle and hides the input by default', () => {
+        renderNavbar()
+        expect(
+            screen.getByRole('button', { name: /open user search/i })
+        ).toBeInTheDocument()
+        expect(
+            screen.queryByRole('searchbox', { name: /search users/i })
+        ).not.toBeInTheDocument()
+    })
+
+    it('clicking the toggle reveals the input and auto-focuses it', async () => {
+        renderNavbar()
+        const toggle = screen.getByRole('button', { name: /open user search/i })
+
+        fireEvent.click(toggle)
+
+        const input = await screen.findByRole('searchbox', { name: /search users/i })
+        expect(input).toBeInTheDocument()
+        await waitFor(() => {
+            expect(document.activeElement).toBe(input)
+        })
+        expect(
+            screen.queryByRole('button', { name: /open user search/i })
+        ).not.toBeInTheDocument()
+    })
+
+    it('pressing Escape in the input closes the search and restores the toggle', async () => {
+        renderNavbar()
+        fireEvent.click(screen.getByRole('button', { name: /open user search/i }))
+
+        const input = await screen.findByRole('searchbox', { name: /search users/i })
+        fireEvent.change(input, { target: { value: 'al' } })
+        fireEvent.keyDown(input, { key: 'Escape', code: 'Escape' })
+
+        await waitFor(() => {
+            expect(
+                screen.queryByRole('searchbox', { name: /search users/i })
+            ).not.toBeInTheDocument()
+        })
+        expect(
+            screen.getByRole('button', { name: /open user search/i })
+        ).toBeInTheDocument()
     })
 })

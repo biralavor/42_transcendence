@@ -1,7 +1,7 @@
 // src/frontend/src/pages/Profile.test.jsx
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import Profile from './Profile'
 
 let mockAuth = { access_token: 'fake-token' }
@@ -132,6 +132,16 @@ function renderProfile() {
   return render(
     <MemoryRouter>
       <Profile />
+    </MemoryRouter>
+  )
+}
+
+function renderProfileRoute(initialEntry) {
+  return render(
+    <MemoryRouter initialEntries={[initialEntry]}>
+      <Routes>
+        <Route path="/profile/:profileUserId" element={<Profile />} />
+      </Routes>
     </MemoryRouter>
   )
 }
@@ -521,6 +531,78 @@ describe('Profile page (general)', () => {
     expect(screen.getByText('3-1')).toBeInTheDocument()
     expect(screen.getByText('0-3')).toBeInTheDocument()
     expect(screen.queryByText(/no matches yet/i)).not.toBeInTheDocument()
+  })
+
+  it('loads a route profile by user id and hides owner-only controls', async () => {
+    vi.spyOn(global, 'fetch')
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ id: 1, username: 'alice' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: 7,
+            username: 'bruno',
+            display_name: 'Bruno',
+            dark_mode: false,
+            avatar_url: null,
+            bio: 'visitor profile',
+            status: 'online',
+            created_at: '2026-01-01',
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            player_stats: {
+              player_id: 7,
+              rank: 4,
+              wins: 2,
+              losses: 1,
+              total_matches: 3,
+            },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            results: [],
+            summary: { player_id: 7, wins: 2, losses: 1, total_matches: 3 },
+            total: 0,
+            page: 1,
+            per_page: 10,
+            last_page: 1,
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ user_id: 7, xp: 50, level: 2, xp_in_level: 50, xp_to_next_level: 100 }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      )
+
+    renderProfileRoute('/profile/7')
+
+    expect(await screen.findByRole('heading', { name: 'Bruno' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /change avatar/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /save profile/i })).not.toBeInTheDocument()
+    expect(screen.queryByTestId('friends-sidebar')).not.toBeInTheDocument()
+    expect(global.fetch).toHaveBeenCalledWith(
+      '/api/users/profile/7',
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
+    )
   })
 
   it('re-fetches match history with filter params and keeps profile data loaded once', async () => {

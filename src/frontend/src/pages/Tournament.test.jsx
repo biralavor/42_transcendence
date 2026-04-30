@@ -216,6 +216,7 @@ describe('Tournament page realtime sync', () => {
 
     visibilityState = 'visible'
     await act(async () => {
+      vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible')
       document.dispatchEvent(new Event('visibilitychange'))
     })
 
