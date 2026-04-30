@@ -95,11 +95,12 @@ export default function NavbarComponent() {
     setIsMenuOpen(false)
     setIsSearchOpen(false)
     setIsSearchFocused(false)
+    setSearchTerm('')
   }, [location.pathname])
 
   useEffect(() => {
     const query = searchTerm.trim()
-    if (!query) {
+    if (!isAuthenticated || !query) {
       setSearchResults([])
       setSearchTotal(0)
       setSearchError('')
@@ -144,7 +145,7 @@ export default function NavbarComponent() {
       clearTimeout(timeoutId)
       controller.abort()
     }
-  }, [searchTerm])
+  }, [searchTerm, isAuthenticated])
 
   const handleToggleMenu = () => {
     setIsMenuOpen((prev) => !prev)
