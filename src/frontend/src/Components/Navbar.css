@@ -144,17 +144,17 @@
 }
 
 .pong-nav__search-toggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 48px;
-  height: 48px;
-  padding: 0;
-  border: 3px solid #3b241d;
-  border-radius: 12px;
-  background: rgba(59, 36, 29, 0.1);
-  color: #3b241d;
+  background: none;
+  border: none;
   cursor: pointer;
+  font-size: 1.3rem;
+  line-height: 1;
+  padding: 0.25rem;
+  color: #3b241d;
+}
+
+.pong-nav__search-toggle:hover {
+  opacity: 0.8;
 }
 
 .pong-nav__search-form {
