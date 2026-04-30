@@ -27,7 +27,10 @@ export default function Home() {
 
   useEffect(() => {
     let cancelled = false
+    let inFlight = false
     async function tick() {
+      if (inFlight) return
+      inFlight = true
       try {
         const r = await fetch('/api/games/live')
         const games = r.ok ? await r.json() : []
@@ -35,6 +38,8 @@ export default function Home() {
         setTopGame(pickTopGame(games))
       } catch {
         if (!cancelled) setTopGame(null)
+      } finally {
+        inFlight = false
       }
     }
     tick()

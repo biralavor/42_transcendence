@@ -1,5 +1,6 @@
 # Note: sys.path is set by main.py (Docker) or test file (host) — not repeated here.
 import asyncio
+import logging
 import re
 import time
 from uuid import uuid4
@@ -119,7 +120,6 @@ async def _spectator_loop(websocket: WebSocket, game_id: str) -> None:
       4. Loop on receive_text(); any inbound message → close 4003.
       5. On disconnect (any reason): unregister, broadcast new count.
     """
-    import logging
     logger = logging.getLogger(__name__)
 
     await manager.connect(game_id, websocket, role="spectator")
@@ -691,7 +691,6 @@ async def _disconnect_countdown(game_id: str, winner_id: int) -> None:
             try:
                 await _on_game_over(game_id, winner_id, session.score.p1, session.score.p2)
             except Exception:
-                import logging
                 logging.getLogger(__name__).exception(
                     "[DISCONNECT_COUNTDOWN] _on_game_over failed for %s", game_id
                 )
@@ -734,7 +733,6 @@ async def start_ai_game(
         speed_multiplier: float = float(prefs.get("ball_speed_multiplier", 1.0))
         speed_multiplier = max(0.5, min(2.0, speed_multiplier))  # clamp to valid range
     except (SQLAlchemyError, ValueError, TypeError, AttributeError) as e:
-        import logging
         logger = logging.getLogger(__name__)
         logger.warning(
             "Failed to load game_preferences for player %s, using default: %s",
@@ -837,7 +835,6 @@ async def game_websocket(websocket: WebSocket, game_id: str, token: str | None =
                 # DB hiccup → caller demoted to anonymous spectator. Log it so a
                 # legitimate player going dark on a transient DB failure leaves
                 # a breadcrumb instead of being silently classified as spectator.
-                import logging
                 logging.getLogger(__name__).warning(
                     "user lookup failed for credential_id=%s; treating ws caller as anonymous",
                     credential_id, exc_info=True,
@@ -897,7 +894,6 @@ async def game_websocket(websocket: WebSocket, game_id: str, token: str | None =
     })
 
     # Log connection
-    import logging
     logger = logging.getLogger(__name__)
     active_in_room = manager.active_connections(game_id)
     logger.info(
@@ -1114,7 +1110,6 @@ async def game_websocket(websocket: WebSocket, game_id: str, token: str | None =
                 active_connections = manager.active_connections(game_id)
                 
                 # Log the incoming message and room state
-                import logging
                 logger = logging.getLogger(__name__)
                 logger.info(
                     f"[BROADCAST] {incoming_event_type} from player {incoming_user_id} "
@@ -1139,7 +1134,6 @@ async def game_websocket(websocket: WebSocket, game_id: str, token: str | None =
     
     except WebSocketDisconnect:
         # Log connection close
-        import logging
         logger = logging.getLogger(__name__)
         logger.info(f"[DISCONNECT] Player {player_id} disconnected from room {game_id}")
         
@@ -1155,7 +1149,6 @@ async def game_websocket(websocket: WebSocket, game_id: str, token: str | None =
     finally:
         manager.disconnect(game_id, websocket)
 
-        import logging
         logger = logging.getLogger(__name__)
         remaining = manager.active_connections(game_id)
         logger.info(

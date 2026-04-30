@@ -24,8 +24,11 @@ export default function GamesLive() {
 
   useEffect(() => {
     let cancelled = false
+    let inFlight = false
 
     async function tick() {
+      if (inFlight) return
+      inFlight = true
       try {
         const r = await fetch('/api/games/live')
         if (!r.ok) {
@@ -45,6 +48,8 @@ export default function GamesLive() {
           setError(e?.message || 'fetch failed')
           setLoading(false)
         }
+      } finally {
+        inFlight = false
       }
     }
 
