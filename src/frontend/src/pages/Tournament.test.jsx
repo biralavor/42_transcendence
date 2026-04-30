@@ -198,10 +198,14 @@ describe('Tournament page realtime sync', () => {
 
     await screen.findByText(/1 \/ 4 participants/i)
 
-    await act(async () => {
-      vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible')
-      document.dispatchEvent(new Event('visibilitychange'))
-    })
+    const visibilitySpy = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible')
+    try {
+      await act(async () => {
+        document.dispatchEvent(new Event('visibilitychange'))
+      })
+    } finally {
+      visibilitySpy.mockRestore()
+    }
 
     await waitFor(() => {
       expect(screen.getByText(/2 \/ 4 participants/i)).toBeInTheDocument()

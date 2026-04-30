@@ -203,11 +203,24 @@ def _cancel_waiting_room_timeout(game_id: str) -> None:
 def _remove_tournament_ready_state(ready_key: tuple[int, int]) -> None:
     _tournament_ready.pop(ready_key, None)
     _tournament_waiting_rooms.pop(ready_key, None)
+    _maybe_remove_tournament_ready_timeout_lock(ready_key[0])
+
+
+def _maybe_remove_tournament_ready_timeout_lock(tournament_id: int) -> None:
+    has_timeout_tasks = any(
+        key[0] == tournament_id for key in _tournament_ready_timeout_tasks
+    )
+    has_ready_state = any(
+        key[0] == tournament_id for key in _tournament_ready
+    )
+    if not has_timeout_tasks and not has_ready_state:
+        _tournament_ready_timeout_locks.pop(tournament_id, None)
 
 
 def _cancel_tournament_ready_timeout(ready_key: tuple[int, int]) -> None:
     task = _tournament_ready_timeout_tasks.pop(ready_key, None)
     _cancel_task(task)
+    _maybe_remove_tournament_ready_timeout_lock(ready_key[0])
 
 
 def _parse_invite_room_players(game_id: str) -> tuple[int, int] | None:
@@ -453,6 +466,7 @@ async def _handle_tournament_ready_timeout(
                 if tournament_data is None:
                     _remove_tournament_ready_state(ready_key)
                     _tournament_ready_timeout_tasks.pop(ready_key, None)
+                    _maybe_remove_tournament_ready_timeout_lock(tournament_id)
                     return
 
                 _, _, matches = tournament_data
@@ -460,6 +474,7 @@ async def _handle_tournament_ready_timeout(
                 if match_row is None or match_row.status != "in_progress":
                     _remove_tournament_ready_state(ready_key)
                     _tournament_ready_timeout_tasks.pop(ready_key, None)
+                    _maybe_remove_tournament_ready_timeout_lock(tournament_id)
                     return
 
                 players = {match_row.player1_id, match_row.player2_id}
@@ -483,6 +498,7 @@ async def _handle_tournament_ready_timeout(
         except SQLAlchemyError:
             _remove_tournament_ready_state(ready_key)
             _tournament_ready_timeout_tasks.pop(ready_key, None)
+            _maybe_remove_tournament_ready_timeout_lock(tournament_id)
             return
 
         sync_tournament_ready_timeouts(tournament_id, refreshed_matches)
@@ -510,6 +526,7 @@ async def _handle_tournament_ready_timeout(
 
         _remove_tournament_ready_state(ready_key)
         _tournament_ready_timeout_tasks.pop(ready_key, None)
+        _maybe_remove_tournament_ready_timeout_lock(tournament_id)
 
 
 def _schedule_tournament_ready_timeout(tournament_id: int, tournament_match_id: int) -> None:
@@ -1097,15 +1114,11 @@ async def game_websocket(websocket: WebSocket, game_id: str, token: str | None =
 
                 if both_ready:
                     _cancel_waiting_room_timeout(game_id)
-                    existing_match_id = data.get("match_id")
-                    if not isinstance(existing_match_id, int):
-                        existing_match_id = remembered_match_id
-
                     await _ensure_game_session(
                         game_id,
                         player1_id,
                         player2_id,
-                        existing_match_id=existing_match_id,
+                        existing_match_id=remembered_match_id,
                     )
 
                     await manager.broadcast(
@@ -1390,6 +1403,7 @@ def _clear_tournament_ready_for_user(tournament_id: int, user_id: int) -> list[i
     for key in empty_keys:
         _tournament_ready.pop(key, None)
         _tournament_waiting_rooms.pop(key, None)
+        _maybe_remove_tournament_ready_timeout_lock(tournament_id)
 
     return list(affected_match_ids)
 
@@ -1544,6 +1558,7 @@ async def tournament_websocket(
                 if not ready_set:
                     _tournament_ready.pop(ready_key, None)
                     _tournament_waiting_rooms.pop(ready_key, None)
+                    _maybe_remove_tournament_ready_timeout_lock(tournament_id)
 
                 await manager.broadcast(
                     room_id,
