@@ -17,6 +17,7 @@ import GamePage from './pages/GamePage'
 import GameInviteModal from './Components/GameInviteModal'
 import Tournament from './pages/Tournament'
 import Tournaments from './pages/Tournaments'
+import Search from './pages/Search'
 
 export default function App() {
   useEffect(() => {
@@ -59,6 +60,24 @@ export default function App() {
           element={(
             <PrivateRoute>
               <Profile />
+            </PrivateRoute>
+          )}
+        />
+
+        <Route
+          path="/profile/:profileUserId"
+          element={(
+            <PrivateRoute>
+              <Profile />
+            </PrivateRoute>
+          )}
+        />
+
+        <Route
+          path="/search"
+          element={(
+            <PrivateRoute>
+              <Search />
             </PrivateRoute>
           )}
         />
@@ -117,4 +136,3 @@ export default function App() {
     </BrowserRouter>
   )
 }
-

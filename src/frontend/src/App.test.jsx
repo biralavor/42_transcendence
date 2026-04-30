@@ -20,6 +20,7 @@ vi.mock('./pages/GameWaitingRoom', () => ({ default: () => <div data-testid="pag
 vi.mock('./pages/GamePage', () => ({ default: () => <div data-testid="page-game" /> }))
 vi.mock('./pages/Tournament', () => ({ default: () => <div data-testid="page-tournament" /> }))
 vi.mock('./pages/Tournaments', () => ({ default: () => <div data-testid="page-tournaments" /> }))
+vi.mock('./pages/Search', () => ({ default: () => <div data-testid="page-search" /> }))
 vi.mock('./Components/PongCanvas', () => ({ default: () => <div data-testid="pong-canvas" /> }))
 vi.mock('./Components/PrivateRoute', () => ({
   default: ({ children }) => <>{children}</>,
@@ -53,6 +54,12 @@ describe('App', () => {
     window.history.pushState({}, '', '/leaderboard')
     render(<App />)
     expect(screen.getByTestId('page-leaderboard')).toBeInTheDocument()
+  })
+
+  it('routes /search to the Search page', () => {
+    window.history.pushState({}, '', '/search?q=alice')
+    render(<App />)
+    expect(screen.getByTestId('page-search')).toBeInTheDocument()
   })
 
   it('attaches inactivity listeners on mount and detaches on unmount', () => {

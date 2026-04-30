@@ -1,5 +1,6 @@
 // src/frontend/src/pages/Profile.jsx
 import { useState, useEffect, useRef, useMemo } from 'react'
+import { useParams } from 'react-router-dom'
 import NavbarComponent from '../Components/Navbar'
 import GameSettings from '../Components/GameSettings'
 import { getAvatarFilter } from '../utils/avatarFilter'
@@ -15,6 +16,35 @@ import AchievementToast from '../Components/AchievementToast'
 const ALLOWED_AVATAR_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024
 const PLACEHOLDER_AVATAR = '/avatar_placeholder.jpg'
+
+const DEFAULT_HISTORY_FILTERS = {
+  dateFrom: '',
+  dateTo: '',
+  result: 'all',
+  sort: 'date:desc',
+}
+
+function buildHistoryUrl(playerId, filters, page) {
+  const params = new URLSearchParams({
+    player_id: String(playerId),
+    limit: '10',
+    page: String(page),
+    result: filters.result,
+    order: filters.sort,
+  })
+
+  if (filters.dateFrom) params.set('date_from', `${filters.dateFrom}T00:00:00`)
+  if (filters.dateTo) params.set('date_to', `${filters.dateTo}T23:59:59.999999`)
+
+  return `/api/game/matches/history?${params.toString()}`
+}
+
+function formatLocalDateInputValue(date = new Date()) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
 
 function getSafeAvatarUrl(avatarUrl) {
   if (!avatarUrl || typeof avatarUrl !== 'string') {
@@ -87,8 +117,10 @@ function emptyHistory(){
 
 export default function Profile() {
   const { auth } = useAuth()
+  const { profileUserId } = useParams()
   const { achievementQueue, dismissAchievement } = useNotifications()
   const [userId, setUserId] = useState(null)
+  const [currentUserId, setCurrentUserId] = useState(null)
   const [profile, setProfile] = useState(null)
   const [paginatedHistory, setPaginatedHistory] = useState(emptyHistory())
   const [userRankData, setUserRankData] = useState(null)
@@ -105,6 +137,10 @@ export default function Profile() {
   const avatarToastTimer = useRef(null)
   const [xpData, setXpData] = useState(null)
   const [achievements, setAchievements] = useState([])
+  const [historyFilters, setHistoryFilters] = useState(DEFAULT_HISTORY_FILTERS)
+  const [historyPage, setHistoryPage] = useState(0)
+  const todayDate = formatLocalDateInputValue()
+  const isOwnProfile = userId !== null && currentUserId !== null && userId === currentUserId
 
   useEffect(() => {
     return () => {
@@ -142,6 +178,7 @@ export default function Profile() {
   }
 
   const handleAvatarPick = (e) => {
+    if (!isOwnProfile) return
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file) return
@@ -158,7 +195,7 @@ export default function Profile() {
   }
 
   const handleAvatarUpload = async () => {
-    if (!avatarFile || avatarBusy) return
+    if (!isOwnProfile || !avatarFile || avatarBusy) return
     setAvatarBusy(true)
     try {
       const formData = new FormData()
@@ -190,7 +227,7 @@ export default function Profile() {
   }
 
   const handleAvatarDelete = async () => {
-    if (avatarBusy) return
+    if (!isOwnProfile || avatarBusy) return
     setAvatarBusy(true)
     try {
       const response = await apiCall('/api/users/avatar', { method: 'DELETE' })
@@ -215,6 +252,20 @@ export default function Profile() {
       return
     }
 
+    setLoading(true)
+    setError('')
+    setSaveStatus('')
+    setAvatarFile(null)
+    setAvatarPreview(null)
+    setAvatarBusy(false)
+    setAvatarToast(null)
+    setAvatarVersion(0)
+    setProfile(null)
+    setPaginatedHistory(emptyHistory())
+    setUserRankData(null)
+    setXpData(null)
+    setAchievements([])
+
     const controller = new AbortController()
     const { signal } = controller
 
@@ -224,22 +275,23 @@ export default function Profile() {
         return r.json()
       })
       .then(me => {
-        const id = me.id
+        const routeUserId =
+          typeof profileUserId === 'string' && /^[1-9]\d*$/.test(profileUserId)
+            ? Number.parseInt(profileUserId, 10)
+            : NaN
+        const id = Number.isSafeInteger(routeUserId) && routeUserId > 0 ? routeUserId : me.id
+        setCurrentUserId(me.id)
         setUserId(id)
         return Promise.all([
           apiCall(`/api/users/profile/${id}`, { signal }).then(r => {
             if (!r.ok) throw new Error(`Profile fetch failed: ${r.status}`)
             return r.json()
           }),
-          apiCall(`/api/game/matches/history?player_id=${id}`, { signal }).then(r => {
-            if (!r.ok) throw new Error(`Matches History fetch failed: ${r.status}`)
-            return r.json()
-          }),
           apiCall(`/api/game/leaderboard?player_id=${id}&limit=1`, { signal }).then(r => {
             if (!r.ok) throw new Error(`Leaderboard fetch failed: ${r.status}`)
             return r.json()
           }),
-        ]).then(([profileData, historyData, rankData]) => {
+        ]).then(([profileData, rankData]) => {
           setProfile({
             displayName: profileData.display_name ?? '',
             darkMode: profileData.dark_mode ?? false,
@@ -249,7 +301,6 @@ export default function Profile() {
             status: profileData.status,
             createdAt: profileData.created_at,
           })
-          setPaginatedHistory(historyData)
           setUserRankData(rankData.player_stats)
 
           // Fetch XP and achievements after core profile data is loaded (non-blocking)
@@ -272,7 +323,28 @@ export default function Profile() {
       })
 
     return () => controller.abort()
-  }, [auth.access_token])
+  }, [auth.access_token, profileUserId])
+
+  useEffect(() => {
+    if (!auth.access_token || !userId) return
+
+    const controller = new AbortController()
+    const { signal } = controller
+
+    apiCall(buildHistoryUrl(userId, historyFilters, historyPage), { signal })
+      .then(r => {
+        if (!r.ok) throw new Error(`Matches History fetch failed: ${r.status}`)
+        return r.json()
+      })
+      .then(data => {
+        if (!signal.aborted) setPaginatedHistory(data)
+      })
+      .catch(err => {
+        if (err.name !== 'AbortError') setError(err.message)
+      })
+
+    return () => controller.abort()
+  }, [auth.access_token, userId, historyFilters, historyPage])
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target
@@ -289,6 +361,7 @@ export default function Profile() {
 
   const handleSave = async (e) => {
     e.preventDefault()
+    if (!isOwnProfile) return
     try {
       const response = await apiCall(`/api/users/profile/${userId}`, {
         method: 'PUT',
@@ -340,17 +413,19 @@ export default function Profile() {
       <NavbarComponent />
       <main className="arcade-content profile-page">
         <div className="profile-layout">
-          <div className="profile-sidebar-col">
-            <FriendsSidebar
-              userId={userId}
-              username={profile?.username}
-              currentUser={{
-                id: userId,
-                username: profile?.username,
-                avatarUrl: profile?.avatarUrl,
-              }}
-            />
-          </div>
+          {isOwnProfile && (
+            <div className="profile-sidebar-col">
+              <FriendsSidebar
+                userId={currentUserId}
+                username={profile?.username}
+                currentUser={{
+                  id: currentUserId,
+                  username: profile?.username,
+                  avatarUrl: profile?.avatarUrl,
+                }}
+              />
+            </div>
+          )}
           <div className="profile-main-col">
             <div className="arcade-screen profile-card">
               {avatarToast && (
@@ -387,56 +462,60 @@ export default function Profile() {
                         <span className="profile-spinner" />
                       </div>
                     )}
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/*"
-                      className="profile-avatar-file-input"
-                      onChange={handleAvatarPick}
-                      aria-label="Choose avatar image"
-                    />
-                    <div className="profile-avatar-actions">
-                      {!avatarPreview && (
-                        <>
-                          <button
-                            type="button"
-                            className="arcade-btn arcade-btn-secondary profile-avatar-btn"
-                            onClick={() => fileInputRef.current?.click()}
-                            disabled={avatarBusy}
-                          >
-                            Change avatar
-                          </button>
-                          <button
-                            type="button"
-                            className="arcade-btn arcade-btn-danger profile-avatar-btn"
-                            onClick={handleAvatarDelete}
-                            disabled={avatarBusy || !profile?.avatarUrl || profile.avatarUrl === PLACEHOLDER_AVATAR}
-                          >
-                            Remove
-                          </button>
-                        </>
-                      )}
-                      {avatarPreview && (
-                        <>
-                          <button
-                            type="button"
-                            className="arcade-btn arcade-btn-primary profile-avatar-btn"
-                            onClick={handleAvatarUpload}
-                            disabled={avatarBusy}
-                          >
-                            {avatarBusy ? 'Uploading…' : 'Confirm upload'}
-                          </button>
-                          <button
-                            type="button"
-                            className="arcade-btn arcade-btn-secondary profile-avatar-btn"
-                            onClick={clearAvatarSelection}
-                            disabled={avatarBusy}
-                          >
-                            Cancel
-                          </button>
-                        </>
-                      )}
-                    </div>
+                    {isOwnProfile && (
+                      <>
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept="image/*"
+                          className="profile-avatar-file-input"
+                          onChange={handleAvatarPick}
+                          aria-label="Choose avatar image"
+                        />
+                        <div className="profile-avatar-actions">
+                          {!avatarPreview && (
+                            <>
+                              <button
+                                type="button"
+                                className="arcade-btn arcade-btn-secondary profile-avatar-btn"
+                                onClick={() => fileInputRef.current?.click()}
+                                disabled={avatarBusy}
+                              >
+                                Change avatar
+                              </button>
+                              <button
+                                type="button"
+                                className="arcade-btn arcade-btn-danger profile-avatar-btn"
+                                onClick={handleAvatarDelete}
+                                disabled={avatarBusy || !profile?.avatarUrl || profile.avatarUrl === PLACEHOLDER_AVATAR}
+                              >
+                                Remove
+                              </button>
+                            </>
+                          )}
+                          {avatarPreview && (
+                            <>
+                              <button
+                                type="button"
+                                className="arcade-btn arcade-btn-primary profile-avatar-btn"
+                                onClick={handleAvatarUpload}
+                                disabled={avatarBusy}
+                              >
+                                {avatarBusy ? 'Uploading…' : 'Confirm upload'}
+                              </button>
+                              <button
+                                type="button"
+                                className="arcade-btn arcade-btn-secondary profile-avatar-btn"
+                                onClick={clearAvatarSelection}
+                                disabled={avatarBusy}
+                              >
+                                Cancel
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
 
@@ -459,6 +538,7 @@ export default function Profile() {
                 </div>
 
                 {/* Cell (1,0): Preferences (Profile sub-section + Game settings + Dark mode + Save) */}
+                {isOwnProfile && (
                 <div className="profile-grid-cell profile-grid-cell--prefs">
                   <form className="profile-form" onSubmit={handleSave}>
                     {saveStatus && (
@@ -518,6 +598,7 @@ export default function Profile() {
                     </button>
                   </form>
                 </div>
+                )}
 
                 {/* Cell (1,1): Achievements */}
                 <div className="profile-grid-cell profile-grid-cell--ach">
@@ -534,6 +615,71 @@ export default function Profile() {
 
               <div className="profile-history">
                 <h2 className="profile-section-title">Match history</h2>
+                <div className="history-controls" role="group" aria-label="Match history filters">
+                  {['all', 'win', 'loss'].map((value) => (
+                    <label key={value} className="history-filter-option">
+                      <input
+                        type="radio"
+                        name="historyResult"
+                        value={value}
+                        checked={historyFilters.result === value}
+                        onChange={(e) => {
+                          setHistoryFilters(prev => ({ ...prev, result: e.target.value }))
+                          setHistoryPage(0)
+                        }}
+                      />
+                      {value === 'all' ? 'All' : value === 'win' ? 'Wins' : 'Losses'}
+                    </label>
+                  ))}
+                  <label className="history-filter-option history-filter-date">
+                    From
+                    <input
+                      type="date"
+                      value={historyFilters.dateFrom}
+                      max={historyFilters.dateTo || todayDate}
+                      onChange={(e) => {
+                        setHistoryFilters(prev => ({ ...prev, dateFrom: e.target.value }))
+                        setHistoryPage(0)
+                      }}
+                    />
+                  </label>
+                  <label className="history-filter-option history-filter-date">
+                    To
+                    <input
+                      type="date"
+                      value={historyFilters.dateTo}
+                      min={historyFilters.dateFrom}
+                      max={todayDate}
+                      onChange={(e) => {
+                        setHistoryFilters(prev => ({ ...prev, dateTo: e.target.value }))
+                        setHistoryPage(0)
+                      }}
+                    />
+                  </label>
+                  <label className="history-filter-option history-filter-select">
+                    Sort
+                    <select
+                      value={historyFilters.sort}
+                      onChange={(e) => {
+                        setHistoryFilters(prev => ({ ...prev, sort: e.target.value }))
+                        setHistoryPage(0)
+                      }}
+                    >
+                      <option value="date:desc">Date</option>
+                      <option value="result:asc">Result</option>
+                    </select>
+                  </label>
+                  <button
+                    type="button"
+                    className="history-clear-button"
+                    onClick={() => {
+                      setHistoryFilters(DEFAULT_HISTORY_FILTERS)
+                      setHistoryPage(0)
+                    }}
+                  >
+                    Clear filters
+                  </button>
+                </div>
                 {paginatedHistory.total === 0 ? (
                   <p style={{ color: 'var(--metal-silver)', fontFamily: 'VT323, monospace' }}>
                     No matches yet.
@@ -563,6 +709,27 @@ export default function Profile() {
                     ))}
                   </div>
                 )}
+                <div className="history-pagination" aria-label="Match history pagination">
+                  <button
+                    type="button"
+                    className="history-page-button"
+                    disabled={paginatedHistory.page <= 0}
+                    onClick={() => setHistoryPage(page => Math.max(0, page - 1))}
+                  >
+                    Previous
+                  </button>
+                  <span className="history-page-summary">
+                    Page {paginatedHistory.page + 1} of {paginatedHistory.last_page + 1} · {paginatedHistory.total} matches
+                  </span>
+                  <button
+                    type="button"
+                    className="history-page-button"
+                    disabled={paginatedHistory.page >= paginatedHistory.last_page}
+                    onClick={() => setHistoryPage(page => page + 1)}
+                  >
+                    Next
+                  </button>
+                </div>
               </div>
             </div>
           </div>
