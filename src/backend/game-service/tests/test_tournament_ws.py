@@ -176,6 +176,24 @@ def test_tournament_websocket_emits_match_start_when_both_players_ready(monkeypa
         assert "game_room_id" in match_start
 
 
+def test_waiting_room_remembers_existing_match_id_from_first_ready():
+    game_id = "tournament-1-match-99"
+
+    first_ready_payload = {"type": "player_ready", "match_id": 99}
+    second_ready_payload = {"type": "player_ready", "match_id": None}
+
+    assert ws_router._remember_existing_match_id(game_id, first_ready_payload) == 99
+    assert ws_router._remember_existing_match_id(game_id, second_ready_payload) == 99
+    assert ws_router._match_ids[game_id] == 99
+
+
+def test_waiting_room_recovers_tournament_match_id_from_game_room_id():
+    game_id = "tournament-1-match-99"
+
+    assert ws_router._remember_existing_match_id(game_id, {"type": "game_start"}) == 99
+    assert ws_router._match_ids[game_id] == 99
+
+
 @pytest.mark.timeout(10)
 def test_tournament_websocket_rejects_non_participant(monkeypatch, seeded_tournament):
     _patch_auth_and_tournament(monkeypatch, seeded_tournament, include_non_participant=True)

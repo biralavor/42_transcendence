@@ -67,11 +67,6 @@ function renderTournamentPage() {
 }
 
 describe('Tournament page realtime sync', () => {
-  const originalVisibilityState = Object.getOwnPropertyDescriptor(
-    Document.prototype,
-    'visibilityState',
-  )
-
   beforeEach(() => {
     wsHandlers = {}
     mockWsClient.send.mockClear()
@@ -82,11 +77,6 @@ describe('Tournament page realtime sync', () => {
 
   afterEach(() => {
     vi.useRealTimers()
-    if (originalVisibilityState) {
-      Object.defineProperty(Document.prototype, 'visibilityState', originalVisibilityState)
-    } else {
-      delete Document.prototype.visibilityState
-    }
   })
 
   it('refreshes tournament data when websocket sends tournament_updated', async () => {
@@ -184,12 +174,6 @@ describe('Tournament page realtime sync', () => {
     const firstTournament = makeTournament([1])
     const secondTournament = makeTournament([1, 2])
     let tournamentReads = 0
-    let visibilityState = 'hidden'
-
-    Object.defineProperty(Document.prototype, 'visibilityState', {
-      configurable: true,
-      get: () => visibilityState,
-    })
 
     apiCall.mockImplementation(async (url) => {
       if (url === '/api/users/auth/me') {
@@ -214,7 +198,6 @@ describe('Tournament page realtime sync', () => {
 
     await screen.findByText(/1 \/ 4 participants/i)
 
-    visibilityState = 'visible'
     await act(async () => {
       vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible')
       document.dispatchEvent(new Event('visibilitychange'))

@@ -56,6 +56,7 @@ _tournament_ready_timeout_tasks: dict[tuple[int, int], asyncio.Task] = {}
 
 READY_TIMEOUT_SECONDS = 90
 _INVITE_ROOM_ID_RE = re.compile(r"^invite-(\d+)-(\d+)-")
+_TOURNAMENT_GAME_ROOM_ID_RE = re.compile(r"^tournament-\d+-match-(\d+)$")
 
 
 def _bind_match(game_id: str, match_id: int) -> None:
@@ -594,6 +595,19 @@ async def _ensure_game_session(
         pass  # best-effort
 
 
+def _remember_existing_match_id(game_id: str, payload: dict) -> int | None:
+    existing_match_id = payload.get("match_id")
+    if isinstance(existing_match_id, int) and existing_match_id > 0:
+        _match_ids.setdefault(game_id, existing_match_id)
+        return _match_ids.get(game_id)
+
+    tournament_room_match = _TOURNAMENT_GAME_ROOM_ID_RE.match(game_id)
+    if tournament_room_match:
+        _match_ids.setdefault(game_id, int(tournament_room_match.group(1)))
+
+    return _match_ids.get(game_id)
+
+
 def _infer_waiting_room_players(
     game_id: str,
     payload: dict,
@@ -1053,6 +1067,7 @@ async def game_websocket(websocket: WebSocket, game_id: str, token: str | None =
 
                 ready_set = _waiting_room_ready.setdefault(game_id, set())
                 ready_set.add(player_id)
+                remembered_match_id = _remember_existing_match_id(game_id, data)
 
                 player1_id, player2_id = _infer_waiting_room_players(game_id, data, ready_set)
                 if player1_id is not None and player2_id is not None:
@@ -1081,7 +1096,7 @@ async def game_websocket(websocket: WebSocket, game_id: str, token: str | None =
                     _cancel_waiting_room_timeout(game_id)
                     existing_match_id = data.get("match_id")
                     if not isinstance(existing_match_id, int):
-                        existing_match_id = _match_ids.get(game_id)
+                        existing_match_id = remembered_match_id
 
                     await _ensure_game_session(
                         game_id,
@@ -1165,9 +1180,7 @@ async def game_websocket(websocket: WebSocket, game_id: str, token: str | None =
                 if player_id not in (player1_id, player2_id):
                     continue
 
-                existing_match_id = data.get("match_id")
-                if not isinstance(existing_match_id, int):
-                    existing_match_id = _match_ids.get(game_id)
+                existing_match_id = _remember_existing_match_id(game_id, data)
 
                 await _ensure_game_session(
                     game_id,
