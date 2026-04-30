@@ -108,6 +108,7 @@ describe('Navbar — bell and DM badge', () => {
         )
 
         renderNavbar()
+        fireEvent.click(screen.getByRole('button', { name: /open user search/i }))
         const searchInput = screen.getByRole('searchbox', { name: /search users/i })
 
         fireEvent.focus(searchInput)
@@ -132,5 +133,49 @@ describe('Navbar — bell and DM badge', () => {
 
         expect(await screen.findByText('alice')).toBeInTheDocument()
         expect(screen.getByRole('link', { name: /see all results/i })).toHaveAttribute('href', '/search?q=ali')
+    })
+
+    it('shows the search toggle and hides the input by default', () => {
+        renderNavbar()
+        expect(
+            screen.getByRole('button', { name: /open user search/i })
+        ).toBeInTheDocument()
+        expect(
+            screen.queryByRole('searchbox', { name: /search users/i })
+        ).not.toBeInTheDocument()
+    })
+
+    it('clicking the toggle reveals the input and auto-focuses it', async () => {
+        renderNavbar()
+        const toggle = screen.getByRole('button', { name: /open user search/i })
+
+        fireEvent.click(toggle)
+
+        const input = await screen.findByRole('searchbox', { name: /search users/i })
+        expect(input).toBeInTheDocument()
+        await waitFor(() => {
+            expect(document.activeElement).toBe(input)
+        })
+        expect(
+            screen.queryByRole('button', { name: /open user search/i })
+        ).not.toBeInTheDocument()
+    })
+
+    it('pressing Escape in the input closes the search and restores the toggle', async () => {
+        renderNavbar()
+        fireEvent.click(screen.getByRole('button', { name: /open user search/i }))
+
+        const input = await screen.findByRole('searchbox', { name: /search users/i })
+        fireEvent.change(input, { target: { value: 'al' } })
+        fireEvent.keyDown(input, { key: 'Escape', code: 'Escape' })
+
+        await waitFor(() => {
+            expect(
+                screen.queryByRole('searchbox', { name: /search users/i })
+            ).not.toBeInTheDocument()
+        })
+        expect(
+            screen.getByRole('button', { name: /open user search/i })
+        ).toBeInTheDocument()
     })
 })

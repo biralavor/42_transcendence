@@ -137,11 +137,14 @@
   position: relative;
   display: flex;
   align-items: center;
+}
+
+.pong-nav__search.is-open {
   min-width: 230px;
 }
 
 .pong-nav__search-toggle {
-  display: none;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 48px;
@@ -414,26 +417,6 @@
     display: grid;
     grid-template-columns: 1fr;
     gap: 0.6rem;
-  }
-
-  .pong-nav__search {
-    display: grid;
-    grid-template-columns: 52px 1fr;
-    gap: 0.5rem;
-    width: 100%;
-    min-width: 0;
-  }
-
-  .pong-nav__search-toggle {
-    display: inline-flex;
-  }
-
-  .pong-nav__search-form {
-    display: none;
-  }
-
-  .pong-nav__search.is-open .pong-nav__search-form {
-    display: block;
   }
 
   .pong-nav__search-dropdown {

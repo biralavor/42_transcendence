@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/authContext'
 import { useNotifications } from '../context/notificationContext'
@@ -67,6 +67,14 @@ export default function NavbarComponent() {
   const [searchError, setSearchError] = useState('')
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [isSearchFocused, setIsSearchFocused] = useState(false)
+
+  const searchInputRef = useRef(null)
+
+  useEffect(() => {
+    if (isSearchOpen) {
+      searchInputRef.current?.focus()
+    }
+  }, [isSearchOpen])
 
   const dmUnreadTotal = Object.values(unreadCounts).reduce((a, b) => a + b, 0)
 
@@ -223,35 +231,44 @@ export default function NavbarComponent() {
             {isAuthenticated ? (
               <div className="pong-nav__actions">
                 <div className={`pong-nav__search ${isSearchOpen ? 'is-open' : ''}`}>
-                  <button
-                    type="button"
-                    className="pong-nav__search-toggle"
-                    aria-label={isSearchOpen ? 'Close user search' : 'Open user search'}
-                    onClick={handleToggleSearch}
-                  >
-                    🔍
-                  </button>
-                  <form className="pong-nav__search-form" role="search" onSubmit={goToFullSearch}>
-                    <input
-                      type="search"
-                      className="pong-nav__search-input"
-                      aria-label="Search users"
-                      placeholder="Search users"
-                      value={searchTerm}
-                      onFocus={() => setIsSearchFocused(true)}
-                      onBlur={(event) => {
-                        const nextFocusedElement = event.relatedTarget
-                        const searchContainer = event.currentTarget.closest('.pong-nav__search')
+                  {!isSearchOpen ? (
+                    <button
+                      type="button"
+                      className="pong-nav__search-toggle"
+                      aria-label="Open user search"
+                      onClick={handleToggleSearch}
+                    >
+                      🔍
+                    </button>
+                  ) : (
+                    <form className="pong-nav__search-form" role="search" onSubmit={goToFullSearch}>
+                      <input
+                        ref={searchInputRef}
+                        type="search"
+                        className="pong-nav__search-input"
+                        aria-label="Search users"
+                        placeholder="Search users"
+                        value={searchTerm}
+                        onFocus={() => setIsSearchFocused(true)}
+                        onBlur={(event) => {
+                          const nextFocusedElement = event.relatedTarget
+                          const searchContainer = event.currentTarget.closest('.pong-nav__search')
 
-                        if (searchContainer?.contains(nextFocusedElement)) {
-                          return
-                        }
+                          if (searchContainer?.contains(nextFocusedElement)) {
+                            return
+                          }
 
-                        setIsSearchFocused(false)
-                      }}
-                      onChange={(event) => setSearchTerm(event.target.value)}
-                    />
-                  </form>
+                          closeSearch()
+                        }}
+                        onChange={(event) => setSearchTerm(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Escape') {
+                            closeSearch()
+                          }
+                        }}
+                      />
+                    </form>
+                  )}
                   {shouldShowSearchDropdown && (
                     <div className="pong-nav__search-dropdown" aria-label="User search results">
                       {searchLoading && (
