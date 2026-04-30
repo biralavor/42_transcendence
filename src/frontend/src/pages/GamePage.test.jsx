@@ -2,6 +2,7 @@ import { render, screen, fireEvent, act } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import GamePage from './GamePage'
 import { apiJson } from '../utils/apiClient'
+import { useAuth } from '../context/authContext'
 
 // apiJson rejects by default so profile fetches fail silently and names
 // fall back to location.state values. Override per-test for fetch assertions.
@@ -9,9 +10,14 @@ vi.mock('../utils/apiClient', () => ({
   apiJson: vi.fn().mockRejectedValue(new Error('no server in tests')),
 }))
 
+// Default: authenticated. Spectator + auth-gate tests override per-test.
+vi.mock('../context/authContext', () => ({
+  useAuth: vi.fn(() => ({ isAuthenticated: true, isAuthReady: true })),
+}))
+
 // Two buttons so tests can fire either player winning
 vi.mock('../Components/PongCanvasMultiplayer', () => ({
-  default: ({ onGameEnd }) => (
+  default: ({ onGameEnd, onSpectatorCount }) => (
     <>
       <button onClick={() => onGameEnd?.({ winner_id: 1, score_p1: 10, score_p2: 3 })}>
         Simulate Game End
@@ -19,6 +25,8 @@ vi.mock('../Components/PongCanvasMultiplayer', () => ({
       <button onClick={() => onGameEnd?.({ winner_id: 2, score_p1: 3, score_p2: 10 })}>
         Simulate Opponent Win
       </button>
+      <button onClick={() => onSpectatorCount?.(0)}>Set Spectators 0</button>
+      <button onClick={() => onSpectatorCount?.(3)}>Set Spectators 3</button>
     </>
   ),
 }))
@@ -139,5 +147,192 @@ describe('GamePage game over overlay', () => {
     await screen.findByRole('heading', { name: /you won/i })
     expect(screen.getByTestId('p1-name').textContent).toBe('alice')
     expect(screen.getByTestId('p2-name').textContent).toBe('bob')
+  })
+})
+
+function renderSpectator(roomId = 'invite-101-202-aaa') {
+  return render(
+    <MemoryRouter initialEntries={[`/game/${roomId}?spectate=true`]}>
+      <Routes>
+        <Route path="/game/:roomId" element={<GamePage />} />
+        <Route path="/play" element={<div>Play page</div>} />
+        <Route path="/login" element={<div>Login page</div>} />
+      </Routes>
+    </MemoryRouter>
+  )
+}
+
+describe('GamePage spectator branch', () => {
+  beforeEach(() => {
+    apiJson.mockRejectedValue(new Error('no server in tests'))
+    useAuth.mockReturnValue({ isAuthenticated: false, isAuthReady: true })
+    vi.spyOn(global, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify([
+          {
+            game_id: 'invite-101-202-aaa',
+            player1: { id: 101, username: 'alice', display_name: 'Alice A', avatar_url: null },
+            player2: { id: 202, username: 'bob',   display_name: 'Bob B',   avatar_url: null },
+            started_at: new Date().toISOString(),
+            spectator_count: 2,
+          },
+        ]),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      )
+    )
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('renders the "Watching as spectator" banner', async () => {
+    renderSpectator()
+    expect(await screen.findByText(/watching as spectator/i)).toBeInTheDocument()
+  })
+
+  it('does NOT redirect to /play even though location.state has no player IDs', async () => {
+    renderSpectator()
+    await screen.findByText(/watching as spectator/i)
+    expect(screen.queryByText(/play page/i)).not.toBeInTheDocument()
+  })
+
+  it('shows initial spectator count from /api/games/live', async () => {
+    renderSpectator()
+    await screen.findByText(/watching as spectator/i)
+    expect(await screen.findByText(/👁 2/)).toBeInTheDocument()
+  })
+
+  it("hides the GameOverOverlay even if a game_over arrives (spectators don't replay)", async () => {
+    renderSpectator()
+    await screen.findByText(/watching as spectator/i)
+    fireEvent.click(screen.getByText('Simulate Game End'))
+    expect(screen.queryByRole('heading', { name: /you won/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: /you lost/i })).not.toBeInTheDocument()
+  })
+})
+
+describe('GamePage non-spectator auth gate', () => {
+  beforeEach(() => {
+    apiJson.mockRejectedValue(new Error('no server in tests'))
+    useAuth.mockReturnValue({ isAuthenticated: false, isAuthReady: true })
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('redirects to /login when not authenticated and not a spectator', async () => {
+    render(
+      <MemoryRouter initialEntries={[`/game/some-room`]}>
+        <Routes>
+          <Route path="/game/:roomId" element={<GamePage />} />
+          <Route path="/login" element={<div>Login page</div>} />
+        </Routes>
+      </MemoryRouter>
+    )
+    expect(await screen.findByText(/login page/i)).toBeInTheDocument()
+  })
+})
+
+describe('GamePage player audience banner', () => {
+  beforeEach(() => {
+    apiJson.mockRejectedValue(new Error('no server in tests'))
+    useAuth.mockReturnValue({ isAuthenticated: true, isAuthReady: true })
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  function renderPlayer() {
+    return render(
+      <MemoryRouter
+        initialEntries={[
+          {
+            pathname: '/game/room-1',
+            state: { player1_id: 1, player2_id: 2 },
+          },
+        ]}
+      >
+        <Routes>
+          <Route path="/game/:roomId" element={<GamePage />} />
+        </Routes>
+      </MemoryRouter>
+    )
+  }
+
+  it('does NOT render the audience banner when spectator count is 0', () => {
+    renderPlayer()
+    expect(screen.queryByText(/audience/i)).not.toBeInTheDocument()
+  })
+
+  it('renders the "Audience" banner when count > 0', () => {
+    renderPlayer()
+    fireEvent.click(screen.getByText('Set Spectators 3'))
+    expect(screen.getByText(/audience/i)).toBeInTheDocument()
+    expect(screen.getByText(/👁 3/)).toBeInTheDocument()
+  })
+
+  it('hides the audience banner again when count returns to 0', () => {
+    renderPlayer()
+    fireEvent.click(screen.getByText('Set Spectators 3'))
+    expect(screen.getByText(/audience/i)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('Set Spectators 0'))
+    expect(screen.queryByText(/audience/i)).not.toBeInTheDocument()
+  })
+
+  it('does NOT render the spectator banner for a player', () => {
+    renderPlayer()
+    fireEvent.click(screen.getByText('Set Spectators 3'))
+    expect(screen.queryByText(/watching as spectator/i)).not.toBeInTheDocument()
+  })
+})
+
+describe('GamePage auth guards (review batch)', () => {
+  beforeEach(() => {
+    apiJson.mockReset()
+    apiJson.mockRejectedValue(new Error('no server in tests'))
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('does NOT render the canvas before auth is ready for non-spectators', () => {
+    useAuth.mockReturnValue({ isAuthenticated: false, isAuthReady: false })
+    render(
+      <MemoryRouter
+        initialEntries={[
+          {
+            pathname: '/game/room-1',
+            state: { player1_id: 1, player2_id: 2 },
+          },
+        ]}
+      >
+        <Routes>
+          <Route path="/game/:roomId" element={<GamePage />} />
+        </Routes>
+      </MemoryRouter>
+    )
+    // The canvas mock renders a "Simulate Game End" button. If the page
+    // suppresses rendering before auth is ready, the button is absent.
+    expect(screen.queryByText('Simulate Game End')).not.toBeInTheDocument()
+  })
+
+  it('does NOT call /api/users/auth/me for spectators', async () => {
+    useAuth.mockReturnValue({ isAuthenticated: false, isAuthReady: true })
+    render(
+      <MemoryRouter initialEntries={[{ pathname: '/game/room-1', search: '?spectate=true' }]}>
+        <Routes>
+          <Route path="/game/:roomId" element={<GamePage />} />
+        </Routes>
+      </MemoryRouter>
+    )
+    // Yield once so any pending effects flush.
+    await act(async () => { await Promise.resolve() })
+    const calls = apiJson.mock.calls.map((args) => args[0])
+    expect(calls).not.toContain('/api/users/auth/me')
   })
 })

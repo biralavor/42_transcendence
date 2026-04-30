@@ -207,3 +207,63 @@ describe('PongCanvasMultiplayer — keyboard input', () => {
     removeSpy.mockRestore()
   })
 })
+
+describe('PongCanvasMultiplayer spectator mode', () => {
+  it('does NOT send game_start on ws open when spectator=true', () => {
+    renderComponent({ spectator: true })
+    const ws = lastSocket()
+    expect(ws).toBeTruthy()
+    act(() => ws.simulateOpen())
+    expect(ws.sentMessages.length).toBe(0)  // no game_start, no input frames
+  })
+
+  it('DOES send game_start on ws open when spectator is falsy (regression)', () => {
+    renderComponent()
+    const ws = lastSocket()
+    act(() => ws.simulateOpen())
+    expect(ws.sentMessages.length).toBe(1)
+    const sent = JSON.parse(ws.sentMessages[0])
+    expect(sent.type).toBe('game_start')
+    expect(sent.player1_id).toBe(11)
+    expect(sent.player2_id).toBe(22)
+  })
+
+  it('does NOT bind keydown/keyup listeners when spectator=true', () => {
+    const addSpy = vi.spyOn(window, 'addEventListener')
+    renderComponent({ spectator: true })
+    const events = addSpy.mock.calls.map(([ev]) => ev)
+    expect(events).not.toContain('keydown')
+    expect(events).not.toContain('keyup')
+    // resize is still bound (canvas rendering), so the gate is precise
+    expect(events).toContain('resize')
+    addSpy.mockRestore()
+  })
+
+  it('binds keydown/keyup listeners in default (non-spectator) mode', () => {
+    const addSpy = vi.spyOn(window, 'addEventListener')
+    renderComponent()
+    const events = addSpy.mock.calls.map(([ev]) => ev)
+    expect(events).toContain('keydown')
+    expect(events).toContain('keyup')
+    addSpy.mockRestore()
+  })
+
+  it('calls onSpectatorCount when a spectator_count frame arrives', () => {
+    const onSpectatorCount = vi.fn()
+    renderComponent({ spectator: true, onSpectatorCount })
+    const ws = lastSocket()
+    act(() => ws.simulateOpen())
+    act(() => ws.simulateMessage({ type: 'spectator_count', count: 3 }))
+    expect(onSpectatorCount).toHaveBeenCalledWith(3)
+  })
+
+  it('ignores malformed spectator_count frames (no count or wrong type)', () => {
+    const onSpectatorCount = vi.fn()
+    renderComponent({ spectator: true, onSpectatorCount })
+    const ws = lastSocket()
+    act(() => ws.simulateOpen())
+    act(() => ws.simulateMessage({ type: 'spectator_count' }))             // missing count
+    act(() => ws.simulateMessage({ type: 'spectator_count', count: '3' })) // wrong type
+    expect(onSpectatorCount).not.toHaveBeenCalled()
+  })
+})

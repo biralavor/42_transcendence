@@ -29,6 +29,11 @@ const publicLinks = [
     label: 'About',
     isActive: (pathname) => pathname.startsWith('/about'),
   },
+  {
+    to: '/games/live',
+    label: 'Live games',
+    isActive: (pathname) => pathname.startsWith('/games/live'),
+  },
 ]
 
 // Links visible only to authenticated users.  Ordering matters for the layout.
@@ -83,6 +88,7 @@ export default function NavbarComponent() {
     ? [
       publicLinks[0], // Home
       publicLinks[1], // Arena
+      publicLinks[4], // Live games
       privateLinks[0], // Chat
       privateLinks[1], // Tournaments
       publicLinks[2], // Ranking

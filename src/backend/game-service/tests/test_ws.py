@@ -36,18 +36,6 @@ def test_ws_healthcheck_access_denied_invalid_token():
 
 
 @pytest.mark.timeout(5)
-def test_ws_game_requires_token_for_non_healthcheck():
-    """Connecting to a non-healthcheck game_id without token should be rejected."""
-    client = TestClient(app)
-    
-    with pytest.raises(WebSocketDisconnect) as exc_info:
-        with client.websocket_connect("/ws/game/some-game-id"):
-            pass
-    
-    assert exc_info.value.code == 4001
-
-
-@pytest.mark.timeout(5)
 def test_ws_games_are_isolated():
     """Multiple healthcheck connections are independent (one-shot nature means no broadcast)."""
     # Healthcheck is one-shot and closes immediately, so broadcast tests are N/A
@@ -367,3 +355,471 @@ async def test_reconnect_cancels_timer_resumes_and_sends_snapshot():
     assert len(broadcasts) == 1
     assert broadcasts[0] == {"type": "opponent_reconnected"}
     assert timer_handled_cancel, "Countdown task should have caught CancelledError"
+
+
+# --------------------------------------------------------------------------- #
+# Audience banner (Tasks 1 + 3)
+# --------------------------------------------------------------------------- #
+
+@pytest.mark.timeout(5)
+def test_player_receives_spectator_count_after_waiting_room_status(monkeypatch):
+    """A connecting player must receive a `spectator_count` message right after
+    `waiting_room_status`, so the audience banner can render the current count
+    even when no spectator joins/leaves while they're connected."""
+    import service.ws.router as router_module
+    from jose import jwt
+    from shared.config.settings import settings
+
+    # Issue a valid token for player 7001 (one of the invite players).
+    credential_id = 7000
+    player_user_id = 7001
+    token = jwt.encode(
+        {"credential_id": credential_id},
+        settings.JWT_SECRET_KEY,
+        algorithm="HS256",
+    )
+
+    # Stub credentials → user_id resolution.
+    fake_row = (player_user_id,)
+    fake_result = MagicMock()
+    fake_result.fetchone = MagicMock(return_value=fake_row)
+    fake_db = AsyncMock()
+    fake_db.execute = AsyncMock(return_value=fake_result)
+    fake_session_ctx = AsyncMock()
+    fake_session_ctx.__aenter__.return_value = fake_db
+    fake_session_ctx.__aexit__.return_value = None
+    monkeypatch.setattr(
+        router_module, "AsyncSessionLocal", MagicMock(return_value=fake_session_ctx)
+    )
+
+    # Mark the room as a known invite room with this player.
+    game_id = f"invite-{player_user_id}-7002-deadbeef"
+    monkeypatch.setitem(
+        router_module._waiting_room_players, game_id, (player_user_id, 7002)
+    )
+
+    # Stub manager.spectator_count so the assertion is deterministic.
+    monkeypatch.setattr(
+        router_module.manager,
+        "spectator_count",
+        MagicMock(return_value=3),
+    )
+
+    client = TestClient(app)
+    with client.websocket_connect(f"/ws/game/{game_id}?token={token}") as ws:
+        # First frame: waiting_room_status (existing behavior).
+        first = ws.receive_json()
+        assert first["type"] == "waiting_room_status"
+
+        # New: second frame must be the current spectator_count.
+        second = ws.receive_json()
+        assert second == {"type": "spectator_count", "count": 3}
+
+
+@pytest.mark.timeout(5)
+def test_player_reconnect_receives_spectator_count_after_state_snapshot(monkeypatch):
+    """Reconnecting player must receive `spectator_count` directly after the
+    state snapshot, so the audience banner re-appears immediately if spectators
+    were watching while the player was briefly offline."""
+    import service.ws.router as router_module
+    from jose import jwt
+    from shared.config.settings import settings
+    from dataclasses import dataclass
+
+    credential_id = 8000
+    player_user_id = 8001
+    token = jwt.encode(
+        {"credential_id": credential_id},
+        settings.JWT_SECRET_KEY,
+        algorithm="HS256",
+    )
+
+    fake_row = (player_user_id,)
+    fake_result = MagicMock()
+    fake_result.fetchone = MagicMock(return_value=fake_row)
+    fake_db = AsyncMock()
+    fake_db.execute = AsyncMock(return_value=fake_result)
+    fake_session_ctx = AsyncMock()
+    fake_session_ctx.__aenter__.return_value = fake_db
+    fake_session_ctx.__aexit__.return_value = None
+    monkeypatch.setattr(
+        router_module, "AsyncSessionLocal", MagicMock(return_value=fake_session_ctx)
+    )
+
+    game_id = f"invite-{player_user_id}-8002-cafebabe"
+    monkeypatch.setitem(
+        router_module._waiting_room_players, game_id, (player_user_id, 8002)
+    )
+
+    # Mark this player as currently disconnected so the reconnect branch fires.
+    monkeypatch.setitem(router_module._disconnected_players, game_id, player_user_id)
+
+    # Stub a session so the snapshot branch fires.
+    @dataclass
+    class FakeSnap:
+        ball: dict
+        paddles: dict
+        score: dict
+
+    fake_session = MagicMock()
+    fake_session.player1_id = player_user_id
+    fake_session.player2_id = 8002
+    fake_session.get_state_snapshot = MagicMock(
+        return_value=FakeSnap(ball={"x": 0}, paddles={"p1": 0, "p2": 0}, score={"p1": 0, "p2": 0})
+    )
+    monkeypatch.setattr(
+        router_module.game_manager, "get_session", MagicMock(return_value=fake_session)
+    )
+    monkeypatch.setattr(
+        router_module.game_manager, "resume_session", MagicMock()
+    )
+    monkeypatch.setattr(
+        router_module.manager,
+        "spectator_count",
+        MagicMock(return_value=4),
+    )
+
+    client = TestClient(app)
+    with client.websocket_connect(f"/ws/game/{game_id}?token={token}") as ws:
+        # Drain pre-input frames in expected order.
+        first = ws.receive_json()
+        assert first["type"] == "waiting_room_status"
+
+        # Task 2 added this on the connect path:
+        second = ws.receive_json()
+        assert second == {"type": "spectator_count", "count": 4}
+
+        # Reconnect branch — state snapshot.
+        third = ws.receive_json()
+        assert third["type"] == "state"
+
+        # NEW: spectator_count must be sent again on reconnect path too.
+        fourth = ws.receive_json()
+        assert fourth == {"type": "spectator_count", "count": 4}
+
+
+# --------------------------------------------------------------------------- #
+# Spectator classification (Task 7 + 8)
+# --------------------------------------------------------------------------- #
+
+@pytest.mark.timeout(5)
+def test_ws_no_token_no_session_closes_4004():
+    """Anonymous client connects to a room with no active session — must be
+    classified as spectator and immediately closed with 4004 (not 4001)."""
+    client = TestClient(app)
+    with pytest.raises(WebSocketDisconnect) as exc_info:
+        with client.websocket_connect("/ws/game/spec-test-no-session"):
+            pass
+    assert exc_info.value.code == 4004
+
+
+# --------------------------------------------------------------------------- #
+# Spectator branch — observable behaviours (Task 8)
+# --------------------------------------------------------------------------- #
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(5)
+async def test_spectator_loop_sends_initial_state_and_registers(monkeypatch):
+    """A spectator gets the current game-state snapshot immediately and is
+    registered in the manager with role='spectator'."""
+    import service.ws.router as router_module
+    from service.ws.router import _spectator_loop
+
+    # Stub out manager + session
+    sent_messages: list[dict] = []
+    fake_manager = MagicMock()
+    fake_manager.connect = AsyncMock()
+    fake_manager.disconnect = MagicMock()
+    fake_manager.broadcast = AsyncMock()
+    fake_manager.spectator_count = MagicMock(return_value=1)
+    monkeypatch.setattr(router_module, "manager", fake_manager)
+
+    fake_session = MagicMock()
+    fake_session.get_state_snapshot = MagicMock(return_value=MagicMock(
+        __dataclass_fields__={},  # asdict-friendly
+    ))
+    monkeypatch.setattr(router_module.game_manager, "get_session", MagicMock(return_value=fake_session))
+
+    # Patch asdict so we don't need a real dataclass
+    monkeypatch.setattr(router_module, "asdict", lambda x: {"ball": "stub", "paddles": "stub", "score": "stub"})
+
+    ws = MagicMock()
+    ws.accept = AsyncMock()
+    ws.send_json = AsyncMock(side_effect=lambda m: sent_messages.append(m))
+    ws.close = AsyncMock()
+    # Simulate disconnect on the very first receive_text call
+    ws.receive_text = AsyncMock(side_effect=WebSocketDisconnect(code=1000))
+
+    await _spectator_loop(ws, "g-1")
+
+    fake_manager.connect.assert_awaited_once_with("g-1", ws, role="spectator")
+    # 1) Snapshot was sent first
+    assert sent_messages[0]["type"] == "state"
+    # 2) Then a spectator_count broadcast was issued (via manager.broadcast)
+    fake_manager.broadcast.assert_any_await("g-1", {"type": "spectator_count", "count": 1})
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(5)
+async def test_spectator_loop_closes_on_inbound_message_with_4003(monkeypatch):
+    """Any inbound message from a spectator triggers close(code=4003)."""
+    import service.ws.router as router_module
+    from service.ws.router import _spectator_loop
+
+    fake_manager = MagicMock()
+    fake_manager.connect = AsyncMock()
+    fake_manager.disconnect = MagicMock()
+    fake_manager.broadcast = AsyncMock()
+    fake_manager.spectator_count = MagicMock(return_value=1)
+    monkeypatch.setattr(router_module, "manager", fake_manager)
+
+    fake_session = MagicMock()
+    fake_session.get_state_snapshot = MagicMock(return_value=MagicMock())
+    monkeypatch.setattr(router_module.game_manager, "get_session", MagicMock(return_value=fake_session))
+    monkeypatch.setattr(router_module, "asdict", lambda x: {"ball": "x"})
+
+    ws = MagicMock()
+    ws.accept = AsyncMock()
+    ws.send_json = AsyncMock()
+    ws.close = AsyncMock()
+    ws.receive_text = AsyncMock(return_value='{"type":"input","direction":"up"}')
+
+    await _spectator_loop(ws, "g-2")
+
+    ws.close.assert_awaited()
+    args, kwargs = ws.close.await_args
+    assert kwargs.get("code") == 4003 or (args and args[0] == 4003)
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(5)
+async def test_spectator_loop_broadcasts_count_decrement_on_disconnect(monkeypatch):
+    """When the spectator disconnects, the loop broadcasts the new (lower) count."""
+    import service.ws.router as router_module
+    from service.ws.router import _spectator_loop
+
+    counts = iter([1, 0])  # first call after connect, second after disconnect
+
+    fake_manager = MagicMock()
+    fake_manager.connect = AsyncMock()
+    fake_manager.disconnect = MagicMock()
+    fake_manager.broadcast = AsyncMock()
+    fake_manager.spectator_count = MagicMock(side_effect=lambda *_a, **_kw: next(counts))
+    monkeypatch.setattr(router_module, "manager", fake_manager)
+
+    fake_session = MagicMock()
+    fake_session.get_state_snapshot = MagicMock(return_value=MagicMock())
+    monkeypatch.setattr(router_module.game_manager, "get_session", MagicMock(return_value=fake_session))
+    monkeypatch.setattr(router_module, "asdict", lambda x: {"ball": "x"})
+
+    ws = MagicMock()
+    ws.accept = AsyncMock()
+    ws.send_json = AsyncMock()
+    ws.close = AsyncMock()
+    ws.receive_text = AsyncMock(side_effect=WebSocketDisconnect(code=1000))
+
+    await _spectator_loop(ws, "g-3")
+
+    # Two count broadcasts: 1 on join, 0 on leave
+    broadcast_calls = [c.args for c in fake_manager.broadcast.await_args_list]
+    counts_broadcast = [args[1]["count"] for args in broadcast_calls if args[1].get("type") == "spectator_count"]
+    assert counts_broadcast == [1, 0]
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(5)
+async def test_spectator_loop_disconnects_manager_on_exit(monkeypatch):
+    """The loop must always call manager.disconnect on exit, even if the
+    initial state-send raises."""
+    import service.ws.router as router_module
+    from service.ws.router import _spectator_loop
+
+    fake_manager = MagicMock()
+    fake_manager.connect = AsyncMock()
+    fake_manager.disconnect = MagicMock()
+    fake_manager.broadcast = AsyncMock()
+    fake_manager.spectator_count = MagicMock(return_value=0)
+    monkeypatch.setattr(router_module, "manager", fake_manager)
+
+    fake_session = MagicMock()
+    fake_session.get_state_snapshot = MagicMock(side_effect=RuntimeError("boom"))
+    monkeypatch.setattr(router_module.game_manager, "get_session", MagicMock(return_value=fake_session))
+
+    ws = MagicMock()
+    ws.accept = AsyncMock()
+    ws.send_json = AsyncMock()
+    ws.close = AsyncMock()
+    ws.receive_text = AsyncMock(side_effect=WebSocketDisconnect(code=1000))
+
+    await _spectator_loop(ws, "g-4")
+
+    fake_manager.disconnect.assert_called_once_with("g-4", ws)
+    # Even if the snapshot raises, the entry-side count broadcast must still
+    # have been attempted so other clients see the new spectator. Counts a
+    # broadcast as "spectator_count" if the message dict carries that type.
+    spectator_count_broadcasts = [
+        c for c in fake_manager.broadcast.await_args_list
+        if c.args[1].get("type") == "spectator_count"
+    ]
+    assert len(spectator_count_broadcasts) >= 1, (
+        "spectator_count broadcast must fire on entry even when snapshot raises"
+    )
+
+
+@pytest.mark.timeout(5)
+def test_ws_spectator_input_closes_with_4003_via_testclient(monkeypatch):
+    """Integration-level: real TestClient + a stubbed session to verify the
+    classifier reaches the spectator branch and rejects an input message."""
+    import service.ws.router as router_module
+
+    # Inject a fake session for room 'spec-int-1' so the classifier doesn't 4004.
+    fake_session = MagicMock()
+    fake_session.player1_id = 5001
+    fake_session.player2_id = 5002
+    fake_session.get_state_snapshot = MagicMock(return_value=MagicMock())
+    monkeypatch.setattr(router_module.game_manager, "get_session", MagicMock(return_value=fake_session))
+    monkeypatch.setattr(router_module, "asdict", lambda x: {"ball": "x"})
+
+    client = TestClient(app)
+    with pytest.raises(WebSocketDisconnect) as exc_info:
+        with client.websocket_connect("/ws/game/spec-int-1") as ws:  # no token → spectator
+            # Drain server-pushed pre-input frames: snapshot + spectator_count
+            ws.receive_text()  # initial state snapshot
+            ws.receive_text()  # spectator_count broadcast
+            ws.send_text('{"type":"input","direction":"up"}')
+            # Server now receives the input and closes 4003
+            ws.receive_text()  # raises WebSocketDisconnect
+    assert exc_info.value.code == 4003
+
+
+@pytest.mark.timeout(5)
+def test_ws_anonymous_invite_url_probe_does_not_register_or_leak_state(monkeypatch):
+    """Anonymous client probes an arbitrary invite-{p1}-{p2}-… URL with no
+    live game session. Must close 4004 and must NOT seed _waiting_room_players
+    or register a role in the manager — otherwise an attacker can grow the
+    in-memory maps indefinitely and inflate spectator counts on phantom rooms.
+    """
+    import service.ws.router as router_module
+
+    # Make sure the room is unknown to every state source.
+    monkeypatch.setattr(
+        router_module.game_manager, "get_session", MagicMock(return_value=None)
+    )
+
+    fake_game_id = "invite-99991-99992-deadbeef"
+    # Snapshot pre-state so we can assert no growth.
+    before_waiting = dict(router_module._waiting_room_players)
+    before_setup = dict(router_module._setup_sessions)
+    before_roles = dict(router_module.manager._roles)
+
+    client = TestClient(app)
+    with pytest.raises(WebSocketDisconnect) as exc_info:
+        with client.websocket_connect(f"/ws/game/{fake_game_id}"):
+            pass
+    assert exc_info.value.code == 4004
+
+    # No state should have been seeded by the probe.
+    assert router_module._waiting_room_players == before_waiting, (
+        "anonymous probe must not seed _waiting_room_players"
+    )
+    assert router_module._setup_sessions == before_setup, (
+        "anonymous probe must not seed _setup_sessions"
+    )
+    assert router_module.manager._roles == before_roles, (
+        "anonymous probe must not register a role in the manager"
+    )
+
+
+@pytest.mark.timeout(5)
+def test_ws_authenticated_third_party_probe_to_invite_url_without_session_closes_4004(monkeypatch):
+    """A logged-in user (valid token, but not one of the invite's players)
+    probing an `invite-X-Y-…` URL when no GameSession exists must ALSO close
+    with 4004 — the spectator gate is on session existence, NOT on whether
+    the caller is anonymous. Otherwise any authenticated user could probe
+    arbitrary invite rooms and inflate spectator counts on phantom games.
+    """
+    import service.ws.router as router_module
+    from datetime import timedelta
+
+    # Issue a valid token for a real third-party user_id (not 99991/99992).
+    from jose import jwt
+    from shared.config.settings import settings
+    third_party_credential_id = 88880
+    third_party_user_id = 88881
+    token = jwt.encode(
+        {"credential_id": third_party_credential_id},
+        settings.JWT_SECRET_KEY,
+        algorithm="HS256",
+    )
+
+    # Stub the credentials lookup so the classifier resolves caller_user_id
+    # without hitting the DB. Patch `text` is intrusive; easier to patch
+    # AsyncSessionLocal so the SELECT yields a row with our user_id.
+    fake_row = (third_party_user_id,)
+    fake_result = MagicMock()
+    fake_result.fetchone = MagicMock(return_value=fake_row)
+
+    class _FakeDb:
+        async def execute(self, *_args, **_kwargs):
+            return fake_result
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *_a):
+            return False
+
+    monkeypatch.setattr(router_module, "AsyncSessionLocal", lambda: _FakeDb())
+
+    # No live session and no setup/waiting state for this game_id.
+    monkeypatch.setattr(
+        router_module.game_manager, "get_session", MagicMock(return_value=None)
+    )
+
+    fake_game_id = "invite-99991-99992-cafef00d"
+    before_roles = dict(router_module.manager._roles)
+    before_waiting = dict(router_module._waiting_room_players)
+
+    client = TestClient(app)
+    with pytest.raises(WebSocketDisconnect) as exc_info:
+        with client.websocket_connect(f"/ws/game/{fake_game_id}?token={token}"):
+            pass
+    # The third-party user is not in (99991, 99992) so they fall to the
+    # spectator branch; the gate then sees no session and closes 4004.
+    assert exc_info.value.code == 4004
+
+    # The probe must not have leaked any state.
+    assert router_module.manager._roles == before_roles, (
+        "authenticated third-party probe must not register a role"
+    )
+    assert router_module._waiting_room_players == before_waiting, (
+        "authenticated third-party probe must not seed _waiting_room_players"
+    )
+
+
+@pytest.mark.timeout(5)
+def test_resolve_room_player_ids_is_read_only_for_invite_urls():
+    """Direct unit test for the read-only contract of _resolve_room_player_ids:
+    parsing an `invite-{p1}-{p2}-…` URL must NOT seed _waiting_room_players.
+    Seeding is the player-path's responsibility (via _ensure_waiting_room_players),
+    NOT the resolver's.
+    """
+    import service.ws.router as router_module
+
+    fake_game_id = "invite-77771-77772-beadbead"
+
+    # Sanity: no pre-existing entry for our test id.
+    before_waiting = dict(router_module._waiting_room_players)
+    assert fake_game_id not in router_module._waiting_room_players
+
+    parsed = router_module._resolve_room_player_ids(fake_game_id)
+
+    # The function still returns the parsed pair so the player path can use it.
+    assert parsed == (77771, 77772), (
+        f"resolver should parse invite-URL into (77771, 77772), got {parsed}"
+    )
+    # …but it must NOT have seeded _waiting_room_players.
+    assert fake_game_id not in router_module._waiting_room_players, (
+        "_resolve_room_player_ids must be read-only — seeding is the player path's job"
+    )
+    assert router_module._waiting_room_players == before_waiting, (
+        "_resolve_room_player_ids must not mutate _waiting_room_players at all"
+    )

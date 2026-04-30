@@ -21,6 +21,8 @@ if "service" not in sys.modules:
     _mod.__package__ = "service"
     sys.modules["service"] = _mod
 
+from service.game_manager import GameManager, score_for
+
 
 @pytest.mark.asyncio
 async def test_game_manager_creation():
@@ -394,3 +396,47 @@ async def main():
 if __name__ == "__main__":
     success = asyncio.run(main())
     sys.exit(0 if success else 1)
+
+
+def test_score_for_returns_tuple_when_session_present():
+    """Inject a fake session directly into `_sessions` to avoid spinning up
+    the asyncio game loop (which would race with the score read)."""
+    gm = GameManager()
+
+    class _FakeScore:
+        p1 = 4
+        p2 = 7
+    class _FakeSession:
+        score = _FakeScore()
+
+    gm._sessions["g-score-1"] = _FakeSession()
+    try:
+        assert gm.score_for("g-score-1") == (4, 7)
+    finally:
+        gm._sessions.pop("g-score-1", None)
+
+
+def test_score_for_returns_none_when_session_missing():
+    gm = GameManager()
+    assert gm.score_for("nope") is None
+
+
+def test_module_level_score_for_delegates_to_singleton(monkeypatch):
+    """The convenience export must read the singleton, mirroring how
+    `spectator_count` is exposed in ws/router.py."""
+    import service.game_manager as gm_module
+
+    class _FakeScore:
+        p1 = 11
+        p2 = 13
+    class _FakeSession:
+        score = _FakeScore()
+
+    monkeypatch.setitem(
+        gm_module.game_manager._sessions, "g-singleton", _FakeSession()
+    )
+    try:
+        assert score_for("g-singleton") == (11, 13)
+        assert score_for("missing") is None
+    finally:
+        gm_module.game_manager._sessions.pop("g-singleton", None)
