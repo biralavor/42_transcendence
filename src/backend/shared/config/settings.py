@@ -12,7 +12,6 @@ class Settings(BaseSettings):
     JWT_SECRET_KEY: str = "changeme"
     USER_SERVICE_PORT: int = 8001
     USER_SERVICE_URL: str = ""
-    ADMIN_USERNAME: str = ""
 
     def __init__(self, **data):
         super().__init__(**data)

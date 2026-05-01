@@ -10,12 +10,15 @@ Or manually:
     docker compose exec user-service python3 /app/seed_dev.py
 
 Test accounts created:
-    username: AI      password: 123dev   id: 0
     username: alice   password: 123dev   id: (auto)
     username: bob     password: 123dev   id: (auto)
     username: charlie password: 123dev   id: (auto)
     username: joao    password: 123dev   id: (auto)
     username: maria   password: 123dev   id: (auto)
+
+Note: the AI opponent (id=0) and admin user are bootstrapped by
+services/user-service/database_init.sh on every `make` invocation,
+not by this script.
 
 Friendships seeded:
     alice   <-> bob     → accepted
@@ -59,7 +62,6 @@ def _hash(password: str) -> str:
 
 
 USERS = [
-    dict(id=0, username="AI",      display_name="AI Opponent", status="offline", bio="I'm the AI.",          avatar_url=None),
     dict(username="alice",   display_name="Alice",   status="online",  bio="Hi, I'm Alice!",        avatar_url=None),
     dict(username="bob",     display_name="Bob",     status="offline", bio="Bob here.",              avatar_url=None),
     dict(username="charlie", display_name="Charlie", status="online",  bio="Charlie checking in.",   avatar_url=None),

@@ -147,66 +147,6 @@ async def test_login_updates_last_login_at_on_existing_user():
 
 
 @pytest.mark.asyncio
-async def test_login_promotes_admin_when_username_matches_setting(monkeypatch):
-    """If ADMIN_USERNAME matches credential.username, the user row gets is_admin=True."""
-    from shared.config.settings import settings as app_settings
-
-    monkeypatch.setattr(app_settings, "ADMIN_USERNAME", "alice")
-
-    cred = _make_credential(username="alice")
-    user = MagicMock()
-    user.id = 1
-    user.is_admin = False
-    session = _session_returning(cred, user, None, None)
-    session.add = MagicMock()
-
-    from shared.database import get_db
-
-    async def _fake_db():
-        yield session
-
-    app.dependency_overrides[get_db] = _fake_db
-    try:
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            resp = await client.post("/auth/login", json={"username": "alice", "password": "secret123"})
-    finally:
-        app.dependency_overrides.pop(get_db, None)
-
-    assert resp.status_code == 200
-    assert user.is_admin is True
-
-
-@pytest.mark.asyncio
-async def test_login_does_not_promote_non_matching_username(monkeypatch):
-    """A non-matching username must NOT be promoted to admin."""
-    from shared.config.settings import settings as app_settings
-
-    monkeypatch.setattr(app_settings, "ADMIN_USERNAME", "owner")
-
-    cred = _make_credential(username="alice")
-    user = MagicMock()
-    user.id = 1
-    user.is_admin = False
-    session = _session_returning(cred, user, None, None)
-    session.add = MagicMock()
-
-    from shared.database import get_db
-
-    async def _fake_db():
-        yield session
-
-    app.dependency_overrides[get_db] = _fake_db
-    try:
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            resp = await client.post("/auth/login", json={"username": "alice", "password": "secret123"})
-    finally:
-        app.dependency_overrides.pop(get_db, None)
-
-    assert resp.status_code == 200
-    assert user.is_admin is False
-
-
-@pytest.mark.asyncio
 async def test_login_token_contains_identity_claims():
     """JWT issued on login must carry sub (username) and credential_id claims."""
     import bcrypt

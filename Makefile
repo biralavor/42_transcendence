@@ -9,6 +9,7 @@ up:
 	DOMAIN=$${DOMAIN:-$$(hostname -I 2>/dev/null | awk '{print $$1}')} ; \
 	DOMAIN=$${DOMAIN:-localhost} ; \
 	DOMAIN=$$DOMAIN docker compose up --build -d
+	@$(MAKE) db-init
 
 .PHONY: down
 down:
@@ -38,6 +39,16 @@ ps:
 windows:
 	docker build -f services/backend-base/Dockerfile -t backend-base .
 	DOMAIN=$$(hostname -I 2>/dev/null | awk '{print $$1}') docker compose up --build -d
+	@$(MAKE) db-init
+
+# db-init: bootstrap users that must always exist (AI opponent id=0, admin user).
+# Idempotent — safe to run repeatedly. Called from `up` after services are healthy,
+# and from `seed` after its TRUNCATE to restore the bootstrap rows.
+.PHONY: db-init
+db-init: wait
+	@echo "Bootstrapping AI + admin users via database_init.sh..."
+	@docker compose cp services/user-service/database_init.sh user-service:/app/database_init.sh
+	@docker compose exec -T user-service sh /app/database_init.sh
 
 .PHONY: wait
 wait:
@@ -60,6 +71,7 @@ seed:
 	@sleep 5
 	@docker compose cp tests/seed_dev.py user-service:/app/seed_dev.py
 	@docker compose exec -e WS_LOG_DEBUG=true user-service python3 /app/seed_dev.py
+	@$(MAKE) db-init
 
 .PHONY: e2e
 e2e: wait seed

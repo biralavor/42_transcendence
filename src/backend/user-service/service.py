@@ -76,8 +76,6 @@ async def authenticate(login: Login, session: AsyncSession) -> LoginResponse:
     now = datetime.now(timezone.utc)
     # users.last_login_at is naive TIMESTAMP (matching users.created_at); strip tz.
     user.last_login_at = now.replace(tzinfo=None)
-    if settings.ADMIN_USERNAME and credential.username == settings.ADMIN_USERNAME:
-        user.is_admin = True
     # Append today's login-day row (idempotent for same-day repeat logins).
     await session.execute(
         text(
