@@ -30,13 +30,19 @@ if "service" not in sys.modules:
 
 def _make_empty_session():
     """Return a mock AsyncSession whose execute() yields an empty result (scalars → None)."""
-    
+
     scalars_mock = MagicMock()
     scalars_mock.first.return_value = None
     scalars_mock.all.return_value = []
 
+    mappings_mock = MagicMock()
+    mappings_mock.first.return_value = None
+    mappings_mock.one.return_value = None
+    mappings_mock.all.return_value = []
+
     result_mock = MagicMock()
     result_mock.scalars.return_value = scalars_mock
+    result_mock.mappings.return_value = mappings_mock
 
     session = AsyncMock()
     session.execute.return_value = result_mock
