@@ -19,7 +19,7 @@ from service.schemas import (
 
 )
 from service.models.user import User
-from service.service import authenticate, refresh_access_token, register_credentials, get_profile, update_profile, get_me
+from service.service import authenticate, refresh_access_token, register_credentials, get_profile, update_profile, get_me, get_credential_email
 import service.avatar as _avatar
 import service.friends as _friends
 from service.friends import (
@@ -67,7 +67,20 @@ async def me(
     session: SessionDependency,
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
 ):
-    return await get_me(credentials.credentials, session)
+    user = await get_me(credentials.credentials, session)
+    email = await get_credential_email(user.credential_id, session)
+    return MeResponse(
+        id=user.id,
+        username=user.username,
+        email=email,
+        credential_id=user.credential_id,
+        display_name=user.display_name,
+        status=user.status,
+        avatar_url=user.avatar_url,
+        created_at=user.created_at,
+        bio=user.bio,
+        is_admin=user.is_admin,
+    )
 
 
 @app.post("/auth/refresh", status_code=status.HTTP_200_OK, response_model=LoginResponse)
@@ -89,7 +102,17 @@ async def get_user_profile(user_id: int, session: SessionDependency):
     profile = await get_profile(user_id, session)
     if profile is None:
         raise HTTPException(status_code=404, detail="User not found")
-    return profile
+    email = await get_credential_email(profile['credential_id'], session)
+    return ProfileResponse(
+        id=profile['id'],
+        username=profile['username'],
+        email=email,
+        display_name=profile['display_name'],
+        status=profile['status'],
+        avatar_url=profile['avatar_url'],
+        created_at=profile['created_at'],
+        bio=profile['bio'],
+    )
 
 
 @app.put("/profile/{user_id}", response_model=ProfileResponse)
@@ -99,7 +122,17 @@ async def update_user_profile(
     profile = await update_profile(user_id, data, session)
     if profile is None:
         raise HTTPException(status_code=404, detail="User not found")
-    return profile
+    email = await get_credential_email(profile.credential_id, session)
+    return ProfileResponse(
+        id=profile.id,
+        username=profile.username,
+        email=email,
+        display_name=profile.display_name,
+        status=profile.status,
+        avatar_url=profile.avatar_url,
+        created_at=profile.created_at,
+        bio=profile.bio,
+    )
 
 
 @app.get("/preferences", response_model=PreferencesResponse)

@@ -53,14 +53,18 @@ class TestProfileResponseNormalizesDisplayName:
 # GET /profile/{id} endpoint — display_name normalization via HTTP  #
 # ----------------------------------------------------------------- #
 
+def _fake_profile(display_name):
+    return {
+        'id': 1, 'credential_id': 10, 'username': 'alice', 'display_name': display_name,
+        'status': 'offline', 'avatar_url': None, 'created_at': None, 'bio': None,
+    }
+
+
 @pytest.mark.asyncio
 async def test_profile_endpoint_coalesces_empty_display_name():
     """Backend must not send '' — returns username as display_name instead."""
-    fake = {
-        'id': 1, 'username': 'alice', 'display_name': '',
-        'status': 'offline', 'avatar_url': None, 'created_at': None, 'bio': None,
-    }
-    with patch('service.main.get_profile', AsyncMock(return_value=fake)):
+    with patch('service.main.get_profile', AsyncMock(return_value=_fake_profile(''))), \
+         patch('service.main.get_credential_email', AsyncMock(return_value='alice@example.com')):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
             resp = await c.get("/profile/1")
     assert resp.status_code == 200
@@ -70,11 +74,8 @@ async def test_profile_endpoint_coalesces_empty_display_name():
 @pytest.mark.asyncio
 async def test_profile_endpoint_coalesces_none_display_name():
     """Backend must not send null — returns username as display_name instead."""
-    fake = {
-        'id': 1, 'username': 'alice', 'display_name': None,
-        'status': 'offline', 'avatar_url': None, 'created_at': None, 'bio': None,
-    }
-    with patch('service.main.get_profile', AsyncMock(return_value=fake)):
+    with patch('service.main.get_profile', AsyncMock(return_value=_fake_profile(None))), \
+         patch('service.main.get_credential_email', AsyncMock(return_value='alice@example.com')):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
             resp = await c.get("/profile/1")
     assert resp.status_code == 200
@@ -84,11 +85,8 @@ async def test_profile_endpoint_coalesces_none_display_name():
 @pytest.mark.asyncio
 async def test_profile_endpoint_preserves_valid_display_name():
     """When display_name is set, the endpoint returns it unchanged."""
-    fake = {
-        'id': 1, 'username': 'alice', 'display_name': 'Alice B',
-        'status': 'offline', 'avatar_url': None, 'created_at': None, 'bio': None,
-    }
-    with patch('service.main.get_profile', AsyncMock(return_value=fake)):
+    with patch('service.main.get_profile', AsyncMock(return_value=_fake_profile('Alice B'))), \
+         patch('service.main.get_credential_email', AsyncMock(return_value='alice@example.com')):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
             resp = await c.get("/profile/1")
     assert resp.status_code == 200

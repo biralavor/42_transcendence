@@ -61,7 +61,8 @@ def _unique_username(prefix: str = "e2e") -> str:
 
 
 async def register_user(api: httpx.AsyncClient, username: str | None = None,
-                         password: str = "P@ssw0rd123!") -> dict:
+                         password: str = "P@ssw0rd123!",
+                         email: str | None = None) -> dict:
     """Register a new user via /api/users/auth/register.
 
     Returns: {'username': str, 'password': str, 'user_id': int, 'token': str}
@@ -69,9 +70,12 @@ async def register_user(api: httpx.AsyncClient, username: str | None = None,
     """
     if username is None:
         username = _unique_username()
+    if email is None:
+        email = f"{username}@example.com"
 
     resp = await api.post("/api/users/auth/register", json={
         "username": username,
+        "email": email,
         "password": password,
     })
     assert resp.status_code in (200, 201), (
@@ -94,9 +98,9 @@ async def register_user(api: httpx.AsyncClient, username: str | None = None,
 
 
 async def login(api: httpx.AsyncClient, username: str, password: str) -> str:
-    """Login and return the access_token."""
+    """Login and return the access_token. `username` may be a username or email."""
     resp = await api.post("/api/users/auth/login", json={
-        "username": username, "password": password,
+        "identifier": username, "password": password,
     })
     assert resp.status_code == 200, f"login failed: {resp.status_code} {resp.text[:200]}"
     token = resp.json().get("access_token")

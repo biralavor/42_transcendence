@@ -1,6 +1,12 @@
 from datetime import datetime, date
 from typing import Literal, Optional
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
+
+def _coalesce_display_name(display_name: Optional[str], username: str) -> str:
+    """Return username when display_name is empty/whitespace, matching the SQL COALESCE pattern."""
+    if display_name and display_name.strip():
+        return display_name.strip()
+    return username
 
 def _coalesce_display_name(display_name: Optional[str], username: str) -> str:
     """Return username when display_name is empty/whitespace, matching the SQL COALESCE pattern."""
@@ -10,7 +16,7 @@ def _coalesce_display_name(display_name: Optional[str], username: str) -> str:
 
 
 class Login(BaseModel):
-    username: str
+    identifier: str
     password: str
 
 
@@ -22,11 +28,13 @@ class LoginResponse(BaseModel):
 
 class RegisterRequest(BaseModel):
     username: str
+    email: EmailStr
     password: str
 
 
 class RegisterResponse(BaseModel):
     username: str
+    email: str  # output schema: return what's stored, validation is at input
 
 
 class ProfileResponse(BaseModel):
@@ -34,6 +42,7 @@ class ProfileResponse(BaseModel):
 
     id:           int
     username:     str
+    email:        Optional[str] = None  # output schema: return what's stored
     display_name: Optional[str] = None
     status:       str
     avatar_url:   Optional[str] = None
@@ -51,6 +60,7 @@ class MeResponse(BaseModel):
 
     id:            int
     username:      str
+    email:         Optional[str] = None  # output schema: return what's stored
     credential_id: Optional[int] = None
     display_name:  Optional[str] = None
     status:        str
