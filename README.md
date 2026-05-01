@@ -72,7 +72,7 @@
 | Game Customization | Gaming & UX |
 | Gamification System | Gaming & UX |
 | Spectator Mode | Gaming & UX |
-| Data Analytics |  Dashboard | 
+| Data Analytics | Dashboard |
 
 > **7 Major × 2 pts + 14 Minor × 1 pt = 28 pts total**
 > Subject minimum: 14 pts — this build provides a comfortable evaluation buffer.
