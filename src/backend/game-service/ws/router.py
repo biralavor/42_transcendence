@@ -1,11 +1,12 @@
 # Note: sys.path is set by main.py (Docker) or test file (host) — not repeated here.
 import asyncio
+import logging
 import re
 import time
 from uuid import uuid4
 from dataclasses import asdict
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException, Depends
-from jose import jwt
+from jose import jwt, JWTError, ExpiredSignatureError
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,16 +27,29 @@ from service.schemas import AiGameRequest, AiGameResponse
 from sqlalchemy.exc import SQLAlchemyError
 
 router = APIRouter()
-manager = ConnectionManager()
+# 0.5s send timeout: a slow client must not stall the 30Hz game broadcast loop.
+# Other services (chat, notifications, presence) use the default (no timeout).
+manager = ConnectionManager(send_timeout=0.5)
 
 # Maps game_id (str) → (player1_id, player2_id) for sessions being set up
 _setup_sessions: dict[str, tuple[int, int]] = {}
 # Maps game_id (str) → match_id (int) for database updates
 _match_ids: dict[str, int] = {}
+# Reverse lookup of `_match_ids` — match_id (int) → game_id (str). Maintained
+# alongside every write/delete on `_match_ids`. Public consumers: GET /games/live.
+_match_id_to_game_id: dict[int, str] = {}
 # Maps game_id → player_id who disconnected mid-game (waiting to reconnect or time out)
 _disconnected_players: dict[str, int] = {}
 # Maps game_id → asyncio Task running the disconnect countdown
 _disconnect_timers: dict[str, asyncio.Task] = {}
+# Maps game_id → monotonic timestamp when the match finished. Used to refuse
+# stale tab/URL reconnects that would otherwise spawn a ghost session for a
+# match that has already been finalized in the DB. Each "Play Again" gets a
+# fresh room_id (Date.now() suffix in buildInviteRoomId), so retaining a
+# finished room_id forever does not block legitimate rematches. Pruned on
+# insert to keep the dict bounded over the server lifetime.
+_finished_rooms: dict[str, float] = {}
+_FINISHED_ROOM_TTL_SECONDS = 3600.0
 
 DISCONNECT_GRACE_SECONDS = 30
 
@@ -47,9 +61,142 @@ _waiting_room_tournament_context: dict[str, tuple[int, int, int]] = {}
 _waiting_room_timeout_tasks: dict[str, asyncio.Task] = {}
 _waiting_room_timeout_deadline: dict[str, float] = {}
 _tournament_ready_timeout_tasks: dict[tuple[int, int], asyncio.Task] = {}
+_tournament_ready_timeout_locks: dict[int, asyncio.Lock] = {}
 
 READY_TIMEOUT_SECONDS = 90
 _INVITE_ROOM_ID_RE = re.compile(r"^invite-(\d+)-(\d+)-")
+_TOURNAMENT_GAME_ROOM_ID_RE = re.compile(r"^tournament-\d+-match-(\d+)$")
+
+
+def _bind_match(game_id: str, match_id: int) -> None:
+    """Set _match_ids[game_id] = match_id and keep the reverse map consistent."""
+    _match_ids[game_id] = match_id
+    _match_id_to_game_id[match_id] = game_id
+
+
+def _mark_room_finished(game_id: str) -> None:
+    """Record that the given room's match has been finalized."""
+    now = time.monotonic()
+    cutoff = now - _FINISHED_ROOM_TTL_SECONDS
+    for stale in [gid for gid, ts in _finished_rooms.items() if ts < cutoff]:
+        _finished_rooms.pop(stale, None)
+    _finished_rooms[game_id] = now
+
+
+def _is_room_finished(game_id: str) -> bool:
+    """True if the room was finalized within the retention window."""
+    ts = _finished_rooms.get(game_id)
+    if ts is None:
+        return False
+    if time.monotonic() - ts > _FINISHED_ROOM_TTL_SECONDS:
+        _finished_rooms.pop(game_id, None)
+        return False
+    return True
+
+
+def _unbind_match(game_id: str) -> None:
+    """Remove `game_id` from both `_match_ids` and the reverse map."""
+    match_id = _match_ids.pop(game_id, None)
+    if match_id is not None:
+        _match_id_to_game_id.pop(match_id, None)
+
+
+def game_id_for_match(match_id: int) -> str | None:
+    """Return the live WS `game_id` for the given DB match id, or None if no
+    active session is bound. Used by the public live-games endpoint."""
+    return _match_id_to_game_id.get(match_id)
+
+
+def spectator_count(game_id: str) -> int:
+    """How many spectators are currently connected to `game_id`."""
+    return manager.spectator_count(game_id)
+
+
+def _resolve_room_player_ids(game_id: str) -> tuple[int, int] | None:
+    """Best-effort lookup of (player1_id, player2_id) for an active room.
+
+    Sources, in priority order:
+      1. live GameSession (post game-start)
+      2. _waiting_room_players (already-seeded waiting room)
+      3. _setup_sessions
+      4. _parse_invite_room_players (read-only parse of `invite-{p1}-{p2}-…`)
+
+    READ-ONLY: this function does NOT seed _waiting_room_players. Seeding
+    happens later in the player path via _ensure_waiting_room_players(),
+    only after the caller has been confirmed as a player. That prevents an
+    anonymous probe to an arbitrary `invite-X-Y-…` URL from inflating the
+    in-memory dicts.
+    """
+    session = game_manager.get_session(game_id)
+    if session is not None:
+        return (session.player1_id, session.player2_id)
+    waiting = _waiting_room_players.get(game_id)
+    if waiting is not None:
+        return waiting
+    setup = _setup_sessions.get(game_id)
+    if setup is not None:
+        return setup
+    return _parse_invite_room_players(game_id)
+
+
+async def _spectator_loop(websocket: WebSocket, game_id: str) -> None:
+    """Read-only WS loop for an anonymous-or-non-player viewer.
+
+    Sequence:
+      1. Register in manager with role='spectator'.
+      2. Send the current game-state snapshot immediately (so the spectator
+         doesn't have to wait for the next tick).
+      3. Broadcast updated spectator_count to ALL connected clients.
+      4. Loop on receive_text(); any inbound message → close 4003.
+      5. On disconnect (any reason): unregister, broadcast new count.
+    """
+    logger = logging.getLogger(__name__)
+
+    await manager.connect(game_id, websocket, role="spectator")
+    try:
+        # Initial state snapshot — best-effort: skip gracefully if the session
+        # is gone or the snapshot itself raises. We deliberately do NOT swallow
+        # send_json failures here; a dead client should propagate to the outer
+        # WebSocketDisconnect handler so the disconnect path is taken cleanly.
+        snapshot_payload: dict | None = None
+        try:
+            session = game_manager.get_session(game_id)
+            if session is not None:
+                snapshot = session.get_state_snapshot()
+                snapshot_payload = {"type": "state", **asdict(snapshot)}
+        except Exception as exc:
+            logger.debug(f"[SPECTATOR] initial snapshot skipped for {game_id}: {exc}")
+
+        if snapshot_payload is not None:
+            await websocket.send_json(snapshot_payload)
+
+        # Announce arrival to everyone in the room.
+        await manager.broadcast(
+            game_id,
+            {"type": "spectator_count", "count": manager.spectator_count(game_id)},
+        )
+
+        # Read-only: any inbound message → reject + close.
+        try:
+            while True:
+                _ = await websocket.receive_text()
+                await websocket.close(
+                    code=4003, reason="Spectators cannot send input"
+                )
+                return
+        except WebSocketDisconnect:
+            # Clean disconnect — fall through to finally.
+            pass
+    finally:
+        manager.disconnect(game_id, websocket)
+        # Best-effort: announce departure (manager may have pruned the room).
+        try:
+            await manager.broadcast(
+                game_id,
+                {"type": "spectator_count", "count": manager.spectator_count(game_id)},
+            )
+        except Exception as exc:
+            logger.debug(f"[SPECTATOR] post-disconnect broadcast skipped for {game_id}: {exc}")
 
 
 async def _broadcast_state(game_id: str, state_snapshot: dict) -> None:
@@ -84,11 +231,24 @@ def _cancel_waiting_room_timeout(game_id: str) -> None:
 def _remove_tournament_ready_state(ready_key: tuple[int, int]) -> None:
     _tournament_ready.pop(ready_key, None)
     _tournament_waiting_rooms.pop(ready_key, None)
+    _maybe_remove_tournament_ready_timeout_lock(ready_key[0])
+
+
+def _maybe_remove_tournament_ready_timeout_lock(tournament_id: int) -> None:
+    has_timeout_tasks = any(
+        key[0] == tournament_id for key in _tournament_ready_timeout_tasks
+    )
+    has_ready_state = any(
+        key[0] == tournament_id for key in _tournament_ready
+    )
+    if not has_timeout_tasks and not has_ready_state:
+        _tournament_ready_timeout_locks.pop(tournament_id, None)
 
 
 def _cancel_tournament_ready_timeout(ready_key: tuple[int, int]) -> None:
     task = _tournament_ready_timeout_tasks.pop(ready_key, None)
     _cancel_task(task)
+    _maybe_remove_tournament_ready_timeout_lock(ready_key[0])
 
 
 def _parse_invite_room_players(game_id: str) -> tuple[int, int] | None:
@@ -137,7 +297,7 @@ async def _finalize_regular_match_timeout(
             if match_id is None:
                 created = await create_match(db, player1_id, player2_id)
                 match_id = created.id
-                _match_ids[game_id] = match_id
+                _bind_match(game_id, match_id)
 
             if winner_id is None:
                 await db.execute(
@@ -290,6 +450,7 @@ async def _handle_waiting_room_timeout(game_id: str) -> None:
     _setup_sessions.pop(game_id, None)
     _cleanup_waiting_room(game_id)
     _waiting_room_timeout_tasks.pop(game_id, None)
+    _mark_room_finished(game_id)
 
 
 def _schedule_waiting_room_timeout(game_id: str) -> None:
@@ -322,73 +483,79 @@ async def _handle_tournament_ready_timeout(
     except asyncio.CancelledError:
         return
 
-    ready_set = set(_tournament_ready.get(ready_key, set()))
-    timeout_winner: int | None = None
-    match_row = None
+    lock = _tournament_ready_timeout_locks.setdefault(tournament_id, asyncio.Lock())
+    async with lock:
+        ready_set = set(_tournament_ready.get(ready_key, set()))
+        timeout_winner: int | None = None
+        match_row = None
 
-    try:
-        async with AsyncSessionLocal() as db:
-            tournament_data = await get_tournament_with_participants(db, tournament_id)
-            if tournament_data is None:
-                _remove_tournament_ready_state(ready_key)
-                _tournament_ready_timeout_tasks.pop(ready_key, None)
-                return
+        try:
+            async with AsyncSessionLocal() as db:
+                tournament_data = await get_tournament_with_participants(db, tournament_id)
+                if tournament_data is None:
+                    _remove_tournament_ready_state(ready_key)
+                    _tournament_ready_timeout_tasks.pop(ready_key, None)
+                    _maybe_remove_tournament_ready_timeout_lock(tournament_id)
+                    return
 
-            _, _, matches = tournament_data
-            match_row = next((m for m in matches if int(m.id) == tournament_match_id), None)
-            if match_row is None or match_row.status != "in_progress":
-                _remove_tournament_ready_state(ready_key)
-                _tournament_ready_timeout_tasks.pop(ready_key, None)
-                return
+                _, _, matches = tournament_data
+                match_row = next((m for m in matches if int(m.id) == tournament_match_id), None)
+                if match_row is None or match_row.status != "in_progress":
+                    _remove_tournament_ready_state(ready_key)
+                    _tournament_ready_timeout_tasks.pop(ready_key, None)
+                    _maybe_remove_tournament_ready_timeout_lock(tournament_id)
+                    return
 
-            players = {match_row.player1_id, match_row.player2_id}
-            valid_ready_players = {pid for pid in ready_set if pid in players}
-            if len(valid_ready_players) == 1:
-                timeout_winner = next(iter(valid_ready_players))
+                players = {match_row.player1_id, match_row.player2_id}
+                valid_ready_players = {pid for pid in ready_set if pid in players}
+                if len(valid_ready_players) == 1:
+                    timeout_winner = next(iter(valid_ready_players))
 
-            try:
-                _, tournament_complete, _ = await record_tournament_match_timeout_result(
-                    db=db,
-                    tournament_id=tournament_id,
-                    tournament_match_id=tournament_match_id,
-                    winner_id=timeout_winner,
-                )
-            except Exception:
-                await db.rollback()
-                tournament_complete = False
+                try:
+                    _, tournament_complete, _ = await record_tournament_match_timeout_result(
+                        db=db,
+                        tournament_id=tournament_id,
+                        tournament_match_id=tournament_match_id,
+                        winner_id=timeout_winner,
+                    )
+                except Exception:
+                    await db.rollback()
+                    tournament_complete = False
 
-            refreshed = await get_tournament_with_participants(db, tournament_id)
-            refreshed_matches = refreshed[2] if refreshed is not None else []
-    except SQLAlchemyError:
-        _remove_tournament_ready_state(ready_key)
-        _tournament_ready_timeout_tasks.pop(ready_key, None)
-        return
+                refreshed = await get_tournament_with_participants(db, tournament_id)
+                refreshed_matches = refreshed[2] if refreshed is not None else []
+        except SQLAlchemyError:
+            _remove_tournament_ready_state(ready_key)
+            _tournament_ready_timeout_tasks.pop(ready_key, None)
+            _maybe_remove_tournament_ready_timeout_lock(tournament_id)
+            return
 
-    sync_tournament_ready_timeouts(tournament_id, refreshed_matches)
+        sync_tournament_ready_timeouts(tournament_id, refreshed_matches)
 
-    room_id = f"tournament_{tournament_id}"
-    await manager.broadcast(
-        room_id,
-        {
-            "type": "match_ready_timeout",
-            "tournament_id": tournament_id,
-            "match_id": tournament_match_id,
-            "winner_id": timeout_winner,
-            "timeout_seconds": READY_TIMEOUT_SECONDS,
-        },
-    )
-    await manager.broadcast(
-        room_id,
-        {"type": "tournament_updated", "tournament_id": tournament_id},
-    )
-    if tournament_complete:
+        room_id = f"tournament_{tournament_id}"
         await manager.broadcast(
             room_id,
-            {"type": "tournament_complete", "tournament_id": tournament_id},
+            {
+                "type": "match_ready_timeout",
+                "tournament_id": tournament_id,
+                "match_id": tournament_match_id,
+                "winner_id": timeout_winner,
+                "timeout_seconds": READY_TIMEOUT_SECONDS,
+            },
         )
+        await manager.broadcast(
+            room_id,
+            {"type": "tournament_updated", "tournament_id": tournament_id},
+        )
+        if tournament_complete:
+            await manager.broadcast(
+                room_id,
+                {"type": "tournament_complete", "tournament_id": tournament_id},
+            )
 
-    _remove_tournament_ready_state(ready_key)
-    _tournament_ready_timeout_tasks.pop(ready_key, None)
+        _remove_tournament_ready_state(ready_key)
+        _tournament_ready_timeout_tasks.pop(ready_key, None)
+        _maybe_remove_tournament_ready_timeout_lock(tournament_id)
 
 
 def _schedule_tournament_ready_timeout(tournament_id: int, tournament_match_id: int) -> None:
@@ -442,7 +609,7 @@ async def _ensure_game_session(
     _setup_sessions[game_id] = (player1_id, player2_id)
 
     if existing_match_id is not None and game_id not in _match_ids:
-        _match_ids[game_id] = existing_match_id
+        _bind_match(game_id, existing_match_id)
 
     if game_manager.get_session(game_id):
         return
@@ -472,9 +639,23 @@ async def _ensure_game_session(
     try:
         async with AsyncSessionLocal() as db:
             match = await create_match(db, player1_id, player2_id)
-            _match_ids[game_id] = match.id
+            _bind_match(game_id, match.id)
     except SQLAlchemyError:
         pass  # best-effort
+
+
+def _remember_existing_match_id(game_id: str, payload: dict) -> int | None:
+    existing_match_id = payload.get("match_id")
+    if isinstance(existing_match_id, int) and existing_match_id > 0:
+        if game_id not in _match_ids:
+            _bind_match(game_id, existing_match_id)
+        return _match_ids.get(game_id)
+
+    tournament_room_match = _TOURNAMENT_GAME_ROOM_ID_RE.match(game_id)
+    if tournament_room_match and game_id not in _match_ids:
+        _bind_match(game_id, int(tournament_room_match.group(1)))
+
+    return _match_ids.get(game_id)
 
 
 def _infer_waiting_room_players(
@@ -500,7 +681,13 @@ def _infer_waiting_room_players(
     return None, None
 
 
-async def _on_game_over(game_id: str, winner_id: int, score_p1: int, score_p2: int) -> None:
+async def _on_game_over(
+    game_id: str,
+    winner_id: int,
+    score_p1: int,
+    score_p2: int,
+    forfeit_reason: str | None = None,
+) -> None:
     """Server-driven callback when a match naturally ends."""
     try:
         async with AsyncSessionLocal() as db:
@@ -539,16 +726,20 @@ async def _on_game_over(game_id: str, winner_id: int, score_p1: int, score_p2: i
         # Clean up memory
         await game_manager.delete_session(game_id)
         _setup_sessions.pop(game_id, None)
-        _match_ids.pop(game_id, None)
+        _unbind_match(game_id)
         _cleanup_waiting_room(game_id)
+        _mark_room_finished(game_id)
 
         # Broadcast the game over event authoritatively
-        await manager.broadcast(game_id, {
+        payload = {
             "type": "game_over",
             "winner_id": winner_id,
             "score_p1": score_p1,
-            "score_p2": score_p2
-        })
+            "score_p2": score_p2,
+        }
+        if forfeit_reason:
+            payload["forfeit_reason"] = forfeit_reason
+        await manager.broadcast(game_id, payload)
 
 
 # Colocated with the WS router (rather than service/router.py) because it
@@ -572,9 +763,14 @@ async def _disconnect_countdown(game_id: str, winner_id: int) -> None:
         session = game_manager.get_session(game_id)
         if session and session.is_active and manager.active_connections(game_id) > 0:
             try:
-                await _on_game_over(game_id, winner_id, session.score.p1, session.score.p2)
+                await _on_game_over(
+                    game_id,
+                    winner_id,
+                    session.score.p1,
+                    session.score.p2,
+                    forfeit_reason="opponent_disconnected",
+                )
             except Exception:
-                import logging
                 logging.getLogger(__name__).exception(
                     "[DISCONNECT_COUNTDOWN] _on_game_over failed for %s", game_id
                 )
@@ -587,6 +783,90 @@ async def _disconnect_countdown(game_id: str, winner_id: int) -> None:
         # must not do anything beyond these two pops to avoid undoing reconnect state.
         _disconnected_players.pop(game_id, None)
         _disconnect_timers.pop(game_id, None)
+
+
+async def _both_disconnect_grace(game_id: str) -> None:
+    """Grace period for when both players disconnect simultaneously.
+
+    Protects the waiting-room → game-page navigation transition: both old
+    WS connections close before the new GamePage WS connections open. The
+    session is kept alive so reconnecting players are not locked out.
+
+    If nobody reconnects within the grace window the session is deleted.
+    """
+    logger = logging.getLogger(__name__)
+    try:
+        await asyncio.sleep(DISCONNECT_GRACE_SECONDS)
+    except asyncio.CancelledError:
+        return
+
+    if manager.player_count(game_id) > 0:
+        # Someone reconnected while the timer was running — nothing to do.
+        _disconnect_timers.pop(game_id, None)
+        return
+
+    logger.info(
+        "[BOTH_DISCONNECT] Grace period expired for %s with no reconnects; cleaning up.",
+        game_id,
+    )
+
+    # Reconcile DB state BEFORE _cleanup_waiting_room pops the context tuple.
+    # Tournament path: mirror _handle_waiting_room_timeout (router.py:332-372).
+    tournament_ctx = _waiting_room_tournament_context.get(game_id)
+    if tournament_ctx is not None:
+        tournament_id, _, tournament_match_row_id = tournament_ctx
+        try:
+            async with AsyncSessionLocal() as db:
+                try:
+                    await record_tournament_match_timeout_result(
+                        db=db,
+                        tournament_id=tournament_id,
+                        tournament_match_id=tournament_match_row_id,
+                        winner_id=None,
+                    )
+                except Exception:
+                    # Idempotent: another path (e.g. tournament ready timeout)
+                    # may already have finalized this match.
+                    await db.rollback()
+        except SQLAlchemyError:
+            logger.warning(
+                "[BOTH_DISCONNECT] DB error reconciling tournament match for %s",
+                game_id,
+            )
+    else:
+        # Regular (non-tournament) match: mirror _finalize_regular_match_timeout
+        # (router.py:259-272) — finished, no winner, zero scores.
+        match_id = _match_ids.get(game_id)
+        if match_id is not None:
+            try:
+                async with AsyncSessionLocal() as db:
+                    await db.execute(
+                        text(
+                            "UPDATE matches "
+                            "SET status = 'finished', "
+                            "    winner_id = NULL, "
+                            "    score_p1 = 0, "
+                            "    score_p2 = 0, "
+                            "    finished_at = NOW() "
+                            "WHERE id = :match_id"
+                        ),
+                        {"match_id": match_id},
+                    )
+                    await db.commit()
+            except SQLAlchemyError:
+                logger.warning(
+                    "[BOTH_DISCONNECT] DB error reconciling regular match for %s",
+                    game_id,
+                )
+
+    session = game_manager.get_session(game_id)
+    if session is not None:
+        await game_manager.delete_session(game_id)
+    _setup_sessions.pop(game_id, None)
+    _unbind_match(game_id)
+    _cleanup_waiting_room(game_id)
+    _disconnect_timers.pop(game_id, None)
+    _mark_room_finished(game_id)
 
 
 @router.post("/ai", status_code=201, response_model=AiGameResponse)
@@ -617,7 +897,6 @@ async def start_ai_game(
         speed_multiplier: float = float(prefs.get("ball_speed_multiplier", 1.0))
         speed_multiplier = max(0.5, min(2.0, speed_multiplier))  # clamp to valid range
     except (SQLAlchemyError, ValueError, TypeError, AttributeError) as e:
-        import logging
         logger = logging.getLogger(__name__)
         logger.warning(
             "Failed to load game_preferences for player %s, using default: %s",
@@ -627,7 +906,7 @@ async def start_ai_game(
 
     try:
         match = await create_match(db, player_id, AI_PLAYER_ID)
-        _match_ids[game_id] = match.id
+        _bind_match(game_id, match.id)
     except SQLAlchemyError:
         raise HTTPException(status_code=500, detail="Failed to create match record")
 
@@ -643,7 +922,7 @@ async def start_ai_game(
         )
     except ValueError:
         # game_id collision (astronomically unlikely with uuid4, but guard it)
-        _match_ids.pop(game_id, None)
+        _unbind_match(game_id)
         raise HTTPException(status_code=500, detail="Game session collision")
 
     return AiGameResponse(game_id=game_id)
@@ -695,31 +974,68 @@ async def game_websocket(websocket: WebSocket, game_id: str, token: str | None =
                 pass
         return
 
-    if not token:
-        await websocket.close(code=4001)
+    # ── Resolve caller (anonymous OK; spec allows anonymous spectators) ──────
+    caller_user_id: int | None = None
+    if token:
+        # Decode the token. JWT failures → anonymous spectator (per spec).
+        credential_id: int | None = None
+        try:
+            payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=["HS256"])
+            credential_id = payload.get("credential_id")
+        except (JWTError, ExpiredSignatureError):
+            credential_id = None
+
+        if credential_id is not None:
+            try:
+                async with AsyncSessionLocal() as db:
+                    result = await db.execute(
+                        text("SELECT id FROM users WHERE credential_id = :cid"),
+                        {"cid": credential_id},
+                    )
+                    row = result.fetchone()
+                    if row:
+                        caller_user_id = row[0]
+            except SQLAlchemyError:
+                # DB hiccup → caller demoted to anonymous spectator. Log it so a
+                # legitimate player going dark on a transient DB failure leaves
+                # a breadcrumb instead of being silently classified as spectator.
+                logging.getLogger(__name__).warning(
+                    "user lookup failed for credential_id=%s; treating ws caller as anonymous",
+                    credential_id, exc_info=True,
+                )
+
+    # ── Refuse stale reconnects to a room whose match already ended. ────────
+    # Without this guard, reopening a tab on a finished match's URL would
+    # spawn a fresh GameSession via the game_start handler — a "ghost" game
+    # with no matches-table row. Each Play Again uses a new room_id (Date.now
+    # suffix in buildInviteRoomId), so this does not block legitimate rematches.
+    if _is_room_finished(game_id) and game_manager.get_session(game_id) is None:
+        await websocket.close(code=4004, reason="Match already ended")
         return
 
-    try:
-        payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=["HS256"])
-        credential_id = payload.get("credential_id")
-        if credential_id is None:
-            await websocket.close(code=4001)
+    # ── Classify caller as player vs spectator ──────────────────────────────
+    player_ids = _resolve_room_player_ids(game_id)
+    is_player = (
+        caller_user_id is not None
+        and player_ids is not None
+        and caller_user_id in player_ids
+    )
+
+    if not is_player:
+        # Spectator path: only admit when a live GameSession exists. A match
+        # row without a running session, or an arbitrary invite-URL probe,
+        # is not a watchable game — refuse with 4004 to avoid inflating
+        # spectator_count and growing in-memory maps.
+        if game_manager.get_session(game_id) is None:
+            await websocket.close(code=4004, reason="Game not found")
             return
-            
-        # Resolve credential_id -> user.id (Hybrid Pattern Fast Path)
-        async with AsyncSessionLocal() as db:
-            result = await db.execute(
-                text("SELECT id FROM users WHERE credential_id = :cid"),
-                {"cid": credential_id}
-            )
-            row = result.fetchone()
-            if not row:
-                await websocket.close(code=4001)
-                return
-            player_id = row[0]
-    except Exception:
-        await websocket.close(code=4001)
+        await _spectator_loop(websocket, game_id)
         return
+
+    # Player path: continue with the existing handler logic below.
+    # is_player being True means caller_user_id is not None.
+    assert caller_user_id is not None
+    player_id = caller_user_id
 
     # Accept the connection
     await manager.connect(game_id, websocket)
@@ -740,9 +1056,17 @@ async def game_websocket(websocket: WebSocket, game_id: str, token: str | None =
         status_payload["player2_id"] = waiting_players[1]
 
     await websocket.send_json(status_payload)
-    
+
+    # Send the current spectator count directly to this player so the audience
+    # banner can render even when the player connects after spectators are
+    # already watching. Direct send (not broadcast): other clients already know
+    # the count and a re-broadcast would be noise.
+    await websocket.send_json({
+        "type": "spectator_count",
+        "count": manager.spectator_count(game_id),
+    })
+
     # Log connection
-    import logging
     logger = logging.getLogger(__name__)
     active_in_room = manager.active_connections(game_id)
     logger.info(
@@ -778,6 +1102,13 @@ async def game_websocket(websocket: WebSocket, game_id: str, token: str | None =
                 **asdict(snapshot),
             })
 
+        # Re-send the current spectator_count to the reconnecting player — they
+        # missed any join/leave broadcasts during the disconnect grace window.
+        await websocket.send_json({
+            "type": "spectator_count",
+            "count": manager.spectator_count(game_id),
+        })
+
         # Broadcast to all (including the reconnecting player). Both players
         # benefit: the reconnecting player can show "connection restored" and
         # the surviving player can hide the countdown UI.
@@ -812,6 +1143,7 @@ async def game_websocket(websocket: WebSocket, game_id: str, token: str | None =
 
                 ready_set = _waiting_room_ready.setdefault(game_id, set())
                 ready_set.add(player_id)
+                remembered_match_id = _remember_existing_match_id(game_id, data)
 
                 player1_id, player2_id = _infer_waiting_room_players(game_id, data, ready_set)
                 if player1_id is not None and player2_id is not None:
@@ -838,15 +1170,11 @@ async def game_websocket(websocket: WebSocket, game_id: str, token: str | None =
 
                 if both_ready:
                     _cancel_waiting_room_timeout(game_id)
-                    existing_match_id = data.get("match_id")
-                    if not isinstance(existing_match_id, int):
-                        existing_match_id = _match_ids.get(game_id)
-
                     await _ensure_game_session(
                         game_id,
                         player1_id,
                         player2_id,
-                        existing_match_id=existing_match_id,
+                        existing_match_id=remembered_match_id,
                     )
 
                     await manager.broadcast(
@@ -924,9 +1252,7 @@ async def game_websocket(websocket: WebSocket, game_id: str, token: str | None =
                 if player_id not in (player1_id, player2_id):
                     continue
 
-                existing_match_id = data.get("match_id")
-                if not isinstance(existing_match_id, int):
-                    existing_match_id = _match_ids.get(game_id)
+                existing_match_id = _remember_existing_match_id(game_id, data)
 
                 await _ensure_game_session(
                     game_id,
@@ -934,6 +1260,25 @@ async def game_websocket(websocket: WebSocket, game_id: str, token: str | None =
                     player2_id,
                     existing_match_id=existing_match_id,
                 )
+
+                # If the session was paused because both players disconnected
+                # simultaneously (waiting-room → game-page navigation), resume
+                # it now that a player has reconnected and confirmed the game IDs.
+                resumed_session = game_manager.get_session(game_id)
+                if resumed_session is not None and resumed_session.is_paused:
+                    grace_timer = _disconnect_timers.pop(game_id, None)
+                    if grace_timer is not None and not grace_timer.done():
+                        grace_timer.cancel()
+                        try:
+                            await asyncio.shield(grace_timer)
+                        except (asyncio.CancelledError, Exception):
+                            pass
+                    game_manager.resume_session(game_id)
+                    ws_logger.session_state(
+                        game_id,
+                        {"status": "resumed_after_both_disconnect", "player_id": player_id},
+                    )
+
                 ws_logger.latency(f"game_start_to_session_created_{game_id}", flow_start)
 
             # Handle player input (with latency filtering)
@@ -952,7 +1297,6 @@ async def game_websocket(websocket: WebSocket, game_id: str, token: str | None =
                 active_connections = manager.active_connections(game_id)
                 
                 # Log the incoming message and room state
-                import logging
                 logger = logging.getLogger(__name__)
                 logger.info(
                     f"[BROADCAST] {incoming_event_type} from player {incoming_user_id} "
@@ -977,7 +1321,6 @@ async def game_websocket(websocket: WebSocket, game_id: str, token: str | None =
     
     except WebSocketDisconnect:
         # Log connection close
-        import logging
         logger = logging.getLogger(__name__)
         logger.info(f"[DISCONNECT] Player {player_id} disconnected from room {game_id}")
         
@@ -993,7 +1336,6 @@ async def game_websocket(websocket: WebSocket, game_id: str, token: str | None =
     finally:
         manager.disconnect(game_id, websocket)
 
-        import logging
         logger = logging.getLogger(__name__)
         remaining = manager.active_connections(game_id)
         logger.info(
@@ -1048,11 +1390,32 @@ async def game_websocket(websocket: WebSocket, game_id: str, token: str | None =
             # via create_task while both players are simultaneously disconnecting.
             # If the session is already inactive, _on_game_over owns the DB write
             # and cleanup — skip here to avoid clearing _match_ids before it runs.
-            if session is None or session.is_active:
+            if session is None:
+                # No active session — waiting-room phase, clean up routing state.
+                _setup_sessions.pop(game_id, None)
+                _unbind_match(game_id)
+                _cleanup_waiting_room(game_id)
+            elif session.is_active and session.player2_id == AI_PLAYER_ID:
+                # AI game: human forfeited (DB update done above), delete session.
                 await game_manager.delete_session(game_id)
                 _setup_sessions.pop(game_id, None)
-                _match_ids.pop(game_id, None)
+                _unbind_match(game_id)
                 _cleanup_waiting_room(game_id)
+            elif session.is_active:
+                # Non-AI active session: both players disconnected simultaneously.
+                # This is the waiting-room → game-page navigation transition —
+                # both old WS connections close before the new GamePage WS opens.
+                # Start a grace period so players can reconnect without losing the session.
+                game_manager.pause_session(game_id)
+                timer = asyncio.create_task(_both_disconnect_grace(game_id))
+                _disconnect_timers[game_id] = timer
+                logger.info(
+                    "[BOTH_DISCONNECT] Both players left %s with active session; "
+                    "%ds grace period started.",
+                    game_id,
+                    DISCONNECT_GRACE_SECONDS,
+                )
+            # else: session.is_active == False — _on_game_over owns cleanup, skip.
 
         else:
             # One player still connected — pause and start countdown for remote games only
@@ -1096,6 +1459,7 @@ def _clear_tournament_ready_for_user(tournament_id: int, user_id: int) -> list[i
     for key in empty_keys:
         _tournament_ready.pop(key, None)
         _tournament_waiting_rooms.pop(key, None)
+        _maybe_remove_tournament_ready_timeout_lock(tournament_id)
 
     return list(affected_match_ids)
 
@@ -1221,7 +1585,7 @@ async def tournament_websocket(
                         int(tournament_match.player1_id),
                         int(tournament_match.player2_id),
                     )
-                    _match_ids[game_room_id] = int(tournament_match.match_id)
+                    _bind_match(game_room_id, int(tournament_match.match_id))
                     _waiting_room_tournament_context[game_room_id] = (
                         tournament_id,
                         int(tournament_match.match_id),
@@ -1250,6 +1614,7 @@ async def tournament_websocket(
                 if not ready_set:
                     _tournament_ready.pop(ready_key, None)
                     _tournament_waiting_rooms.pop(ready_key, None)
+                    _maybe_remove_tournament_ready_timeout_lock(tournament_id)
 
                 await manager.broadcast(
                     room_id,

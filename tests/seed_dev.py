@@ -10,12 +10,15 @@ Or manually:
     docker compose exec user-service python3 /app/seed_dev.py
 
 Test accounts created:
-    username: AI      password: 123dev   id: 0
     username: alice   password: 123dev   id: (auto)
     username: bob     password: 123dev   id: (auto)
     username: charlie password: 123dev   id: (auto)
     username: joao    password: 123dev   id: (auto)
     username: maria   password: 123dev   id: (auto)
+
+Note: the AI opponent (id=0) and admin user are bootstrapped by
+services/user-service/database_init.sh on every `make` invocation,
+not by this script.
 
 Friendships seeded:
     alice   <-> bob     → accepted
@@ -59,7 +62,6 @@ def _hash(password: str) -> str:
 
 
 USERS = [
-    dict(id=0, username="AI",      display_name="AI Opponent", status="offline", bio="I'm the AI.",          avatar_url=None),
     dict(username="alice",   display_name="Alice",   status="online",  bio="Hi, I'm Alice!",        avatar_url=None),
     dict(username="bob",     display_name="Bob",     status="offline", bio="Bob here.",              avatar_url=None),
     dict(username="charlie", display_name="Charlie", status="online",  bio="Charlie checking in.",   avatar_url=None),
@@ -124,21 +126,10 @@ async def seed():
     Session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
     async with Session() as session:
-        # ── cleanup ───────────────────────────────────────────────────
-        # We truncate all tables to ensure a clean state and reset sequences.
-        # This avoids "duplicate key value" errors if the DB was partially seeded.
-        print("Cleaning up existing data...")
-        tables = [
-            "tokens", "friendships", "matches", "messages", "notifications",
-            "tournament_matches", "tournament_participants", "tournaments",
-            "blocks", "users", "chat_rooms", "credentials"
-        ]
-        try:
-            await session.execute(text(f"TRUNCATE TABLE {', '.join(tables)} RESTART IDENTITY CASCADE"))
-            await session.commit()
-        except Exception as e:
-            print(f"  [warn] truncation failed (some tables might not exist): {e}")
-            await session.rollback()
+        # Note: cleanup/TRUNCATE has been moved to tests/clear_db.sh.
+        # `make seed` runs clear-db first, then this script.
+        # If running this script directly, run `make clear-db` beforehand
+        # for a clean state — otherwise expect "duplicate key value" errors.
 
         # ── insert credentials first (users.credential_id is NOT NULL) ─
         cred_ids = {}

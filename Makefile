@@ -1,4 +1,5 @@
 SHELL := /bin/bash
+MAKEFLAGS += --no-print-directory
 
 .PHONY: all
 all: up
@@ -9,6 +10,7 @@ up:
 	DOMAIN=$${DOMAIN:-$$(hostname -I 2>/dev/null | awk '{print $$1}')} ; \
 	DOMAIN=$${DOMAIN:-localhost} ; \
 	DOMAIN=$$DOMAIN docker compose up --build -d
+	@$(MAKE) db-init
 
 .PHONY: down
 down:
@@ -38,6 +40,15 @@ ps:
 windows:
 	docker build -f services/backend-base/Dockerfile -t backend-base .
 	DOMAIN=$$(hostname -I 2>/dev/null | awk '{print $$1}') docker compose up --build -d
+	@$(MAKE) db-init
+
+# db-init: bootstrap users that must always exist (AI opponent id=0, admin user).
+# Idempotent — safe to run repeatedly. Called from `up` after services are healthy,
+# and from `seed` after its TRUNCATE to restore the bootstrap rows.
+.PHONY: db-init
+db-init: wait
+	@echo "Bootstrapping AI + admin users via database_init.sh..."
+	@docker compose exec -T user-service sh -s < services/user-service/database_init.sh
 
 .PHONY: wait
 wait:
@@ -54,28 +65,29 @@ wait:
 	done; \
 	echo ""; echo "Timeout: services not ready after 60s."; exit 1
 
-.PHONY: seed
-seed:
-	@echo "Waiting 5 seconds for seed operations to complete..."
-	@sleep 5
-	@docker compose cp tests/seed_dev.py user-service:/app/seed_dev.py
-	@docker compose exec -e WS_LOG_DEBUG=true user-service python3 /app/seed_dev.py
+# clear-db: TRUNCATE all dev/test tables and reset SERIAL sequences.
+# Standalone destructive op — leaves the DB empty (no AI, no admin).
+# Chain with `make db-init` and/or `make seed` to repopulate.
+.PHONY: clear-db
+clear-db:
+	@docker compose exec -T user-service sh -s < tests/clear_db.sh
 
-.PHONY: e2e
-e2e: wait seed
+.PHONY: seed
+seed: clear-db db-init
 	@echo "Waiting 5 seconds for seed operations to complete..."
 	@sleep 5
-	@echo "Running E2E integration tests..."
-	@PAGER=cat GIT_PAGER=cat bash tests/TranscendenceHealthCheck.sh | tee >(sed 's/\x1b\[[0-9;]*m//g' > release.txt) | cat
+	@docker compose exec -T -e WS_LOG_DEBUG=true user-service python3 - < tests/seed_dev.py
 
 .PHONY: check
 check: wait seed
-	PAGER=cat GIT_PAGER=cat bash tests/TranscendenceHealthCheck.sh | tee >(sed 's/\x1b\[[0-9;]*m//g' > make_check_results.txt) | cat
+	@docker build --target builder -t transcendence-frontend-builder -f services/frontend/Dockerfile . -q
+	@PAGER=cat GIT_PAGER=cat bash tests/TranscendenceHealthCheck.sh | tee >(sed 's/\x1b\[[0-9;]*m//g' > make_check_results.txt) | cat
 
 # check-no-wait: Run tests without re-checking service health (used in CI/CD after container verification)
 .PHONY: check-no-wait
 check-no-wait: seed
-	PAGER=cat GIT_PAGER=cat bash tests/TranscendenceHealthCheck.sh | tee >(sed 's/\x1b\[[0-9;]*m//g' > make_check_results.txt) | cat
+	@docker build --target builder -t transcendence-frontend-builder -f services/frontend/Dockerfile . -q
+	@PAGER=cat GIT_PAGER=cat bash tests/TranscendenceHealthCheck.sh | tee >(sed 's/\x1b\[[0-9;]*m//g' > make_check_results.txt) | cat
 
 # --- alembic migrations ---
 # Usage: make migrate-user MSG=add_avatar_url_to_users

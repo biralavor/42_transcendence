@@ -1,513 +1,294 @@
-# Authentication Pattern Comparison Across Services
+# Authentication Pattern Comparison
 
-**Date:** April 3, 2026  
-**Author:** Claude  
-**Context:** Analysis of authentication approaches in user-service, game-service, and chat-service
-
----
-
-## Overview
-
-This document documents the **unified hybrid authentication pattern** implemented across all Transcendence backend microservices:
-
-1. **User-Service**: Source of truth for authentication & user profiles
-2. **Game-Service**: Hybrid local + remote pattern (reference implementation)
-3. **Chat-Service**: Hybrid local + remote pattern (matches game-service)
-
-**Final Status (April 3, 2026):** ✅ All three services unified on same hybrid pattern
+**Author:** Bira
+**Last revised:** 2026-05-01
+**Context:** Personal study notes — comparing classical web-auth patterns and grounding them in what we actually shipped in ft_transcendence (real-time Pong + chat).
 
 ---
 
-## Authentication Flow Comparison
+## Why I am writing this
 
-### User-Service
+Every time I touch our login code I find myself re-deriving the same questions: why a JWT and not a session cookie? Why two tokens? Why sha256 the refresh token but sign the access one? Why does the WS endpoint accept the token in a query string when our REST endpoints take it in a header?
 
-**Entry Point: `authenticate()` (POST /auth/login)**
-```
-1. Validate username + password vs credentials table
-2. Create/update Tokens row (refresh token hash, expiration)
-3. Return JWT with {sub, credential_id}
-4. NOTE: User row creation DELEGATED to get_me() via fallback pattern
-```
+This document is my attempt to settle those questions in one place. The first half is the conceptual comparison (Sessions vs JWT vs OAuth/OIDC). The second half is what ft_transcendence actually does, with file paths and line numbers I can jump to in VS Code.
 
-**Entry Point: `get_me()` (GET /auth/me) — SINGLE SOURCE OF USER CREATION**
-```
-1. Decode JWT (validates token)
-2. Create User row if missing (lazy-create on first login via fallback)
-3. Return full User profile {id, username, status, display_name, bio, ...}
-4. Called by game-service and chat-service fallback when user not found locally
-```
-
-### Game-Service
-
-**Entry Point: `get_current_user_id()` (Any protected endpoint)**
-```
-1. Decode JWT locally (validates signature)
-2. Extract credential_id claim
-3. Query: SELECT id FROM users WHERE credential_id = ?
-   - Found? Return user_id immediately ✅ FAST PATH
-   - Not found? Call user-service GET /auth/me to create row
-4. Re-query users table, return user_id
-```
-
-**Key Feature:** Hybrid fast/fallback pattern
-- Fast path: Local DB query (no network call)
-- Fallback: Remote call only when user not yet cached locally
-
-### Chat-Service (Hybrid Pattern - Unified)
-
-**Entry Point: `get_current_user()` (HTTP protected endpoints)**
-```
-1. Decode JWT locally (validates signature)
-2. Extract credential_id claim
-3. Query: SELECT id FROM users WHERE credential_id = ?
-   - Found? Fetch full profile and return CurrentUser ✅ FAST PATH
-   - Not found? Call user-service GET /auth/me to create row
-4. Re-query users table, fetch profile, return CurrentUser
-```
-
-**Entry Point: WebSocket endpoints (`ws/chat/{room_slug}`, `ws/notifications`)**
-```
-1. Decode JWT locally, extract credential_id claim
-2. Query: SELECT id FROM users WHERE credential_id = ?
-   - Get actual user.id (used for DM participant validation)
-   - If not found: return 401 (user not in system)
-3. For DM rooms: validate caller is participant
-4. Accept WebSocket, notify recipient via notifications_manager
-```
-
-**Key Feature:** Hybrid local + remote with credential_id → user.id resolution
-- Local JWT decode + DB lookup (fast path, ~5ms)
-- Remote fallback only for lazy-creation (~500ms)
-- Correct user.id extraction from credential_id for DM logic
+I keep this file in `Studies/bira/` and not in `docs/` on purpose: the canonical reference is `docs/AUTHENTICATION.md`. This is my notebook.
 
 ---
 
-## Feature Comparison Matrix
+## Part 1 — Conceptual comparison
 
-| Aspect | User-Service | Game-Service | Chat-Service |
-|--------|--------------|--------------|---------------| 
-| **Entry Point** | `authenticate()` / `get_me()` | `get_current_user_id()` | `get_current_user()` / WebSocket |
-| **Token Validation** | JWT decode (local) | JWT decode (local) | JWT decode (local) |
-| **JWT Claims** | `{sub: username, credential_id: cred.id}` | `{sub: username, credential_id: cred.id}` | `{sub: username, credential_id: cred.id}` |
-| **ID Extraction** | N/A | Extract `credential_id` → query DB | Extract `credential_id` → query DB |
-| **User Lookup** | Creates User if missing | `SELECT id FROM users WHERE credential_id = ?` | `SELECT id FROM users WHERE credential_id = ?` |
-| **Fallback Logic** | N/A | If not found: call `/auth/me` | If not found: call `/auth/me` |
-| **Returns** | LoginResponse / User object | `int` (user_id) | `CurrentUser` object |
-| **Data Available** | Full profile + tokens | ID only | Full profile |
-| **Fast Path Latency** | N/A | ~5ms (local DB query) | ~5ms (local DB query) |
-| **Fallback Latency** | N/A | ~500ms (network + create) | ~500ms (network + create) |
-| **Network Calls** | ✅ 0 per request | ✅ 0 in fast path, ≤1 fallback | ✅ 0 in fast path, ≤1 fallback |
-| **Caching Strategy** | Lazy-create on first request (via get_me fallback) | Lazy-create on first request | Lazy-create on first request |
-| **WebSocket Support** | N/A | N/A | ✅ Credential_id → user.id resolution |
-| **DM Participant Validation** | N/A | N/A | ✅ Uses correct user.id from credential_id |
-| **Service Dependencies** | None (auth source) | user-service (optional fallback) | user-service (optional fallback) |
-| **Scalability** | ✅ High (no deps) | ✅ High (optional remote) | ✅ High (optional remote) |
-| **Single Source of Truth** | ✅ User-service | ✅ User-service | ✅ User-service |
----
+### The shape of the problem
 
-## Implementation Details
+An authentication system has to answer two questions on every request:
 
-### User-Service: User Creation (Single Source of Truth)
+1. **Who is this caller?** (identification)
+2. **Are they allowed to do what they are asking?** (authorization)
 
-**User Creation ONLY in `get_me()` (April 3, 2026 Centralization)**
+The interesting design choice is *where the answer lives*: on the server (sessions), in the token itself (JWT), or with a third party (OAuth/OIDC). Everything else — refresh tokens, hashing, expiry, rotation — is plumbing on top of that core choice.
 
-**Why centralize in `get_me()`?**
-```python
-# BEFORE (Wrong - 3 creation points):
-authenticate()           # Creates user ❌
-refresh_access_token()   # Creates user ❌
-get_me()                 # Creates user ❌
+### Sessions vs JWT vs OAuth — at a glance
 
-# AFTER (Correct - 1 creation point):
-authenticate()           # NO user creation ✅
-refresh_access_token()   # NO user creation ✅
-get_me()                 # ONLY user creation point ✅
-```
+| Aspect | Server-side sessions | Stateless JWT | OAuth 2.0 / OIDC |
+|---|---|---|---|
+| **Where state lives** | Server (DB/Redis), keyed by opaque session id | Inside the token (signed, self-contained) | Authorization server issues tokens; resource servers verify them |
+| **What the client holds** | A random opaque id (usually a cookie) | A signed JSON blob (`header.payload.signature`) | An access token (often JWT) + optional refresh token |
+| **Validation cost** | DB/cache lookup per request | Signature verify + claim check (no I/O) | Local verify if JWT; otherwise introspection call to AS |
+| **Revocation** | Trivial — delete the row | Hard — must wait for `exp` or maintain a denylist | Token introspection / revocation endpoint |
+| **Horizontal scaling** | Needs shared store (sticky sessions or Redis) | Trivial — any node can validate | Any node can validate; centralized AS is the bottleneck |
+| **Payload size on wire** | Small (just an id) | Larger (claims + signature, base64) | Same as JWT, plus extra metadata |
+| **Cross-domain / mobile** | CSRF concerns, cookie scoping | Easy — `Authorization: Bearer …` is portable | Designed for it; this is the whole point |
+| **Identity federation** | DIY | DIY | Native — login with Google/42/etc. |
+| **Failure mode if leaked** | Steal one user’s session until it expires or is revoked | Steal until `exp`; revocation is a problem | Same as JWT, but refresh-token rotation can detect replay |
+| **Best fit** | Classic monoliths, server-rendered apps | SPAs, microservices, mobile clients | Third-party login, multi-tenant, public APIs |
 
-**How Services Now Trigger User Creation:**
-```python
-# Service (game-service or chat-service)
-async def get_current_user(credentials):
-    credential_id = jwt.decode(token)["credential_id"]
-    
-    # Try fast path
-    user_id = query(f"SELECT id FROM users WHERE credential_id = {credential_id}")
-    if user_id:
-        return user_id  # ✅ User exists, return immediately
-    
-    # Fallback: user not found locally
-    # Call user-service GET /auth/me
-    resp = await client.get(
-        f"{USER_SERVICE_URL}/auth/me",
-        headers={"Authorization": f"Bearer {token}"}
-    )
-    # ↑ This calls get_me() which CREATE THE USER ROW ← ← ← Single source
-    
-    # Retry query after creation
-    user_id = query(f"SELECT id FROM users WHERE credential_id = {credential_id}")
-    return user_id
-```
+### The trade-off I keep forgetting
 
-**Benefits of Single Source of Truth:**
-- No duplicate user creation logic (was in 3 places)
-- Consistent behavior (same code path for all users)
-- Clear audit trail (all users created via get_me())
-- Easier maintenance (change logic in one place)
-- Simpler fallback pattern (services "trust" get_me() to create user)
+Stateless JWTs trade **revocation** for **scalability**. A signed token with a 24-hour lifetime is, by design, valid for 24 hours — there is no `DELETE FROM sessions WHERE id = …` you can run when a user clicks "log out everywhere".
 
-### Game-Service: Hybrid Pattern (Recommended)
+The standard fix is the **two-token pattern**:
 
-**Fast Path (99% of cases):**
-```python
-# 1ms query instead of 500ms network call
-user_id = await _lookup_user_id(db, credential_id)
-if user_id is not None:
-    return user_id  # ✅ Fast return
-```
+- A **short-lived access token** (15 min or so) that is stateless and validated locally.
+- A **long-lived refresh token** that is stateful — stored server-side, revocable, used only to mint new access tokens.
 
-**Fallback Path (first login or migration):**
-```python
-# Call user-service only if user not cached locally
-async with httpx.AsyncClient() as client:
-    resp = await client.get(
-        f"{_USER_SERVICE_URL}/auth/me",
-        headers={"Authorization": f"Bearer {credentials.credentials}"},
-    )
-# User row now created in DB, future requests use fast path
-```
+You get most of the scalability of JWT (the hot path is signature verification, no I/O), and most of the control of sessions (the refresh-token row is the revocation lever). The cost is the second round-trip every 15 minutes and the slightly more complex client. This is the pattern we ended up using.
 
-**Benefits:**
-- 99% of requests = sub-millisecond latency
-- Graceful lazy-loading on first request
-- Minimal dependence on user-service availability
+### Where OAuth/OIDC fits
 
-### Chat-Service: Hybrid Pattern (Unified)
+OAuth 2.0 is not really a competitor to "sessions vs JWT" — it is one layer up. It defines *how a third-party authorization server hands tokens to your app*. Inside that token, you can still use a JWT (most providers do) or an opaque token introspected via a separate call.
 
-**HTTP Endpoints:**
-```python
-async def get_current_user(credentials):
-    # 1. Decode JWT locally
-    credential_id = payload.get("credential_id")
-    
-    # 2. Fast path: query local DB
-    result = await db.execute(
-        text("SELECT id FROM users WHERE credential_id = :cid"),
-        {"cid": credential_id}
-    )
-    if result.first():
-        # User already in DB, fetch full profile
-        return await _get_user_profile(db, user_id)
-    
-    # 3. Fallback: lazy-create via user-service
-    resp = await client.get(f"{USER_SERVICE_URL}/auth/me", headers=auth)
-    # User row now created; re-query and return
-```
+OIDC adds an `id_token` (always a JWT) carrying user identity claims. If we ever wire up "Login with 42", that is the protocol we would speak.
 
-**WebSocket Endpoints:**
-```python
-async def chat_websocket(websocket, room_slug, token):
-    # 1. Extract credential_id from JWT
-    credential_id = _uid_from_token(token)
-    
-    # 2. Lookup actual user.id from credential_id
-    result = await db.execute(
-        text("SELECT id FROM users WHERE credential_id = :cid"),
-        {"cid": credential_id}
-    )
-    sender_uid = row[0] if row else None
-    
-    # 3. For DM: validate sender is participant
-    if sender_uid not in dm_participants:
-        await websocket.close(code=4003)
-    
-    # 4. Broadcast notifications to recipient (using correct user.id)
-```
+We do not use OAuth in ft_transcendence — auth lives entirely inside `user-service`. I am noting it for completeness so that if I add Google login next sprint I do not start from zero.
 
-**Benefits:**
-- ✅ Hybrid performance (fast + optional fallback)
-- ✅ Correct user.id resolution for DM logic
-- ✅ WebSocket + HTTP unified on same pattern
-- ✅ Notification system works reliably
-- ✅ Scales horizontally (optional remote calls)
+### Hashing notes (the parts I always have to look up)
+
+| Concern | What to use | Why |
+|---|---|---|
+| **Password storage** | bcrypt / argon2 | Slow on purpose. Rainbow-table resistant via per-password salt. |
+| **Refresh-token storage** | sha256 | Token already has 256 bits of entropy from a CSPRNG — no need for slow hashing. Constant-time compare. |
+| **JWT signing** | HS256 (shared secret) or RS256 (key pair) | HS256 is fine for one team owning all services. RS256 lets verifiers hold only the public key. |
+| **Session id** | CSPRNG, 128+ bits | Treat the id like a password. Hashing on the server side is reasonable. |
 
 ---
 
-## Recommendations
+## Part 2 — How ft_transcendence does it
 
-### 1. **Hybrid Pattern is Production Standard** ✅
+The short version: **two-token JWT** with a stateful refresh side. Access tokens are stateless JWTs validated locally; refresh tokens are random hex strings whose sha256 is stored in `tokens` and rotated on every refresh.
 
-Pattern now implemented across all three services:
+Files I keep coming back to:
 
-```python
-# 1. Try fast local lookup
-user_id = await _lookup_user_id(db, credential_id)
-if user_id is not None:
-    return user_id  # ~5ms
+- `src/backend/user-service/service.py` — all the auth business logic
+- `src/backend/user-service/main.py` — the `/auth/*` routes
+- `src/backend/user-service/models/credentials.py` — `Credentials` and `Tokens` tables
+- `src/backend/user-service/models/user.py` — the profile row, linked by `credential_id`
+- `src/backend/shared/config/settings.py` — `JWT_SECRET_KEY` source
+- `src/frontend/src/utils/apiClient.js` — the 401-retry / refresh dance
+- `src/frontend/src/utils/jwtUtils.js` — base64url decode + expiry helpers
+- `src/frontend/src/context/authContext.jsx` — proactive refresh timer + inactivity logout
+- `src/frontend/src/context/authStorage.js` — sessionStorage / localStorage routing
 
-# 2. Fallback: lazy-create via get_me()
-async with httpx.AsyncClient() as client:
-    resp = await client.get(f"{USER_SERVICE_URL}/auth/me", headers=...)
-    
-# 3. Retry lookup
-return await _lookup_user_id(db, credential_id)
-```
+### The data model
 
-**Performance Achieved:**
-- Fast path: ~5ms (local DB query) — 95%+ of requests
-- Fallback path: ~500ms (network + user-service + re-query) — rare
-- No cascading failures (graceful degradation)
+We have **two tables** for auth, plus the `users` profile row.
 
-### 2. **All Services Use credential_id Claim** ✅
+**`credentials`** (`models/credentials.py:7`)
+- `id` (PK)
+- `username` (unique)
+- `password` — bcrypt hash, stored as a UTF-8 string
 
-All services now unified on same JWT structure:
+**`tokens`** (`models/credentials.py:15`)
+- `id` (PK)
+- `credential_id` (FK → `credentials.id`) — one row per credential, upserted on each login
+- `token_type` — always `"bearer"`
+- `refresh_token_hash` — sha256 of the raw refresh token, hex
+- `created_at`
+- `expires_at` — set 7 days out at issue time
 
-**Standard JWT Claims:**
+**`users`** (`models/user.py:7`)
+- `id` (PK) — this is the id used everywhere downstream
+- `username`, `display_name`, `bio`, `avatar_url`, `status`, `game_preferences`
+- `credential_id` (FK → `credentials.id`, NOT NULL, UNIQUE) — the join back to auth
+- `is_admin` (boolean, default false) — added in migration `20260427_a8b2c4d6e8f0`
+- `last_login_at` — naive timestamp, updated by `authenticate()`
+
+The migrations that established this shape:
+- `20260318_a1b2c3d4e5f6_add_credentials_and_tokens.py` — created both tables
+- `20260318_b2c3d4e5f6a7_harden_tokens_table.py` — dropped plaintext `access_token`, renamed `refresh_token` → `refresh_token_hash`, added `created_at` / `expires_at`
+- `20260325_082195afefdc_make_credential_id_not_null_in_users.py` — enforced the FK as NOT NULL
+- `20260427_a8b2c4d6e8f0_add_admin_login_tracking.py` — added `is_admin`, `last_login_at`, and the `user_login_days` table for streaks
+
+The `b2c3d4e5f6a7_harden_tokens_table` migration is the one I want to remember: the original schema stored plaintext access tokens and plaintext refresh tokens. We deleted both. Access tokens are now never stored at all (the JWT signature is the proof). Refresh tokens are stored only as their sha256.
+
+### Registration — `POST /auth/register`
+
+Routed at `main.py:78`, implemented by `register_credentials()` at `service.py:139`.
+
+1. SELECT against `credentials.username` to fail-fast with 409 on duplicates.
+2. `hash_password()` (`service.py:32`) calls `bcrypt.gensalt()` + `bcrypt.hashpw()`. Salt is per-password and embedded in the hash.
+3. INSERT `credentials`. The DB-level UNIQUE constraint catches the race window between the SELECT and the INSERT — the `IntegrityError` handler maps it to 409.
+4. **No `users` row is created here.** That happens lazily on first login.
+
+### Login — `POST /auth/login`
+
+Routed at `main.py:60`, implemented by `authenticate()` at `service.py:62`.
+
+The flow:
+
+1. SELECT `credentials` by username.
+2. `bcrypt.checkpw()` against the stored hash. Constant-time, so it does not leak length info.
+3. `_ensure_user()` (`service.py:38`) — get-or-create the `users` row. This is the single user-creation point. If two requests race here, the UNIQUE on `users.credential_id` raises `IntegrityError` and we 409.
+4. Update `users.last_login_at` and INSERT into `user_login_days` (idempotent, `ON CONFLICT DO NOTHING`) — drives the activity-streak counter.
+5. Mint the access JWT via `create_access_token()` (`service.py:25`). Claims: `{sub, credential_id, exp}`. Algorithm HS256. Secret from `settings.JWT_SECRET_KEY`. Lifetime `ACCESS_TOKEN_EXPIRE_MINUTES = 15`.
+6. Generate the refresh token: `secrets.token_hex(32)` → 64 hex chars (256 bits of entropy). Store `sha256(raw)` in `tokens.refresh_token_hash`. Set `expires_at = now + 7 days`. Upsert — one row per credential.
+7. Return `{access_token, token_type, refresh_token}`. The raw refresh token is shown to the client exactly once at this moment; we never have it on the server again.
+
+Important nuance from `service.py:78`: `last_login_at` is stored as a *naive* timestamp because the column matches `users.created_at` which is also naive. The code explicitly strips `tzinfo` before assignment. Future me, do not "fix" this without changing the column.
+
+### Refresh — `POST /auth/refresh`
+
+Routed at `main.py:73`, implemented by `refresh_access_token()` at `service.py:110`.
+
+1. Hash the incoming refresh token, look up the row by `refresh_token_hash`.
+2. Reject if not found *or* `expires_at <= now` — same 401 either way (no oracle).
+3. Look up the `Credentials` row by `tokens.credential_id`.
+4. Mint a brand-new access JWT.
+5. **Rotate the refresh token**: generate a new one, overwrite `refresh_token_hash`, push `expires_at` out by another 7 days. The old refresh token is invalidated by being overwritten.
+6. Return the new pair.
+
+The rotation is what makes "refresh-token theft" detectable in principle: if both the legitimate client and an attacker hold the same refresh token, whoever refreshes second gets a 401, which is a strong signal something is wrong. We do not currently act on that signal, but the shape is right.
+
+Note: `refresh_access_token()` does not create or update the `users` row. It deliberately leaves that to `get_me()` (the comment at `service.py:123` says so). I had originally written this as "be defensive, create on refresh too", and Mauricio pushed back — three creation points was a maintenance trap.
+
+### `GET /auth/me` — the identity endpoint
+
+Routed at `main.py:65`, implemented by `get_me()` at `service.py:169`.
+
+1. `jwt.decode(token, JWT_SECRET_KEY, algorithms=["HS256"])`. The `jose` library raises:
+   - `ExpiredSignatureError` → 401 "Token expired" (specific so the frontend can decide to refresh)
+   - `JWTError` (everything else: bad signature, malformed, missing claims) → 401 "Invalid token"
+2. Pull `sub` (username) and `credential_id` from the claims. Either being absent → 401.
+3. `_ensure_user(credential_id, username, session)` — get-or-create the `users` row.
+4. Return the full User. The frontend reads `id`, `username`, `avatar_url`, `is_admin`, `display_name`, etc.
+
+This is the **only** place a `users` row gets created in the backend. Both `authenticate()` and `refresh_access_token()` deliberately do not. If a service ever needs to "wake up" a profile row, the path is: hit `/auth/me` with the token.
+
+Admin status: `users.is_admin` is **bootstrapped at DB-init time** — admin users are seeded with `is_admin=true` in their row. There is no longer a "promote on login if username matches `ADMIN_USERNAME`" code path; the old `ADMIN_USERNAME` setting was removed. `settings.py` no longer holds it. The admin endpoints (`/admin/activity` at `main.py:467`) just check `current_user.is_admin`.
+
+### What goes inside our JWT
+
+The exact claims (`service.py:88` and `service.py:124`):
+
 ```json
 {
-  "sub": "username",
-  "credential_id": "credentials.id",
-  "exp": "expiration_timestamp"
+  "sub": "alice",
+  "credential_id": 17,
+  "exp": 1748728800
 }
 ```
 
-All services:
-- Decode JWT locally
-- Extract `credential_id` claim
-- Query `SELECT id FROM users WHERE credential_id = ?` to get user.id
-- Use user.id for all business logic (DMs, notifications, etc.)
+- `sub` is the username — handy for logs and for the frontend to display "logged in as …" without a round trip (`getTokenUsername()` in `jwtUtils.js:140`).
+- `credential_id` is the stable database key. Other services (game, chat) decode it locally and use `SELECT id FROM users WHERE credential_id = ?` to resolve the actual `user.id` they need for foreign keys.
+- `exp` is a Unix timestamp in seconds. The `jwtUtils.js:62` helper multiplies by 1000 to get JS milliseconds.
 
-### 4. **Document in Code**
+We deliberately do **not** put `user.id` in the JWT. The reason: at JWT-creation time inside `authenticate()`, the `users` row may not yet exist (it gets created by `_ensure_user()` in the same function, but that ordering is fragile). `credential_id` is always available because we just looked it up to verify the password. Stable claims should reference stable keys.
 
-Add docstrings explaining the pattern:
+### Frontend — the apiClient + AuthContext duet
 
-```python
-async def get_current_user(credentials):
-    """Authenticate user and return profile.
-    
-    This follows the hybrid pattern:
-    1. Try local DB lookup (fast path, ~5ms)
-    2. Fall back to user-service GET /auth/me (lazy creation, ~500ms)
-    3. Return full CurrentUser object with all profile data
-    
-    Design rationale:
-    - Minimizes network calls for repeat logins
-    - Auto-creates missing users on first request
-    - Single source of truth: user-service
-    """
-```
+Two components on the frontend, with a clear split of responsibility.
 
----
+**`apiClient.js` is the transport layer.** Every authenticated request goes through `apiCall()` (`apiClient.js:141`). It:
 
-## Flow Diagrams
+1. Reads the access token from `getStoredAuth()` (`apiClient.js:147`).
+2. Attaches `Authorization: Bearer <token>` (`apiClient.js:149`).
+3. Fires the request.
+4. If the response is **401** and `skipRefreshOn401` is not set: calls `queuedTokenRefresh()` (`apiClient.js:174`), which calls `attemptTokenRefresh()` against `/api/users/auth/refresh`. If the refresh succeeds, it retries the original request once with the new access token. If the refresh fails, it dispatches an `auth:logout` event and redirects to `/login`.
+5. The `queuedTokenRefresh` indirection (`apiClient.js:71`) ensures that ten parallel 401s do not fire ten refresh requests — only the first triggers a refresh, the others await the same promise.
 
-### Final State (Unified Hybrid Pattern) ✅
+**`authContext.jsx` is the React-state layer.** It:
 
-```
-User-Service              Game-Service              Chat-Service
-    │                          │                           │
-    ├─ POST /auth/login        │                    GET /protected
-    │  └─ JWT {sub, cred_id}   │                    or
-    │                          │                    WebSocket /ws/chat
-    │                          │                           │
-    │                    GET /protected            Extract credential_id
-    │                          │                           │
-    │                    Try local query           Try local query
-    │                    WHERE cred_id = ?        WHERE cred_id = ?
-    │                          │                           │
-    │                      Found? ✅               Found? ✅
-    │                      Return user_id         Fetch profile
-    │                          │                   Return CurrentUser
-    │                          │                           │
-    │                      Not found?              Not found?
-    │                          │                           │
-    │                    └──→ GET /auth/me ←────┘
-    │                          │
-    │                    Create User row
-    │                    Return full profile
-    │                          │
-    │                    └──→ Re-query local ←────┘
-    │                    WHERE cred_id = ?
-    │                          │
-    │                      Get user_id
-    │                      Return success ✅
-    │
-    └─ GET /auth/me (single source of truth)
-       ├─ Validate token
-       ├─ Create User if missing (defensive)
-       ├─ Return full User object
-```
+1. Hydrates from storage on mount (`authContext.jsx:19`).
+2. Exposes `auth`, `isAuthenticated`, `login(data, rememberMe)`, `logout()` via `useAuth()`.
+3. Runs a **proactive refresh timer** (`authContext.jsx:54`): on every `access_token` change, it decodes the JWT, computes `expiresAt - now - 30s`, and schedules a `manualRefreshToken()` for that moment. So in the happy path the token is rotated before any 401 ever happens — the apiClient retry path is the fallback.
+4. Runs an **inactivity tracker** (`authContext.jsx:118`) that pops `<InactivityWarning />` and ultimately calls `logout()` if the user is idle.
 
-### Performance Profile
+**Storage routing** (`authStorage.js`): tokens live in `sessionStorage` by default (cleared on tab close) and in `localStorage` when "Remember me" is checked. `getStoredAuth()` checks sessionStorage first, then localStorage, and tags the result with `storageType` so refresh writes back to the same one. `clearAuth()` wipes both, which matters if a stale token is sitting in the wrong place.
+
+### WebSocket auth
+
+REST gets the JWT via the `Authorization` header. WebSockets cannot set custom headers on `new WebSocket(...)` in browsers, so we pass it as a **query-string param**:
 
 ```
-Scenario 1: Repeat Login (95% of requests)
-─────────────────────────────────────────
-Client → Service: Decode JWT locally (~1ms)
-       → Database: SELECT id WHERE credential_id = ? (~4ms)
-       ← Success: Return user/profile (~0.1ms)
-       Total: ~5ms ✅
-
-Scenario 2: New User (first request)
-─────────────────────────────────────
-Client → Service: Decode JWT locally (~1ms)
-       → Database: SELECT id WHERE credential_id = ? (not found)
-       → User-Service: GET /auth/me (network latency ~150ms)
-       → User-Service: Create User row (~50ms)
-       → Database: SELECT id WHERE credential_id = ? (now found) (~4ms)
-       ← Success: Return user/profile (~0.1ms)
-       Total: ~205ms ✅
+wss://host/api/users/ws/notifications/<user_id>?token=<jwt>
 ```
 
----
+Server side, `notification_router.py:23` reads `token: str = ""` from the query, calls `get_me(token, session)` (the same function the REST `/auth/me` route uses), and either accepts the connection or closes it with a code:
+- `4001` — missing or invalid token
+- `4003` — token is valid but `me.id != user_id` (you are trying to subscribe to someone else's channel)
 
-## Learnings & Key Decisions
-
-### 1. Credential_id vs User.id
-
-**Early Mistake:** Generating JWT with `uid` (user.id) instead of `credential_id`
-- Problem: User table might not exist yet at JWT creation time
-- Problem: DM slugs use user.id, but we were extracting wrong claim
-- Solution: Use `credential_id` (always exists in Credentials table) and resolve to user.id
-
-**Rule Established:** JWT claims must reference stable, existing database keys
-
-### 2. Hybrid Pattern is Essential
-
-**Why not pure remote (every request calls user-service)?**
-- Adds 100-500ms per request (network latency)
-- Single point of failure (if user-service down, all requests fail)
-- Cascading failures under load
-
-**Why hybrid (try local, fallback remote)?**
-- 95%+ of requests hit fast cache (~5ms)
-- Graceful degradation (lazy-create on first request)
-- Minimal dependency on user-service availability
-- Scales horizontally within service
-
-### 3. WebSocket Authentication is Critical
-
-**Issue Encountered:** WebSocket endpoints were extracting credential_id but treating it as user.id
-- DM room slug `DM-4-5` expects user.id values 4 and 5
-- But credential_id might be 123 and 456
-- Invalid participant check → WebSocket closed
-- Notifications sent to wrong recipient → unread counts never updated
-
-**Solution:** Resolve credential_id → user.id before any business logic
-
-### 5. User Creation Centralized to Single Function
-
-**Issue Discovered (April 3, 2026):** User creation was scattered across 3 functions:
-- `authenticate()` — created user on login ❌
-- `refresh_access_token()` — created user on token refresh ("be defensive") ❌
-- `get_me()` — created user on profile fetch ✅
-
-**Problem:** No single source of truth for user creation
-- Duplicate logic in 3 places
-- Inconsistent behavior (different error handling)
-- Hard to maintain and audit
-- Fragile: change logic in one place, others break silently
-
-**Solution (April 3, 2026):** Centralize ALL user creation in `get_me()`
-- Remove user creation from `authenticate()` 
-- Remove user creation from `refresh_access_token()`
-- Keep ONLY in `get_me()` 
-
-**Result:**
-- ✅ Single source of truth (get_me)
-- ✅ Services use fallback pattern to trigger creation
-- ✅ No duplicate logic
-- ✅ Clear audit trail
-- ✅ All 289 tests pass
+Game and chat services do the same trick with the same `?token=` param. This is the one place where a JWT ends up in a URL, which is mildly unfortunate (URLs end up in proxy logs) — the mitigation is the 15-minute lifetime.
 
 ---
 
-## Testing Checklist
+## Part 3 — Things I learned the hard way
 
-- [x] User can login (user-service generates credential_id JWT)
-- [x] HTTP requests work (game-service hybrid pattern)
-- [x] Chat rooms can be created (chat-service HTTP hybrid pattern)
-- [x] WebSocket DM connects (credential_id → user.id resolution)
-- [x] Notifications received (correct user.id in notifications_manager)
-- [x] Unread counts update (FriendsSidebar receives notification)
-- [x] Both users online: DM messages real-time
-- [x] One user offline: Notifications queued until reconnect
+### `credential_id` vs `user.id`
 
----
+We originally put `user.id` in the JWT. Two problems:
 
-## Migration Path
+1. The `users` row might not exist yet at JWT-creation time, depending on the call order.
+2. DM room slugs (`DM-4-5`) use `user.id`, but other services were extracting "the id from the JWT" and treating it as a `user.id` when it was sometimes a `credential_id`. The participant check failed silently and notifications went to the wrong room.
 
-**Phase 1: User-Service (Complete)** ✅
-- JWT claims: `{sub: username, credential_id: credential.id}`
-- `authenticate()` creates User row
-- `get_me()` enriches + creates User defensively
+The rule I now follow: **JWT claims must be keys that are stable from the moment the JWT is minted**. `credential_id` is stable (we just verified the password against that row). `user.id` is not, in our schema, because the `users` row is created lazily.
 
-**Phase 2: Chat-Service (Complete)** ✅
-- HTTP: Hybrid pattern with credential_id → user.id lookup
-- WebSocket: Credential_id resolution for DM validation & notifications
-- Both paths use lazy-creation via `get_me()` fallback
+### Hash the right thing with the right algorithm
 
-**Phase 3: Game-Service (Already Implemented)**
-- Hybrid pattern established
-- Fast path: ~5ms local query
-- Fallback: ~500ms lazy-create
+- Passwords go through bcrypt because attackers can guess them. Cost factor matters.
+- Refresh tokens go through sha256 because they are already 256 bits of CSPRNG entropy. Bcrypting a refresh token would just be slow for no security gain. The DB-leak property we want is "leaked rows cannot be replayed against the API", and sha256 gives us exactly that.
+- The access token is not hashed because it is not stored. The signature is the proof.
 
-**Phase 4: Token Claims Unified** ✅
-- All services expect: `{sub: username, credential_id: cred.id}`
-- All services query: `SELECT id FROM users WHERE credential_id = ?`
-- All services use same user.id for business logic
+### Single user-creation point
+
+Earlier versions of `service.py` created the `users` row in three places: `authenticate()`, `refresh_access_token()`, and `get_me()`. Each had slightly different error handling. When the `display_name` column was added I had to change three spots and missed one in tests.
+
+`_ensure_user()` is now the only function that inserts into `users`, and only `authenticate()` and `get_me()` call it. `refresh_access_token()` deliberately does not. The `users` row exists from first login onward; refresh does not need to re-check.
+
+### Why proactive refresh *and* reactive 401-retry
+
+I asked myself why we need both. The answer is: they cover different races.
+
+- **Proactive** (the `authContext.jsx` timer) handles the common case: token is about to expire, refresh it 30s ahead. Zero failed requests, smooth UX.
+- **Reactive** (the `apiClient.js` 401 handler) handles the edge cases the timer cannot: tab was suspended, system slept, clock skew, multiple tabs racing, the timer was cleared by a remount. The reactive path is the safety net.
+
+Removing either makes the system fragile in a way that is hard to reproduce in dev.
 
 ---
 
-## Summary
+## Part 4 — Open questions / things I might revisit
 
-**Final Pattern:** Hybrid local + remote with credential_id → user.id resolution
-- **JWT Claims:** `{sub: username, credential_id: cred.id, exp: timestamp}`
-- **User Resolution:** `SELECT id FROM users WHERE credential_id = ?`
-- **Fast Path:** ~5ms (cached users)
-- **Fallback Path:** ~200ms (first login, lazy-create)
-- **Status:** ✅ All three services unified and working
+- **Refresh-token reuse detection.** Right now if an attacker steals a refresh token and uses it once, the legitimate client's next refresh fails with 401 and the user is logged out. We could turn that 401 into a "panic" signal: invalidate the entire `tokens` row for that credential. Not implemented.
+- **JWT algorithm.** HS256 with a shared secret is fine for one team owning all three services. If we ever expose a public verifier (a CDN-edge auth check, say), RS256 with a public/private split would be cleaner.
+- **Session invalidation on password change.** Currently changing a password does not delete the `tokens` row. Should it? Probably yes, but we have no password-change endpoint yet.
+- **OAuth / 42 login.** Listed as a Minor module we did not pick. If a future cohort wants it, the place to add it is a new `/auth/oauth/callback` route that ends in the same `LoginResponse` shape — the rest of the stack would not need to change.
 
 ---
 
-## Performance Achieved
+## Quick reference
 
-| Operation | Latency | Status |
-|-----------|---------|--------|
-| Local user lookup (DB query) | ~5ms | ✅ Fast path (95%+ requests) |
-| Credential_id → user.id resolution | ~4ms | ✅ Sub-millisecond |
-| User-service `/auth/me` call | ~150-300ms | ✅ Fallback only (first login) |
-| HTTP endpoint p50 | ~5ms | ✅ Fast path |
-| HTTP endpoint p95 | ~50ms | ✅ Some DB contention |
-| WebSocket connection (DM) | ~5ms | ✅ Credential_id resolution |
-| DM notification delivery | ~10ms | ✅ User.id lookup + broadcast |
-
-**Achieved:**
-- Fast path latency: <10ms for 95%+ of requests
-- Lazy-creation: ~200ms on first login only
-- No cascading failures (graceful fallback)
-- Scalable: Services work independently with optional remoting
-
----
-
-## Verification
-
-All tests passing as of April 3, 2026:
-- ✅ User registration & login (credential_id JWT)
-- ✅ HTTP protected endpoints (game-service hybrid)
-- ✅ Chat room creation (chat-service HTTP hybrid)
-- ✅ WebSocket connections (credential_id → user.id)
-- ✅ DM notifications (user.id-based recipients)
-- ✅ Unread counts (FriendsSidebar updates)
-- ✅ Offline user handling (graceful degradation)
-
----
-
-## Related Files
-
-- [src/backend/user-service/service.py](../../src/backend/user-service/service.py) - `authenticate()` and `get_me()`
-- [src/backend/game-service/auth.py](../../src/backend/game-service/auth.py) - Hybrid pattern reference
-- [src/backend/chat-service/main.py](../../src/backend/chat-service/main.py) - HTTP hybrid pattern
-- [src/backend/chat-service/ws/router.py](../../src/backend/chat-service/ws/router.py) - WebSocket hybrid pattern
-- [src/backend/shared/config/settings.py](../../src/backend/shared/config/settings.py) - `USER_SERVICE_URL` setting
-
+| Thing | Value | Where |
+|---|---|---|
+| Password hash | bcrypt | `service.py:32` |
+| Access token type | JWT, HS256 | `service.py:25` |
+| Access token lifetime | 15 minutes | `service.py:19` |
+| Access token claims | `sub`, `credential_id`, `exp` | `service.py:88` |
+| Refresh token | 64-hex chars from `secrets.token_hex(32)` | `service.py:92` |
+| Refresh token storage | sha256 hex in `tokens.refresh_token_hash` | `service.py:93`, `models/credentials.py:21` |
+| Refresh token lifetime | 7 days | `service.py:20` |
+| Refresh token rotation | On every refresh call | `service.py:128` |
+| JWT secret source | `settings.JWT_SECRET_KEY` env var | `shared/config/settings.py:12` |
+| Frontend token storage | sessionStorage by default, localStorage if "Remember me" | `context/authStorage.js:30` |
+| 401 retry policy | Refresh once, retry once, logout on second failure | `utils/apiClient.js:170` |
+| Proactive refresh trigger | 30s before `exp` | `context/authContext.jsx:69` |
+| WS auth transport | `?token=<jwt>` query param | `ws/notification_router.py:28` |
+| Single user-creation point | `_ensure_user()` called only by `authenticate()` and `get_me()` | `service.py:38` |
+| Admin bootstrap | `users.is_admin` seeded at DB init; no login-time promotion | `models/user.py:18` |

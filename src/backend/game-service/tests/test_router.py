@@ -868,3 +868,343 @@ async def test_leaderboard_rank_changes_when_sort_changes(client):
     # Assert ranks are monotonic in each response.
     assert [r["rank"] for r in rows_xp] == sorted([r["rank"] for r in rows_xp])
     assert [r["rank"] for r in rows_wins] == sorted([r["rank"] for r in rows_wins])
+
+
+# --------------------------------------------------------------------------- #
+# GET /games/live (public, no auth)
+# --------------------------------------------------------------------------- #
+
+@pytest.mark.asyncio
+async def test_get_live_games_response_is_well_formed_list(client):
+    """Shape-only check: the response is a JSON list and each entry conforms
+    to the LiveGameSummary contract regardless of how many ongoing matches
+    happen to be in the DB at the time."""
+    resp = await client.get("/games/live")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert isinstance(body, list)
+    for entry in body:
+        assert {"game_id", "player1", "player2", "started_at", "spectator_count"} <= entry.keys()
+        assert isinstance(entry["spectator_count"], int)
+
+
+@pytest.mark.asyncio
+async def test_get_live_games_returns_envelope_for_active_match(client):
+    from service.ws.router import _bind_match, _unbind_match
+
+    # Create an ongoing match between two seeded test users
+    create = await client.post(
+        "/matches", json={"player1_id": 5001, "player2_id": 5002}
+    )
+    assert create.status_code == 201, create.text[:200]
+    match_id = create.json()["id"]
+
+    # /games/live only lists matches with a live WS session bound — simulate
+    # one by binding a synthetic game_id to this match_id.
+    test_game_id = f"test-live-{match_id}"
+    _bind_match(test_game_id, match_id)
+
+    try:
+        resp = await client.get("/games/live")
+        assert resp.status_code == 200
+        rows = resp.json()
+        found = next((r for r in rows if r["game_id"] == test_game_id), None)
+        assert found is not None, f"bound match {match_id} should appear in live list"
+        assert found["player1"]["id"] == 5001
+        assert found["player2"]["id"] == 5002
+        assert "started_at" in found
+        # No active spectator WS for this synthetic room → spectator_count == 0
+        assert found["spectator_count"] == 0
+    finally:
+        _unbind_match(test_game_id)
+
+    # Clean up: finish the match so it doesn't leak into subsequent tests
+    finish = await client.post(
+        f"/matches/{match_id}/finish",
+        json={"winner_id": 5001, "score_p1": 7, "score_p2": 0},
+    )
+    assert finish.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_get_live_games_is_publicly_accessible(client):
+    """No Authorization header → 200, never 401/403."""
+    # The `client` fixture intentionally sets NO auth headers.
+    resp = await client.get("/games/live")
+    assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_get_live_games_skips_matches_without_live_ws_session(client):
+    """A match that exists in the DB as 'ongoing' but has no live WS session
+    bound is treated as stale: it must NOT appear in /games/live, AND the
+    endpoint reconciles it by marking status='finished' (no manual cleanup
+    needed in the test — the endpoint IS the cleanup)."""
+    create = await client.post(
+        "/matches", json={"player1_id": 5003, "player2_id": 5010}
+    )
+    assert create.status_code == 201
+    match_id = create.json()["id"]
+
+    resp = await client.get("/games/live")
+    assert resp.status_code == 200
+    rows = resp.json()
+    from service.ws.router import _match_ids
+    for entry in rows:
+        mapped_match_id = _match_ids.get(entry["game_id"])
+        assert mapped_match_id != match_id, (
+            f"unbound match {match_id} should not appear in live list, "
+            f"but found entry: {entry}"
+        )
+    # Cleanup is implicit: the reconciliation in /games/live already marked
+    # this match as finished. Asserting that explicitly is the job of
+    # test_get_live_games_marks_unbound_match_finished_and_excludes_it.
+
+
+@pytest.mark.asyncio
+async def test_get_live_games_marks_unbound_match_finished_and_excludes_it(client, session):
+    """A match that is 'ongoing' in the DB but has NO live WS session bound is
+    a stale row left over from a crashed game. Hitting /games/live must mark
+    it status='finished' (idempotently, only if still 'ongoing') and exclude
+    it from the response."""
+    from sqlalchemy import select
+    from service.models.match import Match
+    from service.ws.router import _match_id_to_game_id, _match_ids
+
+    create = await client.post(
+        "/matches", json={"player1_id": 5001, "player2_id": 5002}
+    )
+    assert create.status_code == 201, create.text[:200]
+    match_id = create.json()["id"]
+
+    # Sanity: the row is currently 'ongoing' and has NO binding.
+    assert match_id not in _match_id_to_game_id
+
+    # Backdate started_at past the helper's 30-second grace window so the
+    # endpoint reconciles this row immediately (we're testing reconciliation,
+    # not the grace window — that's covered separately below).
+    from sqlalchemy import text as sql_text
+    await session.execute(
+        sql_text("UPDATE matches SET started_at = NOW() - INTERVAL '1 hour' WHERE id = :id"),
+        {"id": match_id},
+    )
+    await session.commit()
+
+    resp = await client.get("/games/live")
+    assert resp.status_code == 200
+    rows = resp.json()
+
+    # Response excludes this match (no binding → filtered).
+    for entry in rows:
+        mapped = _match_ids.get(entry["game_id"])
+        assert mapped != match_id, (
+            f"stale match {match_id} must NOT appear in live list, "
+            f"but found entry: {entry}"
+        )
+
+    # DB row now status='finished' with finished_at populated; winner_id and
+    # scores are untouched (NULL / 0).
+    result = await session.execute(select(Match).where(Match.id == match_id))
+    row = result.scalars().one()
+    assert row.status == "finished", (
+        f"reconciliation must mark stale match finished, got status={row.status}"
+    )
+    assert row.finished_at is not None
+    assert row.winner_id is None
+    assert row.score_p1 == 0
+    assert row.score_p2 == 0
+
+
+@pytest.mark.asyncio
+async def test_get_live_games_does_not_touch_already_finished_rows(client, session):
+    """If a row is already 'finished', the endpoint must not bump finished_at
+    or otherwise modify it."""
+    from datetime import datetime, timezone
+    from sqlalchemy import select
+    from service.models.match import Match
+
+    earlier = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    m = Match(
+        player1_id=5001,
+        player2_id=5002,
+        status="finished",
+        finished_at=earlier,
+        winner_id=5001,
+        score_p1=7,
+        score_p2=3,
+    )
+    session.add(m)
+    await session.commit()
+    match_id = m.id
+
+    resp = await client.get("/games/live")
+    assert resp.status_code == 200
+
+    # Re-read the row through a fresh query (don't trust ORM-cached state).
+    session.expire_all()
+    result = await session.execute(select(Match).where(Match.id == match_id))
+    row = result.scalars().one()
+    assert row.status == "finished"
+    assert row.finished_at == earlier  # NOT bumped
+    assert row.winner_id == 5001
+    assert row.score_p1 == 7
+    assert row.score_p2 == 3
+
+
+@pytest.mark.asyncio
+async def test_get_live_games_does_not_finish_recently_created_matches(client, session):
+    """A match created seconds ago without a WS binding (e.g. during the
+    create-to-_bind_match window in the player handshake) must NOT be
+    prematurely reconciled. Once the row ages past the grace window, it
+    becomes eligible for reconciliation."""
+    from sqlalchemy import select, text as sql_text
+    from service.models.match import Match
+    from service.ws.router import _match_id_to_game_id
+
+    create = await client.post(
+        "/matches", json={"player1_id": 5001, "player2_id": 5002}
+    )
+    assert create.status_code == 201, create.text[:200]
+    match_id = create.json()["id"]
+    assert match_id not in _match_id_to_game_id
+
+    # First poll: row is fresh (started_at ≈ now), within the grace window.
+    # The endpoint must NOT mark it finished.
+    resp = await client.get("/games/live")
+    assert resp.status_code == 200
+
+    session.expire_all()
+    result = await session.execute(select(Match).where(Match.id == match_id))
+    row = result.scalars().one()
+    assert row.status == "ongoing", (
+        f"recently-created match must not be reconciled within the grace "
+        f"window, got status={row.status}"
+    )
+    assert row.finished_at is None
+
+    # Backdate started_at past the grace window. The next poll reconciles.
+    await session.execute(
+        sql_text("UPDATE matches SET started_at = NOW() - INTERVAL '1 hour' WHERE id = :id"),
+        {"id": match_id},
+    )
+    await session.commit()
+
+    resp = await client.get("/games/live")
+    assert resp.status_code == 200
+
+    session.expire_all()
+    result = await session.execute(select(Match).where(Match.id == match_id))
+    row = result.scalars().one()
+    assert row.status == "finished"
+    assert row.finished_at is not None
+
+
+@pytest.mark.asyncio
+async def test_get_live_games_includes_score_and_rank_fields(client):
+    """Each entry must expose score1, score2, player1.rank, player2.rank
+    (rank may be int or null; score is always int). Ensures the loop body
+    actually runs by binding at least one synthetic live game."""
+    from service.ws.router import _bind_match, _unbind_match
+
+    create = await client.post(
+        "/matches", json={"player1_id": 5001, "player2_id": 5002}
+    )
+    assert create.status_code == 201
+    match_id = create.json()["id"]
+    test_game_id = f"test-shape-{match_id}"
+    _bind_match(test_game_id, match_id)
+
+    try:
+        resp = await client.get("/games/live")
+        assert resp.status_code == 200
+        rows = resp.json()
+        assert len(rows) >= 1, "expected at least the synthetic live game"
+        for entry in rows:
+            assert "score1" in entry and isinstance(entry["score1"], int)
+            assert "score2" in entry and isinstance(entry["score2"], int)
+            assert "rank" in entry["player1"]
+            assert "rank" in entry["player2"]
+            assert entry["player1"]["rank"] is None or isinstance(entry["player1"]["rank"], int)
+            assert entry["player2"]["rank"] is None or isinstance(entry["player2"]["rank"], int)
+    finally:
+        _unbind_match(test_game_id)
+
+    finish = await client.post(
+        f"/matches/{match_id}/finish",
+        json={"winner_id": 5001, "score_p1": 7, "score_p2": 0},
+    )
+    assert finish.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_get_live_games_score_defaults_to_zero_when_no_session_bound(client):
+    """When a match row is bound to a synthetic game_id but no live
+    GameSession exists in `game_manager`, the score must default to (0, 0)
+    rather than raising or returning null."""
+    from service.ws.router import _bind_match, _unbind_match
+
+    create = await client.post(
+        "/matches", json={"player1_id": 5001, "player2_id": 5002}
+    )
+    assert create.status_code == 201
+    match_id = create.json()["id"]
+
+    test_game_id = f"test-score-{match_id}"
+    _bind_match(test_game_id, match_id)
+    try:
+        resp = await client.get("/games/live")
+        rows = resp.json()
+        found = next((r for r in rows if r["game_id"] == test_game_id), None)
+        assert found is not None
+        assert found["score1"] == 0
+        assert found["score2"] == 0
+    finally:
+        _unbind_match(test_game_id)
+
+    finish = await client.post(
+        f"/matches/{match_id}/finish",
+        json={"winner_id": 5001, "score_p1": 7, "score_p2": 0},
+    )
+    assert finish.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_get_live_games_score_reflects_active_session(client, monkeypatch):
+    """When a GameSession exists for the bound game_id, score1/score2 must
+    reflect that session's `score.p1` / `score.p2`."""
+    from service.ws.router import _bind_match, _unbind_match
+    import service.game_manager as gm_module
+
+    create = await client.post(
+        "/matches", json={"player1_id": 5001, "player2_id": 5002}
+    )
+    assert create.status_code == 201
+    match_id = create.json()["id"]
+    test_game_id = f"test-live-score-{match_id}"
+    _bind_match(test_game_id, match_id)
+
+    class _FakeScore:
+        p1 = 6
+        p2 = 3
+    class _FakeSession:
+        score = _FakeScore()
+    monkeypatch.setitem(gm_module.game_manager._sessions, test_game_id, _FakeSession())
+
+    try:
+        resp = await client.get("/games/live")
+        rows = resp.json()
+        found = next((r for r in rows if r["game_id"] == test_game_id), None)
+        assert found is not None
+        assert found["score1"] == 6
+        assert found["score2"] == 3
+    finally:
+        gm_module.game_manager._sessions.pop(test_game_id, None)
+        _unbind_match(test_game_id)
+
+    finish = await client.post(
+        f"/matches/{match_id}/finish",
+        json={"winner_id": 5001, "score_p1": 7, "score_p2": 0},
+    )
+    assert finish.status_code == 200
+
+

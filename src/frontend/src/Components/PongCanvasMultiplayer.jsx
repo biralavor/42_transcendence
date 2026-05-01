@@ -27,7 +27,10 @@ function PongCanvasMultiplayer(props) {
   const gameId = props?.gameId || 'default-game'
   const player1Id = props?.player1Id
   const player2Id = props?.player2Id
+  const matchId = props?.matchId
   const onGameEnd = props?.onGameEnd || (() => { })
+  const spectator = Boolean(props?.spectator)
+  const onSpectatorCount = props?.onSpectatorCount || (() => { })
   const { auth } = useAuth()
   const { theme } = useGameSettings()
   const themeImagesRef = useRef(null)
@@ -49,6 +52,7 @@ function PongCanvasMultiplayer(props) {
   const [showGoal, setShowGoal] = useState(false)
   const [connStatus, setConnStatus] = useState('connecting')
   const [errorMsg, setErrorMsg] = useState('')
+  const [disconnectSecondsLeft, setDisconnectSecondsLeft] = useState(null)
 
   // Track which player(s) this client represents
   const playerTypeRef = useRef(null)
@@ -105,12 +109,17 @@ function PongCanvasMultiplayer(props) {
       console.log('[WS] Connected to game server')
       setConnStatus('connected')
 
-      // Send game_start to initialize the session
-      ws.send(JSON.stringify({
-        type: 'game_start',
-        player1_id: parseInt(player1Id, 10),
-        player2_id: parseInt(player2Id, 10),
-      }))
+      // Spectators must NOT send game_start — server's spectator branch closes
+      // 4003 on any inbound message. Players still need it to bootstrap.
+      if (!spectator) {
+        const startPayload = {
+          type: 'game_start',
+          player1_id: parseInt(player1Id, 10),
+          player2_id: parseInt(player2Id, 10),
+        }
+        if (matchId) startPayload.match_id = parseInt(matchId, 10)
+        ws.send(JSON.stringify(startPayload))
+      }
     }
 
     ws.onmessage = (event) => {
@@ -140,7 +149,14 @@ function PongCanvasMultiplayer(props) {
             }
           }
         } else if (message.type === 'game_over') {
-          handleGameEnd(message.winner_id, message.score_p1, message.score_p2)
+          setDisconnectSecondsLeft(null)
+          handleGameEnd(message.winner_id, message.score_p1, message.score_p2, message.forfeit_reason)
+        } else if (message.type === 'spectator_count' && Number.isFinite(message.count)) {
+          onSpectatorCount(message.count)
+        } else if (message.type === 'opponent_disconnected' && Number.isFinite(message.seconds_left)) {
+          setDisconnectSecondsLeft(message.seconds_left)
+        } else if (message.type === 'opponent_reconnected') {
+          setDisconnectSecondsLeft(null)
         }
       } catch (err) {
         console.error('[WS] Message parse error:', err)
@@ -153,16 +169,26 @@ function PongCanvasMultiplayer(props) {
       setErrorMsg('WebSocket connection error')
     }
 
-    ws.onclose = () => {
-      console.log('[WS] Connection closed')
+    ws.onclose = (event) => {
+      console.log('[WS] Connection closed', event.code, event.reason)
+      if (event.code === 4004) {
+        setConnStatus('error')
+        setErrorMsg(event.reason || 'Match already ended')
+        return
+      }
       setConnStatus('disconnected')
     }
 
     webSocketRef.current = ws
   }
 
-  function handleGameEnd(winnerId, scoreP1, scoreP2) {
-    onGameEnd({ winner_id: winnerId, score_p1: scoreP1, score_p2: scoreP2 })
+  function handleGameEnd(winnerId, scoreP1, scoreP2, forfeitReason) {
+    onGameEnd({
+      winner_id: winnerId,
+      score_p1: scoreP1,
+      score_p2: scoreP2,
+      forfeit_reason: forfeitReason ?? null,
+    })
   }
 
   function sendInput(direction) {
@@ -202,16 +228,18 @@ function PongCanvasMultiplayer(props) {
       updateCanvasDimensions()
     }
     window.addEventListener('resize', onResize)
-    window.addEventListener('keydown', onKeydown)
-    window.addEventListener('keyup', onKeyup)
+    if (!spectator) {
+      window.addEventListener('keydown', onKeydown)
+      window.addEventListener('keyup', onKeyup)
+    }
 
     // Render loop - just display server state, no client simulation
     function renderLoop() {
       // Get current input
       const direction = getInput()
 
-      // Send input to server only if it changed to avoid WS spam
-      if (direction !== lastDirectionRef.current) {
+      // Spectators must never send input (server closes 4003).
+      if (!spectator && direction !== lastDirectionRef.current) {
         sendInput(direction)
         lastDirectionRef.current = direction
       }
@@ -228,14 +256,19 @@ function PongCanvasMultiplayer(props) {
       cancelAnimationFrame(loopRef.current)
       clearTimeout(goalTimerRef.current)
       window.removeEventListener('resize', onResize)
-      window.removeEventListener('keydown', onKeydown)
-      window.removeEventListener('keyup', onKeyup)
+      if (!spectator) {
+        window.removeEventListener('keydown', onKeydown)
+        window.removeEventListener('keyup', onKeyup)
+      }
 
       // Close WebSocket
       if (webSocketRef.current) {
         webSocketRef.current.close()
       }
     }
+    // Intentional: `spectator` is captured at mount and not in the dep array
+    // because callers do not toggle this prop mid-match. Adding it would tear
+    // down and rebuild the WebSocket on every prop change.
   }, [])
 
   return (
@@ -254,6 +287,15 @@ function PongCanvasMultiplayer(props) {
         {showGoal && (
           <div className='goal-overlay'>
             <span className='goal-text'>GOOOAL!</span>
+          </div>
+        )}
+        {disconnectSecondsLeft != null && (
+          <div className='disconnect-countdown-overlay' role='status' aria-live='polite'>
+            <span className='disconnect-countdown-title'>Opponent disconnected</span>
+            <span className='disconnect-countdown-timer'>{disconnectSecondsLeft}s</span>
+            <span className='disconnect-countdown-subtitle'>
+              Match will end if they don't return
+            </span>
           </div>
         )}
         <canvas ref={canvasRef}></canvas>

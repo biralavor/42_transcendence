@@ -32,6 +32,13 @@
 .game-over-headline--won  { color: #4ade80; }
 .game-over-headline--lost { color: #f87171; }
 
+.game-over-subtitle {
+  font-size: 1.05rem;
+  color: #f4d03f;
+  opacity: 0.9;
+  margin: 0 0 1rem 0;
+}
+
 .game-over-winner-name {
   font-size: 1.1rem;
   opacity: 0.75;

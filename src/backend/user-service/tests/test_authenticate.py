@@ -47,8 +47,11 @@ async def test_login_returns_tokens_without_user_id():
     cred = _make_credential()
     user = MagicMock()
     user.id = 1
-    # execute calls: 1=credentials, 2=user (for uid), 3=tokens (None → new)
-    session = _session_returning(cred, user, None)
+    user.is_admin = False
+    # execute calls: 1=credentials, 2=user (via _ensure_user),
+    # 3=user_login_days INSERT (result unused), 4=tokens (None → new)
+    session = _session_returning(cred, user, None, None)
+    session.add = MagicMock()
 
     from shared.database import get_db
 
@@ -74,13 +77,17 @@ async def test_login_returns_tokens_without_user_id():
 async def test_subsequent_login_updates_token_not_duplicates():
     """Second login: existing Tokens row is updated in-place, no new row added."""
     cred = _make_credential()
+    user = MagicMock()
+    user.id = 1
+    user.is_admin = False
     existing_token = MagicMock()
     existing_token.credential_id = cred.id
     existing_token.refresh_token_hash = "oldhash"
     existing_token.expires_at = None
-    
-    # execute calls: 1=credentials, 2=tokens (found)
-    session = _session_returning(cred, existing_token)
+
+    # execute calls: 1=credentials, 2=user (via _ensure_user),
+    # 3=user_login_days INSERT, 4=tokens (found)
+    session = _session_returning(cred, user, None, existing_token)
 
     added_objects = []
     session.add = MagicMock(side_effect=added_objects.append)
@@ -112,20 +119,16 @@ async def test_subsequent_login_updates_token_not_duplicates():
 
 
 @pytest.mark.asyncio
-async def test_login_does_not_create_user_row():
-    """After (April 3, 2026) centralization: authenticate() does NOT create users.
-    
-    User creation is delegated to get_me() which is called by other services'
-    fallback pattern when the user is not found locally.
-    """
-    from service.models.user import User
-
+async def test_login_updates_last_login_at_on_existing_user():
+    """authenticate() must stamp last_login_at on the user row on every successful login."""
     cred = _make_credential()
-    token_row = _make_token_row(credential_id=cred.id)
-    # user lookup returns None — but we DON'T create a user in authenticate()
-    session = _session_returning(cred, token_row)
-    added_objects = []
-    session.add = MagicMock(side_effect=added_objects.append)
+    user = MagicMock()
+    user.id = 1
+    user.is_admin = False
+    user.last_login_at = None
+    # execute calls: 1=credentials, 2=user, 3=user_login_days INSERT, 4=tokens
+    session = _session_returning(cred, user, None, None)
+    session.add = MagicMock()
 
     from shared.database import get_db
 
@@ -140,11 +143,7 @@ async def test_login_does_not_create_user_row():
         app.dependency_overrides.pop(get_db, None)
 
     assert resp.status_code == 200, resp.text
-    
-    # Verify NO user was created by authenticate()
-    # (user creation happens only in get_me() via fallback pattern)
-    added_users = [o for o in added_objects if isinstance(o, User)]
-    assert len(added_users) == 0, "authenticate() must NOT create users; that's get_me()'s job"
+    assert user.last_login_at is not None, "authenticate() must set last_login_at"
 
 
 @pytest.mark.asyncio
@@ -164,6 +163,7 @@ async def test_login_token_contains_identity_claims():
 
     user = MagicMock()
     user.id = 42
+    user.is_admin = False
 
     token_row = MagicMock()
     token_row.credential_id = 7
@@ -177,9 +177,11 @@ async def test_login_token_contains_identity_claims():
         return r
 
     session = AsyncMock()
+    session.add = MagicMock()
     session.execute.side_effect = [
         _result(cred),       # find credential
-        _result(user),       # find user row
+        _result(user),       # find user row (via _ensure_user)
+        _result(None),       # user_login_days INSERT
         _result(token_row),  # find token row
     ]
 

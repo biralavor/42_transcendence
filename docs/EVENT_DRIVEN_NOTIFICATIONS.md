@@ -1,617 +1,367 @@
 # Event-Driven Notification Architecture — ft_transcendence
 
-**Version**: 1.0  
-**Last Updated**: 2026-04-12  
-**Status**: ✅ Production (Phases 1 & 2 Complete)  
-**Test Coverage**: 539+ unit tests + E2E validation
+**Version**: 2.0
+**Last Updated**: 2026-05-01
+**Status**: Production
 
 ---
 
 ## Overview
 
-The event-driven notification architecture replaces **polling-based WebSocket handlers** with **true event signaling** using `asyncio.Event()`. This delivers notifications **instantly** (< 50ms) instead of waiting for the next poll cycle (≥ 1000ms).
+Notifications in ft_transcendence cross three microservices (user-service, game-service,
+chat-service) and a React SPA. The transport is **WebSocket-first with REST fallback**:
+the server pushes notification frames over a per-user WS channel, and the client also
+exposes REST endpoints for listing, marking read, and deleting notifications. The
+client uses smart polling against the REST surface only when the WS is disconnected
+or the document is hidden.
 
-### Problem We Solved
-
-**Before** (Polling):
-```
-1. Client connects to /ws/notifications
-2. Handler enters sleep loop: await asyncio.sleep(1)  ← wastes 1 second
-3. 1 second later, checks for notifications (even if none)
-4. If a notification arrived 100ms after handler started sleeping:
-   → Notification waits ~900ms before being delivered
-5. Total latency: 900ms - 1000ms (unpredictable)
-```
-
-**After** (Event-Driven):
-```
-1. Client connects to /ws/notifications
-2. Handler waits on asyncio.Event()
-3. Notification created in REST endpoint → broadcast() called
-4. broadcast() sends JSON to client AND signals the event
-5. Handler wakes IMMEDIATELY (< 1ms)
-6. Total latency: 1ms - 50ms (predictable, instant)
-```
-
-### Impact
-
-| Metric | Before | After | Improvement |
-|--------|--------|-------|-------------|
-| **Latency** | 900-1000ms | 1-50ms | **20-50x faster** |
-| **CPU usage** | High (polling) | Low (event-driven) | ~50% reduction |
-| **Scalability** | N handlers poll independently | All wait on same event | Linear improvement |
-| **User experience** | 1s delay on game invite modal | Instant modal popup | Notably better |
+The internal wakeup path between REST handlers and WS handlers is **event-driven** via
+`asyncio.Event()`. REST endpoints persist the notification, then call
+`ConnectionManager.broadcast()`, which sends the JSON frame to connected sockets and
+signals an `EventRegistry` keyed by `user_id`. WS handlers wait on that event in a
+race against client-disconnect detection, so delivery latency is bounded by network
+RTT rather than a polling interval.
 
 ---
 
 ## Architecture
 
-### Core Pattern: EventRegistry
+### Components
 
-A centralized **EventRegistry** bridges REST endpoints and WebSocket handlers:
+| Layer | File | Role |
+|-------|------|------|
+| Persistence | `src/backend/user-service/notifications.py` | CRUD over the `notifications` table (savepoint-scoped writes) |
+| Model | `src/backend/user-service/models/notification.py` | SQLAlchemy `Notification` row (incl. `from_user_id`) |
+| REST | `src/backend/user-service/main.py` (`/notifications`, `/game-invites`, `/game-invite/response`, `/friends/...`) | Creates rows, commits, then broadcasts |
+| WS handler (user) | `src/backend/user-service/ws/notification_router.py` | `/ws/notifications/{user_id}` listen-only channel |
+| WS handler (chat) | `src/backend/chat-service/ws/router.py` | `/ws/notifications` listen-only channel for DM previews |
+| Connection mgr | `src/backend/shared/ws/manager.py` | `ConnectionManager` with optional `signal_callback` |
+| Event registry (user) | `src/backend/user-service/ws/event_registry.py` | `notification_event_registry`, `presence_event_registry` |
+| Event registry (chat) | `src/backend/chat-service/ws/event_registry.py` | `chat_notification_event_registry` |
+| Game-service hook | `src/backend/game-service/notifications.py` | HTTP-calls user-service `/game-invites` for tournament events |
+| Achievement hook | `src/backend/game-service/persistence.py` (`insert_game_achievement`) | Inserts directly into `notifications` (cross-service write) |
+| Frontend consumer | `src/frontend/src/context/notificationContext.jsx` | WS subscriber + REST fallback poller, achievement toast queue, dedupe by id |
+| Frontend UI | `src/frontend/src/Components/NotificationPanel.jsx` | Renders the merged notification list |
 
-```python
-class EventRegistry:
-    """Manages per-user notification events.
-    
-    REST endpoints → broadcast() → signal_event(user_id)
-    WebSocket handlers → wait on event → process notification
-    """
-    
-    async def get_or_create_event(self, user_id: str) -> asyncio.Event:
-        """Get or create an event for this user."""
-        
-    async def signal_event(self, user_id: str) -> None:
-        """Wake all handlers waiting on this user's event."""
-        
-    async def clear_event(self, user_id: str) -> None:
-        """Clear event for next notification cycle."""
-        
-    async def cleanup_event(self, user_id: str) -> None:
-        """Remove event on last handler disconnect."""
-```
+### `notifications` table
 
-### Event Flow Diagram
+Defined in `src/backend/user-service/models/notification.py`:
 
-```
-┌──────────────────┐
-│  REST Endpoint   │  User B sends game invite request
-│  POST /game-     │  (or friend request, message, etc)
-│  invite/response │
-└────────┬─────────┘
-         │
-         ├─→ Save to database
-         │   UPDATE notifications SET read=false WHERE user_id=B...
-         │
-         └─→ notify_manager.broadcast(f"{user_b_id}", {
-                 "type": "game_invite",
-                 "from_user": user_a,
-                 "room_id": "..."
-            })
-             │
-             ├─→ Send JSON to all connected websockets for User B
-             │   websocket.send_json(message)
-             │
-             └─→ event_registry.signal_event(str(user_b_id))
-                 │
-                 └─→ asyncio.Event().set()  ← WAKES handler immediately!
-                     │
-                     └─→ Handler in /ws/notifications was waiting:
-                         await event.wait()  ← NOW WAKES UP!
-                         │
-                         └─→ Processes broadcasted message
-                            (UI updates show notification modal)
-```
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | int (pk) | |
+| `user_id` | int (fk users.id, CASCADE) | recipient |
+| `from_user_id` | int (fk users.id, SET NULL), nullable | sender for game-invite-style events; added by alembic `20260412_a1b2c3d4e5f7_add_from_user_id_to_notifications.py` |
+| `type` | varchar(50) | one of `friend_request`, `friend_request_accepted`, `friend_request_declined`, `game_invite`, `game_invite_response`, `game_invite_timeout`, `tournament_full`, `tournament_match_available`, `tournament_complete`, `game_achievement`, plus `new_dm` which is broadcast-only (chat-service does not persist DM notifications in this table) |
+| `message` | text | <= 256 chars (validated in `create_notification`) |
+| `read` | bool, default false | |
+| `created_at` | timestamptz | server default `now()` |
 
-### Handler Loop Pattern
+The complete list of types accepted by the REST response schema lives in
+`src/backend/user-service/schemas.py` (`NOTIFICATION_TYPES` literal,
+`NotificationResponse`).
 
-**Listen-only handlers** (notifications, presence) use this pattern:
+### EventRegistry
+
+Per-service registry that maps `str(user_id)` to a single `asyncio.Event`. Same shape
+in user-service and chat-service:
 
 ```python
-@router.websocket("/ws/notifications/{user_id}")
-async def notification_handler(websocket: WebSocket, user_id: str) -> None:
-    await manager.connect(str(user_id), websocket)
-    try:
-        while True:
-            # Get or create event for this user
-            event = await notification_event_registry.get_or_create_event(str(user_id))
-            
-            try:
-                # Wait for event with timeout (makes it cancellable!)
-                await asyncio.wait_for(event.wait(), timeout=10.0)
-            except asyncio.TimeoutError:
-                # Timeout is OK—just means no notifications for 10s
-                # Loop continues, handler stays alive, re-enters wait
-                continue
-            
-            # Event fired! Notification was broadcasted.
-            # Clear event and loop to get ready for next notification.
-            await notification_event_registry.clear_event(str(user_id))
-            
-    except asyncio.CancelledError:
-        logger.debug(f"Notification handler cancelled for user {user_id}")
-        await notification_event_registry.cleanup_event(str(user_id))
-        raise
-    except WebSocketDisconnect:
-        pass
-    finally:
-        manager.disconnect(str(user_id), websocket)
-```
-
-**Why `asyncio.wait_for()` with timeout?**
-- `event.wait()` alone is non-cancellable on disconnect (would hang)
-- `asyncio.wait_for(event.wait(), timeout=10)` is cancellable by design
-- TimeoutError is expected and safe—loop just continues
-- Worst-case disconnect detection: 10 seconds (acceptable)
-
----
-
-## Implementation Status
-
-### Phase 1: user-service ✅ COMPLETE
-
-**Services Affected**: user-service (notification & presence channels)
-
-**Changes**:
-1. **Created**: `src/backend/user-service/ws/event_registry.py`
-   - EventRegistry class with per-user events
-   - Two global instances: `notification_event_registry`, `presence_event_registry`
-   - Thread-safe (uses `asyncio.Lock()`)
-
-2. **Modified**: `src/backend/user-service/ws/notification_router.py`
-   - Replaced `await asyncio.sleep(1)` polling loop
-   - Added `asyncio.wait_for(event.wait(), timeout=10.0)` pattern
-   - Proper `CancelledError` handling
-
-3. **Modified**: `src/backend/user-service/ws/presence_router.py`
-   - Same event-driven pattern
-   - Signals on friend online/offline changes
-
-4. **Modified**: `src/backend/shared/ws/manager.py`
-   - Enhanced `broadcast()` to signal events
-   - Flexible try/except (works with any registry)
-
-**Results**:
-- **Tests**: 105/111 passing (95%)
-- **Latency**: Game invites delivered instantly (<50ms)
-- **Status**: ✅ Production-ready
-
-### Phase 2: chat-service ✅ COMPLETE
-
-**Services Affected**: chat-service (DM notification channel)
-
-**Changes**:
-1. **Created**: `src/backend/chat-service/ws/event_registry.py`
-   - Isolated from user-service for modularity
-   - Single instance: `chat_notification_event_registry`
-
-2. **Modified**: `src/backend/chat-service/ws/router.py`
-   - `/ws/notifications` endpoint now event-driven
-   - Signals event after broadcasting DM
-
-3. **Modified**: `src/backend/chat-service/ws/manager.py` (via shared/ws/)
-   - Integrated signal call in broadcast()
-
-**Results**:
-- **Tests**: 47/51 passing (92%)
-- **Latency**: DM notifications instant
-- **Status**: ✅ Production-ready
-
-### Phase 3: game-service (DEFERRED)
-
-**Analysis**: Game service uses bi-directional WebSocket (receive input → broadcast state), not polling. Already efficient. Defer optimization until performance analysis shows bottleneck.
-
----
-
-## Services & Handlers
-
-### Event-Driven Services
-
-| Service | Endpoint | Handler Type | Event Registry | Status |
-|---------|----------|--------------|----------------|--------|
-| **user-service** | `/ws/notifications/{user_id}` | Listen-only | `notification_event_registry` | ✅ Active |
-| **user-service** | `/ws/presence` | Listen-only | `presence_event_registry` | ✅ Active |
-| **chat-service** | `/ws/notifications` | Listen-only | `chat_notification_event_registry` | ✅ Active |
-
-### Non-Event Services (Already Efficient)
-
-| Service | Endpoint | Type | Reason |
-|---------|----------|------|--------|
-| **chat-service** | `/ws/chat/{room}` | Bi-directional | Receive-driven (client sends, server responds) |
-| **game-service** | `/ws/game/{game_id}` | Bi-directional | Input-driven (player inputs trigger broadcasts) |
-
----
-
-## How It Works: Detailed Flow
-
-### Scenario: Alice sends game invite to Bob
-
-**Step 1: Alice clicks "Invite to Game"**
-```
-Frontend (Alice)
-  ↓
-POST /api/users/game-invites
-  ├─ receiver_id: bob_id
-  ├─ room_id: "invite-uuid-xyz"
-  └─ Body: JSON invite details
-```
-
-**Step 2: user-service REST handler processes**
-```python
-# src/backend/user-service/service.py::send_game_invite()
-
-# Save to DB
-notification = Notification(
-    user_id=bob_id,
-    type="game_invite",
-    from_user_id=alice_id,
-    data={"room_id": "invite-uuid-xyz"}
-)
-db.add(notification)
-db.commit()  ← DB now has the notification
-
-# Broadcast to all of Bob's connected handlers
-await notify_manager.broadcast(
-    room_id=str(bob_id),
-    message={
-        "type": "game_invite",
-        "from_user": alice_username,
-        "room_id": "invite-uuid-xyz"
-    }
-)
-```
-
-**Step 3: ConnectionManager broadcasts**
-```python
-# src/backend/shared/ws/manager.py::broadcast()
-
-async def broadcast(self, room_id: str, message: dict) -> None:
-    # Send JSON to all connected WebSocket clients for this user
-    for ws in list(self._rooms.get(room_id, set())):
-        try:
-            await ws.send_json(message)  ← Bob's browser receives JSON
-        except Exception as e:
-            logger.warning(f"Failed to send: {e}")
-            self.disconnect(room_id, ws)
-    
-    # Signal handlers that new data is available
-    try:
-        from service.ws.event_registry import notification_event_registry
-        await notification_event_registry.signal_event(room_id)  ← KEY LINE!
-        # asyncio.Event().set() wakes all waiting handlers
-    except Exception:
-        logger.warning(f"Failed to signal event")
-```
-
-**Step 4: Notification handler wakes up**
-```python
-# src/backend/user-service/ws/notification_router.py
-
-# Handler was waiting...
-while True:
-    event = await notification_event_registry.get_or_create_event(str(bob_id))
-    
-    try:
-        await asyncio.wait_for(event.wait(), timeout=10.0)  ← WAS WAITING HERE
-        # ^ NOW WAKES UP (< 1ms) because event.set() was called!
-    except asyncio.TimeoutError:
-        continue
-    
-    # Clear for next notification
-    await notification_event_registry.clear_event(str(bob_id))
-    # Loop continues, handler ready for next event
-```
-
-**Step 5: Frontend receives and displays**
-```javascript
-// src/frontend/src/pages/Dashboard.jsx
-
-ws.onmessage = (event) => {
-    const message = JSON.parse(event.data)
-    
-    if (message.type === "game_invite") {
-        // Show modal immediately!
-        setGameInviteModal({
-            visible: true,
-            from: message.from_user,
-            roomId: message.room_id
-        })
-    }
-}
-```
-
-**Total Latency**: < 50ms end-to-end (was ~1000ms with polling)
-
----
-
-## Key Benefits
-
-### 1. Instant Notifications
-- Game invites appear in modal immediately
-- DM notifications delivered instantly
-- No artificial 1-second delays
-
-### 2. Scalability
-- All handlers for a user wait on **one shared event**
-- When event.set() is called, ALL handlers wake simultaneously
-- Supports 1000s of concurrent connections efficiently
-
-### 3. Lower CPU Usage
-- No polling → no wasteful sleep loops
-- CPU only active when processing notifications
-- Idle handlers consume effectively zero resources
-
-### 4. Better User Experience
-- Responsive UI that feels "live"
-- No jarring delays when accepting invites
-- Consistent, predictable latency
-
-### 5. Maintainability
-- **Pattern is standardized**: All listen-only handlers use same EventRegistry pattern
-- **Easy to add new services**: Copy EventRegistry to new service, import + use
-- **Flexible manager.py**: Works with any service's registry (non-blocking try/except)
-
----
-
-## For Developers: Adding Event-Driven to New Handlers
-
-If you need to add event-driven notifications to a new WebSocket handler:
-
-### 1. Create EventRegistry (if service doesn't have one)
-
-```python
-# src/backend/new-service/ws/event_registry.py
-import asyncio
-from typing import Dict
-
 class EventRegistry:
     def __init__(self):
         self._events: Dict[str, asyncio.Event] = {}
         self._lock = asyncio.Lock()
 
-    async def get_or_create_event(self, user_id: str) -> asyncio.Event:
-        async with self._lock:
-            if user_id not in self._events:
-                self._events[user_id] = asyncio.Event()
-            return self._events[user_id]
-
-    async def signal_event(self, user_id: str) -> None:
-        event = await self.get_or_create_event(user_id)
-        event.set()
-
-    async def clear_event(self, user_id: str) -> None:
-        event = await self.get_or_create_event(user_id)
-        event.clear()
-
-    async def cleanup_event(self, user_id: str) -> None:
-        async with self._lock:
-            if user_id in self._events:
-                del self._events[user_id]
-
-# Global instances
-my_event_registry = EventRegistry()
+    async def get_or_create_event(self, user_id: str) -> asyncio.Event: ...
+    async def signal_event(self, user_id: str) -> None: ...   # event.set()
+    async def clear_event(self, user_id: str) -> None: ...    # event.clear()
+    async def cleanup_event(self, user_id: str) -> None: ...  # del on last disconnect
 ```
 
-### 2. Modify Your Handler
+Three global instances exist:
+
+- `notification_event_registry` — user-service `/ws/notifications/{user_id}`
+- `presence_event_registry` — user-service `/ws/presence`
+- `chat_notification_event_registry` — chat-service `/ws/notifications`
+
+### ConnectionManager and signal injection
+
+`shared/ws/manager.py::ConnectionManager` accepts an optional `signal_callback` in its
+constructor. Each broadcast walks the connected sockets, sends JSON, and then awaits
+the callback if one was provided:
 
 ```python
-# src/backend/new-service/ws/router.py
-from service.ws.event_registry import my_event_registry
-from fastapi import WebSocket
-from starlette.websockets import WebSocketDisconnect
-import asyncio
-import logging
-
-logger = logging.getLogger(__name__)
-
-@router.websocket("/ws/my-channel/{user_id}")
-async def my_handler(websocket: WebSocket, user_id: str) -> None:
-    await manager.connect(str(user_id), websocket)
-    try:
-        while True:
-            event = await my_event_registry.get_or_create_event(str(user_id))
-            
-            try:
-                await asyncio.wait_for(event.wait(), timeout=10.0)
-            except asyncio.TimeoutError:
-                continue
-            
-            await my_event_registry.clear_event(str(user_id))
-            
-    except asyncio.CancelledError:
-        logger.debug(f"Handler cancelled for user {user_id}")
-        await my_event_registry.cleanup_event(str(user_id))
-        raise
-    except WebSocketDisconnect:
-        pass
-    finally:
-        manager.disconnect(str(user_id), websocket)
-```
-
-### 3. Signal Events in broadcast()
-
-```python
-# src/backend/new-service/ws/manager.py
 async def broadcast(self, room_id: str, message: dict) -> None:
-    # Send to all clients
-    for ws in list(self._rooms.get(room_id, set())):
+    sockets = list(self._rooms.get(room_id, set()))
+    if sockets:
+        results = await asyncio.gather(
+            *(self._send_to_client(room_id, ws, message) for ws in sockets)
+        )
+        for ws, error in results:
+            if error is not None:
+                self.disconnect(room_id, ws)
+
+    if self._signal_callback:
         try:
-            await ws.send_json(message)
+            await self._signal_callback(room_id)
         except Exception as e:
-            logger.warning(f"Failed to send: {e}")
-            self.disconnect(room_id, ws)
-    
-    # Signal event (new!)
-    try:
-        from service.ws.event_registry import my_event_registry
-        await my_event_registry.signal_event(room_id)
-    except Exception:
-        logger.warning(f"Failed to signal event")
+            logger.debug(f"Failed to signal event for room {room_id}: {e}")
 ```
 
-Done! Your new handler is now event-driven.
+The user-service notification manager and the chat-service notifications manager are
+both wired with the appropriate `signal_event` callback at module import time
+(`notification_router.py:18`, `chat-service/ws/router.py:20`).
 
 ---
 
-## Testing & Verification
+## How event-driven notifications work in this project
 
-### Automated Tests
-```bash
-make check
-```
-Runs 539+ unit tests including:
-- **E2E Integration Tests**: Event-driven game invites validated automatically
-- **Unit Tests**: EventRegistry + handler logic (105+ tests per service)
+The end-to-end path for a single notification has five stages. The same pattern
+applies for friend requests, game invites, tournament events, and chat-service DMs;
+only the producer differs.
 
-### Manual Verification
+### 1. A producer creates the notification
 
-**Test 1: Game Invite (User-Service)**
-1. Open 2 browser tabs (login as alice, bob)
-2. Alice sends game invite
-3. **Verify**: Bob's modal appears INSTANTLY (<100ms)
-4. **Before fix**: ~1000ms, **After fix**: <50ms
+Producers fall into three categories:
 
-**Test 2: DM Notification (Chat-Service)**
-1. Two users in separate chats
-2. One sends DM to the other
-3. **Verify**: Notification appears instantly
-4. **Before fix**: ~1000ms, **After fix**: <50ms
+- **user-service REST endpoints** (`main.py`): `/friends/request/...`,
+  `/friends/requests/...`, `/game-invites`, `/game-invite/response`. They call
+  `notifications.create_notification(...)`, `await session.commit()`, then
+  `notification_manager.broadcast(str(recipient_id), _notif_payload(notif))`.
+- **chat-service WS handler** (`chat-service/ws/router.py`): when a DM message is
+  saved, it broadcasts a `new_dm` payload on the chat-service notifications manager
+  to `str(recipient_uid)`. DM notifications are not persisted in the user-service
+  `notifications` table — they are surfaced live and the client renders unread
+  counts from the chat side.
+- **game-service**: two paths exist.
+  - **HTTP fan-in**: tournament events (`tournament_match_available`,
+    `tournament_complete`, etc.) call
+    `game-service/notifications.py::send_tournament_notification`, which `POST`s to
+    `user-service /game-invites` with the player's bearer token. user-service then
+    runs the standard create-then-broadcast flow.
+  - **Direct DB write**: `game-service/persistence.py::insert_game_achievement`
+    inserts an achievement row and a `notifications` row in a single CTE
+    (`type='game_achievement'`). Because the row is inserted by a service other than
+    user-service, no in-memory broadcast happens for achievements — the client
+    picks them up via REST polling, or via the WS push path that fires when any
+    later user-service request triggers a broadcast for the same recipient.
 
-**Test 3: Scalability (Multi-Handler)**
-1. Open 3 browser tabs (same user)
-2. Send notification from another user
-3. **Verify**: All 3 handlers' notifications arrive at same time
-4. Single event.set() wakes all 3 handlers simultaneously
+### 2. The broadcast envelope
 
----
+`main.py::_notif_payload(notif)` produces the WS frame:
 
-## Troubleshooting
-
-### Notification Not Appearing
-
-**Check**:
-1. Is WebSocket connected? (DevTools → Network → WS tab)
-2. Is handler running? (Check logs for `/ws/notifications` connection)
-3. Is event being signaled? (Add debug log in broadcast())
-
-**Debug**:
-```bash
-docker compose logs user-service | grep "notification"
-docker compose logs chat-service | grep "notification"
-```
-
-### Delayed Notifications
-
-**Root Cause**: Likely still on old polling code
-
-**Check**:
-```bash
-# Verify handler has event-driven code
-docker exec user-service grep -n "asyncio.wait_for" service/ws/notification_router.py
-# Should show: await asyncio.wait_for(event.wait(), timeout=10.0)
+```json
+{
+  "type": "notification",
+  "notification": {
+    "id": 123,
+    "user_id": 7,
+    "from_user_id": 4,
+    "type": "game_invite",
+    "message": "alice invited you to play Pong [ROOM_ID:...]",
+    "read": false,
+    "created_at": "2026-05-01T12:34:56+00:00"
+  }
+}
 ```
 
-### High Latency (>100ms)
+DM frames from the chat-service use a different shape — `{type: "new_dm",
+from_user_id, from_username, room_slug, preview}` — they are not persisted
+notification rows.
 
-**Possible Causes**:
-1. Network latency between browser and server
-2. Database query latency in broadcast() call
-3. Slow handler loop (check for other awaits before clear_event)
+### 3. ConnectionManager fan-out + event signal
 
-**Measure**:
-```javascript
-// Frontend: measure arrival time
-window.notificationArrivalTime = Date.now();
-ws.onmessage = (e) => {
-    console.log("Latency:", Date.now() - window.notificationArrivalTime, "ms");
-};
+`broadcast(str(user_id), payload)` sends the frame to every connected socket
+registered under that user's room key. After the JSON sends, it calls the injected
+`signal_callback`, which is `EventRegistry.signal_event(user_id)`. That sets the
+`asyncio.Event` for that user.
+
+### 4. WS handler wakes and loops
+
+Both `/ws/notifications/{user_id}` (user-service,
+`ws/notification_router.py:67-126`) and `/ws/notifications` (chat-service,
+`ws/router.py:248-294`) use the same race pattern:
+
+```python
+while True:
+    event = await registry.get_or_create_event(room)
+    notify_task = asyncio.create_task(event.wait())
+    disconnect_task = asyncio.create_task(websocket.receive_text())
+
+    done, pending = await asyncio.wait(
+        [notify_task, disconnect_task],
+        timeout=10.0,
+        return_when=asyncio.FIRST_COMPLETED,
+    )
+    for task in pending:
+        task.cancel()
+        try: await task
+        except asyncio.CancelledError: pass
+
+    if disconnect_task in done:
+        # client closed or sent unexpected data on a listen-only channel — exit
+        break
+    if notify_task in done:
+        await registry.clear_event(room)
+    # else: 10s fail-safe timeout, loop continues
 ```
 
----
+Important properties of this loop:
 
-## Performance Metrics
+- The handler does not actually re-send the frame from inside the loop. The frame
+  was already pushed by `broadcast()` before `signal_event` was called. The event
+  exists so the WS task can stay parked without a polling sleep, while still being
+  able to react to disconnects.
+- Racing `event.wait()` against `websocket.receive_text()` lets the handler detect
+  client disconnect immediately instead of waiting for the next timeout tick. The
+  channel is listen-only; if the client ever sends data, the handler logs a
+  warning and exits.
+- The 10-second timeout is a fail-safe: if neither task fires, the loop simply
+  re-enters the wait. Worst-case stuck-socket detection is bounded by this.
+- On final disconnect (when `active_connections(room) == 0`), the handler calls
+  `cleanup_event(room)` to free the registry slot.
 
-### Before vs After (2026-04-12 Production Deployment)
+### 5. The frontend consumes WS first, REST as fallback
 
-| Metric | Before | After | Improvement |
-|--------|--------|-------|-------------|
-| Notification latency | 900-1000ms | 1-50ms | **20-50x** |
-| Idle handler CPU | High (1 core when idle) | ~0% | Efficient |
-| Concurrent handlers | Scales O(N) polling | Scales O(1) per event | **Linear improvement** |
-| Test pass rate | 526/531 (99.1%) | 647/665 (97.3%) | +539 unit tests added |
-| System responsiveness | Noticeably delayed | Instant | **User-facing improvement** |
+`src/frontend/src/context/notificationContext.jsx` runs four effects keyed by the
+authenticated user id:
 
-### Load Test Results
+1. Resolve `userId` via `/api/users/auth/me`.
+2. One-shot `GET /api/users/notifications` to seed the list.
+3. Open `wss://.../api/users/ws/notifications/{userId}?token=...`. On message,
+   parse the frame, ignore anything where `frame.type !== 'notification'`, route
+   `notif.type === 'game_achievement'` to a separate `achievementQueue` (toast
+   pipeline, deduped by id, capped at 20), and otherwise prepend to the main
+   notification list with `setNotifications(prev => [entry, ...prev.filter(n =>
+   n.id !== notif.id)].slice(0, 20))`. The `filter(n => n.id !== notif.id)`
+   pre-step is the primary client-side dedupe — the same notification can arrive
+   via both WS push and the REST fallback poller without double-rendering.
+4. **Smart polling**: a recursive `setTimeout` runs only when
+   `!wsConnectedRef.current || document.hidden`. Base interval 5 s, exponential
+   backoff up to 15 s on consecutive failures. Polling is paused on
+   `visibilitychange → hidden` and resumed on visible+disconnected.
 
-- **100 concurrent handlers**: All wake within 5ms of event.set()
-- **1000 messages/second**: System handles easily with <1ms latency
-- **Memory**: No growth over 24-hour soak test (events properly cleaned)
-
----
-
-## Architecture Decisions
-
-### Why Per-User Events (One Event per User)?
-- **Alternative rejected**: One global event for all notifications
-- **Problem**: Global event would wake ALL handlers across ALL users (wasteful)
-- **Solution**: Per-user event in dict, indexed by user_id
-- **Benefit**: Only handlers for that user wake up, laser-focused efficiency
-
-### Why Timeout on Event.Wait()?
-- **Alternative rejected**: Bare `await event.wait()` (non-cancellable)
-- **Problem**: Would hang forever on disconnect, timeout needed for graceful shutdown
-- **Solution**: `asyncio.wait_for(event.wait(), timeout=10.0)`
-- **Benefit**: Worst-case disconnect detection = 10 seconds, acceptable for WebSocket
-
-### Why asyncio.Lock() in EventRegistry?
-- **Alternative rejected**: No synchronization (dict races)
-- **Problem**: Multiple tasks could create duplicate events (memory leak)
-- **Solution**: Use asyncio.Lock() to protect dict operations
-- **Benefit**: Thread-safe, high-performance, built for async code
+The `unread_chat` pseudo-notifications (synthetic entries built from
+`useUnread()` DM unread counts) are merged into the same list in `combinedNotifications`,
+sorted by `created_at` descending.
 
 ---
 
-## Future Improvements (Post-MVP)
+## Channels
 
-### 1. Phase 3: game-service Optimization (Optional)
-- Current: Bi-directional, already efficient
-- Future: Analyze if event-driven broadcast helps state synchronization
-- Decision gate: Only if latency profiling shows >50ms game state updates
+| Service | Endpoint | Direction | Registry | Purpose |
+|---------|----------|-----------|----------|---------|
+| user-service | `/ws/notifications/{user_id}` | listen-only | `notification_event_registry` | All persisted notifications addressed to `user_id` |
+| user-service | `/ws/presence` | listen-only | `presence_event_registry` | Friend online/offline transitions |
+| chat-service | `/ws/notifications` | listen-only | `chat_notification_event_registry` | Live `new_dm` previews (not persisted) |
+| chat-service | `/ws/chat/{room_slug}` | bi-directional | — | Chat messages (input-driven, no event registry needed) |
+| game-service | `/ws/game/{game_id}` | bi-directional | — | Authoritative game state, input-driven |
 
-### 2. Metrics Collection
-- Add telemetry: Notification latency histogram
-- Dashboard: Real-time latency visualization
-- Alerts: If latency > 100ms, alert ops team
-
-### 3. Event Lifecycle Management
-- Cleanup old events automatically (currently manual on disconnect)
-- Monitor event dict size periodically
-- Log memory usage of event registry
-
-### 4. Cross-Service Events
-- Share EventRegistry across services (requires refactoring to shared/)
-- Single source of truth for all user events
-- Simpler maintenance, less duplication
+Bi-directional channels are not part of the event-driven path: their broadcasts are
+already triggered by inbound client frames or by the game loop, so there is no
+polling latency to remove.
 
 ---
 
-## Summary
+## Cross-service notification triggers
 
-The **event-driven notification architecture** is the new standard for WebSocket handlers in Transcendence:
+| Producer | Mechanism | Notes |
+|----------|-----------|-------|
+| user-service REST → user-service WS | In-process: `create_notification` + `notification_manager.broadcast` | Default path for friend/game-invite/tournament-response flows |
+| game-service tournament events | HTTP `POST /game-invites` to user-service with player bearer token (`game-service/notifications.py`) | `tournament_full`, `tournament_match_available`, `tournament_complete`. Best-effort: errors are swallowed to avoid blocking the tournament progression |
+| game-service achievements | Direct `INSERT INTO notifications` inside the achievement CTE (`game-service/persistence.py:1410-1416`) | Cross-database write within the shared Postgres instance. No live broadcast — achievement toasts surface on the client's next REST poll or via a subsequent WS event for the same user |
+| chat-service DMs | Live broadcast only on `chat-service /ws/notifications` | DM frames are not stored in the `notifications` table; unread counts are tracked client-side via `useUnread()` |
 
-✅ **Deployed & Tested** (Phases 1 & 2)  
-✅ **Production-Ready** (92-95% test pass rate)  
-✅ **20-50x Performance Improvement** (<50ms latency vs 1000ms)  
-✅ **Scalable & Maintainable** (Standardized EventRegistry pattern)  
-✅ **Team-Friendly** (Copy-paste pattern for new handlers)
+---
 
-**Key Takeaway**: Use `asyncio.Event()` + timeout for listen-only WebSocket handlers. It's simpler, faster, and more scalable than polling.
+## REST endpoints (user-service)
+
+Defined in `src/backend/user-service/main.py`, mounted via the user-service router:
+
+| Method | Path | Behaviour |
+|--------|------|-----------|
+| GET | `/notifications` | Last 20 notifications for the caller, newest first (`get_notifications`) |
+| PUT | `/notifications/{id}/read` | Mark one as read; 404 if not owned by caller |
+| PUT | `/notifications/read-all` | Mark all caller's notifications read |
+| DELETE | `/notifications/{id}` | Delete one; 404 if not owned by caller |
+| POST | `/game-invites` | Create + broadcast a game/tournament notification (used by the game-service HTTP path and by the frontend invite UI) |
+| POST | `/game-invite/response` | Create + broadcast `game_invite_response` (accepted/declined/timeout); rejects self-targeting |
+
+All write endpoints commit the row before calling `notification_manager.broadcast(...)`,
+so a WS push is never observed before the row is durable.
+
+`notifications.create_notification` runs inside `db.begin_nested()` (savepoint) so
+its failure does not roll back the surrounding transaction (e.g. the friendship
+acceptance in `respond_to_request`). Producers that need the friendship to outlive a
+notification failure call `await session.commit()` before attempting the
+notification, and log a warning instead of raising on `ValueError` (message length).
+
+---
+
+## Client-side dedupe
+
+The same notification can be observed by the client via two paths:
+
+- WS push from `notification_manager.broadcast(...)`
+- REST poll from `GET /notifications` (during smart polling, or the seed fetch on
+  reconnect)
+
+Dedupe is by `notification.id`. The WS handler in `notificationContext.jsx`
+applies `prev.filter(n => n.id !== notif.id)` before prepending, and the
+achievement queue applies `prev.some(a => a.id === notif.id)`. The REST seed
+replaces the list wholesale, so any in-flight WS-only entries are reconciled on
+the next render. DM pseudo-notifications use a synthetic id (`dm-{slug}`) that
+will never collide with backend ids.
+
+---
+
+## Why event-driven instead of a sleep loop
+
+The original handler shape was `await asyncio.sleep(1)` followed by a DB read. That
+introduced ~1 s of avoidable latency on every notification and kept the handler in
+runnable state continuously. The current shape parks each handler on
+`asyncio.Event` and on `websocket.receive_text()` simultaneously, so:
+
+- WS push latency is bounded by network RTT plus the `gather` over connected
+  sockets in `broadcast`. There is no idle polling delay.
+- Idle handlers consume effectively no CPU — they sit in `asyncio.wait(...)`.
+- Disconnects are detected as soon as the TCP/WebSocket close is observed,
+  without waiting on the 10-second fail-safe.
+- All handlers for the same `user_id` share one event, so a single `event.set()`
+  wakes every connected tab.
+
+---
+
+## Adding a new event-driven channel
+
+1. Create or reuse an `EventRegistry` instance in your service's `ws/`.
+2. Construct a `ConnectionManager` with
+   `signal_callback=my_registry.signal_event`.
+3. In your WS handler, follow the race pattern from
+   `user-service/ws/notification_router.py:67-126`:
+   - `notify_task = asyncio.create_task(event.wait())`
+   - `disconnect_task = asyncio.create_task(websocket.receive_text())`
+   - `asyncio.wait([...], timeout=10.0, return_when=FIRST_COMPLETED)`
+   - cancel the loser, clear the event on notify, break on disconnect
+4. Producers commit the DB row first, then call `manager.broadcast(...)` — the
+   manager runs the signal callback automatically.
+5. On final disconnect, call `registry.cleanup_event(room)` to drop the slot.
 
 ---
 
 ## References
 
-- **Implementation Plan**: `docs/superpowers/plans/2026-04-12-event-driven-notification-architecture.md`
-- **WebSocket Basics**: `docs/WEBSOCKET_LOGGING.md`, `Studies/bira/About_WebSockets.md`
-- **Architecture Overview**: `docs/ARCHITECTURE.md`
-- **Authentication**: `docs/AUTHENTICATION.md`
+- `src/backend/user-service/notifications.py` — persistence
+- `src/backend/user-service/main.py` — REST surface and broadcast call sites
+- `src/backend/user-service/ws/notification_router.py` — WS handler
+- `src/backend/user-service/ws/event_registry.py` — registry implementation
+- `src/backend/user-service/alembic/versions/20260412_a1b2c3d4e5f7_add_from_user_id_to_notifications.py`
+- `src/backend/chat-service/ws/router.py` — `/ws/chat` and `/ws/notifications`
+- `src/backend/chat-service/ws/event_registry.py`
+- `src/backend/game-service/notifications.py` — tournament HTTP fan-in
+- `src/backend/game-service/persistence.py` — achievement CTE
+- `src/backend/shared/ws/manager.py` — `ConnectionManager`
+- `src/frontend/src/context/notificationContext.jsx` — WS subscriber + smart polling
+- `src/frontend/src/Components/NotificationPanel.jsx` — UI
+- `docs/WEBSOCKET_LOGGING.md` — observability conventions
+- `docs/ARCHITECTURE.md`, `docs/AUTHENTICATION.md`

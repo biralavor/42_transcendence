@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, date
 from typing import Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -33,7 +33,6 @@ class ProfileResponse(BaseModel):
     avatar_url:   Optional[str] = None
     created_at:   Optional[datetime] = None
     bio:          Optional[str] = None
-    dark_mode:    bool = False
 
 
 class MeResponse(BaseModel):
@@ -47,13 +46,40 @@ class MeResponse(BaseModel):
     avatar_url:    Optional[str] = None
     created_at:    Optional[datetime] = None
     bio:           Optional[str] = None
-    dark_mode:     bool = False
+    is_admin:      bool = False
+
+
+class DailyCount(BaseModel):
+    date: date
+    count: int
+
+
+class AdminActivityResponse(BaseModel):
+    """Site-wide aggregate stats for the admin dashboard.
+
+    All counts and per-day buckets are scoped to the [range_start, range_end]
+    window (inclusive on both ends, capped at 30 days).
+    """
+    range_start: date
+    range_end: date
+    active_users: int
+    games_total: int
+    messages_total: int
+    games_per_day: list[DailyCount]
+    messages_per_day: list[DailyCount]
+
+
+class UserActivityResponse(BaseModel):
+    """Per-user activity for the authenticated caller."""
+    last_login_at: Optional[datetime] = None
+    active_streak_days: int
+    games_per_day: list[DailyCount]
+    messages_per_day: list[DailyCount]
 
 
 class UpdateProfileRequest(BaseModel):
     display_name: Optional[str] = None
     bio:          Optional[str] = None
-    dark_mode:    Optional[bool] = None
 
 
 class FriendResponse(BaseModel):

@@ -8,13 +8,18 @@ export function PresenceProvider({ children }) {
   const [presenceMap, setPresenceMap] = useState({})
 
   useEffect(() => {
-    if (!auth.access_token) return
+    if (!auth.access_token) {
+      setPresenceMap({})
+      return
+    }
 
     const scheme = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const url = `${scheme}//${window.location.host}/api/users/ws/presence?token=${auth.access_token}`
     const ws = new WebSocket(url)
+    let cancelled = false
 
     ws.onmessage = (event) => {
+      if (cancelled) return
       try {
         const data = JSON.parse(event.data)
         if (data.type === 'presence') {
@@ -25,11 +30,8 @@ export function PresenceProvider({ children }) {
       }
     }
 
-    ws.onclose = () => {
-      setPresenceMap({})
-    }
-
     return () => {
+      cancelled = true
       ws.close()
     }
   }, [auth.access_token])

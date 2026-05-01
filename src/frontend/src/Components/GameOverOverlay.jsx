@@ -48,15 +48,19 @@ export default function GameOverOverlay({
   p2Name,
   isCurrentUserWinner = null,
   isTournamentGame,
+  isSpectator = false,
+  forfeitReason = null,
   onPlayAgain,
   onClose,
   onViewBracket,
   onNextTurn,
 }) {
   const panelRef = useRef(null)
+  const isForfeit = forfeitReason === 'opponent_disconnected'
 
   useEffect(() => {
     panelRef.current?.focus()
+    if (isSpectator) return  // No celebratory/defeat burst for spectators.
     let spawnTimers = []
     let createdEls = []
     if (isCurrentUserWinner === true)
@@ -71,7 +75,7 @@ export default function GameOverOverlay({
       spawnTimers.forEach(clearTimeout)   // cancel pending spawns
       createdEls.forEach(el => el.remove()) // immediately remove any already-created nodes
     }
-  // isCurrentUserWinner is intentionally read once at mount — burst fires only on appearance
+  // isCurrentUserWinner / isSpectator intentionally read once at mount.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -82,47 +86,69 @@ export default function GameOverOverlay({
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [onClose])
 
-  const headline = isCurrentUserWinner === null
-    ? 'WINS!'
-    : isCurrentUserWinner ? 'YOU WON' : 'YOU LOST'
+  const headline = isSpectator
+    ? 'MATCH OVER'
+    : isCurrentUserWinner === null
+      ? 'WINS!'
+      : isCurrentUserWinner ? 'YOU WON' : 'YOU LOST'
 
   const headlineClass = [
     'game-over-headline',
-    isCurrentUserWinner === true  && 'game-over-headline--won',
-    isCurrentUserWinner === false && 'game-over-headline--lost',
+    !isSpectator && isCurrentUserWinner === true  && 'game-over-headline--won',
+    !isSpectator && isCurrentUserWinner === false && 'game-over-headline--lost',
   ].filter(Boolean).join(' ')
+
+  let forfeitSubtitle = null
+  if (isForfeit) {
+    forfeitSubtitle = isSpectator
+      ? `${winnerName} wins — opponent disconnected`
+      : isCurrentUserWinner
+        ? 'Won by forfeit — opponent disconnected'
+        : 'Match ended — opponent disconnected'
+  }
 
   return (
     <div className="game-over-overlay" role="dialog" aria-modal="true" aria-label="Game Over">
       <div className="game-over-panel" ref={panelRef} tabIndex="-1">
         <h1 className={headlineClass}>
-          {winnerName && <>{winnerName},<br /></>}
+          {!isSpectator && winnerName && <>{winnerName},<br /></>}
           {headline}
         </h1>
+        {forfeitSubtitle && (
+          <p className="game-over-subtitle">{forfeitSubtitle}</p>
+        )}
         <div className="game-over-score">
           <span className="game-over-player">{p1Name}: <strong>{scoreP1}</strong></span>
           <span className="game-over-separator">—</span>
           <span className="game-over-player">{p2Name}: <strong>{scoreP2}</strong></span>
         </div>
         <div className="game-over-actions">
-          {!isTournamentGame && (
-            <button className="btn btn-primary game-over-btn" onClick={onPlayAgain}>
-              Play Again
+          {isSpectator ? (
+            <button className="btn btn-primary game-over-btn" onClick={onClose}>
+              OK
             </button>
-          )}
-          {isTournamentGame && (
+          ) : (
             <>
-              <button className="btn btn-primary game-over-btn" onClick={onViewBracket ?? undefined}>
-                View Bracket
-              </button>
-              <button className="btn btn-success game-over-btn" onClick={onNextTurn ?? undefined}>
-                Next Turn
+              {!isTournamentGame && !isForfeit && (
+                <button className="btn btn-primary game-over-btn" onClick={onPlayAgain}>
+                  Play Again
+                </button>
+              )}
+              {isTournamentGame && (
+                <>
+                  <button className="btn btn-primary game-over-btn" onClick={onViewBracket ?? undefined}>
+                    View Bracket
+                  </button>
+                  <button className="btn btn-success game-over-btn" onClick={onNextTurn ?? undefined}>
+                    Next Turn
+                  </button>
+                </>
+              )}
+              <button className="btn btn-secondary game-over-btn" onClick={onClose}>
+                Close
               </button>
             </>
           )}
-          <button className="btn btn-secondary game-over-btn" onClick={onClose}>
-            Close
-          </button>
         </div>
       </div>
     </div>

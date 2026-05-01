@@ -9,6 +9,7 @@ import Leaderboard from './pages/Leaderboard'
 import Register from './pages/Register'
 import Profile from './pages/Profile'
 import ForgotPassword from './pages/ForgotPassword'
+import GamesLive from './pages/GamesLive'
 import Chat from './pages/Chat'
 import PongCanvas from './Components/PongCanvas'
 import PrivateRoute from './Components/PrivateRoute'
@@ -17,6 +18,11 @@ import GamePage from './pages/GamePage'
 import GameInviteModal from './Components/GameInviteModal'
 import Tournament from './pages/Tournament'
 import Tournaments from './pages/Tournaments'
+import Admin from './pages/Admin'
+import ActivityDashboard from './pages/ActivityDashboard'
+import Search from './pages/Search'
+import Privacy from './pages/Privacy'
+import Terms from './pages/Terms'
 
 export default function App() {
   useEffect(() => {
@@ -49,6 +55,7 @@ export default function App() {
         <Route path="/about" element={<About />} />
         <Route path="/play" element={<Play />} />
         <Route path="/leaderboard" element={<Leaderboard />} />
+        <Route path="/games/live" element={<GamesLive />} />
         <Route path="/register" element={<Register />} />
         <Route path="/pong-develop" element={<PongCanvas
           player1Kind='local'
@@ -59,6 +66,33 @@ export default function App() {
           element={(
             <PrivateRoute>
               <Profile />
+            </PrivateRoute>
+          )}
+        />
+
+        <Route
+          path="/profile/activity"
+          element={(
+            <PrivateRoute>
+              <ActivityDashboard />
+            </PrivateRoute>
+          )}
+        />
+
+        <Route
+          path="/profile/:profileUserId"
+          element={(
+            <PrivateRoute>
+              <Profile />
+            </PrivateRoute>
+          )}
+        />
+
+        <Route
+          path="/search"
+          element={(
+            <PrivateRoute>
+              <Search />
             </PrivateRoute>
           )}
         />
@@ -90,14 +124,9 @@ export default function App() {
           )}
         />
 
-        <Route
-          path="/game/:roomId"
-          element={(
-            <PrivateRoute>
-              <GamePage />
-            </PrivateRoute>
-          )}
-        />
+        {/* /game/:roomId is public so spectators (?spectate=true) can reach it.
+            GamePage redirects non-spectators without auth to /login internally. */}
+        <Route path="/game/:roomId" element={<GamePage />} />
 
         <Route path="/tournaments/:id" element={<Tournament />} />
 
@@ -111,10 +140,21 @@ export default function App() {
           )}
         />
 
+        <Route
+          path="/admin"
+          element={(
+            <PrivateRoute>
+              <Admin />
+            </PrivateRoute>
+          )}
+        />
+
         <Route path="/forgot-password" element={<ForgotPassword />} />
+
+        <Route path="/privacy" element={<Privacy />} />
+        <Route path="/terms" element={<Terms />} />
       </Routes>
       <GameInviteModal />
     </BrowserRouter>
   )
 }
-

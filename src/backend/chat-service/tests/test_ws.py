@@ -151,7 +151,7 @@ def _ws_db_patches(is_blocked_fn=None, sender_uid=None):
     async def mock_get_room_history(db, room_id):
         return []
 
-    async def mock_save_message(db, room_id, sender, content):
+    async def mock_save_message(db, room_id, sender, content, user_id=None):
         pass
 
     @contextlib.asynccontextmanager
@@ -207,7 +207,7 @@ def test_typing_event_not_persisted():
     import contextlib
     save_calls = []
 
-    async def tracking_save(db, room_id, sender, content):
+    async def tracking_save(db, room_id, sender, content, user_id=None):
         save_calls.append(content)
 
     with contextlib.ExitStack() as stack:
@@ -251,13 +251,14 @@ def test_dm_non_participant_rejected():
     import pytest
     from starlette.websockets import WebSocketDisconnect
 
-    # uid=99 is not in DM-1-2 (participants are 1 and 2)
+    # uid=99 is not in DM-1-2 (participants are 1 and 2).
+    # ?token=stub bypasses the empty-token gate so the patched _uid_from_token is reached.
     with contextlib.ExitStack() as stack:
         for p in _ws_db_patches(sender_uid=99):
             stack.enter_context(p)
         client = TestClient(app)
         with pytest.raises(WebSocketDisconnect) as exc_info:
-            with client.websocket_connect("/ws/chat/DM-1-2"):
+            with client.websocket_connect("/ws/chat/DM-1-2?token=stub"):
                 pass
         assert exc_info.value.code == 4003
 
@@ -270,12 +271,13 @@ def test_blocked_sender_message_not_delivered():
     async def mock_is_blocked(db, blocker_id, blocked_id):
         return blocker_id == 10 and blocked_id == 20
 
+    # ?token=stub bypasses the empty-token gate so the patched _uid_from_token is reached.
     with contextlib.ExitStack() as stack:
         for p in _ws_db_patches(is_blocked_fn=mock_is_blocked, sender_uid=20):
             stack.enter_context(p)
         client = TestClient(app)
-        with client.websocket_connect(f"/ws/chat/{room}") as ws_blocker, \
-             client.websocket_connect(f"/ws/chat/{room}") as ws_sender:
+        with client.websocket_connect(f"/ws/chat/{room}?token=stub") as ws_blocker, \
+             client.websocket_connect(f"/ws/chat/{room}?token=stub") as ws_sender:
             ws_sender.send_json({"sender": "bob", "content": "blocked msg"})
 
             result = queue.Queue()
@@ -298,13 +300,14 @@ def test_unblocked_sender_message_delivered():
     async def mock_is_blocked(db, blocker_id, blocked_id):
         return False
 
+    # ?token=stub bypasses the empty-token gate so the patched _uid_from_token is reached.
     with contextlib.ExitStack() as stack:
         for p in _ws_db_patches(is_blocked_fn=mock_is_blocked, sender_uid=30):
             stack.enter_context(p)
         client = TestClient(app)
         room = "DM-30-40"
-        with client.websocket_connect(f"/ws/chat/{room}") as ws1, \
-             client.websocket_connect(f"/ws/chat/{room}") as ws2:
+        with client.websocket_connect(f"/ws/chat/{room}?token=stub") as ws1, \
+             client.websocket_connect(f"/ws/chat/{room}?token=stub") as ws2:
             ws1.send_json({"sender": "alice", "content": "hello"})
             d = ws2.receive_json()
             assert d["content"] == "hello"

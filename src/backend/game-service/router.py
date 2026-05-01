@@ -8,6 +8,7 @@ from service.history import get_match_history_paginated
 
 from service.notifications import send_tournament_notification
 
+from service.game_manager import score_for as game_score_for
 from service.persistence import (
     InvalidWinner,
     NotTournamentCreator,
@@ -30,19 +31,24 @@ from service.persistence import (
     get_leaderboard,
     get_leaderboard_paginated,
     get_match,
+    get_ranks_for_user_ids,
     get_tournament_with_participants,
     get_user_matches,
     get_user_stats,
     get_xp_for_user,
     join_tournament,
     leave_tournament,
+    list_live_matches,
     list_tournaments,
+    mark_match_finished_if_ongoing,
     record_tournament_match_result,
     start_tournament,
     withdraw_tournament,
 )
 from service.schemas import (
     AchievementResponse,
+    LiveGamePlayer,
+    LiveGameSummary,
     MatchCreateRequest,
     MatchFinishRequest,
     MatchHistoryItem,
@@ -59,7 +65,9 @@ from service.schemas import (
     XpResponse,
 )
 from service.ws.router import (
+    game_id_for_match,
     manager as ws_manager,
+    spectator_count,
     sync_tournament_ready_timeouts,
 )
 from shared.database import get_db
@@ -480,3 +488,68 @@ async def xp_leaderboard(session: SessionDependency, limit: int = Query(20, ge=1
         {"limit": limit},
     )
     return [dict(row) for row in result.mappings()]
+
+
+@router.get(
+    "/games/live",
+    response_model=list[LiveGameSummary],
+    summary="List currently-active matches (public, no auth)",
+)
+async def list_live_games(session: SessionDependency):
+    rows = await list_live_matches(session)
+
+    resolved: list[tuple[dict, str]] = []
+    stale_marked = False
+    for row in rows:
+        match_id_int = int(row["match_id"])
+        game_id = game_id_for_match(match_id_int)
+        if game_id is None:
+            # No live WS session is bound to this match. Lazy-reconcile by
+            # marking it finished — but only if the row is older than the
+            # helper's grace window, so we don't prematurely finish a match
+            # that's mid-handshake (the WS path commits the match row before
+            # binding the in-memory game_id, leaving a brief unbound window).
+            #
+            # Concurrency note: the SQL gates on status='ongoing' AND age, so
+            # a legitimate concurrent finish or a just-bound match always
+            # wins — no extra in-loop re-check needed (and an in-loop dict
+            # re-read couldn't help anyway since there's no await between it
+            # and the first lookup within the same asyncio task).
+            updated = await mark_match_finished_if_ongoing(session, match_id_int)
+            stale_marked = stale_marked or updated
+            continue
+        resolved.append((row, game_id))
+
+    all_player_ids: set[int] = set()
+    for row, _ in resolved:
+        all_player_ids.add(row["p1_id"])
+        all_player_ids.add(row["p2_id"])
+    ranks = await get_ranks_for_user_ids(session, sorted(all_player_ids))
+
+    out: list[dict] = []
+    for row, game_id in resolved:
+        score = game_score_for(game_id) or (0, 0)
+        out.append({
+            "game_id": game_id,
+            "player1": {
+                "id": row["p1_id"],
+                "username": row["p1_username"],
+                "display_name": row["p1_display_name"],
+                "avatar_url": row["p1_avatar_url"],
+                "rank": ranks.get(row["p1_id"]),
+            },
+            "player2": {
+                "id": row["p2_id"],
+                "username": row["p2_username"],
+                "display_name": row["p2_display_name"],
+                "avatar_url": row["p2_avatar_url"],
+                "rank": ranks.get(row["p2_id"]),
+            },
+            "started_at": row["started_at"],
+            "spectator_count": spectator_count(game_id),
+            "score1": score[0],
+            "score2": score[1],
+        })
+    if stale_marked:
+        await session.commit()
+    return out

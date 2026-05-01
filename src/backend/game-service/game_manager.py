@@ -54,7 +54,15 @@ class GameManager:
     
     def get_session(self, game_id: str) -> Optional[GameSession]:
         return self._sessions.get(game_id)
-    
+
+    def score_for(self, game_id: str) -> tuple[int, int] | None:
+        """Current (p1, p2) score for an active session, or None when no
+        session is bound (handshake window or finished game)."""
+        session = self._sessions.get(game_id)
+        if session is None:
+            return None
+        return (session.score.p1, session.score.p2)
+
     async def handle_player_input(
         self,
         game_id: str,
@@ -131,3 +139,9 @@ class GameManager:
             session.is_active = False
 
 game_manager = GameManager()
+
+
+def score_for(game_id: str) -> tuple[int, int] | None:
+    """Module-level convenience over the singleton. Mirrors the shape used by
+    `spectator_count` in ws/router.py so the router import stays uniform."""
+    return game_manager.score_for(game_id)

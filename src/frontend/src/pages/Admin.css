@@ -1,0 +1,38 @@
+.admin-stats {
+  margin-top: 1rem;
+}
+
+.admin-stat-card {
+  padding: 1.5rem 1rem;
+}
+
+.admin-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: end;
+  margin-bottom: 1rem;
+}
+
+.admin-filters label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-family: 'VT323', monospace;
+  color: var(--metal-silver);
+}
+
+.admin-filters input[type="date"] {
+  background: var(--arcade-bg, #111);
+  color: var(--metal-silver, #ddd);
+  border: 1px solid var(--arcade-border, #444);
+  padding: 0.4rem 0.6rem;
+  font-family: 'VT323', monospace;
+  font-size: 1rem;
+}
+
+.admin-filter-caption {
+  font-family: 'VT323', monospace;
+  color: var(--metal-silver);
+  margin-top: 0.5rem;
+}

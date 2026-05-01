@@ -6,7 +6,7 @@ import bcrypt
 import hashlib
 import secrets
 from jose import jwt, ExpiredSignatureError, JWTError
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -35,6 +35,30 @@ def hash_password(password: str) -> bytes:
     return bcrypt.hashpw(password_bytes, salt)
 
 
+async def _ensure_user(credential_id: int, username: str, session: AsyncSession) -> User:
+    """Get-or-create the User row for a credential. Commits if a new row is inserted
+    (matches original get_me() behavior for the create path)."""
+    result = await session.execute(
+        select(User).where(User.credential_id == credential_id)
+    )
+    user = result.scalars().first()
+    if user:
+        return user
+
+    user = User(username=username, credential_id=credential_id)
+    try:
+        user = await session.merge(user)
+        await session.commit()
+        await session.refresh(user)
+        return user
+    except IntegrityError:
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="User was created concurrently, failed to retrieve user data"
+        )
+
+
 async def authenticate(login: Login, session: AsyncSession) -> LoginResponse:
     password_bytes = login.password.encode('utf-8')
     result = await session.execute(select(Credentials).where(Credentials.username == login.username))
@@ -47,8 +71,20 @@ async def authenticate(login: Login, session: AsyncSession) -> LoginResponse:
             detail="Invalid credentials"
         )
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    # User creation is delegated to get_me() via fallback pattern in other services.
-    # This ensures single source of truth for user creation.
+
+    user = await _ensure_user(credential.id, credential.username, session)
+    now = datetime.now(timezone.utc)
+    # users.last_login_at is naive TIMESTAMP (matching users.created_at); strip tz.
+    user.last_login_at = now.replace(tzinfo=None)
+    # Append today's login-day row (idempotent for same-day repeat logins).
+    await session.execute(
+        text(
+            "INSERT INTO user_login_days (user_id, login_date) VALUES (:uid, :d) "
+            "ON CONFLICT (user_id, login_date) DO NOTHING"
+        ),
+        {"uid": user.id, "d": now.date()},
+    )
+
     access_token = create_access_token(
         data={"sub": credential.username, "credential_id": credential.id},
         expires_delta=access_token_expires,
@@ -150,26 +186,7 @@ async def get_me(token: str, session: AsyncSession) -> User:
             detail="Invalid token",
         ) from exc
 
-    result = await session.execute(
-        select(User).where(User.credential_id == credential_id)
-    )
-    user = result.scalars().first()
-
-    if user:
-        return user
-
-    user = User(username=username, credential_id=credential_id)
-    try:
-        user = await session.merge(user)
-        await session.commit()
-        await session.refresh(user)
-        return user
-    except IntegrityError:
-        await session.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="User was created concurrently, failed to retrieve user data"
-        )
+    return await _ensure_user(credential_id, username, session)
 
 
 
@@ -184,8 +201,6 @@ async def update_profile(
         user.display_name = data.display_name
     if data.bio is not None:
         user.bio = data.bio
-    if data.dark_mode is not None:
-        user.dark_mode = data.dark_mode
     await session.commit()
     await session.refresh(user)
     return user

@@ -17,11 +17,13 @@ export function createWsClient(url, { onMessage, onOpen, onClose } = {}) {
     ws = new WebSocket(url);
 
     ws.onopen = () => {
+      if (intentionallyClosed) return;
       retryDelay = 1000;
       onOpen?.();
     };
 
     ws.onmessage = (event) => {
+      if (intentionallyClosed) return;
       try {
         onMessage?.(JSON.parse(event.data));
       } catch {
@@ -30,11 +32,10 @@ export function createWsClient(url, { onMessage, onOpen, onClose } = {}) {
     };
 
     ws.onclose = () => {
+      if (intentionallyClosed) return;
       onClose?.();
-      if (!intentionallyClosed) {
-        retryTimer = setTimeout(connect, retryDelay);
-        retryDelay = Math.min(retryDelay * 2, 30_000);
-      }
+      retryTimer = setTimeout(connect, retryDelay);
+      retryDelay = Math.min(retryDelay * 2, 30_000);
     };
   }
 
