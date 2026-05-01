@@ -823,3 +823,237 @@ def test_resolve_room_player_ids_is_read_only_for_invite_urls():
     assert router_module._waiting_room_players == before_waiting, (
         "_resolve_room_player_ids must not mutate _waiting_room_players at all"
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(5)
+async def test_both_disconnect_grace_ignores_spectators(monkeypatch):
+    """A lone spectator must NOT prevent grace cleanup — only players matter."""
+    import ws.router as router_module
+    from ws.router import _both_disconnect_grace
+
+    # Skip the real 30s sleep
+    monkeypatch.setattr(asyncio, "sleep", AsyncMock(return_value=None))
+
+    # No players connected, but one spectator is — cleanup must still happen
+    monkeypatch.setattr(router_module.manager, "player_count", MagicMock(return_value=0))
+    monkeypatch.setattr(
+        router_module.manager, "active_connections", MagicMock(return_value=1)
+    )
+
+    deleted: list[str] = []
+    mock_session = MagicMock()
+    monkeypatch.setattr(
+        router_module.game_manager, "get_session", MagicMock(return_value=mock_session)
+    )
+
+    async def mock_delete(gid):
+        deleted.append(gid)
+
+    monkeypatch.setattr(router_module.game_manager, "delete_session", mock_delete)
+
+    # Seed in-memory routing state so we can verify it is cleared
+    game_id = "game-spec-block"
+    router_module._setup_sessions[game_id] = (1, 2)
+    router_module._match_ids[game_id] = 4242
+    router_module._match_id_to_game_id[4242] = game_id
+
+    try:
+        await _both_disconnect_grace(game_id)
+    finally:
+        # Hermetic cleanup in case assertions fail mid-test
+        router_module._setup_sessions.pop(game_id, None)
+        router_module._match_ids.pop(game_id, None)
+        router_module._match_id_to_game_id.pop(4242, None)
+        router_module._disconnect_timers.pop(game_id, None)
+
+    assert deleted == [game_id], (
+        "delete_session must be called even when a spectator is still connected"
+    )
+    assert game_id not in router_module._setup_sessions
+    assert game_id not in router_module._match_ids
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(5)
+async def test_both_disconnect_grace_reconciles_tournament_match(monkeypatch):
+    """Grace expiry with tournament context must finalize the TournamentMatch row
+    via record_tournament_match_timeout_result(winner_id=None) BEFORE cleanup
+    pops the context."""
+    import ws.router as router_module
+    from ws.router import _both_disconnect_grace
+
+    monkeypatch.setattr(asyncio, "sleep", AsyncMock(return_value=None))
+    monkeypatch.setattr(router_module.manager, "player_count", MagicMock(return_value=0))
+
+    mock_session = MagicMock()
+    monkeypatch.setattr(
+        router_module.game_manager, "get_session", MagicMock(return_value=mock_session)
+    )
+    monkeypatch.setattr(router_module.game_manager, "delete_session", AsyncMock())
+
+    # Stub AsyncSessionLocal so `async with AsyncSessionLocal() as db:` works
+    mock_db = MagicMock()
+    mock_db.commit = AsyncMock()
+    mock_db.rollback = AsyncMock()
+
+    class MockSessionCM:
+        async def __aenter__(self_inner):
+            return mock_db
+
+        async def __aexit__(self_inner, exc_type, exc, tb):
+            return None
+
+    monkeypatch.setattr(router_module, "AsyncSessionLocal", MockSessionCM)
+
+    timeout_calls: list[dict] = []
+
+    async def mock_record(*, db, tournament_id, tournament_match_id, winner_id):
+        timeout_calls.append(
+            {
+                "tournament_id": tournament_id,
+                "tournament_match_id": tournament_match_id,
+                "winner_id": winner_id,
+            }
+        )
+        return (MagicMock(), False, [])
+
+    monkeypatch.setattr(
+        router_module, "record_tournament_match_timeout_result", mock_record
+    )
+
+    # Tuple shape: (tournament_id, match_id (Match row), tm.id (TournamentMatch row))
+    # — confirmed at router.py:1453-1457
+    game_id = "game-tourney-grace"
+    router_module._waiting_room_tournament_context[game_id] = (10, 20, 30)
+
+    try:
+        await _both_disconnect_grace(game_id)
+    finally:
+        router_module._waiting_room_tournament_context.pop(game_id, None)
+        router_module._disconnect_timers.pop(game_id, None)
+
+    assert len(timeout_calls) == 1, (
+        "record_tournament_match_timeout_result must be called exactly once"
+    )
+    assert timeout_calls[0]["tournament_id"] == 10
+    assert timeout_calls[0]["tournament_match_id"] == 30, (
+        "must use tm.id (TournamentMatch row id), not Match.id"
+    )
+    assert timeout_calls[0]["winner_id"] is None, (
+        "both players abandoned → no winner"
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(5)
+async def test_both_disconnect_grace_reconciles_regular_match(monkeypatch):
+    """Grace expiry with NO tournament context must finalize the regular Match
+    row via UPDATE (status='finished', winner_id NULL, scores 0/0)."""
+    import ws.router as router_module
+    from ws.router import _both_disconnect_grace
+
+    monkeypatch.setattr(asyncio, "sleep", AsyncMock(return_value=None))
+    monkeypatch.setattr(router_module.manager, "player_count", MagicMock(return_value=0))
+
+    mock_session = MagicMock()
+    monkeypatch.setattr(
+        router_module.game_manager, "get_session", MagicMock(return_value=mock_session)
+    )
+    monkeypatch.setattr(router_module.game_manager, "delete_session", AsyncMock())
+
+    executed: list[tuple] = []
+    mock_db = MagicMock()
+    mock_db.commit = AsyncMock()
+    mock_db.rollback = AsyncMock()
+
+    async def fake_execute(stmt, params=None):
+        executed.append((str(stmt), params))
+        return MagicMock()
+
+    mock_db.execute = AsyncMock(side_effect=fake_execute)
+
+    class MockSessionCM:
+        async def __aenter__(self_inner):
+            return mock_db
+
+        async def __aexit__(self_inner, exc_type, exc, tb):
+            return None
+
+    monkeypatch.setattr(router_module, "AsyncSessionLocal", MockSessionCM)
+
+    # No tournament context → regular-match branch
+    game_id = "game-regular-grace"
+    router_module._match_ids[game_id] = 7777
+    router_module._match_id_to_game_id[7777] = game_id
+
+    try:
+        await _both_disconnect_grace(game_id)
+    finally:
+        router_module._match_ids.pop(game_id, None)
+        router_module._match_id_to_game_id.pop(7777, None)
+        router_module._disconnect_timers.pop(game_id, None)
+
+    assert len(executed) == 1, "exactly one UPDATE matches statement must run"
+    sql_text, params = executed[0]
+    assert "UPDATE matches" in sql_text
+    assert "status = 'finished'" in sql_text
+    assert "winner_id = NULL" in sql_text
+    assert params == {"match_id": 7777}
+    mock_db.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(5)
+async def test_game_start_resume_cancels_grace_timer_when_session_paused(monkeypatch):
+    """When a player reconnects via `game_start` after both-disconnect grace has
+    started, the grace timer must be cancelled and the session resumed.
+
+    Reproduces the game_start resume block from ws/router.py in isolation so
+    it can be exercised without a full WebSocket connection."""
+    import ws.router as router_module
+
+    game_id = "game-resume-test"
+    cancelled = asyncio.Event()
+
+    async def fake_grace():
+        try:
+            await asyncio.Event().wait()  # block forever until cancelled
+        except asyncio.CancelledError:
+            cancelled.set()
+            raise
+
+    grace_task = asyncio.create_task(fake_grace())
+    await asyncio.sleep(0)  # let fake_grace reach its suspension point
+
+    router_module._disconnect_timers[game_id] = grace_task
+
+    paused_session = MagicMock()
+    paused_session.is_paused = True
+
+    resumed: list[str] = []
+    monkeypatch.setattr(
+        router_module.game_manager, "get_session", MagicMock(return_value=paused_session)
+    )
+    monkeypatch.setattr(
+        router_module.game_manager,
+        "resume_session",
+        MagicMock(side_effect=lambda gid: resumed.append(gid)),
+    )
+
+    # Reproduce the game_start resume block verbatim
+    resumed_session = router_module.game_manager.get_session(game_id)
+    if resumed_session is not None and resumed_session.is_paused:
+        grace_timer = router_module._disconnect_timers.pop(game_id, None)
+        if grace_timer is not None and not grace_timer.done():
+            grace_timer.cancel()
+            try:
+                await asyncio.shield(grace_timer)
+            except (asyncio.CancelledError, Exception):
+                pass
+        router_module.game_manager.resume_session(game_id)
+
+    assert cancelled.is_set(), "grace timer must receive CancelledError"
+    assert grace_task.done()
+    assert game_id not in router_module._disconnect_timers
+    assert resumed == [game_id]

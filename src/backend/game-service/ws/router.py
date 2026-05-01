@@ -720,7 +720,7 @@ async def _both_disconnect_grace(game_id: str) -> None:
     except asyncio.CancelledError:
         return
 
-    if manager.active_connections(game_id) > 0:
+    if manager.player_count(game_id) > 0:
         # Someone reconnected while the timer was running — nothing to do.
         _disconnect_timers.pop(game_id, None)
         return
@@ -729,6 +729,56 @@ async def _both_disconnect_grace(game_id: str) -> None:
         "[BOTH_DISCONNECT] Grace period expired for %s with no reconnects; cleaning up.",
         game_id,
     )
+
+    # Reconcile DB state BEFORE _cleanup_waiting_room pops the context tuple.
+    # Tournament path: mirror _handle_waiting_room_timeout (router.py:332-372).
+    tournament_ctx = _waiting_room_tournament_context.get(game_id)
+    if tournament_ctx is not None:
+        tournament_id, _, tournament_match_row_id = tournament_ctx
+        try:
+            async with AsyncSessionLocal() as db:
+                try:
+                    await record_tournament_match_timeout_result(
+                        db=db,
+                        tournament_id=tournament_id,
+                        tournament_match_id=tournament_match_row_id,
+                        winner_id=None,
+                    )
+                except Exception:
+                    # Idempotent: another path (e.g. tournament ready timeout)
+                    # may already have finalized this match.
+                    await db.rollback()
+        except SQLAlchemyError:
+            logger.warning(
+                "[BOTH_DISCONNECT] DB error reconciling tournament match for %s",
+                game_id,
+            )
+    else:
+        # Regular (non-tournament) match: mirror _finalize_regular_match_timeout
+        # (router.py:259-272) — finished, no winner, zero scores.
+        match_id = _match_ids.get(game_id)
+        if match_id is not None:
+            try:
+                async with AsyncSessionLocal() as db:
+                    await db.execute(
+                        text(
+                            "UPDATE matches "
+                            "SET status = 'finished', "
+                            "    winner_id = NULL, "
+                            "    score_p1 = 0, "
+                            "    score_p2 = 0, "
+                            "    finished_at = NOW() "
+                            "WHERE id = :match_id"
+                        ),
+                        {"match_id": match_id},
+                    )
+                    await db.commit()
+            except SQLAlchemyError:
+                logger.warning(
+                    "[BOTH_DISCONNECT] DB error reconciling regular match for %s",
+                    game_id,
+                )
+
     session = game_manager.get_session(game_id)
     if session is not None:
         await game_manager.delete_session(game_id)
