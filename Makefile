@@ -48,8 +48,7 @@ windows:
 .PHONY: db-init
 db-init: wait
 	@echo "Bootstrapping AI + admin users via database_init.sh..."
-	@docker compose cp services/user-service/database_init.sh user-service:/app/database_init.sh
-	@docker compose exec -T user-service sh /app/database_init.sh
+	@docker compose exec -T user-service sh -s < services/user-service/database_init.sh
 
 .PHONY: wait
 wait:
@@ -71,23 +70,13 @@ wait:
 # Chain with `make db-init` and/or `make seed` to repopulate.
 .PHONY: clear-db
 clear-db:
-	@docker compose cp tests/clear_db.sh user-service:/app/clear_db.sh
-	@docker compose exec -T user-service sh /app/clear_db.sh
+	@docker compose exec -T user-service sh -s < tests/clear_db.sh
 
 .PHONY: seed
-seed: clear-db
+seed: clear-db db-init
 	@echo "Waiting 5 seconds for seed operations to complete..."
 	@sleep 5
-	@docker compose cp tests/seed_dev.py user-service:/app/seed_dev.py
-	@docker compose exec -e WS_LOG_DEBUG=true user-service python3 /app/seed_dev.py
-	@$(MAKE) db-init
-
-.PHONY: e2e
-e2e: wait seed
-	@echo "Waiting 5 seconds for seed operations to complete..."
-	@sleep 5
-	@echo "Running E2E integration tests..."
-	@PAGER=cat GIT_PAGER=cat bash tests/TranscendenceHealthCheck.sh | tee >(sed 's/\x1b\[[0-9;]*m//g' > release.txt) | cat
+	@docker compose exec -T -e WS_LOG_DEBUG=true user-service python3 - < tests/seed_dev.py
 
 .PHONY: check
 check: wait seed
