@@ -15,7 +15,7 @@ from service.ws.router import router as ws_router, manager
 from service.persistence import (
     get_or_create_dm_room,
     block_user, unblock_user, get_blocked_ids,
-    create_general_room, list_live_rooms,
+    create_general_room, list_public_rooms,
 )
 
 _ALGORITHM = "HS256"
@@ -192,9 +192,9 @@ async def create_room(body: RoomCreate, session: SessionDep, caller: CallerUser)
 
 
 @app.get("/rooms", status_code=200)
-async def get_live_rooms(session: SessionDep, caller: CallerUser):
-    """List all general rooms with at least one active WebSocket connection."""
-    return await list_live_rooms(session, manager)
+async def get_public_rooms(session: SessionDep, caller: CallerUser):
+    """List persisted public chat rooms with their active WebSocket connection count."""
+    return await list_public_rooms(session, manager)
 
 
 @app.get("/room/{room_slug}/active")

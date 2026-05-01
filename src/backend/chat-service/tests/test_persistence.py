@@ -247,7 +247,7 @@ class TestCreateGeneralRoom:
     @pytest.mark.asyncio
     async def test_room_creation_saves_system_message(self, db):
         """The contract says a system 'created by …' message is saved so the
-        new room is immediately visible to list_live_rooms."""
+        new room is immediately visible to the room list."""
         import time
         name = f"r2-room-sys-{int(time.time() * 1000) % 100000}"
         room = await create_general_room(db, name, "alice")
