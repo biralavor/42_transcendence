@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import NavbarComponent from '../Components/Navbar'
 import { apiCall } from '../utils/apiClient'
 import './Leaderboard.css'
+import { useUser } from '../context/userContext'
 
 /**
  * @typedef {Object} LeaderboardEntry
@@ -61,7 +62,7 @@ export default function Leaderboard() {
   const [error, setError] = useState('');
   const [sortMode, setSortMode] = useState('xp')      // 'xp' | 'wins'
   const [currentPage, setCurrentPage] = useState(0)
-  const [currentUserId, setCurrentUserId] = useState(null)
+  const { user, token } = useUser()
 
   const entries = page.results ?? [];
   const summary = page.summary ?? {
@@ -69,16 +70,6 @@ export default function Leaderboard() {
     max_current_streak: { value: 0, display_name: 'No Data' },
     max_points: { value: 0, display_name: 'No Data' },
   }
-
-  // Fetch caller's user_id once on mount for row highlighting.
-  // /leaderboard is a public route — use skipRefreshOn401 so logged-out
-  // visitors don't get redirected to /login by the apiClient's refresh flow.
-  useEffect(() => {
-    apiCall('/api/users/auth/me', { skipRefreshOn401: true })
-      .then(r => r.ok ? r.json() : null)
-      .then(data => { if (data && typeof data.id === 'number') setCurrentUserId(data.id) })
-      .catch(() => {})
-  }, [])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -243,7 +234,7 @@ export default function Leaderboard() {
                     <tbody>
                       {entries.map((entry) => {
                         const baseClass = entry.rank <= 3 ? `leaderboard-top-${entry.rank}` : ''
-                        const isMe = currentUserId !== null && entry.user_id === currentUserId
+                        const isMe = user !== null && entry.user_id === user.id
                         const rowClass = [baseClass, isMe ? 'current-user-row' : ''].filter(Boolean).join(' ')
                         return (
                           <tr key={entry.user_id} className={rowClass}>
