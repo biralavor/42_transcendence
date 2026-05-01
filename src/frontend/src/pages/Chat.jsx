@@ -21,7 +21,6 @@ export default function Chat() {
   const { roomId } = useParams()
   const navigate = useNavigate()
   const { user, token } = useUser()
-  const { auth, isAuthReady } = useAuth()
   const { clearUnread, setActiveRoom } = useUnread()
   const [joined, setJoined] = useState(!!user)
   const [connected, setConnected] = useState(false)
@@ -52,7 +51,7 @@ export default function Chat() {
     if (!joined || !roomId) return
     const scheme = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const base = `${scheme}//${window.location.host}/api/chat/ws/chat/${roomId}`
-    const url = auth.access_token ? `${base}?token=${auth.access_token}` : base
+    const url = token ? `${base}?token=${token}` : base
     const ws = createWsClient(url, {
       onOpen: () => setConnected(true),
       onClose: () => setConnected(false),
@@ -102,17 +101,17 @@ export default function Chat() {
   // Safety-net redirect: auth fully loaded, no token, still no identity → go to lobby
   // (PrivateRoute normally handles unauthenticated users before reaching here)
   useEffect(() => {
-    if (roomId && !joined && isAuthReady && !auth.access_token) {
+    if (roomId && !joined && !token) {
       navigate('/chat', { replace: true })
     }
-  }, [roomId, joined, isAuthReady, auth.access_token, navigate])
+  }, [roomId, joined, token, navigate])
 
   function handleInputChange(e) {
     setInput(e.target.value)
-    if (!connected || !wsRef.current || !e.target.value.trim()) return
+    if (!connected || !wsRef.current || !e.target.value.trim() || !user) return
     clearTimeout(emitThrottle.current)
     emitThrottle.current = setTimeout(() => {
-      wsRef.current?.send({ type: 'typing', sender: name, sender_uid: user.id })
+      wsRef.current?.send({ type: 'typing', sender: user.username, sender_uid: user.id })
     }, 300)
   }
 
@@ -153,10 +152,10 @@ export default function Chat() {
             compact={false}
             onEnter={handleEnterRoom}
             username={user.username}
-            token={auth.access_token}
+            token={token}
           />
         </div>
-        {profileTarget && (
+        {profileTarget && user && (
           <UserProfileModal
             username={profileTarget.username}
             userId={profileTarget.userId}
@@ -261,7 +260,7 @@ export default function Chat() {
           compact={true}
           onEnter={handleEnterRoom}
           username={user.username}
-          token={auth.access_token}
+          token={token}
         />
       </div>
 

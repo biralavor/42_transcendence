@@ -313,7 +313,7 @@ export default function Profile() {
   }, [user, token, id, profileUserId])
 
   useEffect(() => {
-    if (!token || !user) return
+    if (!token || !user || !id) return
 
     const controller = new AbortController()
     const { signal } = controller
@@ -332,7 +332,7 @@ export default function Profile() {
       })
 
     return () => controller.abort()
-  }, [token, user, historyFilters, historyPage])
+  }, [token, user, id, historyFilters, historyPage])
 
   const handleChange = (e) => {
     const { name, value } = e.target

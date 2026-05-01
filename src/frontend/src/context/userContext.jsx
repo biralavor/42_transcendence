@@ -10,20 +10,33 @@ export function UserProvider({ children }) {
   const [user, setUser] = useState(null);
 
   useEffect(() => {
-    
-    if (!isAuthReady || !auth?.access_token) return;
-    apiJson('/api/users/auth/me')
-      .then(user => {
-        console.log('setting user: ', user)
-        setUser(user)
-      })
-      .catch(err => {
-        if (err.name !== 'AbortError')
-          console.warn('Failed to fetch user', err)
-        setUser(null)
-      })
-  }, [isAuthReady, auth?.access_token]);
 
+     if (!isAuthReady) return;
+     if (!auth?.access_token) {
+       setUser(null);
+       return;
+     }
+     let isCurrent = true;
+
+     const controller = new AbortController()
+     const { signal } = controller
+    
+    apiJson('/api/users/auth/me', { signal })
+       .then(user => {
+         if (!isCurrent) return;
+         console.log('setting user: ', user)
+         setUser(user)
+       })
+      .catch(err => {
+         if (!isCurrent) return;
+         if (err.name !== 'AbortError')
+           console.warn('Failed to fetch user', err)
+         setUser(null)
+       });
+     return () => {
+       isCurrent = false;
+     };
+  }, [isAuthReady, auth?.access_token]);
 
   return (
     <UserContext.Provider value={{ user, token: auth.access_token }}>
