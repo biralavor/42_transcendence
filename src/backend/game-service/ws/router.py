@@ -450,6 +450,7 @@ async def _handle_waiting_room_timeout(game_id: str) -> None:
     _setup_sessions.pop(game_id, None)
     _cleanup_waiting_room(game_id)
     _waiting_room_timeout_tasks.pop(game_id, None)
+    _mark_room_finished(game_id)
 
 
 def _schedule_waiting_room_timeout(game_id: str) -> None:

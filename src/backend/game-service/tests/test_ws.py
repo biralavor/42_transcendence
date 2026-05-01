@@ -1057,3 +1057,119 @@ async def test_game_start_resume_cancels_grace_timer_when_session_paused(monkeyp
     assert grace_task.done()
     assert game_id not in router_module._disconnect_timers
     assert resumed == [game_id]
+
+
+# ── _finished_rooms / stale-reconnect guard ──────────────────────────────────
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(5)
+async def test_handle_waiting_room_timeout_marks_room_finished(monkeypatch):
+    """_handle_waiting_room_timeout must call _mark_room_finished after cleanup."""
+    import ws.router as router_module
+    from ws.router import _handle_waiting_room_timeout
+
+    # Use an invite-style room ID so _ensure_waiting_room_players can parse
+    # player IDs from the name without needing _waiting_room_players populated.
+    game_id = "invite-10-20-timeout-test"
+    router_module._finished_rooms.pop(game_id, None)
+    router_module._waiting_room_ready.pop(game_id, None)
+    router_module._waiting_room_tournament_context.pop(game_id, None)
+
+    monkeypatch.setattr(asyncio, "sleep", AsyncMock(return_value=None))
+    monkeypatch.setattr(router_module.manager, "broadcast", AsyncMock())
+    monkeypatch.setattr(
+        router_module,
+        "_finalize_regular_match_timeout",
+        AsyncMock(return_value={
+            "winner_id": None,
+            "match_id": None,
+            "tournament_complete": False,
+            "tournament_id": None,
+            "newly_assigned": [],
+        }),
+    )
+
+    try:
+        await _handle_waiting_room_timeout(game_id)
+        assert router_module._is_room_finished(game_id), (
+            "_handle_waiting_room_timeout must record the room as finished "
+            "so stale reconnects get the 4004 guard"
+        )
+    finally:
+        router_module._finished_rooms.pop(game_id, None)
+        router_module._waiting_room_ready.pop(game_id, None)
+
+
+def test_mark_room_finished_and_is_room_finished():
+    """_mark_room_finished records the room; _is_room_finished returns True."""
+    import ws.router as router_module
+    from ws.router import _mark_room_finished, _is_room_finished
+
+    game_id = "test-finished-basic"
+    router_module._finished_rooms.pop(game_id, None)
+    try:
+        assert not _is_room_finished(game_id)
+        _mark_room_finished(game_id)
+        assert _is_room_finished(game_id)
+    finally:
+        router_module._finished_rooms.pop(game_id, None)
+
+
+def test_is_room_finished_expires_after_ttl(monkeypatch):
+    """_is_room_finished returns False and prunes the entry after TTL."""
+    import time
+    import ws.router as router_module
+
+    game_id = "test-finished-ttl"
+    router_module._finished_rooms.pop(game_id, None)
+    try:
+        # Inject a timestamp older than the TTL
+        router_module._finished_rooms[game_id] = (
+            time.monotonic() - router_module._FINISHED_ROOM_TTL_SECONDS - 1
+        )
+        assert not router_module._is_room_finished(game_id)
+        # Entry must be pruned on the stale read
+        assert game_id not in router_module._finished_rooms
+    finally:
+        router_module._finished_rooms.pop(game_id, None)
+
+
+def test_stale_reconnect_guard_conditions_are_met_after_game_over():
+    """After _mark_room_finished with no live session, both guard conditions hold."""
+    import ws.router as router_module
+    from ws.router import _mark_room_finished, _is_room_finished
+
+    game_id = "test-finished-guard"
+    router_module._finished_rooms.pop(game_id, None)
+    try:
+        _mark_room_finished(game_id)
+        # Condition 1: room is in the finished set
+        assert _is_room_finished(game_id)
+        # Condition 2: no live session (router.py line 1011 checks both)
+        assert router_module.game_manager.get_session(game_id) is None
+    finally:
+        router_module._finished_rooms.pop(game_id, None)
+
+
+def test_mark_room_finished_prunes_stale_entries():
+    """Each _mark_room_finished call prunes entries older than TTL."""
+    import time
+    import ws.router as router_module
+    from ws.router import _mark_room_finished
+
+    stale_id = "test-stale-entry"
+    fresh_id = "test-fresh-entry"
+    router_module._finished_rooms.pop(stale_id, None)
+    router_module._finished_rooms.pop(fresh_id, None)
+    try:
+        # Insert a stale entry directly
+        router_module._finished_rooms[stale_id] = (
+            time.monotonic() - router_module._FINISHED_ROOM_TTL_SECONDS - 1
+        )
+        _mark_room_finished(fresh_id)
+        # Stale entry must be pruned; fresh one must be present
+        assert stale_id not in router_module._finished_rooms
+        assert fresh_id in router_module._finished_rooms
+    finally:
+        router_module._finished_rooms.pop(stale_id, None)
+        router_module._finished_rooms.pop(fresh_id, None)

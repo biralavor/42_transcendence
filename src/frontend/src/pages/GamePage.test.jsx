@@ -35,9 +35,12 @@ vi.mock('../Components/Navbar', () => ({ default: () => <nav /> }))
 
 // Expose all props used in tests via data-testid
 vi.mock('../Components/GameOverOverlay', () => ({
-  default: ({ isCurrentUserWinner, winnerName, p1Name, p2Name, scoreP1, scoreP2 }) => (
+  default: ({ isCurrentUserWinner, winnerName, p1Name, p2Name, scoreP1, scoreP2, isSpectator }) => (
     <div>
-      <h1>{isCurrentUserWinner ? 'YOU WON' : 'YOU LOST'}</h1>
+      {isSpectator
+        ? <h1>MATCH OVER</h1>
+        : <h1>{isCurrentUserWinner ? 'YOU WON' : 'YOU LOST'}</h1>
+      }
       <span data-testid="winner-name">{winnerName}</span>
       <span data-testid="p1-name">{p1Name}</span>
       <span data-testid="p2-name">{p2Name}</span>
@@ -203,12 +206,61 @@ describe('GamePage spectator branch', () => {
     expect(await screen.findByText(/👁 2/)).toBeInTheDocument()
   })
 
-  it("hides the GameOverOverlay even if a game_over arrives (spectators don't replay)", async () => {
+  it('shows the GameOverOverlay with MATCH OVER (not YOU WON/YOU LOST) when game ends for spectator', async () => {
     renderSpectator()
     await screen.findByText(/watching as spectator/i)
     fireEvent.click(screen.getByText('Simulate Game End'))
+    expect(await screen.findByRole('heading', { name: /match over/i })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: /you won/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: /you lost/i })).not.toBeInTheDocument()
+  })
+})
+
+describe('GamePage spectator winnerName', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  function mockLiveGame(player1Id, player2Id, p1DisplayName, p2DisplayName) {
+    vi.spyOn(global, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify([
+          {
+            game_id: 'invite-101-202-aaa',
+            player1: { id: player1Id, username: p1DisplayName.toLowerCase(), display_name: p1DisplayName, avatar_url: null },
+            player2: { id: player2Id, username: p2DisplayName.toLowerCase(), display_name: p2DisplayName, avatar_url: null },
+            started_at: new Date().toISOString(),
+            spectator_count: 0,
+          },
+        ]),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      )
+    )
+  }
+
+  it('shows p1Name as winnerName when winner_id matches player1 from live fetch', async () => {
+    useAuth.mockReturnValue({ isAuthenticated: false, isAuthReady: true })
+    // winner_id=1 from "Simulate Game End" — match player1.id=1
+    mockLiveGame(1, 2, 'Alice Live', 'Bob Live')
+    renderSpectator()
+    await screen.findByText(/watching as spectator/i)
+    // Flush the live-game fetch effects so specPlayer1Id/specPlayer2Id are set
+    await act(async () => {})
+    fireEvent.click(screen.getByText('Simulate Game End'))   // winner_id: 1
+    await screen.findByRole('heading', { name: /match over/i })
+    expect(screen.getByTestId('winner-name').textContent).toBe('Alice Live')
+  })
+
+  it('shows p2Name as winnerName when winner_id matches player2 from live fetch', async () => {
+    useAuth.mockReturnValue({ isAuthenticated: false, isAuthReady: true })
+    // winner_id=2 from "Simulate Opponent Win" — match player2.id=2
+    mockLiveGame(1, 2, 'Alice Live', 'Bob Live')
+    renderSpectator()
+    await screen.findByText(/watching as spectator/i)
+    await act(async () => {})
+    fireEvent.click(screen.getByText('Simulate Opponent Win'))  // winner_id: 2
+    await screen.findByRole('heading', { name: /match over/i })
+    expect(screen.getByTestId('winner-name').textContent).toBe('Bob Live')
   })
 })
 

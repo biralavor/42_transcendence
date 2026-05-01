@@ -79,6 +79,8 @@ export default function GamePage() {
   const matchId = location.state?.matchId ?? tournamentMatchId
   const difficulty = location.state?.difficulty ?? 'medium'
 
+  const [specPlayer1Id, setSpecPlayer1Id] = useState(null)
+  const [specPlayer2Id, setSpecPlayer2Id] = useState(null)
   const [gameOverResult, setGameOverResult] = useState(null)
   const [spectatorCount, setSpectatorCount] = useState(0)
   const submittingRef = useRef(false)
@@ -114,6 +116,8 @@ export default function GamePage() {
         setP2Name(g.player2?.display_name || g.player2?.username || 'Player 2')
         setP1Avatar(g.player1?.avatar_url || '/avatar_placeholder.jpg')
         setP2Avatar(g.player2?.avatar_url || '/avatar_placeholder.jpg')
+        setSpecPlayer1Id(g.player1?.id ?? null)
+        setSpecPlayer2Id(g.player2?.id ?? null)
         if (typeof g.spectator_count === 'number') {
           setSpectatorCount(g.spectator_count)
         }
@@ -285,7 +289,7 @@ export default function GamePage() {
                 {gameOverResult && (
                   <GameOverOverlay
                     winnerName={isSpectator
-                      ? (Number(gameOverResult.winner_id) === Number(player1Id) ? p1Name : p2Name)
+                      ? (Number(gameOverResult.winner_id) === Number(specPlayer1Id) ? p1Name : p2Name)
                       : myName}
                     scoreP1={scoreP1}
                     scoreP2={scoreP2}
