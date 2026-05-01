@@ -57,7 +57,7 @@ def _unique_username(prefix: str = "e2e") -> str:
     runs (pytest-xdist) cannot collide on a 409 "User already exists". Total
     length stays within the 32-char registration validator.
     """
-    return f"{prefix}_{uuid.uuid4().hex[:12]}"
+    return f"{prefix}_{uuid.uuid4().hex[:3]}"
 
 
 async def register_user(api: httpx.AsyncClient, username: str | None = None,
