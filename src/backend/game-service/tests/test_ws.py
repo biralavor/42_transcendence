@@ -68,8 +68,8 @@ async def test_disconnect_countdown_broadcasts_sequence_and_forfeits(monkeypatch
     mock_session.score.p2 = 3
     monkeypatch.setattr(router_module.game_manager, "get_session", MagicMock(return_value=mock_session))
 
-    async def mock_on_game_over(game_id, winner_id, score_p1, score_p2):
-        on_game_over_calls.append((game_id, winner_id, score_p1, score_p2))
+    async def mock_on_game_over(game_id, winner_id, score_p1, score_p2, forfeit_reason=None):
+        on_game_over_calls.append((game_id, winner_id, score_p1, score_p2, forfeit_reason))
     monkeypatch.setattr(router_module, "_on_game_over", mock_on_game_over)
 
     await _disconnect_countdown("game-x", winner_id=2)
@@ -78,7 +78,7 @@ async def test_disconnect_countdown_broadcasts_sequence_and_forfeits(monkeypatch
     assert broadcasts[0] == {"type": "opponent_disconnected", "seconds_left": 3}
     assert broadcasts[1] == {"type": "opponent_disconnected", "seconds_left": 2}
     assert broadcasts[2] == {"type": "opponent_disconnected", "seconds_left": 1}
-    assert on_game_over_calls == [("game-x", 2, 5, 3)]
+    assert on_game_over_calls == [("game-x", 2, 5, 3, "opponent_disconnected")]
 
 
 @pytest.mark.asyncio
@@ -99,7 +99,7 @@ async def test_disconnect_countdown_no_forfeit_when_no_connections(monkeypatch):
     mock_session.is_active = True
     monkeypatch.setattr(router_module.game_manager, "get_session", MagicMock(return_value=mock_session))
 
-    async def mock_on_game_over(*args):
+    async def mock_on_game_over(*args, **kwargs):
         on_game_over_calls.append(args)
     monkeypatch.setattr(router_module, "_on_game_over", mock_on_game_over)
 
@@ -126,7 +126,7 @@ async def test_disconnect_countdown_handles_cancellation_cleanly(monkeypatch):
     monkeypatch.setattr(asyncio, "sleep", blocking_sleep)
     monkeypatch.setattr(router_module.manager, "broadcast", AsyncMock())
 
-    async def mock_on_game_over(*args):
+    async def mock_on_game_over(*args, **kwargs):
         on_game_over_calls.append(args)
     monkeypatch.setattr(router_module, "_on_game_over", mock_on_game_over)
 

@@ -198,6 +198,10 @@ export default function GamePage() {
   }
 
   function handleClose() {
+    if (isSpectator) {
+      navigate('/games/live')
+      return
+    }
     navigate('/play')
   }
 
@@ -278,15 +282,19 @@ export default function GamePage() {
                   spectator={isSpectator}
                   onSpectatorCount={setSpectatorCount}
                 />
-                {gameOverResult && !isSpectator && (
+                {gameOverResult && (
                   <GameOverOverlay
-                    winnerName={myName}
+                    winnerName={isSpectator
+                      ? (Number(gameOverResult.winner_id) === Number(player1Id) ? p1Name : p2Name)
+                      : myName}
                     scoreP1={scoreP1}
                     scoreP2={scoreP2}
                     p1Name={p1Name}
                     p2Name={p2Name}
                     isCurrentUserWinner={isCurrentUserWinner}
                     isTournamentGame={Boolean(tournamentId)}
+                    isSpectator={isSpectator}
+                    forfeitReason={gameOverResult.forfeit_reason ?? null}
                     onPlayAgain={handlePlayAgain}
                     onClose={handleClose}
                     onViewBracket={handleViewBracket}
