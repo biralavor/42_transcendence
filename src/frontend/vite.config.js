@@ -2,11 +2,29 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import autoprefixer from 'autoprefixer'
 
+// Strips Bootstrap 5 vendor-prefix declarations and deprecated Mozilla pseudo-class
+// selectors that produce console warnings in modern Firefox/Chrome.
+// Double-colon pseudo-elements (::-moz-range-thumb etc.) are intentionally kept.
+const stripLegacyVendorCSS = root => {
+  root.walkRules(rule => {
+    // Remove rulesets whose selector contains a single-colon :-moz- pseudo-class.
+    // Negative lookbehind excludes double-colon ::-moz- pseudo-elements.
+    if (/(?<!:):-moz-/.test(rule.selector ?? '')) rule.remove()
+  })
+  root.walkDecls(decl => {
+    if (decl.prop === '-moz-osx-font-smoothing' || decl.prop === '-webkit-text-size-adjust')
+      decl.remove()
+  })
+}
+
 export default defineConfig({
   plugins: [react()],
   css: {
     postcss: {
-      plugins: [autoprefixer()],
+      plugins: [
+        autoprefixer({ overrideBrowserslist: ['last 2 Chrome versions', 'last 2 Firefox versions', 'last 2 Safari versions', 'last 2 Edge versions'] }),
+        stripLegacyVendorCSS,
+      ],
     },
   },
   server: {
