@@ -62,7 +62,7 @@ async def test_login_returns_tokens_without_user_id():
 
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            resp = await client.post("/auth/login", json={"username": "alice", "password": "secret123"})
+            resp = await client.post("/auth/login", json={"identifier": "alice", "password": "secret123"})
     finally:
         app.dependency_overrides.pop(get_db, None)
 
@@ -103,7 +103,7 @@ async def test_subsequent_login_updates_token_not_duplicates():
 
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            resp = await client.post("/auth/login", json={"username": "alice", "password": "secret123"})
+            resp = await client.post("/auth/login", json={"identifier": "alice", "password": "secret123"})
     finally:
         app.dependency_overrides.pop(get_db, None)
 
@@ -138,7 +138,7 @@ async def test_login_updates_last_login_at_on_existing_user():
     app.dependency_overrides[get_db] = _fake_db
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            resp = await client.post("/auth/login", json={"username": "alice", "password": "secret123"})
+            resp = await client.post("/auth/login", json={"identifier": "alice", "password": "secret123"})
     finally:
         app.dependency_overrides.pop(get_db, None)
 
@@ -191,7 +191,7 @@ async def test_login_token_contains_identity_claims():
     app.dependency_overrides[get_db] = fake_db
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            resp = await client.post("/auth/login", json={"username": "alice", "password": "pass"})
+            resp = await client.post("/auth/login", json={"identifier": "alice", "password": "pass"})
         assert resp.status_code == 200
         token = resp.json()["access_token"]
         payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=["HS256"])

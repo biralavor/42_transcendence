@@ -62,11 +62,11 @@ def _hash(password: str) -> str:
 
 
 USERS = [
-    dict(username="alice",   display_name="Alice",   status="online",  bio="Hi, I'm Alice!",        avatar_url=None),
-    dict(username="bob",     display_name="Bob",     status="offline", bio="Bob here.",              avatar_url=None),
-    dict(username="charlie", display_name="Charlie", status="online",  bio="Charlie checking in.",   avatar_url=None),
-    dict(username="joao",    display_name="João",    status="online",  bio="João aqui!",             avatar_url=None),
-    dict(username="maria",   display_name="Maria",   status="offline", bio="Hey, I'm Maria.",        avatar_url=None),
+    dict(username="alice",   email="alice@example.com",   display_name="Alice",   status="online",  bio="Hi, I'm Alice!",        avatar_url=None),
+    dict(username="bob",     email="bob@example.com",     display_name="Bob",     status="offline", bio="Bob here.",              avatar_url=None),
+    dict(username="charlie", email="charlie@example.com", display_name="Charlie", status="online",  bio="Charlie checking in.",   avatar_url=None),
+    dict(username="joao",    email="joao@example.com",    display_name="João",    status="online",  bio="João aqui!",             avatar_url=None),
+    dict(username="maria",   email="maria@example.com",   display_name="Maria",   status="offline", bio="Hey, I'm Maria.",        avatar_url=None),
 ]
 
 PASSWORD = "123dev"
@@ -148,14 +148,14 @@ async def seed():
             # Use manual ID if provided (e.g. for AI = 0)
             if "id" in u:
                 await session.execute(
-                    text("INSERT INTO credentials (id, username, password) VALUES (:id, :u, :p)"),
-                    {"id": u["id"], "u": u["username"], "p": pw_hash},
+                    text("INSERT INTO credentials (id, username, email, password) VALUES (:id, :u, :e, :p)"),
+                    {"id": u["id"], "u": u["username"], "e": u["email"], "p": pw_hash},
                 )
                 cred_ids[u["username"]] = u["id"]
             else:
                 result = await session.execute(
-                    text("INSERT INTO credentials (username, password) VALUES (:u, :p) RETURNING id"),
-                    {"u": u["username"], "p": pw_hash},
+                    text("INSERT INTO credentials (username, email, password) VALUES (:u, :e, :p) RETURNING id"),
+                    {"u": u["username"], "e": u["email"], "p": pw_hash},
                 )
                 cred_ids[u["username"]] = result.fetchone()[0]
 
@@ -180,9 +180,10 @@ async def seed():
                 cols.insert(0, "id")
                 vals.insert(0, ":id")
 
+            user_params = {k: v for k, v in u.items() if k != "email"}
             result = await session.execute(
                 text(f"INSERT INTO users ({', '.join(cols)}) VALUES ({', '.join(vals)}) RETURNING id"),
-                {**u, "credential_id": cred_ids[u["username"]]},
+                {**user_params, "credential_id": cred_ids[u["username"]]},
             )
             uid = result.fetchone()[0]
             user_ids[u["username"]] = uid

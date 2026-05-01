@@ -283,6 +283,7 @@ export default function Profile() {
         darkMode: profileData.dark_mode ?? false,
         avatarUrl: profileData.avatar_url ?? PLACEHOLDER_AVATAR,
         username: profileData.username,
+        email: profileData.email ?? '',
         bio: profileData.bio ?? '',
         status: profileData.status,
         createdAt: profileData.created_at,
@@ -422,6 +423,9 @@ export default function Profile() {
                   <div className="profile-info">
                     <h1 className="profile-display-name">{profile.displayName || profile.username}</h1>
                     <p className="profile-username">@{profile.username}</p>
+                    {profile.email && (
+                      <p className="profile-email">{profile.email}</p>
+                    )}
                     {xpData && (
                       <XpBar level={xpData.level} xpInLevel={xpData.xp_in_level} />
                     )}

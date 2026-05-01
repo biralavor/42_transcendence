@@ -17,8 +17,9 @@ function renderRegister(loginSpy = vi.fn()) {
   )
 }
 
-function fillForm({ username = 'newuser', password = 'pass123', confirm = 'pass123', terms = true, privacy = true } = {}) {
+function fillForm({ username = 'newuser', email = 'newuser@example.com', password = 'pass123', confirm = 'pass123', terms = true, privacy = true } = {}) {
   fireEvent.change(screen.getByLabelText(/^username/i), { target: { value: username } })
+  fireEvent.change(screen.getByLabelText(/^email$/i), { target: { value: email } })
   fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: password } })
   fireEvent.change(screen.getByLabelText(/confirm password/i), { target: { value: confirm } })
   if (terms) fireEvent.click(screen.getByLabelText(/terms of use/i))
@@ -32,9 +33,10 @@ describe('RegisterForm', () => {
     sessionStorage.clear()
   })
 
-  it('renders username, password, confirmPassword fields and checkboxes', () => {
+  it('renders username, email, password, confirmPassword fields and checkboxes', () => {
     renderRegister()
     expect(screen.getByLabelText(/^username/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/^email$/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/^password$/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/confirm password/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/terms of use/i)).toBeInTheDocument()
@@ -100,7 +102,7 @@ describe('RegisterForm', () => {
     await waitFor(() => expect(fetchSpy).toHaveBeenCalled())
     const [url, options] = fetchSpy.mock.calls[0]
     expect(url).toBe('/api/users/auth/register')
-    expect(JSON.parse(options.body)).toEqual({ username: 'newuser', password: 'pass123' })
+    expect(JSON.parse(options.body)).toEqual({ username: 'newuser', email: 'newuser@example.com', password: 'pass123' })
   })
 
   it('shows success message on 201', async () => {
