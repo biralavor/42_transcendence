@@ -1,8 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, act, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import { AuthProvider } from '../context/authContext'
-import { UserProvider } from '../context/userContext'
 import Chat from './Chat'
 
 // ── Mock createWsClient ────────────────────────────────────────────────────

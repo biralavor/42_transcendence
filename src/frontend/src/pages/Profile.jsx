@@ -7,7 +7,7 @@ import { getAvatarFilter } from '../utils/avatarFilter'
 import { apiCall } from '../utils/apiClient'
 import './Profile.css'
 import FriendsSidebar from '../Components/FriendsSidebar'
-import { useAuth } from '../context/authContext'
+import { useUser } from '../context/userContext'
 import { useNotifications } from '../context/notificationContext'
 import XpBar from '../Components/XpBar'
 import BadgeGrid from '../Components/BadgeGrid'
@@ -116,11 +116,9 @@ function emptyHistory(){
 }
 
 export default function Profile() {
-  const { auth } = useAuth()
   const { profileUserId } = useParams()
   const { achievementQueue, dismissAchievement } = useNotifications()
-  const [userId, setUserId] = useState(null)
-  const [currentUserId, setCurrentUserId] = useState(null)
+  const { user, token } = useUser() 
   const [profile, setProfile] = useState(null)
   const [paginatedHistory, setPaginatedHistory] = useState(emptyHistory())
   const [userRankData, setUserRankData] = useState(null)
@@ -140,8 +138,9 @@ export default function Profile() {
   const [historyFilters, setHistoryFilters] = useState(DEFAULT_HISTORY_FILTERS)
   const [historyPage, setHistoryPage] = useState(0)
   const todayDate = formatLocalDateInputValue()
-  const isOwnProfile = userId !== null && currentUserId !== null && userId === currentUserId
-
+  const isOwnProfile = user !== null && (user.id == profileUserId || profileUserId == null)
+  const id = isNaN(Number(profileUserId)) ? user?.id : Number(profileUserId)
+  
   useEffect(() => {
     return () => {
       clearTimeout(saveStatusTimer.current)
@@ -246,7 +245,7 @@ export default function Profile() {
   }
 
   useEffect(() => {
-    if (!auth.access_token) {
+    if (!token) {
       setError('Not authenticated')
       setLoading(false)
       return
@@ -269,68 +268,58 @@ export default function Profile() {
     const controller = new AbortController()
     const { signal } = controller
 
-    apiCall('/api/users/auth/me', { signal })
-      .then(r => {
-        if (!r.ok) throw new Error(`Auth failed: ${r.status}`)
+    if (!id) return
+
+    Promise.all([
+      apiCall(`/api/users/profile/${id}`, { signal }).then(r => {
+        if (!r.ok) throw new Error(`Profile fetch failed: ${r.status}`)
         return r.json()
+      }),
+      apiCall(`/api/game/leaderboard?player_id=${id}&limit=1`, { signal }).then(r => {
+        if (!r.ok) throw new Error(`Leaderboard fetch failed: ${r.status}`)
+        return r.json()
+      }),
+    ]).then(([profileData, rankData]) => {
+      setProfile({
+        displayName: profileData.display_name ?? '',
+        darkMode: profileData.dark_mode ?? false,
+        avatarUrl: profileData.avatar_url ?? PLACEHOLDER_AVATAR,
+        username: profileData.username,
+        bio: profileData.bio ?? '',
+        status: profileData.status,
+        createdAt: profileData.created_at,
       })
-      .then(me => {
-        const routeUserId =
-          typeof profileUserId === 'string' && /^[1-9]\d*$/.test(profileUserId)
-            ? Number.parseInt(profileUserId, 10)
-            : NaN
-        const id = Number.isSafeInteger(routeUserId) && routeUserId > 0 ? routeUserId : me.id
-        setCurrentUserId(me.id)
-        setUserId(id)
-        return Promise.all([
-          apiCall(`/api/users/profile/${id}`, { signal }).then(r => {
-            if (!r.ok) throw new Error(`Profile fetch failed: ${r.status}`)
-            return r.json()
-          }),
-          apiCall(`/api/game/leaderboard?player_id=${id}&limit=1`, { signal }).then(r => {
-            if (!r.ok) throw new Error(`Leaderboard fetch failed: ${r.status}`)
-            return r.json()
-          }),
-        ]).then(([profileData, rankData]) => {
-          setProfile({
-            displayName: profileData.display_name ?? '',
-            avatarUrl: profileData.avatar_url ?? PLACEHOLDER_AVATAR,
-            username: profileData.username,
-            bio: profileData.bio ?? '',
-            status: profileData.status,
-            createdAt: profileData.created_at,
-          })
-          setUserRankData(rankData.player_stats)
+      setUserRankData(rankData.player_stats)
 
-          // Fetch XP and achievements after core profile data is loaded (non-blocking)
-          apiCall(`/api/game/xp/${id}`, { signal })
-            .then(r => r.ok ? r.json() : null)
-            .then(data => { if (data) setXpData(data) })
-            .catch(() => {})
+      // Fetch XP and achievements after core profile data is loaded (non-blocking)
+      apiCall(`/api/game/xp/${id}`, { signal })
+        .then(r => r.ok ? r.json() : null)
+        .then(data => { if (data) setXpData(data) })
+        .catch(() => {})
 
-          apiCall(`/api/game/achievements/${id}`, { signal })
-            .then(r => r.ok ? r.json() : [])
-            .then(data => setAchievements(Array.isArray(data) ? data : []))
-            .catch(() => {})
-        })
-      })
-      .catch(err => {
-        if (err.name !== 'AbortError') setError(err.message)
-      })
-      .finally(() => {
-        if (!signal.aborted) setLoading(false)
-      })
+      apiCall(`/api/game/achievements/${id}`, { signal })
+        .then(r => r.ok ? r.json() : [])
+        .then(data => setAchievements(Array.isArray(data) ? data : []))
+        .catch(() => {})
+    })
+    .catch(err => {
+      if (err.name !== 'AbortError') setError(err.message)
+    })
+    .finally(() => {
+      if (!signal.aborted) setLoading(false)
+    })
 
     return () => controller.abort()
-  }, [auth.access_token, profileUserId])
+  }, [user, token, id, profileUserId])
 
   useEffect(() => {
-    if (!auth.access_token || !userId) return
+    if (!token || !user) return
 
     const controller = new AbortController()
     const { signal } = controller
+    const url = buildHistoryUrl(id, historyFilters, historyPage)
 
-    apiCall(buildHistoryUrl(userId, historyFilters, historyPage), { signal })
+    apiCall(url, { signal })
       .then(r => {
         if (!r.ok) throw new Error(`Matches History fetch failed: ${r.status}`)
         return r.json()
@@ -343,7 +332,7 @@ export default function Profile() {
       })
 
     return () => controller.abort()
-  }, [auth.access_token, userId, historyFilters, historyPage])
+  }, [token, user, historyFilters, historyPage])
 
   const handleChange = (e) => {
     const { name, value } = e.target
@@ -357,7 +346,7 @@ export default function Profile() {
     e.preventDefault()
     if (!isOwnProfile) return
     try {
-      const response = await apiCall(`/api/users/profile/${userId}`, {
+      const response = await apiCall(`/api/users/profile/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -409,12 +398,12 @@ export default function Profile() {
           {isOwnProfile && (
             <div className="profile-sidebar-col">
               <FriendsSidebar
-                userId={currentUserId}
-                username={profile?.username}
+                userId={user.id}
+                username={user.username}
                 currentUser={{
-                  id: currentUserId,
-                  username: profile?.username,
-                  avatarUrl: profile?.avatarUrl,
+                  id: user.id,
+                  username: user.username,
+                  avatarUrl: user.avatarUrl,
                 }}
               />
             </div>
@@ -448,7 +437,7 @@ export default function Profile() {
                       src={avatarSrc}
                       alt="User avatar"
                       className="profile-avatar"
-                      style={{ filter: avatarPreview ? 'none' : getAvatarFilter(userId) }}
+                      style={{ filter: avatarPreview ? 'none' : getAvatarFilter(id) }}
                     />
                     {avatarBusy && (
                       <div className="profile-avatar-spinner" aria-label="Uploading avatar" role="status">

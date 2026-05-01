@@ -14,6 +14,7 @@ export function UserProvider({ children }) {
     if (!isAuthReady || !auth?.access_token) return;
     apiJson('/api/users/auth/me')
       .then(user => {
+        console.log('setting user: ', user)
         setUser(user)
       })
       .catch(err => {

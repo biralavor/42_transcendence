@@ -104,9 +104,6 @@ function mockProfileBoot({
   vi.spyOn(global, 'fetch').mockImplementation((url) => {
     const requestUrl = String(url)
 
-    if (requestUrl === '/api/users/auth/me') {
-      return Promise.resolve(jsonResponse({ id: userId, username }))
-    }
     if (requestUrl === `/api/users/profile/${userId}`) {
       return Promise.resolve(jsonResponse(profile))
     }
@@ -151,6 +148,12 @@ function historyRequestUrls() {
     .filter(url => url.startsWith('/api/game/matches/history'))
 }
 
+const mockUseUser = vi.fn()
+vi.mock('../context/userContext', () => ({
+  useUser: () => mockUseUser(),
+  UserProvider: ({ children }) => <>{children}</>,
+}))
+
 describe('Profile avatar UI', () => {
   let restoreCreateObjectURL
   let restoreRevokeObjectURL
@@ -162,7 +165,10 @@ describe('Profile avatar UI', () => {
     sessionStorage.setItem('access_token', 'fake-token')
     sessionStorage.setItem('refresh_token', 'fake-refresh')
     sessionStorage.setItem('token_type', 'bearer')
-
+    mockUseUser.mockReturnValue({
+      user: { id: 1, username: 'Alice' },
+      token: 'fake-token',
+    })
     const hadCreate = 'createObjectURL' in URL
     const hadRevoke = 'revokeObjectURL' in URL
     const origCreate = URL.createObjectURL
@@ -399,6 +405,10 @@ describe('Profile page (general)', () => {
     sessionStorage.setItem('access_token', 'fake-token')
     sessionStorage.setItem('refresh_token', 'fake-refresh')
     sessionStorage.setItem('token_type', 'bearer')
+    mockUseUser.mockReturnValue({
+      user: { id: 1, username: 'Alice' },
+      token: 'fake-token',
+    })
   })
 
   afterEach(() => {
@@ -413,19 +423,18 @@ describe('Profile page (general)', () => {
   })
 
   it('shows "Not authenticated" when there is no access token', async () => {
-    mockAuth = { access_token: null }
+    mockUseUser.mockReturnValue({
+      user: null,
+      token: null,
+    })
+  
     renderProfile()
     expect(await screen.findByText(/not authenticated/i)).toBeInTheDocument()
   })
 
   it('shows error message when profile fetch fails', async () => {
     vi.spyOn(global, 'fetch')
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ id: 1, username: 'alice' }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        })
-      )
+      .mockResolvedValueOnce(new Response('boom', { status: 500 }))
       .mockResolvedValueOnce(new Response('boom', { status: 500 }))
       .mockResolvedValueOnce(new Response('boom', { status: 500 }))
 
@@ -434,6 +443,10 @@ describe('Profile page (general)', () => {
   })
 
   it('renders display name, username and stats from fetched data', async () => {
+    mockUseUser.mockReturnValue({
+      user: { id: 7, username: 'Alice' },
+      token: 'fake-token',
+    })
     mockProfileBoot({
       userId: 7,
       username: 'alice',
@@ -534,12 +547,6 @@ describe('Profile page (general)', () => {
 
   it('loads a route profile by user id and hides owner-only controls', async () => {
     vi.spyOn(global, 'fetch')
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ id: 1, username: 'alice' }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        })
-      )
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
