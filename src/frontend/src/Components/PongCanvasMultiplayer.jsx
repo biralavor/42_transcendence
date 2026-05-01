@@ -52,6 +52,7 @@ function PongCanvasMultiplayer(props) {
   const [showGoal, setShowGoal] = useState(false)
   const [connStatus, setConnStatus] = useState('connecting')
   const [errorMsg, setErrorMsg] = useState('')
+  const [disconnectSecondsLeft, setDisconnectSecondsLeft] = useState(null)
 
   // Track which player(s) this client represents
   const playerTypeRef = useRef(null)
@@ -148,9 +149,14 @@ function PongCanvasMultiplayer(props) {
             }
           }
         } else if (message.type === 'game_over') {
-          handleGameEnd(message.winner_id, message.score_p1, message.score_p2)
+          setDisconnectSecondsLeft(null)
+          handleGameEnd(message.winner_id, message.score_p1, message.score_p2, message.forfeit_reason)
         } else if (message.type === 'spectator_count' && Number.isFinite(message.count)) {
           onSpectatorCount(message.count)
+        } else if (message.type === 'opponent_disconnected' && Number.isFinite(message.seconds_left)) {
+          setDisconnectSecondsLeft(message.seconds_left)
+        } else if (message.type === 'opponent_reconnected') {
+          setDisconnectSecondsLeft(null)
         }
       } catch (err) {
         console.error('[WS] Message parse error:', err)
@@ -163,16 +169,26 @@ function PongCanvasMultiplayer(props) {
       setErrorMsg('WebSocket connection error')
     }
 
-    ws.onclose = () => {
-      console.log('[WS] Connection closed')
+    ws.onclose = (event) => {
+      console.log('[WS] Connection closed', event.code, event.reason)
+      if (event.code === 4004) {
+        setConnStatus('error')
+        setErrorMsg(event.reason || 'Match already ended')
+        return
+      }
       setConnStatus('disconnected')
     }
 
     webSocketRef.current = ws
   }
 
-  function handleGameEnd(winnerId, scoreP1, scoreP2) {
-    onGameEnd({ winner_id: winnerId, score_p1: scoreP1, score_p2: scoreP2 })
+  function handleGameEnd(winnerId, scoreP1, scoreP2, forfeitReason) {
+    onGameEnd({
+      winner_id: winnerId,
+      score_p1: scoreP1,
+      score_p2: scoreP2,
+      forfeit_reason: forfeitReason ?? null,
+    })
   }
 
   function sendInput(direction) {
@@ -271,6 +287,15 @@ function PongCanvasMultiplayer(props) {
         {showGoal && (
           <div className='goal-overlay'>
             <span className='goal-text'>GOOOAL!</span>
+          </div>
+        )}
+        {disconnectSecondsLeft != null && (
+          <div className='disconnect-countdown-overlay' role='status' aria-live='polite'>
+            <span className='disconnect-countdown-title'>Opponent disconnected</span>
+            <span className='disconnect-countdown-timer'>{disconnectSecondsLeft}s</span>
+            <span className='disconnect-countdown-subtitle'>
+              Match will end if they don't return
+            </span>
           </div>
         )}
         <canvas ref={canvasRef}></canvas>

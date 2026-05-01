@@ -1,819 +1,566 @@
-# How WebSocket Works — Using Our Code
+# About WebSockets — Bira's Study Notes
 
-## 📋 Update (2026-04-12): Event-Driven Notification Architecture
+These are my own notes from learning WebSockets while building ft_transcendence. Two halves:
 
-**Major architectural change deployed**: Listen-only WebSocket handlers (`/ws/notifications`, `/ws/presence`) now use **event-driven delivery** instead of polling-based handlers.
+- **Part I — Theory**: what WebSockets are, why HTTP can't do this, the handshake, frames, close codes.
+- **Part II — Our project**: how WebSockets are actually wired into our 3-microservice backend + React frontend. File paths included so I can jump back to the code.
 
-### What Changed
+---
 
-**Notification Handlers** (user-service, chat-service):
-- **Before**: `await asyncio.sleep(1)` → polling loop (wasteful)
-- **After**: `await asyncio.Event().wait()` → event-driven (instant)
-- **Benefit**: 1000ms latency → < 50ms (20-50x improvement)
+## Part I — Theory
 
-**Example: Game Invite**
-- Alice sends invite, handler receives it, broadcasts to Bob
-- Bob's handler **wakes instantly** via `event.set()` signal
-- GameInviteModal appears **immediately** (< 50ms)
-- Before: Modal appeared after ~1s (polling delay)
+### 1. The problem WebSockets solve
 
-### New Components
+HTTP is request/response. The client asks; the server answers; the connection ends. That's fine for "give me /profile/3.json", but it's a terrible model for:
 
-1. **EventRegistry** (`service/ws/event_registry.py` in each service)
-   - Manages per-user events
-   - `get_or_create_event(user_id)` — get or create async.Event for user
-   - `signal_event(user_id)` — wake all handlers for user
-   - `clear_event(user_id)` — reset for next notification
-   - `cleanup_event(user_id)` — remove on last disconnect
+- A chat where another user types something and I should see it instantly.
+- A multiplayer game where the ball must move at 30+ frames per second.
+- "X is online now" presence dots.
+- "Alice invited you to a Pong match" toasts.
 
-2. **Event Signaling in broadcast()**
-   - After sending JSON to clients, call `event_registry.signal_event(room_id)`
-   - This wakes the handler that was waiting on `event.wait()`
-   - Handler processes next notification, loops back
+People worked around HTTP for years with three patterns, all bad:
 
-### Handler Pattern
+| Workaround | How it works | Why it stinks |
+|---|---|---|
+| Polling | Client asks every N seconds: "anything new?" | Wastes bandwidth + battery; latency = N. |
+| Long polling | Server holds the request open until something happens, then replies. | One full HTTP round-trip per event; doesn't scale. |
+| Server-Sent Events | Server pushes a one-way stream over HTTP. | Server → client only. No client → server channel without a second connection. |
 
-Listen-only handlers now follow this pattern:
+WebSocket fixes this with a **single TCP connection that stays open and sends frames in either direction**, with low overhead per frame. RFC 6455 (2011).
 
-```python
-@router.websocket("/ws/notifications/{user_id}")
-async def notification_handler(websocket: WebSocket, user_id: str) -> None:
-    await manager.connect(str(user_id), websocket)
-    try:
-        while True:
-            event = await notification_event_registry.get_or_create_event(str(user_id))
-            
-            try:
-                await asyncio.wait_for(event.wait(), timeout=10.0)
-            except asyncio.TimeoutError:
-                continue
-            
-            await notification_event_registry.clear_event(str(user_id))
-            
-    except asyncio.CancelledError:
-        await notification_event_registry.cleanup_event(str(user_id))
-        raise
-    except WebSocketDisconnect:
-        pass
-    finally:
-        manager.disconnect(str(user_id), websocket)
+### 2. The handshake — HTTP becomes WS
+
+A WS connection starts as an ordinary HTTP/1.1 GET with two special headers:
+
+```
+GET /ws/chat/lobby HTTP/1.1
+Host: example.com
+Upgrade: websocket
+Connection: Upgrade
+Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==
+Sec-WebSocket-Version: 13
 ```
 
-**Key points:**
-- `event.wait()` alone is non-cancellable → `asyncio.wait_for()` with timeout makes it safe
-- TimeoutError is expected and OK → handler just loops
-- 10-second timeout ensures graceful disconnect detection
-- Cleanup on CancelledError prevents memory leaks
+If the server agrees, it answers `101 Switching Protocols` and from that point the same TCP socket stops speaking HTTP and starts speaking WS frames. The `Sec-WebSocket-Key` is a nonce; the server hashes it with a fixed GUID and returns `Sec-WebSocket-Accept`. This is purely an anti-cache / accidental-upgrade safeguard, not real security.
 
-### For Team Members
+Important consequence: **any proxy on the path must understand and forward the Upgrade headers**. If it strips them, the upgrade never happens. (See nginx section in Part II — this bit me.)
 
-- **Measuring latency**: Expect ~5-50ms for notifications (was ~1000ms)
-- **Testing**: Game invites now appear instantly (manual test)
-- **Debugging**: If notifications delayed, check if handler uses new event-driven pattern
+### 3. Frames
 
-**See**: [EVENT_DRIVEN_NOTIFICATIONS.md](docs/EVENT_DRIVEN_NOTIFICATIONS.md) in docs/ for full architecture guide.
+After upgrade, both sides send/receive *frames*. A frame has a small binary header (a few bytes) and a payload. Frame types I care about:
+
+- **Text** (opcode 0x1) — UTF-8 string, almost always JSON in our app.
+- **Binary** (0x2) — raw bytes; we don't use this.
+- **Ping / Pong** (0x9 / 0xA) — keep-alive. Browsers and servers handle these automatically.
+- **Close** (0x8) — graceful shutdown with a 16-bit code + optional reason string.
+
+Compared to HTTP/1.1 where every message has dozens of header bytes, a WS frame is tiny. That's what makes 30Hz game broadcasts feasible.
+
+### 4. Close codes I actually see in our project
+
+Standard codes (RFC 6455):
+
+- `1000` — normal close.
+- `1001` — going away (tab closed, server shutdown).
+- `1006` — abnormal close (no Close frame received). I get this when wifi drops.
+- `1011` — server error.
+
+Application codes (4000–4999) — we define our own:
+
+- `4001` — auth failed (bad/missing token, user not found).
+- `4002` — DB error during connect (chat-service uses this if `get_or_create_room` fails).
+- `4003` — forbidden (token valid, but not the right user / not a participant / spectator tried to send input).
+- `4004` — not found (game session doesn't exist, tournament doesn't exist).
+
+### 5. Lifecycle of one connection
+
+```
+client: new WebSocket(url)
+       │
+       │  HTTP GET + Upgrade headers
+       ▼
+server: receives, validates, accepts → sends 101
+       │
+       ▼
+   [open] ←──── frames flow either direction ────→
+       │
+       │  client closes tab / network drops / server kicks
+       ▼
+   [close] both sides see a close event/exception
+```
+
+On the browser, `WebSocket` exposes 4 events: `onopen`, `onmessage`, `onclose`, `onerror`. On the FastAPI side, the handler is an `async` function that calls `await websocket.accept()`, then loops on `receive_*()` until a `WebSocketDisconnect` exception is raised.
+
+### 6. Things that surprised me
+
+- **WS does NOT auto-reconnect.** If the network blinks, the socket dies and you're done unless you wrote reconnect logic. Browsers don't do it for you.
+- **The browser `WebSocket` constructor cannot set custom headers.** You can't put `Authorization: Bearer <jwt>` on a WS handshake. Workarounds: pass token via `?token=<jwt>` query string, send a first frame with the token after open, or use cookies. We use the query string.
+- **Backpressure is your problem.** If a client is slow, `send_json` can block. The game-service sets a 0.5s send timeout per client and disconnects slow ones so the 30Hz loop doesn't stall. (Other services don't bother — chat is human-paced.)
+- **Horizontal scaling needs a broker.** Our `ConnectionManager` is a Python dict in process memory. Two replicas can't see each other's sockets; you'd need Redis pub/sub. For our project (single container per service) it's fine.
+- **`while True` is not a busy loop.** `await websocket.receive_json()` parks the coroutine. The event loop reuses the thread for thousands of idle sockets. This is what makes async servers good at WS.
+
+### 7. WebSocket vs SSE vs HTTP/2 push
+
+- **SSE** is one-way (server → client) over HTTP. Simpler, auto-reconnects, but no client → server frames. Good for stock tickers; bad for games.
+- **HTTP/2 server push** is unrelated — it pushes resources for caching, not application messages.
+- **WS** is the only one of the three that gives bidirectional, low-overhead, real-time framing.
 
 ---
 
-## WebSocket Channel Inventory
+## Part II — How WebSockets work in our project
 
-| nginx URL | Service | FastAPI route | Manager | Auth pattern | Direction | Purpose |
-|-----------|---------|---------------|---------|--------------|-----------|---------|
-| `/api/users/ws/presence` | user-service | `/ws/presence` | `PresenceManager` (per-user) | `get_me(token)` | server→client | Friend online/offline events |
-| `/api/users/ws/notifications/{id}` | user-service | `/ws/notifications/{user_id}` | `ConnectionManager` (room=str(id)) | `get_me(token)` + ownership | server→client | Friend & game notifications (listen-only owner channel; server delivers via `POST /game-invites`) |
-| `/api/chat/ws/chat/{room}` | chat-service | `/ws/chat/{room_slug}` | `ConnectionManager` (room=slug) | `credential_id` → DB | bidirectional | Real-time chat messages |
-| `/api/chat/ws/notifications` | chat-service | `/ws/notifications` | `ConnectionManager` (room=str(uid)) | `credential_id` → DB | server→client | DM unread pushes with sender name (`from_username`) |
-| `/api/game/ws/game/{id}` | game-service | `/ws/game/{game_id}` | `ConnectionManager` (room=game_id) | `credential_id` → DB | bidirectional | Pong game state + inputs |
+### 8. The big picture
 
-**Auth patterns:**
-- `get_me(token)` — user-service only; decodes JWT `sub` claim and queries by username. Source of truth.
-- `credential_id → DB` — game/chat-service hybrid; decodes JWT locally, extracts `credential_id`, queries `SELECT id FROM users WHERE credential_id = ?`. ~5ms fast path, no network call.
+We have 3 backend microservices, each with its own WS endpoints:
 
----
+```
+                          ┌────────── user-service (8001) ───────────┐
+                          │  /ws/presence              (per-user)     │
+                          │  /ws/notifications/{id}    (per-user)     │
+                          └───────────────────────────────────────────┘
+browser ─→ nginx (443) ─→ ┌────────── game-service (8002) ───────────┐
+                          │  /ws/game/{game_id}        (per-room)     │
+                          │  /ws/tournament/{id}       (per-tourney)  │
+                          └───────────────────────────────────────────┘
+                          ┌────────── chat-service (8003) ───────────┐
+                          │  /ws/chat/{room_slug}      (per-room)     │
+                          │  /ws/notifications         (per-user)     │
+                          └───────────────────────────────────────────┘
+```
 
-## 1. The Handshake (nginx)
+nginx terminates TLS on `443/8443`, then proxies based on the URL prefix. Browser-side, the URL the client opens is always `wss://host/api/{service}/ws/...?token=<jwt>`.
 
-Every WS connection enters through `services/nginx/nginx.conf.template`. Without these three lines, the upgrade dies at the proxy:
+### 9. nginx — making the upgrade work
+
+`services/nginx/nginx.conf.template`. Three pieces matter for WS:
 
 ```nginx
-proxy_http_version     1.1;          -- HTTP/1.0 can't upgrade — this was our bug
-proxy_set_header       Upgrade $http_upgrade;
-proxy_set_header       Connection "upgrade";
+# 1) Map to translate Upgrade header → Connection header value.
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;     # if no Upgrade header, this is plain HTTP — close after request
+}
+
+# 2) On each /api/* location:
+location /api/users/ {
+    proxy_pass             http://user-service/;
+    proxy_http_version     1.1;                          # HTTP/1.0 cannot upgrade
+    proxy_set_header       Upgrade $http_upgrade;
+    proxy_set_header       Connection $connection_upgrade;
+    proxy_read_timeout     3600s;                        # otherwise idle WS dies after 60s
+    proxy_send_timeout     3600s;
+    proxy_buffering        off;                          # don't buffer frames!
+}
 ```
 
-nginx forwards the `101 Switching Protocols` response back to the browser, and from that point the TCP connection is **owned by the WS protocol** — nginx just passes raw frames through.
+The `proxy_buffering off` line is the one I keep forgetting. Without it nginx buffers small frames waiting for "more" data, adding latency that's deadly for the game loop. The 3600s timeout matters because nginx defaults are short and would silently kill idle WS like the presence channel.
 
----
+`/api/users/`, `/api/game/`, `/api/chat/` blocks all carry the same WS upgrade headers. `/api/games/` (plural — REST endpoints for live-games listing) does *not* — it's HTTP only.
 
-## 2. Server Accepts the Connection (router.py)
+### 10. Connection state lives in memory — `shared/ws/manager.py`
 
-After nginx passes the upgrade, FastAPI/Starlette handles it:
-
-```python
-# src/backend/chat-service/ws/router.py
-@router.websocket("/ws/chat/{room_id}")
-async def chat_websocket(websocket: WebSocket, room_id: str) -> None:
-    await manager.connect(room_id, websocket)   # ← sends the 101, registers the socket
-    try:
-        while True:                              # ← holds the connection open forever
-            data = await websocket.receive_json()
-            await manager.broadcast(room_id, data)
-    except WebSocketDisconnect:                  # ← client closed tab / lost network
-        manager.disconnect(room_id, websocket)
-```
-
-The `while True` is not a bug — it *is* WebSocket. The coroutine parks itself waiting for the next frame. When a frame arrives, it broadcasts and parks again. When the client disconnects, Starlette raises `WebSocketDisconnect` to break out cleanly.
-
----
-
-## 3. Connection State Lives in Memory (manager.py)
-
-This is the most important architectural piece:
+This is the single most important class to understand. Lives at `src/backend/shared/ws/manager.py`.
 
 ```python
-# src/backend/shared/ws/manager.py
 class ConnectionManager:
-    def __init__(self) -> None:
-        self._rooms: Dict[str, Set[WebSocket]] = {}   # room_id → all sockets in that room
+    def __init__(self, signal_callback=None, send_timeout=None):
+        self._rooms: Dict[str, Set[WebSocket]] = {}
+        self._roles: Dict[Tuple[str, WebSocket], str] = {}     # 'player' | 'spectator'
+        self._player_counts: Dict[str, int] = {}
+        self._spectator_counts: Dict[str, int] = {}
+        self._signal_callback = signal_callback                 # for event-driven wakeup
+        self._send_timeout = send_timeout                       # backpressure guard
 
-    async def connect(self, room_id: str, websocket: "WebSocket") -> None:
+    async def connect(self, room_id, websocket, role="player"):
         await websocket.accept()
         self._rooms.setdefault(room_id, set()).add(websocket)
+        # ...track role + counts...
 
-    def disconnect(self, room_id: str, websocket: "WebSocket") -> None:
-        room = self._rooms.get(room_id, set())
-        room.discard(websocket)
-        if not room:
-            self._rooms.pop(room_id, None)   # ← prune empty rooms or memory leaks forever
+    def disconnect(self, room_id, websocket):
+        # ...remove socket; prune empty rooms to avoid memory leak...
 
-    async def broadcast(self, room_id: str, message: dict) -> None:
-        for ws in list(self._rooms.get(room_id, set())):   # ← snapshot before iterating
-            try:
-                await ws.send_json(message)
-            except Exception:
-                pass                           # ← one dead socket can't kill the broadcast
+    async def broadcast(self, room_id, message):
+        sockets = list(self._rooms.get(room_id, set()))         # snapshot!
+        results = await asyncio.gather(
+            *(self._send_to_client(room_id, ws, message) for ws in sockets)
+        )
+        for ws, error in results:                                # evict dead sockets
+            if error is not None:
+                self.disconnect(room_id, ws)
+        if self._signal_callback:                                # event-driven wakeup
+            await self._signal_callback(room_id)
 ```
 
-`_rooms` is a plain Python dict that lives **in the uvicorn process**. This is why horizontal scaling is hard — if player A connects to pod 1 and player B connects to pod 2, `broadcast()` on pod 1 can't reach pod 2's sockets. You'd need Redis pub/sub as a broker. For our project (single container), this is fine.
+Things I learned reading this code:
 
-The `list()` snapshot on broadcast matters: if a socket dies mid-loop, the set would change size during iteration — a runtime error. The snapshot prevents that.
+1. **`_rooms` is a plain dict in the uvicorn process.** Cross-process broadcast would need Redis pub/sub. We don't.
+2. **The `list()` snapshot before iterating** is mandatory. If a socket dies and gets removed mid-iteration, the set mutates and Python raises `RuntimeError: Set changed size during iteration`.
+3. **`asyncio.gather` parallel send.** All clients in a room get the frame in parallel; one slow client doesn't delay the others.
+4. **Send timeout (game-service only).** `manager = ConnectionManager(send_timeout=0.5)` in `game-service/ws/router.py:32`. Slow clients are disconnected so the 30Hz game loop doesn't stall. Chat doesn't need this — humans aren't 30Hz.
+5. **Role tracking + counts** are kept in lockstep with `_rooms`. Used by the live-games endpoint and the spectator banner.
+6. **Pruning empty rooms** (`if not room: self._rooms.pop(...)`) prevents the dict from growing forever as games come and go.
 
----
+`PresenceManager` (`shared/ws/presence.py`) is a sibling class keyed by `user_id: int` instead of `room_id: str`. Same shape, different key — because presence is "is this user online anywhere?", not "what's in this room?"
 
-## 4. Per-User Presence Tracking (presence.py)
+### 11. The two auth patterns
 
-`ConnectionManager` groups sockets by **room** — the key is a string like `"DM-1-2"`. That model doesn't work for presence: we need to know whether a specific **user** is online, not which room they're in.
+We have two ways the server figures out who you are on a WS connection. I keep forgetting which is which.
 
-`PresenceManager` in `src/backend/shared/ws/presence.py` uses `user_id` (int) as the key instead:
+**Pattern A: `get_me(token, session)` — user-service only.** Decodes the JWT `sub` claim (which is a username), then `SELECT … FROM users WHERE username = …`. This is the source-of-truth auth, but it touches two tables (credentials + users) so it's a bit slower.
+
+**Pattern B: `_uid_from_token(token)` + DB lookup — game-service and chat-service.** Decodes locally, extracts `credential_id`, then `SELECT id FROM users WHERE credential_id = :cid`. One small query, no inter-service network call, ~5ms. This is the "hybrid" path.
+
+Both rely on the same trick to get the token in the first place: `?token=<jwt>` in the WS URL, because browsers can't set Authorization headers on WS.
+
+### 12. WebSocket channel inventory
+
+| nginx URL | Service | FastAPI route | Auth | Direction | Purpose |
+|---|---|---|---|---|---|
+| `/api/users/ws/presence` | user-service | `/ws/presence` | `get_me` | server→client | Friend online/offline events |
+| `/api/users/ws/notifications/{id}` | user-service | `/ws/notifications/{user_id}` | `get_me` + ownership | server→client | Friend events, game invites, achievements |
+| `/api/game/ws/game/{id}` | game-service | `/ws/game/{game_id}` | `credential_id` (optional, for player) | bidirectional | Pong inputs + state; spectators when no token |
+| `/api/game/ws/tournament/{id}` | game-service | `/ws/tournament/{tournament_id}` | `credential_id` | bidirectional | Tournament ready/start signaling |
+| `/api/chat/ws/chat/{slug}` | chat-service | `/ws/chat/{room_slug}` | `credential_id` (DM-required) | bidirectional | Chat messages + typing |
+| `/api/chat/ws/notifications` | chat-service | `/ws/notifications` | `credential_id` | server→client | DM unread pings |
+
+### 13. Event-driven listen-only handlers
+
+This is a recent change (April 2026, see `docs/EVENT_DRIVEN_NOTIFICATIONS.md`) that I want to remember.
+
+Listen-only channels (`/ws/presence`, `/ws/notifications/{id}`, chat-service `/ws/notifications`) used to do this in their main loop:
 
 ```python
-class PresenceManager:
-    def __init__(self) -> None:
-        self._users: Dict[int, Set[WebSocket]] = {}   # user_id → all sockets for that user
-
-    async def connect(self, user_id: int, ws: WebSocket) -> None:
-        await ws.accept()
-        self._users.setdefault(user_id, set()).add(ws)
-
-    def disconnect(self, user_id: int, ws: WebSocket) -> None:
-        sockets = self._users.get(user_id, set())
-        sockets.discard(ws)
-        if not sockets:
-            self._users.pop(user_id, None)   # ← prune empty sets — same memory-leak guard
-
-    def is_online(self, user_id: int) -> bool:
-        return bool(self._users.get(user_id))
-
-    async def broadcast_to(self, user_id: int, message: dict) -> None:
-        for ws in list(self._users.get(user_id, set())):
-            try:
-                await ws.send_json(message)
-            except Exception:
-                self.disconnect(user_id, ws)   # ← evict dead socket inline
+while True:
+    await asyncio.sleep(1)   # poll
 ```
 
-A module-level singleton `presence_manager = PresenceManager()` is the shared instance — the same pattern `ConnectionManager` uses in chat/game services.
-
----
-
-## 5. Presence Endpoint — Auth via Query Param (presence_router.py)
-
-The `/ws/presence` endpoint in `src/backend/user-service/ws/presence_router.py` has one key difference from all other endpoints: **authentication via query param**, not the `Authorization` header.
-
-**Why?** The browser's native `WebSocket` constructor does not support custom headers. Every WS connection must authenticate a different way. The solution is `?token=<jwt>`:
+That works but the latency floor was 1 second. We replaced it with `asyncio.Event` + a registry per service:
 
 ```python
-@router.websocket("/ws/presence")
-async def presence_endpoint(websocket: WebSocket, session: SessionDep, token: str = ""):
-    if not token:
-        await websocket.close(code=4001)   # ← 4001 = custom app-level: Unauthorized
-        return
-    try:
-        me = await get_me(token, session)
-    except Exception as exc:
-        logger.warning("WS /presence auth failed: %s", exc)
-        await websocket.close(code=4001)
-        return
+# src/backend/user-service/ws/event_registry.py
+class EventRegistry:
+    def __init__(self):
+        self._events: Dict[str, asyncio.Event] = {}
 
-    user_id = me.id
-    await presence_manager.connect(user_id, websocket)
+    async def signal_event(self, user_id):
+        event = await self.get_or_create_event(user_id)
+        event.set()                                 # wakes the handler instantly
+```
 
-    friends = await get_friends(user_id, session)
+The `ConnectionManager` constructor takes a `signal_callback`. After every `broadcast()`, it calls that callback with the room id, which calls `event.set()`, which wakes the parked handler. End-to-end notification latency went from ~1000ms to ~5–50ms.
+
+The handler pattern (see `src/backend/user-service/ws/notification_router.py:67`):
+
+```python
+while True:
+    event = await registry.get_or_create_event(room)
+    notify_task = asyncio.create_task(event.wait())
+    disconnect_task = asyncio.create_task(websocket.receive_text())
+    done, pending = await asyncio.wait(
+        [notify_task, disconnect_task],
+        timeout=10.0,
+        return_when=asyncio.FIRST_COMPLETED,
+    )
+    # cancel pending; if disconnect_task in done → break; else clear event and loop
+```
+
+Two things I had to read twice:
+
+1. **Why race a `receive_text()` we don't want to read?** Because that's the only way to detect disconnect promptly. `event.wait()` alone would never wake on disconnect, and the OS can take minutes to time out a dead TCP socket. Racing the two means whichever comes first wins — notification fires *or* the client goes away.
+2. **Why a 10s timeout?** Fail-safe. If both tasks somehow stall, we don't want a handler stuck forever. Loop and try again.
+
+### 14. Presence — `src/backend/user-service/ws/presence_router.py`
+
+Presence answers "is this user online?". Two interesting bits beyond the channel mechanics:
+
+```python
+# 1. Send "alice is online" only on the FIRST connection of that user.
+already_online = presence_manager.is_online(user_id)
+await presence_manager.connect(user_id, websocket)
+if not already_online:
+    friends = await get_friends(user_id, db_session)
     for friend in friends:
         if presence_manager.is_online(friend.id):
-            await presence_manager.broadcast_to(
-                friend.id,
-                {"type": "presence", "user_id": user_id, "status": "online"},
-            )
+            await presence_manager.broadcast_to(friend.id,
+                {"type": "presence", "user_id": user_id, "status": "online"})
+    await set_user_status(user_id, "online", db_session)
 
-    await set_user_status(user_id, "online", session)
-
-    try:
-        while True:
-            await websocket.receive_text()   # ← keep-alive; payload is ignored
-    except WebSocketDisconnect:
-        pass
-
-    presence_manager.disconnect(user_id, websocket)
-    friends = await get_friends(user_id, session)
-    for friend in friends:
-        if presence_manager.is_online(friend.id):
-            await presence_manager.broadcast_to(
-                friend.id,
-                {"type": "presence", "user_id": user_id, "status": "offline"},
-            )
-    await set_user_status(user_id, "offline", session)
+# 2. On disconnect, send "alice is offline" only if NO sockets remain for that user.
+presence_manager.disconnect(user_id, websocket)
+if not presence_manager.is_online(user_id):
+    # broadcast offline to friends + update DB
 ```
 
-WS close codes 4000–4999 are application-defined. We use:
-- `4001` — authentication failed (missing or invalid token, or user not found in DB — `get_me` raises `HTTPException(401)` for all of these)
+`set_user_status` writes `users.status` so the REST API (`/profile/{id}`, `/friends`) returns the correct dot color even before a friend's WS map has loaded. The frontend uses the WS as the live source and falls back to the REST status field.
 
-The event shape is always: `{"type": "presence", "user_id": 42, "status": "online"|"offline"}`
+Frame shape: `{"type": "presence", "user_id": 42, "status": "online" | "offline"}`.
 
-`set_user_status` updates `users.status` in Postgres so REST endpoints (`/profile/:id`, `/friends/:id`) also return accurate online state.
+### 15. User-service notifications — listen-only, ownership-enforced
 
----
+`src/backend/user-service/ws/notification_router.py`. Important rules:
 
-## 6. Notification Channel — Listen-Only + Ownership Enforced (notification_router.py)
+- Only the authenticated owner may connect (`me.id != user_id` → close 4003).
+- Clients **cannot send** notifications. Any inbound frame is logged as a warning. Delivery happens server-side via `POST /api/users/game-invites`, which:
+  1. Injects `from_user_id` and `from_username` from the JWT (anti-impersonation).
+  2. Persists a `notifications` row.
+  3. `notification_manager.broadcast(str(target_id), raw_payload)` — the FriendsSidebar uses this to render an invite popup.
+  4. `notification_manager.broadcast(str(target_id), notification_envelope)` — the bell badge consumes this.
 
-`/ws/notifications/{user_id}` in `src/backend/user-service/ws/notification_router.py` is the official per-user channel for all real-time notification delivery. After the security hardening in issue #261, the channel is **listen-only and ownership-enforced** — only the authenticated owner may connect, and all client frames are silently discarded.
+Two broadcasts per game event = two WS frames the recipient gets. The frontend filters by `frame.type === 'notification'` for the bell, and the raw frame for the invite UI.
 
-### Architecture
-
-```
-Server                                    Bob (owner, persistent listener)
-  |                                              |
-  |── persistent WS /ws/notifications/42 ──────>|
-  |   owner only; 4003 if id mismatch            |
-  |                                              |
-Alice POSTs to HTTP /game-invites ─────────>  Server
-  {type:"game_invite", to_user_id:42, ...}        |
-                                                  | creates notification row in DB
-                                                  | notification_manager.broadcast("42", raw_payload)
-                                                  | notification_manager.broadcast("42", notif_envelope)
-                                                  |──── WS frame (raw) ──────────────────>|
-                                                  |──── WS frame (envelope) ─────────────>|
-                                                                                           | onMessage() fires twice
-                                                                                           | FriendsSidebar: handles raw game_invite
-                                                                                           | Notification bell (#284): handles notification envelope
-```
-
-Server is the **sole delivery mechanism**. No client can inject messages into another user's channel.
-
-### Authentication and authorization
-
-```python
-# src/backend/user-service/ws/notification_router.py
-@router.websocket("/ws/notifications/{user_id}")
-async def notification_endpoint(websocket, user_id, session, token=""):
-    if not token:
-        await websocket.close(code=4001)   # missing token
-        return
-    try:
-        me = await get_me(token, session)  # user-service auth: validates JWT via sub claim
-    except Exception:
-        await websocket.close(code=4001)   # invalid token or user not found
-        return
-    if me.id != user_id:
-        await websocket.close(code=4003)   # ownership: caller must own the channel
-        return
-
-    room = str(user_id)
-    await notification_manager.connect(room, websocket)
-    try:
-        while True:
-            await websocket.receive()      # blocks until disconnect; all frames discarded
-    except WebSocketDisconnect:
-        pass
-    finally:
-        notification_manager.disconnect(room, websocket)
-```
-
-**Close codes:**
-- `4001` — authentication failed (missing/invalid token, or user not found)
-- `4003` — forbidden (token is valid but caller is not the channel owner)
-
-**Auth follows the user-service pattern:** `get_me(token, session)` decodes the JWT `sub` claim and queries by username. This is the source-of-truth path. Game/chat-service use `credential_id → DB` hybrid instead (see `Authentication-Pattern-Comparison.md`).
-
-### Server-side delivery — `POST /game-invites`
-
-Clients never write to the WS channel. Instead, they call the HTTP endpoint:
-
-```
-POST /api/users/game-invites
-Authorization: Bearer <token>
-{type, to_user_id, room_id, [status], [expires_at], ...}
-```
-
-The server:
-1. Injects `from_user_id` and `from_username` from the JWT (prevents impersonation)
-2. Persists a `Notification` row in the DB (type mapped per event, message localised)
-3. Broadcasts the **raw game payload** to the target's WS room (for FriendsSidebar invite UI)
-4. Broadcasts the **notification envelope** to the same room (for the notification bell #284)
-
-```python
-# main.py — deliver_game_notification
-payload = {**body.model_dump(...), "from_user_id": current_user.id, ...}
-notif = await _notifications.create_notification(session, body.to_user_id, body.type, message)
-await notification_manager.broadcast(str(body.to_user_id), payload)           # raw — invite popup
-await notification_manager.broadcast(str(body.to_user_id), _notif_payload(notif))  # envelope — bell
-```
-
-### Notification envelope format
-
-All server-pushed notifications (friend events + game events) share this WS frame shape:
+Notification envelope:
 
 ```json
-{"type": "notification", "notification": {"id": 1, "type": "friend_request", "message": "Alice sent you a friend request", "read": false}}
-```
-
-### Notification types and messages
-
-| `notification.type` | Trigger endpoint | Message template |
-|---|---|---|
-| `friend_request` | `POST /friends/{id}/request/{addr}` | `"{sender} sent you a friend request"` |
-| `friend_request_accepted` | `PUT /friends/{id}/requests/{req}` (accept) | `"{acceptor} accepted your friend request"` |
-| `game_invite` | `POST /game-invites` (type=game_invite) | `"{sender} invited you to play Pong"` |
-| `game_invite_response` | `POST /game-invites` (type=game_invite_response) | `"{sender} accepted/declined your game invite"` |
-| `game_invite_timeout` | `POST /game-invites` (type=game_invite_timeout) | `"Your game invite with {sender} has expired"` |
-
-### Two broadcasts per game event
-
-For game events, the recipient's WS channel receives **two frames** per POST:
-
-| Frame | `type` field | Consumer |
-|---|---|---|
-| Raw game payload | `"game_invite"` / `"game_invite_response"` / `"game_invite_timeout"` | `FriendsSidebar.jsx` invite popup |
-| Notification envelope | `"notification"` | Notification bell (#284) |
-
-The notification bell handler must filter to `type === "notification"` only — ignoring the raw game frames.
-
-### nginx routing
-
-No dedicated location block needed. The existing `/api/users/` block already handles WS upgrade:
-
-```nginx
-location /api/users/ {
-    proxy_pass         http://user-service/;
-    proxy_http_version 1.1;
-    proxy_set_header   Upgrade $http_upgrade;
-    proxy_set_header   Connection $connection_upgrade;
+{
+  "type": "notification",
+  "notification": {"id": 7, "type": "game_invite", "message": "alice invited you to play Pong", "read": false}
 }
 ```
 
-### Frontend (gameInviteChannel.js)
+### 16. Chat — `src/backend/chat-service/ws/router.py`
 
-`src/frontend/src/utils/gameInviteChannel.js` is the abstraction for game invite signaling.
+Two endpoints:
 
-`createGameChannelClient(userId, token, handlers)` opens a **persistent listen-only WS** to `/api/users/ws/notifications/{userId}` — used by `FriendsSidebar.jsx` to receive incoming game events.
-
-`sendGameChannelMessage(_channelId, payload, token)` now calls **`fetch POST /api/users/game-invites`** — the `_channelId` parameter is kept for call-site compatibility but unused. The server injects `from_user_id`/`from_username` from the JWT.
-
-```js
-// gameInviteChannel.js — sendGameChannelMessage (post security fix)
-export async function sendGameChannelMessage(_channelId, payload, token, options = {}) {
-  const resp = await fetch('/api/users/game-invites', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-    body: JSON.stringify(payload),
-  })
-  if (!resp.ok)
-    throw new Error('Unable to send the game invite event.')
-}
-```
-
-**History:** Prior to #261, this function opened a transient WS to the target's channel and wrote the payload directly. That was the relay pattern — replaced by the HTTP endpoint for security (server now controls identity injection and DB persistence).
-
----
-
-## 7. Chat Notification Channel (chat-service ws/router.py)
-
-Chat-service has its own per-user notification channel at `/ws/notifications` (no `user_id` in the path):
+**`/ws/chat/{room_slug}`** — bidirectional. Public rooms tolerate anonymous senders (no token → connect as anonymous). DM rooms (slug like `DM-3-7`) **require** a valid token *and* require the sender to be one of the two participant IDs:
 
 ```python
-# src/backend/chat-service/ws/router.py
-notifications_manager = ConnectionManager()   # separate instance from chat manager
-
-@router.websocket("/ws/notifications")
-async def notifications_websocket(websocket, token=""):
-    credential_id = _uid_from_token(token)        # hybrid: decode locally
-    # ... resolve credential_id → user.id via DB
-    await notifications_manager.connect(str(uid), websocket)
-    # server-push only: client messages are discarded
+# router.py:78–134
+dm_participants = _parse_dm_participants(room_slug)   # returns (lo, hi) or None
+sender_uid = ... # resolve from token
+if dm_participants is not None:
+    if sender_uid is None:
+        await websocket.close(code=4001); return
+    if sender_uid not in dm_participants:
+        await websocket.close(code=4003); return
 ```
 
-**Auth follows the chat-service hybrid pattern:** `credential_id` is extracted from the JWT locally (no network call), then resolved to `user.id` via `SELECT id FROM users WHERE credential_id = :cid`.
+The slug pattern `DM-{lo}-{hi}` (sorted user ids) means there's exactly one canonical DM room for each pair — `DM-3-7`, never `DM-7-3`. Frontend (`Chat.jsx`) computes the slug deterministically when opening a DM.
 
-**Push-only:** unlike the user-service notification channel, clients cannot write to this socket — received messages are discarded. Only the server pushes events (DM notifications from `chat_websocket`).
+On every persisted message in a DM, the chat-service also pushes a `new_dm` frame to the recipient's per-user notification socket:
 
-**Event shape:** `{"type": "new_dm", "from_user_id": int, "from_username": str, "room_slug": str, "preview": str}`
+```python
+# router.py:201–211
+await notifications_manager.broadcast(str(recipient_uid), {
+    "type": "new_dm",
+    "from_user_id": sender_uid,
+    "from_username": message_sender,
+    "room_slug": room_slug,
+    "preview": data["content"][:80],
+})
+```
 
-`from_username` was added (commit `b976f7f`) so the frontend can show sender name in the notification bell without a separate REST lookup.
+Block list is enforced inside `_sender_is_blocked` before broadcast/persist — if the recipient blocked the sender, the message is silently dropped (not persisted, not delivered).
 
-Frontend (`unreadContext.jsx`) connects at `/api/chat/ws/notifications?token=<jwt>` and updates two pieces of state on each `new_dm` event:
-- `unreadCounts: { [slug]: number }` — per-room unread badge count; incremented unless the user is already viewing that room (`activeRoomRef`)
-- `dmSenders: { [slug]: string }` — latest sender username per room; set from `from_username`; cleared alongside `unreadCounts` when `clearUnread(slug)` is called
+**`/ws/notifications`** — the per-user channel. Pure server-push: any client frame triggers a warning log. This is what the unreadContext on the frontend uses to count DM badges.
 
-Both are exposed from `useUnread()` and consumed by `notificationContext.jsx` to build DM pseudo-notifications with sender context.
+### 17. Game — `src/backend/game-service/ws/router.py`
 
----
+The most complex WS handler in the project. ~1500 lines. Key pieces:
 
-## 8. Browser Side (wsClient.js)
+**Player vs spectator classification (lines ~961–977).** Token is *optional*. The flow:
 
+1. Decode token → `credential_id` → `SELECT id FROM users WHERE credential_id = …`. No row, JWT failure, or no token → `caller_user_id = None` → spectator.
+2. Resolve the room's player IDs by checking, in priority order: live `GameSession`, `_waiting_room_players`, `_setup_sessions`, parsed from `invite-{p1}-{p2}-…` URL.
+3. If `caller_user_id` is in the resolved player tuple → **player** path; otherwise → **spectator** path.
 
-The browser's native `WebSocket` is fire-and-forget — it doesn't reconnect. Our wrapper adds that:
+Spectators are **read-only**. Any inbound frame triggers `close(4003)`. The first thing they receive is a state snapshot so they don't have to wait for the next tick. `manager.broadcast(... spectator_count ...)` notifies everyone in the room when audience size changes.
+
+**Ready/start state machine.** Players hit `player_ready`, server tracks `_waiting_room_ready: dict[str, set[int]]`. When both players are in the set, server `broadcast`s `game_start` and creates the `GameSession`. There's a 90s `READY_TIMEOUT_SECONDS` on the waiting room — if both players haven't readied up, the match is cancelled (or, in tournaments, recorded as a forfeit).
+
+**Live game loop.** `GameSession` runs at 30Hz in a separate task. Each tick, it builds a state snapshot and calls `_broadcast_state(game_id, snapshot)` → `manager.broadcast(game_id, {"type": "state", ball:{}, paddles:{}, score:{}})`. This is the only WS broadcast that fires continuously; everything else is event-driven.
+
+**Disconnect grace.** Two grace windows, both 30s (`DISCONNECT_GRACE_SECONDS`):
+
+- **One player drops, the other stays.** Server pauses the session, broadcasts a per-second `opponent_disconnected` countdown to the surviving player, and starts `_disconnect_countdown(game_id, winner_id)` that awards a forfeit win on timeout. If the dropped player reconnects (same `player_id` rejoins the room), the timer is cancelled and the session resumes.
+- **Both players drop simultaneously** — happens during the waiting-room → game-page React route transition. Server pauses the session, starts `_both_disconnect_grace(game_id)`, deletes the session if neither player reconnects in 30s.
+
+Disconnect logic lives in the `finally:` block at `router.py:1281–1385`. It branches on: AI game vs PvP, last-player-out vs one-still-here, active session vs already-game-over.
+
+**AI games.** `POST /api/game/ai` (`router.py:826`) creates the match row + `GameSession` with `player2_id = AI_PLAYER_ID` and returns a `game_id`. The client then opens `/ws/game/{game_id}?token=<jwt>` and the same handler runs, just with one human and AI input being computed inside `GameSession`.
+
+**Tournament endpoint** `/ws/tournament/{tournament_id}` is separate (`router.py:1412`). Only registered participants can connect (close 4003 otherwise). Used to coordinate per-match ready states: when both players in a bracket pair are ready, the server creates a tournament-scoped game room id (`tournament-{t_id}-match-{match_id}`) and broadcasts `match_start`. Same 90s ready timeout.
+
+### 18. Frontend — `src/frontend/src/utils/wsClient.js`
+
+Tiny wrapper (~50 lines). Two reasons to exist:
+
+1. **JSON serialization** — `ws.send(JSON.stringify(data))` on send, `JSON.parse(event.data)` on receive.
+2. **Exponential-backoff reconnect** — start at 1s, double on each failure up to 30s, reset to 1s on a successful open.
 
 ```js
-// src/frontend/src/utils/wsClient.js
-export function createWsClient(url, { onMessage, onOpen, onClose } = {}) {
-  let ws;
-  let retryDelay = 1000;
-  let intentionallyClosed = false;
-
-  function connect() {
-    ws = new WebSocket(url);
-
-    ws.onopen = () => {
-      retryDelay = 1000;    // ← reset backoff on successful connect
-      onOpen?.();
-    };
-
-    ws.onclose = () => {
-      onClose?.();
-      if (!intentionallyClosed) {
-        setTimeout(connect, retryDelay);               // ← schedule reconnect
-        retryDelay = Math.min(retryDelay * 2, 30_000); // ← exponential backoff, cap 30s
-      }
-    };
-  }
-
-  connect();
-  return {
-    send(data) {
-      if (ws.readyState === WebSocket.OPEN)   // ← guard: drop silently if reconnecting
-        ws.send(JSON.stringify(data));
-    },
-    close() {
-      intentionallyClosed = true;   // ← tells onclose NOT to reconnect
-      ws.close();
-    },
-  };
+ws.onclose = () => {
+  if (intentionallyClosed) return     // ← user closed → don't reconnect
+  onClose?.()
+  retryTimer = setTimeout(connect, retryDelay)
+  retryDelay = Math.min(retryDelay * 2, 30_000)
 }
 ```
 
-The `intentionallyClosed` flag is the key distinction between "user closed the tab" (don't reconnect) and "network hiccup" (do reconnect). Without it, `client.close()` would trigger a reconnect loop immediately.
+The `intentionallyClosed` flag is the key distinction between "user logged out" (don't reconnect — would only flap with a stale token) and "wifi blinked" (reconnect please). `client.close()` sets it; `ws.onclose` from the network does not.
 
----
+Used by:
 
-## 9. Frontend Presence Session (presenceContext.jsx)
+- `pages/Chat.jsx` — chat room WS.
+- `pages/GameWaitingRoom.jsx` — waiting-room WS to game-service.
+- `pages/Tournament.jsx` — tournament WS.
+- `utils/gameInviteChannel.js` — wraps user-service notification WS for `FriendsSidebar`.
 
-`createWsClient` in `wsClient.js` is designed for **room-scoped** connections (chat, game) and reconnects automatically. Presence is different: it is a **session-level** singleton that lives for the entire authenticated session, and it doesn't need a room — it just needs to know the user's JWT.
+### 19. Frontend — three context providers, three background WS
 
-`PresenceProvider` in `src/frontend/src/context/presenceContext.jsx` owns that single connection:
+These three providers live high in the React tree (`main.jsx`) and each open exactly one WS for the whole authenticated session. Together they power presence dots, the bell badge, and DM unread counts.
+
+**`presenceContext.jsx`** — bare `new WebSocket(...)` (no `createWsClient`). Reason: presence is a session singleton; on logout React unmounts and calls `ws.close()`, which is intentional. We don't want reconnect loops with a stale token.
 
 ```jsx
-export function PresenceProvider({ children }) {
-  const { auth } = useAuth()
-  const [presenceMap, setPresenceMap] = useState({})
-
-  useEffect(() => {
-    if (!auth.access_token) return            // ← not logged in: no connection
-    const scheme = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const url = `${scheme}//${window.location.host}/api/users/ws/presence?token=${auth.access_token}`
-    const ws = new WebSocket(url)
-
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data)
-        if (data.type === 'presence') {
-          setPresenceMap(prev => ({ ...prev, [data.user_id]: data.status }))
-        }
-      } catch { /* ignore non-JSON frames */ }
-    }
-
-    ws.onclose = () => { setPresenceMap({}) }   // ← clear stale map on disconnect
-
-    return () => { ws.close() }                 // ← React cleanup on logout / token change
-  }, [auth.access_token])
-
-  return (
-    <PresenceContext.Provider value={presenceMap}>
-      {children}
-    </PresenceContext.Provider>
-  )
+const url = `${scheme}//${host}/api/users/ws/presence?token=${access_token}`
+const ws = new WebSocket(url)
+ws.onmessage = (event) => {
+  const data = JSON.parse(event.data)
+  if (data.type === 'presence')
+    setPresenceMap(prev => ({ ...prev, [data.user_id]: data.status }))
 }
+return () => ws.close()
 ```
 
-`presenceMap` is a plain object keyed by `user_id` (number → `"online"|"offline"`). The `onclose` handler clears it so that when the WS drops (e.g., network loss, logout), stale green dots disappear immediately.
-
-`PresenceProvider` wraps `App` inside `AuthProvider` in `main.jsx`, so the map is available everywhere. Consumer components read it via `usePresence()`:
+`presenceMap` is `{ user_id: "online" | "offline" }`. Components read it via `usePresence()`:
 
 ```jsx
-// FriendsSidebar.jsx
-const presenceMap = usePresence()
-// ...
-<span className={`friends-status-dot friends-status-${presenceMap[friend.id] ?? friend.status}`} />
+<span className={`status-${presenceMap[friend.id] ?? friend.status}`} />
 ```
 
-The `??` fallback means: use the live WS map when available, fall back to the REST `status` field fetched at page load. This gives correct dots even before the WS connection is established (or if the user has presence disabled).
+The `??` falls back to the REST `status` field, so dots are correct even before the WS finishes connecting.
 
-**Why not use `createWsClient` here?** `createWsClient` reconnects on close. That's correct for chat (you want to stay in the room). For presence, reconnecting with a stale token is wrong — when the user logs out, React tears down the component and calls `ws.close()`, which is intentional. A reconnect loop would attempt to re-authenticate with an invalid token and log auth failures.
-
----
-
-## 10. Frontend Notification System (notificationContext + NotificationPanel)
-
-Implemented in PR #288 (commits `7af9cd1` → `b976f7f`). The frontend notification system is built from three cooperating pieces.
-
-### 10.1 NotificationContext — two-step WS auth
-
-`src/frontend/src/context/notificationContext.jsx` cannot use a user_id from the JWT because the JWT `sub` claim is the **username**, not an integer id. It resolves the integer via a separate REST call first:
+**`notificationContext.jsx`** — opens user-service `/ws/notifications/{id}`. Two-step auth because the JWT `sub` is the username, not the integer id:
 
 ```
-Step 1: fetch GET /api/users/auth/me  →  { id: 7, username: "alice" }
-Step 2: open  WS  /api/users/ws/notifications/7?token=<jwt>
+Step 1: GET /api/users/auth/me  → { id: 7 }
+Step 2: open WS /api/users/ws/notifications/7?token=<jwt>
 ```
 
-This two-step pattern matches how `Chat.jsx` resolves its user id, and mirrors what the backend expects: the `user_id` path parameter must equal the token owner's `me.id`.
+Filters `frame.type === 'notification'` (ignores raw game_invite frames; FriendsSidebar handles those). Routes `notif.type === 'game_achievement'` to a separate toast queue. Caps the list at 20 with deduplication on `notif.id`.
 
-```jsx
-// notificationContext.jsx — simplified
-useEffect(() => {
-    if (!auth.access_token) {
-        setUserId(null)
-        setNotifications([])
-        dmFirstSeenRef.current = {}
-        return                              // logout: clear everything
-    }
-    apiCall('/api/users/auth/me')
-        .then(r => r.json())
-        .then(me => setUserId(me.id))
-}, [auth.access_token])
+There's also a smart polling fallback: if `wsConnectedRef.current === false` *or* `document.hidden`, it polls `/api/users/notifications` every 5s (with backoff up to 15s on failure). When the WS is healthy and the tab is visible, no polling. This survives the case where the WS silently dies (1006) and the reconnect attempt fails.
 
-useEffect(() => {
-    if (!userId || !auth.access_token) return
-    const url = `...${window.location.host}/api/users/ws/notifications/${userId}?token=${auth.access_token}`
-    const ws = new WebSocket(url)
-    ws.onmessage = (event) => {
-        const frame = JSON.parse(event.data)
-        if (frame.type !== 'notification') return   // ignore raw game frames
-        const notif = frame.notification
-        const suppressed = notif.type === 'game_invite' && inviteVisibleRef.current
-        const entry = { ...notif, read: notif.read || suppressed }
-        setNotifications(prev =>
-            [entry, ...prev.filter(n => n.id !== notif.id)].slice(0, 20)
-        )
-    }
-    return () => ws.close()
-}, [userId, auth.access_token])
-```
+**`unreadContext.jsx`** — opens chat-service `/ws/notifications`. Listens for `new_dm` frames and increments per-room unread counts (`unreadCounts: { [slug]: number }`). Skips the increment if `activeRoomRef.current === room_slug` (user is already viewing that DM). Also tracks the latest sender username per slug (`dmSenders`), so the notification list can show "3 unread messages from alice" instead of just "3 unread messages".
 
-**Key design decisions:**
+The Navbar bell badge sums `notifications.unreadCount + sum(unreadCounts)` so users see one number for everything pending.
 
-| Decision | Rationale |
-|---|---|
-| Filter `frame.type !== 'notification'` | The same WS channel delivers raw game frames (`game_invite`, etc.) for `FriendsSidebar`. The bell must only consume the `notification` envelope. |
-| Suppression: insert as `read: true` | When `inviteVisibleRef.current` is true (FriendsSidebar is showing the invite), inserting as already-read means `totalUnreadCount` (derived from `filter(n => !n.read)`) naturally excludes it — no separate suppressed-ids tracking needed. |
-| Cap at 20 with deduplication | `[entry, ...prev.filter(n => n.id !== notif.id)].slice(0, 20)` — new entry wins (updated server state), list never grows unbounded. |
-| Logout clears `notifications` + `dmFirstSeenRef` | Token → null would close the WS but leave stale notifications from the previous user visible until the next page load. Explicit reset on token loss prevents that. |
+### 20. The full journey of one message
 
-### 10.2 DM pseudo-notifications
-
-`NotificationContext` imports `{ unreadCounts, clearUnread, dmSenders }` from `useUnread()` and merges DM unread state into the notification list as **pseudo-notification objects**:
-
-```jsx
-const combinedNotifications = useMemo(() => {
-    const dmNotifs = Object.entries(unreadCounts).map(([slug, count]) => {
-        if (!dmFirstSeenRef.current[slug])
-            dmFirstSeenRef.current[slug] = new Date().toISOString()  // stable timestamp
-        const senderName = dmSenders[slug]
-        const message = senderName
-            ? `${count} unread message${count !== 1 ? 's' : ''} from ${senderName}`
-            : `${count} unread message${count !== 1 ? 's' : ''}`
-        return {
-            id: `dm-${slug}`,          // synthetic id; prefix avoids collision with real notif ids
-            type: 'unread_chat',
-            message,
-            read: false,
-            created_at: dmFirstSeenRef.current[slug],   // set once, never updated → stable sort
-            room_slug: slug,
-            other_user_id: ...,
-        }
-    })
-    return [...dmNotifs, ...notifications]
-        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-}, [notifications, unreadCounts, userId, dmSenders])
-```
-
-`dmFirstSeenRef` (a `useRef` map, not state) stores the first-seen timestamp per slug once and never updates it. Without this, `new Date().toISOString()` called on every memo recompute would change timestamps and cause sort-order flicker as the count increments.
-
-When `markRead('dm-DM-1-7')` is called, it strips the `dm-` prefix and calls `clearUnread(slug)`, which removes the entry from both `unreadCounts` and `dmSenders` in `unreadContext`.
-
-**`unreadCount` (exported) is system-only:** `notifications.filter(n => !n.read).length` — DM unreads are excluded to prevent double-counting. The Navbar adds them separately.
-
-### 10.3 NotificationPanel component
-
-`src/frontend/src/Components/NotificationPanel.jsx` renders the combined list:
-
-- Calls `fetchNotifications()` on mount to hydrate from the REST endpoint
-- Each `<li>` item has `tabIndex={0}` + `onKeyDown` (Enter/Space) for keyboard accessibility
-- Clicking an unread system notification calls `markRead(id)` + updates DB via `PUT /api/users/notifications/{id}/read`
-- Clicking a DM pseudo-notification (`id.startsWith('dm-')`) calls `markRead(id)` which routes to `clearUnread(slug)` (no HTTP call, DM unreads live in client state only)
-- Clicking a DM notification also navigates to `/chat/{room_slug}` via `useNavigate`
-- "Mark all as read" calls `markAllRead()` which PUTs `/read-all` and calls `clearUnread` for every slug in `unreadCounts`
-- Empty state: "No notifications" when list is empty
-
-### 10.4 Navbar bell integration
-
-`src/frontend/src/Components/Navbar.jsx` shows a single bell badge:
-
-```jsx
-const { unreadCount } = useNotifications()   // system notifications only
-const { unreadCounts } = useUnread()         // DM unread counts
-
-const dmUnreadTotal = Object.values(unreadCounts).reduce((a, b) => a + b, 0)
-
-// Bell badge = system + DM combined
-{(unreadCount + dmUnreadTotal) > 0 && (
-    <span data-testid="bell-badge">{unreadCount + dmUnreadTotal}</span>
-)}
-```
-
-The Chat navbar link has **no separate DM badge** — the bell is the sole unread indicator. This was an explicit design decision (commit `1391548`, `a234a83`): a Chat-link badge duplicated the bell count and created confusion about which was authoritative.
-
----
-
-## 11. Health Check Verifies the Full Path (TranscendenceHealthCheck.sh)
-
-```bash
-# tests/TranscendenceHealthCheck.sh
-ws_handshake() {
-    local url="$1"
-    local code
-    code=$(curl -sk -o /dev/null -w "%{http_code}" \
-        --max-time 5 \
-        -H "Upgrade: websocket" \
-        -H "Connection: Upgrade" \
-        -H "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==" \
-        -H "Sec-WebSocket-Version: 13" \
-        "$url" 2>/dev/null)
-    [[ "$code" == "101" ]]
-}
-```
-
-curl simulates the browser handshake. `101` means nginx forwarded the upgrade, the service accepted it, and the TCP connection upgraded — the full stack works. curl then times out (it's not a real WS client), which is expected and harmless now that we removed the `|| echo "000"` that was concatenating `"000"` onto `"101"`.
-
----
-
-## The Full Journey of One Message
-
-### Chat message
+#### Chat message in a public room
 
 ```
-Browser                nginx               chat-service
-  |                      |                      |
-  |-- WS frame --------->|                      |
-  |   {"content":"hi"}   |-- proxy frame ------>|
-  |                      |                      | receive_json()
-  |                      |                      | manager.broadcast("room1", data)
-  |                      |<-- frame (ws1) -------|
-  |<-- frame (ws1) ------|                      |
-  |                      |<-- frame (ws2) -------|  (other client in same room)
-  (other browser) <------|                      |
+Browser            nginx              chat-service
+  │                  │                      │
+  │  WS frame ──────▶│                      │
+  │  {sender,content}│  proxy frame ───────▶│
+  │                  │                      │ receive_json()
+  │                  │                      │ validate
+  │                  │                      │ save_message(db, …)
+  │                  │                      │ manager.broadcast(slug, data)
+  │                  │◀──── frame (ws1) ────│
+  │◀── frame (ws1) ──│                      │
+  │                  │◀──── frame (ws2) ────│  (other client in room)
+  (other browser) ◀──│                      │
 ```
 
-The `room_id` in `/ws/chat/{room_id}` is the key that `ConnectionManager._rooms` uses to decide who gets the broadcast. Two players in `room1` both receive every message sent by either of them. A player in `room2` receives nothing — isolated by the dict key.
-
-### DM notification (Alice sends a message, Bob is not in the chat room)
+#### DM (Alice → Bob, Bob is on /home, not in the chat tab)
 
 ```
-Alice's browser      nginx         chat-service           Bob's browser
-  |                    |                 |                       |
-  | WS /chat/DM-1-2 -->|-- upgrade ----->|                       |
-  |                    |                 | manager.connect       |
-  |                    |                 |  ("DM-1-2", alice_ws) |
-  |                    |                 |                       |
-  |                    |                 |<-- WS /notifications --|
-  |                    |                 |   ?token=<bob_jwt>    |
-  |                    |                 | credential_id → uid=2 |
-  |                    |                 | notifications_manager |
-  |                    |                 |  .connect("2", bob_ws)|
-  |                    |                 |                       |
-  | send {"content":   |                 |                       |
-  |  "Hey!", "sender": |                 |                       |
-  |  "alice"} -------->|-- frame ------->|                       |
-  |                    |                 | save_message()        |
-  |                    |                 | manager.broadcast     |
-  |                    |                 |  ("DM-1-2", msg)  (Alice sees own message echoed)
-  |                    |                 | notifications_manager |
-  |                    |                 |  .broadcast("2", {    |
-  |                    |                 |    type:"new_dm",     |
-  |                    |                 |    from_user_id:1,    |
-  |                    |                 |    from_username:     |
-  |                    |                 |     "alice",          |
-  |                    |                 |    room_slug:         |
-  |                    |                 |     "DM-1-2",         |
-  |                    |                 |    preview:"Hey!"})   |
-  |                    |                 |-- WS frame ---------->|
-  |                    |                 |                       | unreadContext.onmessage()
-  |                    |                 |                       | unreadCounts["DM-1-2"]++
-  |                    |                 |                       | dmSenders["DM-1-2"]="alice"
-  |                    |                 |                       |
-  |                    |                 |                       | notificationContext useMemo
-  |                    |                 |                       | builds pseudo-notif:
-  |                    |                 |                       | { type:"unread_chat",
-  |                    |                 |                       |   message:"1 unread message
-  |                    |                 |                       |            from alice",
-  |                    |                 |                       |   read:false }
-  |                    |                 |                       |
-  |                    |                 |                       | Navbar bell badge = 0+1 = 1
+Alice browser     nginx          chat-service          Bob browser
+  │                 │                 │                       │
+  │ WS /chat/DM-1-2│                 │                       │
+  │  ?token=alice ▶│ upgrade ───────▶│ uid=1                 │
+  │                │                 │ manager.connect       │
+  │                │                 │  ("DM-1-2", aws)      │
+  │                │                 │                       │
+  │                │                 │◀── WS /notifications ─│
+  │                │                 │   ?token=bob          │
+  │                │                 │ uid=2                 │
+  │                │                 │ notifications_mgr     │
+  │                │                 │  .connect("2", bws)   │
+  │                │                 │                       │
+  │ {sender:alice, │                 │                       │
+  │  content:"hi"} ▶ frame ─────────▶│                       │
+  │                │                 │ save_message()        │
+  │                │                 │ manager.broadcast     │
+  │                │                 │  ("DM-1-2", msg) → echoes to alice
+  │                │                 │ notifications_mgr     │
+  │                │                 │  .broadcast("2", {    │
+  │                │                 │    type:"new_dm",     │
+  │                │                 │    from_username:     │
+  │                │                 │     "alice",          │
+  │                │                 │    room_slug:         │
+  │                │                 │     "DM-1-2",         │
+  │                │                 │    preview:"hi"})     │
+  │                │                 │ ── frame ────────────▶│ unreadContext:
+  │                │                 │                       │  unreadCounts["DM-1-2"]++
+  │                │                 │                       │  dmSenders["DM-1-2"]="alice"
+  │                │                 │                       │
+  │                │                 │                       │ Navbar bell badge = ... + 1
 ```
 
-Bob's `unreadContext` and `notificationContext` both connect over **two separate WS channels** that happen to be in different services. The notification bell count is the sum of `unreadCount` (system, from user-service) + `dmUnreadTotal` (DMs, from chat-service).
+Bob's unreadContext and notificationContext are on **two separate WS** in two different services. The bell badge sums their counts.
 
----
-
-### Game invite (Alice invites Bob)
+#### Game invite (Alice clicks "Invite Bob to Pong")
 
 ```
-Alice's browser         nginx           user-service            Bob's browser
-  |                       |                   |                       |
-  | -- persistent WS ---->|-- upgrade ------->|                       |
-  |  /ws/notifications/1  |                   | room "1" registered   |
-  |   ?token=<alice_jwt>  |                   |                       |
-  |                       |                   |                       |
-  |                                           |  <- persistent WS ---|
-  |                                           |  /ws/notifications/2  |
-  |                                           |  ?token=<bob_jwt>    |
-  |                                           | room "2" registered   |
-  |                       |                   |                       |
-  | transient WS open --->|-- upgrade ------->|                       |
-  |  /ws/notifications/2  |                   |                       |
-  |   ?token=<alice_jwt>  |                   | get_me(alice_jwt) ✓  |
-  |                       |                   | connect to room "2"   |
-  | send game_invite ----->|-- frame -------->|                       |
-  |  {type:"game_invite", |                   | broadcast(room "2",   |
-  |   room_id:"invite-…"} |                   |   payload)            |
-  |                       |                   |-- WS frame ---------->|
-  |                       |                   |                       | onMessage()
-  |                       |                   |                       | show toast
-  | transient WS close ---|                   |                       |
-  |                       |                   |                       |
-  |                       |         Bob accepts:                      |
-  |                       |           transient WS to room "1"        |
-  |                       |           send game_invite_response        |
-  |                       |           broadcast(room "1", response)   |
-  |<-- WS frame ----------|-----------|                               |
-  | onMessage()           |           |                               |
-  | navigate to           |           |                               |
-  | waiting room          |                                           |
+Alice browser      nginx           user-service          Bob browser
+  │                   │                  │                       │
+  │  persistent WS ──▶│ upgrade ────────▶│ room "1" registered   │
+  │   /ws/notifications/1                │                       │
+  │   ?token=alice    │                  │                       │
+  │                                      │   ◀── persistent WS ──│
+  │                                      │   /ws/notifications/2 │
+  │                                      │   ?token=bob          │
+  │                                      │ room "2" registered   │
+  │                   │                  │                       │
+  │ POST /game-invites│                  │                       │
+  │ {to_user_id:2,   ──── HTTP ────────▶│                       │
+  │  type:game_invite,                   │                       │
+  │  room_id:"invite-1-2-…"}             │                       │
+  │                                      │ inject from_user_id   │
+  │                                      │  /from_username       │
+  │                                      │ persist Notification  │
+  │                                      │ broadcast("2", raw)   │
+  │                                      │ broadcast("2", env)   │
+  │                                      │ ──── 2 frames ───────▶│ FriendsSidebar:
+  │                                      │                       │  show invite popup
+  │                                      │                       │ NotificationPanel:
+  │                                      │                       │  bell badge +1
 ```
 
----
+Both clients keep their persistent WS open the whole time. Sending the invite is just an HTTP POST — the server is the sole writer to Bob's WS room.
 
-### Presence event (user comes online)
+#### Pong tick (live game)
 
 ```
-Alice's browser        nginx            user-service           Bob's browser
-  |                      |                    |                      |
-  |-- GET /ws/presence   |                    |                      |
-  |   ?token=<jwt> ----->|-- upgrade -------->|                      |
-  |                      |                    | get_me(token)        |
-  |                      |                    | presence_manager     |
-  |                      |                    |  .connect(alice_id)  |
-  |                      |                    | get_friends(alice)   |
-  |                      |                    |  → [bob, ...]        |
-  |                      |                    | is_online(bob) → ✓  |
-  |                      |                    | broadcast_to(bob,    |
-  |                      |                    |  {type:"presence",   |
-  |                      |                    |   user_id: alice_id, |
-  |                      |                    |   status:"online"})  |
-  |                      |<-- WS frame --------|                      |
-  |                      |                    |-- WS frame --------->|
-  |                      |                    |                      | onmessage()
-  |                      |                    |                      | presenceMap[alice_id]
-  |                      |                    |                      |  = "online"
-  |                      |                    |                      | dot → green
+Player1 browser    nginx           game-service          Player2 browser
+  │                   │                  │                       │
+  │ {type:"input",   ─── frame ─────────▶│                       │
+  │  direction:"up"}  │                  │ handle_player_input() │
+  │                   │                  │                       │
+  │                                      │ GameSession runs at 30Hz
+  │                                      │ each tick:
+  │                                      │   snapshot = {ball, paddles, score}
+  │                                      │   _broadcast_state(game_id, snapshot)
+  │                                      │   manager.broadcast(game_id, {type:"state", …})
+  │ ◀────── frame ────────────────────── │
+  │                                      │ ──── frame ──────────▶│
+  │                                      │                       │
+  │  (and any spectators in the room)    │                       │
 ```
 
-`broadcast_to(bob_id, ...)` looks up `_users[bob_id]` in the in-process dict and pushes the frame directly to Bob's socket — no DB round-trip, no HTTP call. The map update on Bob's browser is synchronous with `onmessage`, so the dot turns green within one RTT of Alice's WS handshake completing.
+### 21. How I test WS locally
+
+- `tests/TranscendenceHealthCheck.sh` does an actual `curl -H "Upgrade: websocket"` against each endpoint and asserts `101`. It's a real handshake test, not a mock.
+- `make logs` tails uvicorn — I see `[CONNECTION] Player N connected to room ...` and `[DISCONNECT]` lines from `ws_logger`.
+- Browser DevTools → Network → WS tab shows the open sockets with their frames in real time. Easiest way to spot a missing event.
+- `WS_LOG_DEBUG=true make re-back` enables the per-event WS logger (`shared/logging/ws_logger.py`) — verbose, only useful when chasing a specific bug.
+
+### 22. Open questions / things I still want to learn
+
+- How would I add a Redis pub/sub layer to `ConnectionManager` without rewriting every consumer? Probably wrap `broadcast()` to also publish, and add a subscribe loop that calls the local `broadcast()` for incoming pub messages. But naively that double-broadcasts to local sockets. Need to mark origin somehow.
+- The 30Hz game broadcast sends a full state snapshot each tick. Could be diff-based to save bandwidth. Probably not worth it for 2 players + N spectators.
+- Should I add a heartbeat ping at the application layer? Browsers + uvicorn handle the protocol-level pings, but if a NAT silently drops a connection, we won't notice until the next send fails. The 10s timeout in the event-driven handlers is one defence; an explicit "every 30s if-idle ping" would be tighter.
+- What happens to `_disconnect_timers` if the uvicorn process restarts mid-grace-window? Answer: they evaporate, the session is gone, the surviving player gets a 1006 close, and the next reconnect attempt hits a non-existent room and gets `4004`. Not great. A persistent state store would help — but that's basically saying "use Redis".
