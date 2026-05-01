@@ -1,12 +1,12 @@
 import { render, screen, fireEvent, act } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import Play from './Play'
-import { apiJson } from '../utils/apiClient'
 
-// apiJson rejects by default so auth/me fails silently and p1Name stays "Player 1".
-// Override per-test to verify the name-fetch behavior.
-vi.mock('../utils/apiClient', () => ({
-  apiJson: vi.fn().mockRejectedValue(new Error('no server in tests')),
+const mockUseUser = vi.fn()
+
+vi.mock('../context/userContext', () => ({
+  useUser: () => mockUseUser(),
+  UserProvider: ({ children }) => <>{children}</>,
 }))
 
 vi.mock('../Components/Navbar', () => ({ default: () => <nav /> }))
@@ -37,7 +37,7 @@ vi.mock('../Components/GameOverOverlay', () => ({
 }))
 
 beforeEach(() => {
-  apiJson.mockRejectedValue(new Error('no server in tests'))
+  mockUseUser.mockReturnValue({ user: null, token: null })
 })
 
 describe('Play page local game over', () => {
@@ -75,8 +75,8 @@ describe('Play page local game over', () => {
     expect(screen.getByText('P1 Wins')).toBeInTheDocument()
   })
 
-  it('uses display_name from /api/users/auth/me as viewer name on win', async () => {
-    apiJson.mockResolvedValueOnce({ id: 1, username: 'alice', display_name: 'Alice' })
+  it('uses display_name from user context as viewer name on win', async () => {
+    mockUseUser.mockReturnValue({ user: { id: 1, username: 'alice', display_name: 'Alice' }, token: 'token' })
     render(<MemoryRouter><Play /></MemoryRouter>)
     await act(async () => {})
     fireEvent.click(screen.getByText('P1 Wins'))
@@ -85,8 +85,8 @@ describe('Play page local game over', () => {
     expect(screen.getByTestId('p1-name').textContent).toBe('Alice')
   })
 
-  it('uses display_name from /api/users/auth/me as viewer name on loss', async () => {
-    apiJson.mockResolvedValueOnce({ id: 1, username: 'alice', display_name: 'Alice' })
+  it('uses display_name from user context as viewer name on loss', async () => {
+    mockUseUser.mockReturnValue({ user: { id: 1, username: 'alice', display_name: 'Alice' }, token: 'token' })
     render(<MemoryRouter><Play /></MemoryRouter>)
     await act(async () => {})
     fireEvent.click(screen.getByText('P2 Wins'))
@@ -96,7 +96,7 @@ describe('Play page local game over', () => {
   })
 
   it('falls back to username when display_name is absent', async () => {
-    apiJson.mockResolvedValueOnce({ id: 1, username: 'alice', display_name: null })
+    mockUseUser.mockReturnValue({ user: { id: 1, username: 'alice', display_name: null }, token: 'token' })
     render(<MemoryRouter><Play /></MemoryRouter>)
     await act(async () => {})
     fireEvent.click(screen.getByText('P1 Wins'))
@@ -104,7 +104,7 @@ describe('Play page local game over', () => {
     expect(screen.getByTestId('p1-name').textContent).toBe('alice')
   })
 
-  it('falls back to Player 1 when auth/me fails', async () => {
+  it('falls back to Player 1 when user context has no user', async () => {
     render(<MemoryRouter><Play /></MemoryRouter>)
     await act(async () => {})
     fireEvent.click(screen.getByText('P1 Wins'))

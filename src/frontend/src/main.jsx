@@ -14,19 +14,22 @@ import { PresenceProvider } from './context/presenceContext'
 import { UnreadProvider } from './context/unreadContext'
 import { NotificationProvider } from './context/notificationContext'
 import { GameSettingsProvider } from './context/gameSettingsContext'
+import { UserProvider } from './context/userContext'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <AuthProvider>
-      <GameSettingsProvider>
-        <PresenceProvider>
-          <UnreadProvider>
-            <NotificationProvider>
-              <App />
-            </NotificationProvider>
-          </UnreadProvider>
-        </PresenceProvider>
-      </GameSettingsProvider>
+      <UserProvider>
+        <GameSettingsProvider>
+          <PresenceProvider>
+            <UnreadProvider>
+              <NotificationProvider>
+                <App />
+              </NotificationProvider>
+            </UnreadProvider>
+          </PresenceProvider>
+        </GameSettingsProvider>
+      </UserProvider>
     </AuthProvider>
   </StrictMode>
 )
