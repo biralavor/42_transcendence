@@ -65,8 +65,16 @@ wait:
 	done; \
 	echo ""; echo "Timeout: services not ready after 60s."; exit 1
 
+# clear-db: TRUNCATE all dev/test tables and reset SERIAL sequences.
+# Standalone destructive op — leaves the DB empty (no AI, no admin).
+# Chain with `make db-init` and/or `make seed` to repopulate.
+.PHONY: clear-db
+clear-db:
+	@docker compose cp tests/clear_db.sh user-service:/app/clear_db.sh
+	@docker compose exec -T user-service sh /app/clear_db.sh
+
 .PHONY: seed
-seed:
+seed: clear-db
 	@echo "Waiting 5 seconds for seed operations to complete..."
 	@sleep 5
 	@docker compose cp tests/seed_dev.py user-service:/app/seed_dev.py

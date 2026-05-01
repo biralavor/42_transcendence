@@ -126,21 +126,10 @@ async def seed():
     Session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
     async with Session() as session:
-        # ── cleanup ───────────────────────────────────────────────────
-        # We truncate all tables to ensure a clean state and reset sequences.
-        # This avoids "duplicate key value" errors if the DB was partially seeded.
-        print("Cleaning up existing data...")
-        tables = [
-            "tokens", "friendships", "matches", "messages", "notifications",
-            "tournament_matches", "tournament_participants", "tournaments",
-            "blocks", "users", "chat_rooms", "credentials"
-        ]
-        try:
-            await session.execute(text(f"TRUNCATE TABLE {', '.join(tables)} RESTART IDENTITY CASCADE"))
-            await session.commit()
-        except Exception as e:
-            print(f"  [warn] truncation failed (some tables might not exist): {e}")
-            await session.rollback()
+        # Note: cleanup/TRUNCATE has been moved to tests/clear_db.sh.
+        # `make seed` runs clear-db first, then this script.
+        # If running this script directly, run `make clear-db` beforehand
+        # for a clean state — otherwise expect "duplicate key value" errors.
 
         # ── insert credentials first (users.credential_id is NOT NULL) ─
         cred_ids = {}
