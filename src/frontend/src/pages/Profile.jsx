@@ -294,7 +294,6 @@ export default function Profile() {
         ]).then(([profileData, rankData]) => {
           setProfile({
             displayName: profileData.display_name ?? '',
-            darkMode: profileData.dark_mode ?? false,
             avatarUrl: profileData.avatar_url ?? PLACEHOLDER_AVATAR,
             username: profileData.username,
             bio: profileData.bio ?? '',
@@ -347,15 +346,10 @@ export default function Profile() {
   }, [auth.access_token, userId, historyFilters, historyPage])
 
   const handleChange = (e) => {
-    const { name, value, type, checked } = e.target
+    const { name, value } = e.target
     setProfile(prev => ({
       ...prev,
-      [name]:
-        type === 'checkbox'
-          ? checked
-          : name === 'avatarUrl'
-            ? sanitizeAvatarUrl(value)
-            : value,
+      [name]: name === 'avatarUrl' ? sanitizeAvatarUrl(value) : value,
     }))
   }
 
@@ -369,7 +363,6 @@ export default function Profile() {
         body: JSON.stringify({
           display_name: profile.displayName,
           bio: profile.bio,
-          dark_mode: profile.darkMode,
         }),
       })
       if (!response.ok) throw new Error('Save failed')
@@ -578,20 +571,6 @@ export default function Profile() {
                       </div>
 
                       <GameSettings />
-
-                      <div className="profile-preference-item form-check arcade-form-check">
-                        <input
-                          className="form-check-input"
-                          type="checkbox"
-                          id="darkMode"
-                          name="darkMode"
-                          checked={profile.darkMode}
-                          onChange={handleChange}
-                        />
-                        <label className="form-check-label" htmlFor="darkMode">
-                          Enable dark mode
-                        </label>
-                      </div>
                     </div>
                     <button className="arcade-btn arcade-btn-primary profile-save-btn" type="submit">
                       Save profile

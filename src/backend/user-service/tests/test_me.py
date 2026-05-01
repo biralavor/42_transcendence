@@ -27,7 +27,6 @@ def _make_user(credential_id: int = 1, user_id: int = 42, is_admin: bool = False
     user.avatar_url = None
     user.created_at = None
     user.bio = None
-    user.dark_mode = False
     user.is_admin = is_admin
     return user
 
@@ -114,7 +113,6 @@ async def test_get_me_creates_user_on_first_call():
     def _apply_db_defaults(obj):
         obj.id = new_user.id
         obj.status = "offline"
-        obj.dark_mode = False
         obj.is_admin = False
 
     async def mock_merge(user_obj):

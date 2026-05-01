@@ -33,7 +33,6 @@ class ProfileResponse(BaseModel):
     avatar_url:   Optional[str] = None
     created_at:   Optional[datetime] = None
     bio:          Optional[str] = None
-    dark_mode:    bool = False
 
 
 class MeResponse(BaseModel):
@@ -47,7 +46,6 @@ class MeResponse(BaseModel):
     avatar_url:    Optional[str] = None
     created_at:    Optional[datetime] = None
     bio:           Optional[str] = None
-    dark_mode:     bool = False
     is_admin:      bool = False
 
 
@@ -82,7 +80,6 @@ class UserActivityResponse(BaseModel):
 class UpdateProfileRequest(BaseModel):
     display_name: Optional[str] = None
     bio:          Optional[str] = None
-    dark_mode:    Optional[bool] = None
 
 
 class FriendResponse(BaseModel):

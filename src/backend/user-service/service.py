@@ -201,8 +201,6 @@ async def update_profile(
         user.display_name = data.display_name
     if data.bio is not None:
         user.bio = data.bio
-    if data.dark_mode is not None:
-        user.dark_mode = data.dark_mode
     await session.commit()
     await session.refresh(user)
     return user
