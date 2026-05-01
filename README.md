@@ -72,7 +72,7 @@
 | Game Customization | Gaming & UX |
 | Gamification System | Gaming & UX |
 | Spectator Mode | Gaming & UX |
-| Data Export and Import | Data & Analytics |
+| Data Analytics |  Dashboard | 
 
 > **7 Major × 2 pts + 14 Minor × 1 pt = 28 pts total**
 > Subject minimum: 14 pts — this build provides a comfortable evaluation buffer.
@@ -85,9 +85,9 @@ PostgreSQL 16 with three independent Alembic migration histories (one per servic
 
 | Service | Owned Tables | Purpose |
 |---------|--|---|
-| **user-service** | `users` | User accounts (username, email, hashed password, avatar URL) |
-| | `credentials` | OAuth + JWT token storage for multi-provider auth |
-| | `tokens` | Access/refresh token records (expiry, revocation) |
+| **user-service** | `users` | User accounts (username, hashed password via credentials.id FK, avatar URL, profile fields) |
+| | `credentials` | Local authentication (username, password hash) |
+| | `tokens` | Refresh token records (hash, expiration, revocation tracking) |
 | | `friendships` | Friend connections (bidirectional with status) |
 | | `notifications` | In-app notifications (game invites, friend requests, messages) |
 | | `achievements` | Badge templates (e.g., "First Win", "Streak Master") |
@@ -97,7 +97,7 @@ PostgreSQL 16 with three independent Alembic migration histories (one per servic
 | | `tournament_participants` | Many-to-many: users in tournaments |
 | | `tournament_matches` | Round-robin matches within a tournament |
 | **chat-service** | `chat_rooms` | Chat rooms (name, type: DM/group, created_at) |
-| | `messages` | Chat messages (room_id, sender_id, content, timestamp) |
+| | `messages` | Chat messages (room_id, user_id, sender_name, content, created_at) |
 | | `blocks` | Blocked user pairs (prevents DMs and room visibility) |
 
 **Data Access:**
@@ -105,7 +105,11 @@ PostgreSQL 16 with three independent Alembic migration histories (one per servic
 - Cross-service reads happen via shared engine (e.g., `chat-service` reads `users`).
 - Cross-service writes go through HTTP (e.g., `game-service` → `user-service` for notifications).
 
-**Key Indexes:** user_id, created_at, room_id, tournament_id for query performance.
+**Recommended Indexes:** Explicit indexes exist on FK columns (e.g., requester_id/addressee_id in friendships, blocker_id in blocks). Consider adding indexes on:
+- `created_at` columns for time-range queries (user activity, match history)
+- `user_id` on messages and matches tables for per-user lookups
+- `room_id` on messages for efficient message retrieval
+- `tournament_id` on tournament_matches for tournament-specific queries
 
 ---
 
@@ -153,9 +157,9 @@ See [docs/DEV_DOC.md](docs/DEV_DOC.md) · [docs/ARCHITECTURE.md](docs/ARCHITECTU
 | **Real-Time Chat** | Real-Time Features | Web | DMs, group rooms, instant notifications, WebSockets |
 | **Pong Game (Local)** | Web-Based Game | Gaming | 2-player local match, paddle physics, score tracking |
 | **Online Multiplayer** | Remote Players | Gaming | Match invites, live opponent sync, game state broadcast |
-| **AI Opponent** | AI Opponent | Gaming | Difficulty levels, ML-based paddle prediction |
+| **AI Opponent** | AI Opponent | Gaming | Difficulty levels (easy/medium/hard) with parameter-based paddle prediction (error rate, reaction delay, noise) |
 | **Tournaments** | Tournament System | Gaming | Create, join, round-robin bracket, notifications |
-| **Match History** | Game Statistics | Analytics | Per-user stats, win/loss tracking, match replays accessible |
+| **Match History** | Game Statistics | Analytics | Per-user stats, win/loss tracking, paginated match query with date/result filters |
 | **Leaderboard** | Game Statistics | Analytics | XP ranking, seasonal boards, pagination |
 | **Game Customization** | Game Customization | Gaming | Theme switcher (4 themes: neon, wood, central paddle, two-paddle) |
 | **Spectator Mode** | Spectator Mode | Gaming | Watch live matches, spectator count, read-only state |
@@ -168,11 +172,11 @@ See [docs/DEV_DOC.md](docs/DEV_DOC.md) · [docs/ARCHITECTURE.md](docs/ARCHITECTU
 | **Privacy Policy** | Standard Auth | Compliance | `/privacy` page with data collection terms |
 | **Terms of Service** | Standard Auth | Compliance | `/terms` page with usage rules |
 | **Browser Compatibility** | Browser Compatibility | Accessibility | Tested on Chrome, Firefox, Safari; responsive design |
-| **Data Export** | Data Export/Import | Analytics | `GET /export` CSV endpoint for user data and match history |
+| **Data Export** | Data Analytics | Analytics | `GET /export` CSV endpoint for user data and match history |
 
 ---
 
-##  Team and Individual Contributions 
+## Team and Individual Contributions 
 
 ### **Lis** (Product Owner) [@solismesmo](https://github.com/solismesmo)
 - **Role:** Product direction, visual identity, game narrative, user-facing experience
