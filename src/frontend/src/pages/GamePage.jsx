@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams, useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import NavbarComponent from '../Components/Navbar'
 import PongCanvasMultiplayer from '../Components/PongCanvasMultiplayer'
@@ -83,7 +83,6 @@ export default function GamePage() {
   const [specPlayer2Id, setSpecPlayer2Id] = useState(null)
   const [gameOverResult, setGameOverResult] = useState(null)
   const [spectatorCount, setSpectatorCount] = useState(0)
-  const submittingRef = useRef(false)
 
   useEffect(() => {
     // Spectators don't have player IDs in location.state — they reach this
@@ -132,20 +131,6 @@ export default function GamePage() {
   if (!isSpectator && isAuthReady && !isAuthenticated) return null
 
   async function handleGameEnd(result) {
-    if (tournamentId && matchId && !submittingRef.current) {
-      submittingRef.current = true
-      try {
-        await apiJson(`/api/game/tournaments/${tournamentId}/matches/${matchId}/result`, {
-          method: 'POST',
-          body: JSON.stringify(result),
-        })
-        // Fall through — show overlay with tournament-specific buttons
-      } catch (error) {
-        console.error('Failed to submit tournament result:', error)
-      } finally {
-        submittingRef.current = false
-      }
-    }
     setGameOverResult(result)
   }
 
