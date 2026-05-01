@@ -17,7 +17,7 @@ def _make_credential(username: str = "alice"):
     return cred
 
 
-def _make_user(credential_id: int = 1, user_id: int = 42):
+def _make_user(credential_id: int = 1, user_id: int = 42, is_admin: bool = False):
     user = MagicMock()
     user.id = user_id
     user.credential_id = credential_id
@@ -27,6 +27,7 @@ def _make_user(credential_id: int = 1, user_id: int = 42):
     user.avatar_url = None
     user.created_at = None
     user.bio = None
+    user.is_admin = is_admin
     return user
 
 
@@ -71,6 +72,30 @@ async def test_get_me_returns_existing_user():
 
     assert resp.status_code == 200, resp.text
     assert resp.json()["username"] == "alice"
+    assert resp.json()["is_admin"] is False
+
+
+@pytest.mark.asyncio
+async def test_get_me_exposes_is_admin_true():
+    """MeResponse must surface is_admin=true for admin users."""
+    user = _make_user(is_admin=True)
+    session = _session_returning(user)
+    session.refresh = AsyncMock()
+
+    from shared.database import get_db
+
+    async def _fake_db():
+        yield session
+
+    app.dependency_overrides[get_db] = _fake_db
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get("/auth/me", headers={"Authorization": f"Bearer {_valid_token()}"})
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["is_admin"] is True
 
 
 @pytest.mark.asyncio
@@ -88,6 +113,7 @@ async def test_get_me_creates_user_on_first_call():
     def _apply_db_defaults(obj):
         obj.id = new_user.id
         obj.status = "offline"
+        obj.is_admin = False
 
     async def mock_merge(user_obj):
         user_obj.credential_id = user_obj.credential_id if user_obj.credential_id is not None else 1

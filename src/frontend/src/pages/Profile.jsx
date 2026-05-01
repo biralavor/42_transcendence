@@ -1,6 +1,6 @@
 // src/frontend/src/pages/Profile.jsx
 import { useState, useEffect, useRef, useMemo } from 'react'
-import { useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import NavbarComponent from '../Components/Navbar'
 import GameSettings from '../Components/GameSettings'
 import { getAvatarFilter } from '../utils/avatarFilter'
@@ -593,7 +593,12 @@ export default function Profile() {
               </div>
 
               <div className="profile-history">
-                <h2 className="profile-section-title">Match history</h2>
+                <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                  <h2 className="profile-section-title mb-0">Match history</h2>
+                  <Link to="/profile/activity" className="arcade-btn arcade-btn-secondary">
+                    View activity
+                  </Link>
+                </div>
                 <div className="history-controls" role="group" aria-label="Match history filters">
                   {['all', 'win', 'loss'].map((value) => (
                     <label key={value} className="history-filter-option">

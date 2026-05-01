@@ -78,9 +78,13 @@ async def get_or_create_dm_room(db: AsyncSession, user_a_id: int, user_b_id: int
 
 
 async def save_message(
-    db: AsyncSession, room_pk: int, sender_name: str, content: str
+    db: AsyncSession,
+    room_pk: int,
+    sender_name: str,
+    content: str,
+    user_id: int | None = None,
 ) -> Message:
-    msg = Message(room_id=room_pk, user_id=None, sender_name=sender_name, content=content)
+    msg = Message(room_id=room_pk, user_id=user_id, sender_name=sender_name, content=content)
     db.add(msg)
     await db.commit()
     await db.refresh(msg)

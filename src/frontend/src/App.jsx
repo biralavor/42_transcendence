@@ -18,6 +18,8 @@ import GamePage from './pages/GamePage'
 import GameInviteModal from './Components/GameInviteModal'
 import Tournament from './pages/Tournament'
 import Tournaments from './pages/Tournaments'
+import Admin from './pages/Admin'
+import ActivityDashboard from './pages/ActivityDashboard'
 import Search from './pages/Search'
 
 export default function App() {
@@ -62,6 +64,15 @@ export default function App() {
           element={(
             <PrivateRoute>
               <Profile />
+            </PrivateRoute>
+          )}
+        />
+
+        <Route
+          path="/profile/activity"
+          element={(
+            <PrivateRoute>
+              <ActivityDashboard />
             </PrivateRoute>
           )}
         />
@@ -123,6 +134,15 @@ export default function App() {
           element={(
             <PrivateRoute>
               <Tournaments />
+            </PrivateRoute>
+          )}
+        />
+
+        <Route
+          path="/admin"
+          element={(
+            <PrivateRoute>
+              <Admin />
             </PrivateRoute>
           )}
         />

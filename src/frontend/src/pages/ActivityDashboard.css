@@ -1,0 +1,12 @@
+.activity-stats {
+  margin-top: 1rem;
+}
+
+.activity-stat-card {
+  padding: 1.5rem 1rem;
+}
+
+.activity-stat-value {
+  font-size: 2rem;
+  word-break: break-word;
+}
