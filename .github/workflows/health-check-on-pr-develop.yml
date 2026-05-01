@@ -75,6 +75,7 @@ jobs:
                   make wait
                   make seed
                   make wait
+                  docker build --target builder -t transcendence-frontend-builder -f services/frontend/Dockerfile . -q
                   PAGER=cat GIT_PAGER=cat bash tests/TranscendenceHealthCheck.sh \
                     | tee >(sed 's/\x1b\[[0-9;]*m//g' > make_check_results.txt) | cat
                   echo "make_check_exit_code=$?" >> $GITHUB_OUTPUT
