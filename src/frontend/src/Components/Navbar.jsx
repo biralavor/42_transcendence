@@ -68,7 +68,7 @@ export default function NavbarComponent() {
   const location = useLocation()
   const navigate = useNavigate()
   const { logout, isAuthenticated } = useAuth()
-  const { user, token } = useUser()
+  const { user } = useUser()
   const { unreadCount } = useNotifications()
   const { unreadCounts } = useUnread()
   const [isMenuOpen, setIsMenuOpen] = useState(false)
@@ -80,7 +80,7 @@ export default function NavbarComponent() {
   const [searchError, setSearchError] = useState('')
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [isSearchFocused, setIsSearchFocused] = useState(false)
-  const isAdmin = user?.username == 'admin'
+  const isAdmin = Boolean(user?.is_admin)
   
   const searchInputRef = useRef(null)
 

@@ -39,7 +39,7 @@ describe('PrivateRoute', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
     mockUseUser.mockReturnValue({
-      user: { id: 1, username: 'admin' }
+      user: { id: 1, username: 'admin' },
       token: null,
     })
   })
