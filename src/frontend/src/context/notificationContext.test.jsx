@@ -32,10 +32,19 @@ class MockWebSocket {
 beforeEach(() => {
     mockWsInstance = null
     vi.stubGlobal('WebSocket', MockWebSocket)
-    // Default: /auth/me succeeds with id=7
-    apiCall.mockResolvedValue(
-        new Response(JSON.stringify({ id: 7, username: 'alice' }), { status: 200 })
-    )
+    // mockImplementation returns a fresh Response per call — NotificationProvider
+    // calls apiCall multiple times (auth/me, fetchNotifications, polling) and a
+    // shared Response body would be consumed on the first read. The branch on
+    // URL also returns the right shape per endpoint (/auth/me → user object,
+    // /notifications → array) so source-side response-shape validation stays quiet.
+    apiCall.mockImplementation((url) => {
+        if (typeof url === 'string' && url.includes('/api/users/notifications')) {
+            return Promise.resolve(new Response('[]', { status: 200 }))
+        }
+        return Promise.resolve(
+            new Response(JSON.stringify({ id: 7, username: 'alice' }), { status: 200 })
+        )
+    })
     // Default: useUnread returns empty unreadCounts
     useUnread.mockReturnValue({ unreadCounts: {}, clearUnread: vi.fn(), dmSenders: {} })
 })
@@ -71,9 +80,14 @@ describe('NotificationContext', () => {
 
         apiCall
             .mockImplementationOnce(() => stalePromise)   // first token: held
-            .mockResolvedValue(                            // second token: resolves immediately
-                new Response(JSON.stringify({ id: 7, username: 'alice' }), { status: 200 })
-            )
+            .mockImplementation((url) => {                // second token + later: branch by URL
+                if (typeof url === 'string' && url.includes('/api/users/notifications')) {
+                    return Promise.resolve(new Response('[]', { status: 200 }))
+                }
+                return Promise.resolve(
+                    new Response(JSON.stringify({ id: 7, username: 'alice' }), { status: 200 })
+                )
+            })
 
         useAuth.mockReturnValue({ auth: { access_token: 'tok1' } })
         const { rerender, result } = renderHook(useNotifications, { wrapper })

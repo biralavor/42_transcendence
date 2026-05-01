@@ -41,14 +41,16 @@ function jsonResponse(data, status = 200) {
   })
 }
 
+// Per-day counts intentionally differ from totals so getByText('5')/getByText('34')
+// asserts uniquely against the StatCard values, not the per-day table cells.
 function buildAdminPayload({
   rangeStart = '2026-03-30',
   rangeEnd = '2026-04-28',
   activeUsers = 12,
   gamesTotal = 5,
   messagesTotal = 34,
-  gamesPerDay = [{ date: '2026-04-28', count: 5 }],
-  messagesPerDay = [{ date: '2026-04-28', count: 34 }],
+  gamesPerDay = [{ date: '2026-04-28', count: 2 }],
+  messagesPerDay = [{ date: '2026-04-28', count: 7 }],
 } = {}) {
   return {
     range_start: rangeStart,

@@ -12,6 +12,11 @@ import { useNotifications } from '../context/notificationContext'
 vi.mock('../context/unreadContext', () => ({ useUnread: vi.fn() }))
 import { useUnread } from '../context/unreadContext'
 
+// Mock apiCall so the admin-detection useEffect doesn't leak a real fetch promise
+// after tests tear down (which used to crash with "useAuth is undefined" on late re-renders).
+vi.mock('../utils/apiClient', () => ({ apiCall: vi.fn() }))
+import { apiCall } from '../utils/apiClient'
+
 vi.mock('./NotificationPanel', () => ({
     default: ({ onClose }) => (
         <div data-testid="notif-panel">
@@ -29,6 +34,9 @@ describe('Navbar — bell and DM badge', () => {
         useAuth.mockReturnValue({ isAuthenticated: true, logout: vi.fn() })
         useNotifications.mockReturnValue({ unreadCount: 0 })
         useUnread.mockReturnValue({ unreadCounts: {} })
+        // Default: admin-detection /auth/me returns non-admin. Tests that need
+        // search results override this with a mockImplementation below.
+        apiCall.mockResolvedValue({ ok: true, json: async () => ({ is_admin: false }) })
     })
 
     afterEach(() => {
@@ -98,14 +106,21 @@ describe('Navbar — bell and DM badge', () => {
     it('debounces user search and renders dropdown results', async () => {
         vi.useFakeTimers()
 
-        vi.spyOn(global, 'fetch').mockResolvedValue(
-            new Response(JSON.stringify({
-                results: [{ id: 7, username: 'alice', avatar_url: '/avatars/alice.png' }],
-                total: 1,
-                page: 1,
-                per_page: 5,
-            }), { status: 200, headers: { 'Content-Type': 'application/json' } })
-        )
+        // Branch on URL: /auth/me from admin-detection returns non-admin; search returns alice.
+        apiCall.mockImplementation((url) => {
+            if (typeof url === 'string' && url.includes('/api/users/search')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: async () => ({
+                        results: [{ id: 7, username: 'alice', avatar_url: '/avatars/alice.png' }],
+                        total: 1,
+                        page: 1,
+                        per_page: 5,
+                    }),
+                })
+            }
+            return Promise.resolve({ ok: true, json: async () => ({ is_admin: false }) })
+        })
 
         renderNavbar()
         fireEvent.click(screen.getByRole('button', { name: /open user search/i }))
@@ -116,7 +131,10 @@ describe('Navbar — bell and DM badge', () => {
             target: { value: 'ali' },
         })
 
-        expect(global.fetch).not.toHaveBeenCalled()
+        expect(apiCall).not.toHaveBeenCalledWith(
+            expect.stringContaining('/api/users/search'),
+            expect.anything(),
+        )
 
         await act(async () => {
             vi.advanceTimersByTime(300)
@@ -125,7 +143,7 @@ describe('Navbar — bell and DM badge', () => {
         vi.useRealTimers()
 
         await waitFor(() => {
-            expect(global.fetch).toHaveBeenCalledWith(
+            expect(apiCall).toHaveBeenCalledWith(
                 '/api/users/search?q=ali&page=1&per_page=5&sort=username',
                 expect.objectContaining({ signal: expect.any(AbortSignal) })
             )
