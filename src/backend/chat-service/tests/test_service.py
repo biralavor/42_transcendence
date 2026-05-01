@@ -443,15 +443,15 @@ async def test_create_general_room_rejects_invalid_name(db):
 
 
 @pytest.mark.asyncio
-async def test_list_live_rooms_returns_active_only(db):
+async def test_list_live_rooms_returns_persisted_rooms_even_when_empty(db):
     await create_general_room(db, room_name="live", creator_name="alice")
     await create_general_room(db, room_name="empty-room", creator_name="bob")
     mock_manager = MagicMock()
     mock_manager.active_connections.side_effect = lambda slug: 2 if slug == "live" else 0
     result = await list_live_rooms(db, mock_manager)
-    assert len(result) == 1
-    assert result[0]["room_name"] == "live"
-    assert result[0]["active_connections"] == 2
+    rooms = {room["room_name"]: room for room in result}
+    assert rooms["live"]["active_connections"] == 2
+    assert rooms["empty-room"]["active_connections"] == 0
 
 
 @pytest.mark.asyncio

@@ -193,7 +193,7 @@ async def create_room(body: RoomCreate, session: SessionDep, caller: CallerUser)
 
 @app.get("/rooms", status_code=200)
 async def get_live_rooms(session: SessionDep, caller: CallerUser):
-    """List all general rooms with at least one active WebSocket connection."""
+    """List persisted public chat rooms with their active WebSocket connection count."""
     return await list_live_rooms(session, manager)
 
 

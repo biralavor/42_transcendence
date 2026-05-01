@@ -284,12 +284,12 @@ async def test_post_rooms_propagates_409_for_duplicate_name():
 
 
 # --------------------------------------------------------------------------- #
-# GET /rooms  — list live general rooms
+# GET /rooms  — list persisted general rooms
 # --------------------------------------------------------------------------- #
 
 @pytest.mark.asyncio
 async def test_get_rooms_returns_list_from_persistence():
-    """Endpoint forwards whatever list_live_rooms returns."""
+    """Endpoint forwards persisted rooms and their active counts."""
     session = _make_session()
     _override_db(session)
     fake_rooms = [
@@ -310,7 +310,7 @@ async def test_get_rooms_returns_list_from_persistence():
 
 
 @pytest.mark.asyncio
-async def test_get_rooms_returns_empty_list_when_no_live_rooms():
+async def test_get_rooms_returns_empty_list_when_no_rooms():
     session = _make_session()
     _override_db(session)
     try:
