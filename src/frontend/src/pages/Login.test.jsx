@@ -4,6 +4,13 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { AuthProvider } from '../context/authContext'
 import Login from './Login'
 
+// Mock the useUser hook
+const mockUseUser = vi.fn()
+vi.mock('../context/userContext', () => ({
+  useUser: () => mockUseUser(),
+  UserProvider: ({ children }) => <>{children}</>,
+}))
+
 // Mock jwtUtils so tests don't depend on real JWT parsing
 vi.mock('../utils/jwtUtils', () => ({
   getTimeUntilExpiry: vi.fn(() => 14400000), // 4 hours in seconds
@@ -50,6 +57,10 @@ describe('Login page', () => {
     vi.restoreAllMocks()
     localStorage.clear()
     sessionStorage.clear()
+    mockUseUser.mockReturnValue({
+      user: null,
+      token: null,
+    })
   })
 
   it('renders username and password fields', () => {

@@ -16,6 +16,13 @@ vi.mock('../context/notificationContext', () => ({
   })),
 }))
 
+// Mock the useUser hook
+const mockUseUser = vi.fn()
+vi.mock('../context/userContext', () => ({
+  useUser: () => mockUseUser(),
+  UserProvider: ({ children }) => <>{children}</>,
+}))
+
 function renderWithAuth(authValue) {
   return render(
     <MemoryRouter>
@@ -31,6 +38,10 @@ function renderWithAuth(authValue) {
 describe('PrivateRoute', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
+    mockUseUser.mockReturnValue({
+      user: { id: 1, username: 'admin' }
+      token: null,
+    })
   })
 
   it('shows loading state when auth is not ready', () => {
