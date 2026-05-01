@@ -153,7 +153,7 @@
 | Minor Gaming | Gamification | 1 | Yes |
 | Minor Gaming | Spectator Mode | 1 | Yes |
 | Major DevOps | Backend as Microservices | 2 | Yes |
-| Minor DataAnalytics | Data Export / Import | 1 | **Not shipped** |
+| Major DataAnalytics | Data Advanced Analytics | 2 | Yes |
 | **Total selected** | | **28** | **24 confirmed shipped, 3 at risk (browser ×2, export/import)** |
 
 > Minimum required: **14 points**. Even with the 3 at-risk modules dropped, confirmed-shipped score is **25** (24 listed + the 1 confirmed Browser Compat once a manual pass is run). Comfortable buffer above the 14-point minimum.

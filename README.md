@@ -1,5 +1,7 @@
 # ft_transcendence
 
+This project has been created as part of the 42 curriculum by *maurodri*, *umeneses*, *dgomes-l*, *livieira*, *bnespoli*.
+
 ![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white)
 ![Python](https://img.shields.io/badge/Python-3776AB?style=flat-square&logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white)
@@ -16,7 +18,7 @@
 
 | Layer | Technology | Justification |
 |-------|-----------|---------------|
-| Frontend | React (JavaScript) + Vite | Component-based UI, rapid development with hot module reloading, mature ecosystem for real-time apps |
+| Frontend | React (JavaScript) + Vite (with Hot Module Replacement)| Component-based UI, rapid development with hot module reloading, mature ecosystem for real-time apps |
 | Backend | FastAPI (Python) + uvicorn | Async-first framework enabling real-time WebSockets; automatic API documentation; strong type hints for reliability |
 | Database | PostgreSQL 16 | Robust ACID compliance for transaction integrity; JSON support for flexible schemas; superior to MySQL for complex queries |
 | Infrastructure | Docker Compose · nginx (TLS 1.2/1.3) · Alpine Linux | Reproducible multi-service deployment; Alpine reduces image size; TLS termination at nginx for security |
@@ -29,15 +31,19 @@
 
 **Methodology:** Trunk-Based Development (TBD) with 1-week Agile sprints (10 sprints, Feb 21 – May 1 2026).
 
-- **Sprint Cycle:** Saturday–Friday; Scrum Master merges `develop` → `main` every Friday
+- **Sprint Cycle:** Monday-Saturday; Scrum Master merges `develop` → `main` every Sunday
 - **Board:** GitHub Projects (one shared board for all 5 team members) with custom Squad field (DB, BE, FE)
 - **Workflow:** GitHub Issues → feature branches (`#N-issue-name`) → Pull Requests → `develop` → `main`
 - **Automation:** Auto-link PRs to project; auto-set Sprint on PR creation; close Issues on merge
 - **Milestones:** 
-  - Sprint milestones (S01–S10)
-  - Phase milestones: MVP (S05), Feature Complete (S08), Submission (S10)
-  - 5 delivery phases: Foundation → Core Gameplay → Real-Time + AI → Platform Features → Polish
-- **Tracking:** Burndown via GitHub Projects milestone progress (open vs closed Issues)
+  - 10 Sprints
+  - Milestones Phases:
+    - #1 Foundations- Hello World with Auth login
+    - #2 Core Gamepley - Basic Pong Game + Chat + Stats
+    - #3 Tournaments + AI
+    - #4 Platform Features
+    - #5 Final Polishment
+- **Tracking:** Burndown via GitHub Projects milestone progress (open vs closed Issues) - 200 Issues, 180 PRs
 
 ---
 
@@ -54,6 +60,7 @@
 | Web-Based Game (Pong) | Gaming & UX |
 | Remote Players | Gaming & UX |
 | Backend as Microservices | DevOps |
+| Advanced analytics dashboard with data visualization | Data & Analytics |
 
 ### Minor Modules (1 pt each)
 
@@ -65,14 +72,12 @@
 | Notification System | Web |
 | Advanced Search | Web |
 | File Upload & Management | Web |
-| Browser Compatibility | Accessibility |
 | Game Statistics & Match History | User Management |
 | User Activity Analytics & Insights Dashboard | User Management |
 | Tournament System | Gaming & UX |
 | Game Customization | Gaming & UX |
 | Gamification System | Gaming & UX |
 | Spectator Mode | Gaming & UX |
-| Data Analytics | Dashboard |
 
 > **7 Major × 2 pts + 14 Minor × 1 pt = 28 pts total**
 > Subject minimum: 14 pts — this build provides a comfortable evaluation buffer.
@@ -86,10 +91,10 @@ PostgreSQL 16 with three independent Alembic migration histories (one per servic
 | Service | Owned Tables | Purpose |
 |---------|--|---|
 | **user-service** | `users` | User accounts (username, hashed password via credentials.id FK, avatar URL, profile fields) |
-| | `credentials` | Local authentication (username, password hash) |
+| | `credentials` | Local authentication (username, email, password hash) |
 | | `tokens` | Refresh token records (hash, expiration, revocation tracking) |
 | | `friendships` | Friend connections (bidirectional with status) |
-| | `notifications` | In-app notifications (game invites, friend requests, messages) |
+| | `notifications` | In-app notifications (game invites, friend requests, messages, achievements, tournaments, chat messages) |
 | | `achievements` | Badge templates (e.g., "First Win", "Streak Master") |
 | | `user_login_days` | Per-day activity for analytics (games count, messages count, login timestamp) |
 | **game-service** | `matches` | Pong match records (player IDs, scores, winner, timestamp, AI flag) |
@@ -143,7 +148,7 @@ See [docs/DEV_DOC.md](docs/DEV_DOC.md) · [docs/ARCHITECTURE.md](docs/ARCHITECTU
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System diagram and service routing |
 | [docs/MICROSERVICES.md](docs/MICROSERVICES.md) | Backend service layout |
 | [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) | Git workflow and branching strategy |
-| [docs/ALEMBIC.md](docs/ALEMBIC.md) | Alembic migration guide — changelog, rollback, workflow |
+| [docs/SQLAlchemy_vs_Alembic.md](docs/SQLAlchemy_vs_Alembic.md) | Alembic migration guide — changelog, rollback, workflow and explanation about SQLAlchemy |
 
 ---
 
@@ -179,7 +184,7 @@ See [docs/DEV_DOC.md](docs/DEV_DOC.md) · [docs/ARCHITECTURE.md](docs/ARCHITECTU
 ## Team and Individual Contributions 
 
 ### **Lis** (Product Owner) [@solismesmo](https://github.com/solismesmo)
-- **Role:** Product direction, visual identity, game narrative, user-facing experience
+- **Role:** Product direction, visual identity, game narrative
 - **Key Contributions:**
   - Shaped the product vision and overall user experience goals
   - Defined the visual identity and arcade-inspired presentation
@@ -190,40 +195,44 @@ See [docs/DEV_DOC.md](docs/DEV_DOC.md) · [docs/ARCHITECTURE.md](docs/ARCHITECTU
 - **Role:** System design, backend architecture, API contracts, DevOps oversight
 - **Key Contributions:**
   - Designed 3-service microservices topology with shared PostgreSQL
-  - Architected event-driven WebSocket notification system (50x latency improvement)
   - Implemented shared code library (`shared/`) for cross-service utilities
   - Led technical reviews and code quality standards
   - Designed inter-service communication patterns (HTTP + async events)
-  - Setup Docker Compose orchestration and nginx routing
+  - Pagination for Match History, Learderboard, User Search
+  - Implemented Game Achievements, Authentication
+  - Implemented **Pong game engine** (physics, collision detection, AI opponent logic)
 
 ### **Bira Lavor** (Project Manager & Scrum Master) [@biralavor](https://github.com/biralavor)
-- **Role:** Sprint planning, team coordination, CI/CD infrastructure, DevOps
+- **Role:** Sprint planning, team coordination, CI/CD infrastructure, DevOps, user-facing experience
 - **Key Contributions:**
   - Established Trunk-Based Development workflow with GitHub Projects automation
-  - Built GitHub Actions workflows (health checks, auto-linking PRs, closing issues)
+  - Built GitHub Actions workflows (health checks, auto-linking PRs, closing issues, auto-delete branches)
+  - Setup Docker Compose orchestration and nginx routing
+  - Architected event-driven WebSocket notification system (50x latency improvement)
   - Configured Docker images and build pipelines
-  - Managed release schedule (10 sprints, Fridays for main merges)
+  - Managed release schedule (10 sprints, Sundays for main merges)
   - Mentored team on Agile ceremonies and retrospectives
   - Troubleshooting infrastructure and environment setup
+  - Created theme system (4 selectable themes with CSS variables)
 
 ### **Bruno Gomes Lameirinha** (Full-Stack Developer) [@Bruno-Gomes-Lameirinha](https://github.com/Bruno-Gomes-Lameirinha)
 - **Role:** Backend APIs, business logic, game mechanics
 - **Key Contributions:**
-  - Implemented **user-service** endpoints (auth, profiles, friends, activity tracking)
+  - Implemented **user-service** endpoS for mints (auth, profiles, friends, activity tracking)
   - Built achievement and XP system with badge logic
   - Designed login streak calculation and activity analytics aggregation
-  - Implemented admin dashboard queries for site-wide stats
-  - Wrote Alembic migrations for user-service schema evolution
+  - Designed responsive pages (Profile, Leaderboard, Chat, Tournament)
+  - Built game UI components and private routes (PongCanvas, GameWaitingRoom, Spectator view, Tournaments)
 
 ### **Bruno Thorstensen** (Full-Stack Developer) [@brunothors](https://github.com/brunothors) 
 - **Role:** UI/UX, React components, frontend integration, game rendering
 - **Key Contributions:**
   - Built React app scaffold with Vite and React Router
   - Implemented **Pong game engine** (physics, collision detection, AI opponent logic)
-  - Created theme system (4 selectable themes with CSS variables)
-  - Built game UI components (PongCanvas, GameWaitingRoom, Spectator view)
   - Integrated real-time WebSocket state management for multiplayer sync
-  - Designed responsive pages (Profile, Leaderboard, Chat, Tournament)
+  - Implemented admin dashboard queries for site-wide stats
+  - Wrote Alembic migrations for user-service schema evolution
+  - Implemented Advanced Analytics Dashboard
 
 ---
 
