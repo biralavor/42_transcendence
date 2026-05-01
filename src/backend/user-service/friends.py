@@ -247,7 +247,7 @@ SELECT
                   jsonb_agg(jsonb_build_object(
                      'id' ,id
                      , 'username'  ,username
-                     , 'display_name'  ,display_name
+                     , 'display_name'  ,COALESCE(NULLIF(TRIM(display_name), ''), username)
                      , 'avatar_url'  ,avatar_url
                      , 'status'  ,status
                   ) ORDER BY {query_order})

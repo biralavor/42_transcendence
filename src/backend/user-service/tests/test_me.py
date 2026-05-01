@@ -7,6 +7,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.exc import IntegrityError
 
 from service.main import app
+from service.schemas import MeResponse
 from service.service import create_access_token
 
 
@@ -171,3 +172,104 @@ async def test_get_me_returns_401_for_expired_token():
 
     assert resp.status_code == 401
     assert resp.json()["detail"] == "Token expired"
+
+
+# ----------------------------------------------------------------- #
+# MeResponse model_validator — pure unit tests                      #
+# ----------------------------------------------------------------- #
+
+class TestMeResponseNormalizesDisplayName:
+    def test_none_becomes_username(self):
+        me = MeResponse(id=1, username='alice', display_name=None, status='offline')
+        assert me.display_name == 'alice'
+
+    def test_empty_string_becomes_username(self):
+        me = MeResponse(id=1, username='alice', display_name='', status='offline')
+        assert me.display_name == 'alice'
+
+    def test_whitespace_becomes_username(self):
+        me = MeResponse(id=1, username='alice', display_name='   ', status='offline')
+        assert me.display_name == 'alice'
+
+    def test_valid_display_name_preserved(self):
+        me = MeResponse(id=1, username='alice', display_name='Alice B', status='offline')
+        assert me.display_name == 'Alice B'
+
+
+# ----------------------------------------------------------------- #
+# GET /auth/me endpoint — display_name normalization via HTTP       #
+# ----------------------------------------------------------------- #
+
+@pytest.mark.asyncio
+async def test_get_me_coalesces_empty_display_name():
+    """GET /auth/me must return username when display_name is '' in DB."""
+    user = _make_user()
+    user.display_name = ''
+
+    session = _session_returning(user)
+    session.refresh = AsyncMock()
+
+    from shared.database import get_db
+
+    async def _fake_db():
+        yield session
+
+    app.dependency_overrides[get_db] = _fake_db
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get("/auth/me", headers={"Authorization": f"Bearer {_valid_token()}"})
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+    assert resp.status_code == 200
+    assert resp.json()['display_name'] == 'alice'
+
+
+@pytest.mark.asyncio
+async def test_get_me_coalesces_whitespace_display_name():
+    """GET /auth/me must return username when display_name is whitespace-only."""
+    user = _make_user()
+    user.display_name = '   '
+
+    session = _session_returning(user)
+    session.refresh = AsyncMock()
+
+    from shared.database import get_db
+
+    async def _fake_db():
+        yield session
+
+    app.dependency_overrides[get_db] = _fake_db
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get("/auth/me", headers={"Authorization": f"Bearer {_valid_token()}"})
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+    assert resp.status_code == 200
+    assert resp.json()['display_name'] == 'alice'
+
+
+@pytest.mark.asyncio
+async def test_get_me_preserves_valid_display_name():
+    """GET /auth/me must return display_name when it is properly set."""
+    user = _make_user()
+    user.display_name = 'Alice B'
+
+    session = _session_returning(user)
+    session.refresh = AsyncMock()
+
+    from shared.database import get_db
+
+    async def _fake_db():
+        yield session
+
+    app.dependency_overrides[get_db] = _fake_db
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get("/auth/me", headers={"Authorization": f"Bearer {_valid_token()}"})
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+    assert resp.status_code == 200
+    assert resp.json()['display_name'] == 'Alice B'
