@@ -618,12 +618,13 @@ async def _ensure_game_session(
 def _remember_existing_match_id(game_id: str, payload: dict) -> int | None:
     existing_match_id = payload.get("match_id")
     if isinstance(existing_match_id, int) and existing_match_id > 0:
-        _match_ids.setdefault(game_id, existing_match_id)
+        if game_id not in _match_ids:
+            _bind_match(game_id, existing_match_id)
         return _match_ids.get(game_id)
 
     tournament_room_match = _TOURNAMENT_GAME_ROOM_ID_RE.match(game_id)
-    if tournament_room_match:
-        _match_ids.setdefault(game_id, int(tournament_room_match.group(1)))
+    if tournament_room_match and game_id not in _match_ids:
+        _bind_match(game_id, int(tournament_room_match.group(1)))
 
     return _match_ids.get(game_id)
 
