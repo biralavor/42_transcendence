@@ -12,7 +12,7 @@ from service.models.message import Message
 
 async def get_or_create_room(db: AsyncSession, room_slug: str) -> ChatRoom:
     # NOTE: rooms created here have room_type=NULL (neither "general" nor "dm").
-    # They are intentionally excluded from list_live_rooms (which filters room_type="general").
+    # They are intentionally excluded from public room listings (which filter room_type="general").
     # This path is used by the WebSocket router for direct-URL room access.
     result = await db.execute(select(ChatRoom).where(ChatRoom.room_name == room_slug))
     room = result.scalars().first()
@@ -173,9 +173,12 @@ async def create_general_room(
     return room
 
 
-async def list_live_rooms(db: AsyncSession, manager) -> list[dict]:
-    """Return all general rooms that have at least one stored message AND at least one active
-    WebSocket connection — enforcing both conditions from the #209 visibility spec."""
+async def list_public_rooms(db: AsyncSession, manager) -> list[dict]:
+    """Return all persisted general rooms that have at least one stored message.
+
+    The active WebSocket count is included for display only; it must not decide
+    whether a room exists in the lobby.
+    """
     has_message = exists().where(Message.room_id == ChatRoom.id)
     result = await db.execute(
         select(ChatRoom).where(
@@ -184,9 +187,13 @@ async def list_live_rooms(db: AsyncSession, manager) -> list[dict]:
         )
     )
     rooms = result.scalars().all()
-    live = []
+    rooms_payload = []
     for r in rooms:
         count = manager.active_connections(r.room_name)
-        if count > 0:
-            live.append({"room_name": r.room_name, "active_connections": count})
-    return live
+        rooms_payload.append({"room_name": r.room_name, "active_connections": count})
+    return rooms_payload
+
+
+async def list_live_rooms(db: AsyncSession, manager) -> list[dict]:
+    """Backward-compatible alias for the previous public-room listing name."""
+    return await list_public_rooms(db, manager)

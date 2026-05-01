@@ -1,7 +1,15 @@
 import { useState, useEffect } from 'react'
 import './LobbyPanel.css'
 
-export default function LobbyPanel({ compact = false, onEnter, username, token }) {
+const ROOM_REFRESH_INTERVAL_MS = 5000
+
+export default function LobbyPanel({
+  compact = false,
+  onEnter,
+  username,
+  token,
+  refreshIntervalMs = ROOM_REFRESH_INTERVAL_MS,
+}) {
   const [rooms, setRooms] = useState([])
   const [loading, setLoading] = useState(true)
   const [fetchError, setFetchError] = useState('')
@@ -14,28 +22,61 @@ export default function LobbyPanel({ compact = false, onEnter, username, token }
       setLoading(false)
       return
     }
-    setLoading(true)
-    setFetchError('')
-    const controller = new AbortController()
-    fetch('/api/chat/rooms', {
-      headers: { Authorization: `Bearer ${token}` },
-      signal: controller.signal,
-    })
-      .then(r => {
+
+    let isMounted = true
+    let latestRequestId = 0
+    let intervalId = null
+    const controllers = new Set()
+
+    async function fetchRooms(showLoading = false) {
+      const requestId = ++latestRequestId
+      const controller = new AbortController()
+      controllers.add(controller)
+      if (showLoading) {
+        setLoading(true)
+        setFetchError('')
+      }
+      try {
+        const r = await fetch('/api/chat/rooms', {
+          headers: { Authorization: `Bearer ${token}` },
+          signal: controller.signal,
+        })
         if (!r.ok) throw new Error(`HTTP ${r.status}`)
-        return r.json()
-      })
-      .then(data => {
+        const data = await r.json()
+        if (!isMounted || requestId !== latestRequestId) return
         setRooms(data)
-        setLoading(false)
-      })
-      .catch(err => {
+        setFetchError('')
+      } catch (err) {
         if (err.name === 'AbortError') return
-        setFetchError('Could not load rooms. Try refreshing.')
-        setLoading(false)
-      })
-    return () => controller.abort()
-  }, [token])
+        if (!isMounted || requestId !== latestRequestId) return
+        if (showLoading) {
+          setFetchError('Could not load rooms. Try refreshing.')
+        } else {
+          console.warn('Could not refresh public rooms:', err)
+        }
+      } finally {
+        controllers.delete(controller)
+        if (isMounted && showLoading && requestId === latestRequestId) {
+          setLoading(false)
+        }
+      }
+    }
+
+    async function startPolling() {
+      await fetchRooms(true)
+      if (!isMounted || refreshIntervalMs <= 0) return
+      intervalId = window.setInterval(() => fetchRooms(false), refreshIntervalMs)
+    }
+
+    startPolling()
+
+    return () => {
+      isMounted = false
+      if (intervalId) window.clearInterval(intervalId)
+      controllers.forEach(controller => controller.abort())
+      controllers.clear()
+    }
+  }, [token, refreshIntervalMs])
 
   async function handleCreate(e) {
     e.preventDefault()
@@ -81,7 +122,7 @@ export default function LobbyPanel({ compact = false, onEnter, username, token }
         <p className="lobby-panel__error" role="alert">{fetchError}</p>
       ) : rooms.length === 0 ? (
         <p className="lobby-panel__status">
-          {compact ? 'No public live rooms.' : 'No public live rooms yet. Create the first one!'}
+          {compact ? 'No public rooms.' : 'No public rooms yet. Create the first one!'}
         </p>
       ) : (
         <ul className="lobby-panel__list">

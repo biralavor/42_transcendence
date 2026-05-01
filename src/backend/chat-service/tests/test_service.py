@@ -13,7 +13,7 @@ from main import app
 from persistence import get_or_create_room, save_message, get_room_history
 from persistence import block_user, unblock_user, get_blocked_ids, is_blocked
 from persistence import get_or_create_dm_room
-from persistence import create_general_room, list_live_rooms
+from persistence import create_general_room, list_public_rooms
 
 @pytest_asyncio.fixture
 async def db():
@@ -443,24 +443,24 @@ async def test_create_general_room_rejects_invalid_name(db):
 
 
 @pytest.mark.asyncio
-async def test_list_live_rooms_returns_active_only(db):
+async def test_list_public_rooms_returns_persisted_rooms_even_when_empty(db):
     await create_general_room(db, room_name="live", creator_name="alice")
     await create_general_room(db, room_name="empty-room", creator_name="bob")
     mock_manager = MagicMock()
     mock_manager.active_connections.side_effect = lambda slug: 2 if slug == "live" else 0
-    result = await list_live_rooms(db, mock_manager)
-    assert len(result) == 1
-    assert result[0]["room_name"] == "live"
-    assert result[0]["active_connections"] == 2
+    result = await list_public_rooms(db, mock_manager)
+    rooms = {room["room_name"]: room for room in result}
+    assert rooms["live"]["active_connections"] == 2
+    assert rooms["empty-room"]["active_connections"] == 0
 
 
 @pytest.mark.asyncio
-async def test_list_live_rooms_excludes_dm_rooms(db):
+async def test_list_public_rooms_excludes_dm_rooms(db):
     await create_general_room(db, room_name="general1", creator_name="alice")
     await get_or_create_dm_room(db, user_a_id=10, user_b_id=20)
     mock_manager = MagicMock()
     mock_manager.active_connections.return_value = 1
-    result = await list_live_rooms(db, mock_manager)
+    result = await list_public_rooms(db, mock_manager)
     names = [r["room_name"] for r in result]
     assert "general1" in names
     assert "DM-10-20" not in names
@@ -527,7 +527,7 @@ async def test_get_rooms_returns_list():
         yield session
     app.dependency_overrides[get_db] = fake_db
     try:
-        with patch("main.list_live_rooms", new=AsyncMock(
+        with patch("main.list_public_rooms", new=AsyncMock(
             return_value=[{"room_name": "general", "active_connections": 3}]
         )):
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:

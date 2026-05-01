@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import LobbyPanel from './LobbyPanel'
 
 const TOKEN = 'test-token'
@@ -19,8 +19,18 @@ function renderLobby(props = {}) {
   return { onEnter }
 }
 
+async function flushPromises() {
+  await act(async () => {
+    await Promise.resolve()
+    await Promise.resolve()
+  })
+}
+
 describe('LobbyPanel', () => {
-  beforeEach(() => vi.restoreAllMocks())
+  beforeEach(() => {
+    vi.useRealTimers()
+    vi.restoreAllMocks()
+  })
 
   it('fetches rooms on mount and renders the list', async () => {
     vi.spyOn(global, 'fetch').mockResolvedValueOnce(
@@ -37,14 +47,54 @@ describe('LobbyPanel', () => {
     expect(screen.getByText('gaming')).toBeInTheDocument()
   })
 
-  it('shows empty state when no rooms are live', async () => {
+  it('shows empty state when no public rooms exist', async () => {
     vi.spyOn(global, 'fetch').mockResolvedValueOnce(
       new Response(JSON.stringify([]), { status: 200 })
     )
     renderLobby()
     await waitFor(() =>
-      expect(screen.getByText(/no public live rooms/i)).toBeInTheDocument()
+      expect(screen.getByText(/no public rooms/i)).toBeInTheDocument()
     )
+  })
+
+  it('renders persisted rooms with zero active connections', async () => {
+    vi.spyOn(global, 'fetch').mockResolvedValueOnce(
+      new Response(
+        JSON.stringify([{ room_name: 'quiet-room', active_connections: 0 }]),
+        { status: 200 }
+      )
+    )
+    renderLobby()
+    await waitFor(() => expect(screen.getByText('quiet-room')).toBeInTheDocument())
+    expect(screen.getByText('(0)')).toBeInTheDocument()
+  })
+
+  it('refreshes room counts while the lobby stays mounted', async () => {
+    vi.useFakeTimers()
+    vi.spyOn(global, 'fetch')
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([{ room_name: 'busy-room', active_connections: 2 }]),
+          { status: 200 }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([{ room_name: 'busy-room', active_connections: 12 }]),
+          { status: 200 }
+        )
+      )
+
+    renderLobby({ refreshIntervalMs: 5000 })
+
+    await flushPromises()
+    expect(screen.getByText('(2)')).toBeInTheDocument()
+
+    await act(async () => {
+      vi.advanceTimersByTime(5000)
+    })
+    await flushPromises()
+    expect(screen.getByText('(12)')).toBeInTheDocument()
   })
 
   it('calls onEnter with room name when a room button is clicked', async () => {

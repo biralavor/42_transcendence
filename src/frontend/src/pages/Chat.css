@@ -4,6 +4,7 @@
 
 .chat-view {
   max-width: 700px;
+  margin: auto;
 }
 
 .chat-messages {
