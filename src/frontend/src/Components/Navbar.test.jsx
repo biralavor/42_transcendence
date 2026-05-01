@@ -6,6 +6,13 @@ import NavbarComponent from './Navbar'
 vi.mock('../context/authContext', () => ({ useAuth: vi.fn() }))
 import { useAuth } from '../context/authContext'
 
+// Mock the useUser hook
+const mockUseUser = vi.fn()
+vi.mock('../context/userContext', () => ({
+  useUser: () => mockUseUser(),
+  UserProvider: ({ children }) => <>{children}</>,
+}))
+
 vi.mock('../context/notificationContext', () => ({ useNotifications: vi.fn() }))
 import { useNotifications } from '../context/notificationContext'
 
@@ -32,11 +39,13 @@ function renderNavbar() {
 describe('Navbar — bell and DM badge', () => {
     beforeEach(() => {
         useAuth.mockReturnValue({ isAuthenticated: true, logout: vi.fn() })
+        
         useNotifications.mockReturnValue({ unreadCount: 0 })
         useUnread.mockReturnValue({ unreadCounts: {} })
-        // Default: admin-detection /auth/me returns non-admin. Tests that need
-        // search results override this with a mockImplementation below.
-        apiCall.mockResolvedValue({ ok: true, json: async () => ({ is_admin: false }) })
+        mockUseUser.mockReturnValue({
+          user: { id: 1, username: 'Alice' },
+          token: 'fake-token',
+        })
     })
 
     afterEach(() => {

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/authContext'
+import { useUser } from '../context/userContext'
 import { useNotifications } from '../context/notificationContext'
 import { useUnread } from '../context/unreadContext'
 import { apiCall } from '../utils/apiClient'
@@ -67,11 +68,11 @@ export default function NavbarComponent() {
   const location = useLocation()
   const navigate = useNavigate()
   const { logout, isAuthenticated } = useAuth()
+  const { user, token } = useUser()
   const { unreadCount } = useNotifications()
   const { unreadCounts } = useUnread()
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isPanelOpen, setIsPanelOpen] = useState(false)
-  const [isAdmin, setIsAdmin] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [searchResults, setSearchResults] = useState([])
   const [searchTotal, setSearchTotal] = useState(0)
@@ -79,7 +80,8 @@ export default function NavbarComponent() {
   const [searchError, setSearchError] = useState('')
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [isSearchFocused, setIsSearchFocused] = useState(false)
-
+  const isAdmin = user?.username == 'admin'
+  
   const searchInputRef = useRef(null)
 
   useEffect(() => {
@@ -89,19 +91,6 @@ export default function NavbarComponent() {
   }, [isSearchOpen])
 
   const dmUnreadTotal = Object.values(unreadCounts).reduce((a, b) => a + b, 0)
-
-  useEffect(() => {
-    if (!isAuthenticated) {
-      setIsAdmin(false)
-      return
-    }
-    let cancelled = false
-    apiCall('/api/users/auth/me', { skipRefreshOn401: true })
-      .then(r => r.ok ? r.json() : null)
-      .then(data => { if (!cancelled) setIsAdmin(Boolean(data?.is_admin)) })
-      .catch(() => { if (!cancelled) setIsAdmin(false) })
-    return () => { cancelled = true }
-  }, [isAuthenticated])
 
   // Build nav links: for authenticated users, interleave public and private links.
   const baseAuthedLinks = [
