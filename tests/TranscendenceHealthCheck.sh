@@ -1049,7 +1049,14 @@ printf "${YELLOW}Please wait for a while. I'm running more than 500 Frontend tes
 printf "${YELLOW}If you see no output for a long time, it may be because the frontend container is still starting up or installing dependencies. You can check the status with: docker logs frontend -f\n${RESET}"
 printf "${YELLOW}If the tests fail, the most relevant error messages will be displayed below.\n${RESET}"
 if container_running frontend; then
-    out=$(docker exec frontend sh -c "npx vitest run 2>&1" || echo "")
+    if docker exec frontend sh -c "which npx" >/dev/null 2>&1; then
+        out=$(docker exec frontend sh -c "npx vitest run 2>&1" || echo "")
+    else
+        # Production nginx container — no node available; run tests via the builder stage image
+        # (tagged by 'make check' before this script runs — no pull, no npm install needed)
+        out=$(docker run --rm transcendence-frontend-builder \
+            sh -c "npx vitest run 2>&1" || echo "")
+    fi
     # Extract the "Tests" line which has the actual test count (not Test Files)
     pass_count=$(echo "$out" | grep "^[[:space:]]*Tests" | grep -oE '[0-9]+ passed' | awk '{print $1}' || echo "0")
     fail_count=$(echo "$out" | grep "^[[:space:]]*Tests" | grep -oE '[0-9]+ failed' | awk '{print $1}' || echo "0")

@@ -80,11 +80,13 @@ seed: clear-db db-init
 
 .PHONY: check
 check: wait seed
+	@docker build --target builder -t transcendence-frontend-builder -f services/frontend/Dockerfile . -q
 	@PAGER=cat GIT_PAGER=cat bash tests/TranscendenceHealthCheck.sh | tee >(sed 's/\x1b\[[0-9;]*m//g' > make_check_results.txt) | cat
 
 # check-no-wait: Run tests without re-checking service health (used in CI/CD after container verification)
 .PHONY: check-no-wait
 check-no-wait: seed
+	@docker build --target builder -t transcendence-frontend-builder -f services/frontend/Dockerfile . -q
 	@PAGER=cat GIT_PAGER=cat bash tests/TranscendenceHealthCheck.sh | tee >(sed 's/\x1b\[[0-9;]*m//g' > make_check_results.txt) | cat
 
 # --- alembic migrations ---
