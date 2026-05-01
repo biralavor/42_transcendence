@@ -3,7 +3,30 @@ from unittest.mock import MagicMock
 
 from httpx import AsyncClient, ASGITransport
 from service.main import app, get_current_user
+from service.schemas import FriendResponse
 import pytest
+
+
+# ----------------------------------------------------------------- #
+# FriendResponse model_validator — pure unit tests                  #
+# ----------------------------------------------------------------- #
+
+class TestFriendResponseNormalizesDisplayName:
+    def test_none_becomes_username(self):
+        f = FriendResponse(id=1, username='alice', display_name=None, status='offline')
+        assert f.display_name == 'alice'
+
+    def test_empty_string_becomes_username(self):
+        f = FriendResponse(id=1, username='alice', display_name='', status='offline')
+        assert f.display_name == 'alice'
+
+    def test_whitespace_becomes_username(self):
+        f = FriendResponse(id=1, username='alice', display_name='  ', status='offline')
+        assert f.display_name == 'alice'
+
+    def test_valid_display_name_preserved(self):
+        f = FriendResponse(id=1, username='alice', display_name='Alice B', status='offline')
+        assert f.display_name == 'Alice B'
 
 @pytest.mark.asyncio
 async def test_list_friends_empty_for_unknown_user():

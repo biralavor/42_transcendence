@@ -1,8 +1,98 @@
 # src/backend/user-service/tests/test_profile.py
 from httpx import AsyncClient, ASGITransport
 from service.main import app
+from service.schemas import ProfileResponse, _coalesce_display_name
 from unittest.mock import AsyncMock, patch
 import pytest
+
+
+# ----------------------------------------------------------------- #
+# _coalesce_display_name helper — pure unit tests                   #
+# ----------------------------------------------------------------- #
+
+class TestCoalesceDisplayName:
+    def test_none_falls_back_to_username(self):
+        assert _coalesce_display_name(None, 'alice') == 'alice'
+
+    def test_empty_string_falls_back_to_username(self):
+        assert _coalesce_display_name('', 'alice') == 'alice'
+
+    def test_whitespace_only_falls_back_to_username(self):
+        assert _coalesce_display_name('   ', 'alice') == 'alice'
+
+    def test_valid_name_is_trimmed_and_returned(self):
+        assert _coalesce_display_name('  Alice B  ', 'alice') == 'Alice B'
+
+    def test_valid_name_without_padding_returned_unchanged(self):
+        assert _coalesce_display_name('Alice B', 'alice') == 'Alice B'
+
+
+# ----------------------------------------------------------------- #
+# ProfileResponse model_validator — pure unit tests                 #
+# ----------------------------------------------------------------- #
+
+class TestProfileResponseNormalizesDisplayName:
+    def test_none_becomes_username(self):
+        p = ProfileResponse(id=1, username='alice', display_name=None, status='offline')
+        assert p.display_name == 'alice'
+
+    def test_empty_string_becomes_username(self):
+        p = ProfileResponse(id=1, username='alice', display_name='', status='offline')
+        assert p.display_name == 'alice'
+
+    def test_whitespace_becomes_username(self):
+        p = ProfileResponse(id=1, username='alice', display_name='  ', status='offline')
+        assert p.display_name == 'alice'
+
+    def test_valid_display_name_preserved(self):
+        p = ProfileResponse(id=1, username='alice', display_name='Alice B', status='offline')
+        assert p.display_name == 'Alice B'
+
+
+# ----------------------------------------------------------------- #
+# GET /profile/{id} endpoint — display_name normalization via HTTP  #
+# ----------------------------------------------------------------- #
+
+@pytest.mark.asyncio
+async def test_profile_endpoint_coalesces_empty_display_name():
+    """Backend must not send '' — returns username as display_name instead."""
+    fake = {
+        'id': 1, 'username': 'alice', 'display_name': '',
+        'status': 'offline', 'avatar_url': None, 'created_at': None, 'bio': None,
+    }
+    with patch('service.main.get_profile', AsyncMock(return_value=fake)):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            resp = await c.get("/profile/1")
+    assert resp.status_code == 200
+    assert resp.json()['display_name'] == 'alice'
+
+
+@pytest.mark.asyncio
+async def test_profile_endpoint_coalesces_none_display_name():
+    """Backend must not send null — returns username as display_name instead."""
+    fake = {
+        'id': 1, 'username': 'alice', 'display_name': None,
+        'status': 'offline', 'avatar_url': None, 'created_at': None, 'bio': None,
+    }
+    with patch('service.main.get_profile', AsyncMock(return_value=fake)):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            resp = await c.get("/profile/1")
+    assert resp.status_code == 200
+    assert resp.json()['display_name'] == 'alice'
+
+
+@pytest.mark.asyncio
+async def test_profile_endpoint_preserves_valid_display_name():
+    """When display_name is set, the endpoint returns it unchanged."""
+    fake = {
+        'id': 1, 'username': 'alice', 'display_name': 'Alice B',
+        'status': 'offline', 'avatar_url': None, 'created_at': None, 'bio': None,
+    }
+    with patch('service.main.get_profile', AsyncMock(return_value=fake)):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            resp = await c.get("/profile/1")
+    assert resp.status_code == 200
+    assert resp.json()['display_name'] == 'Alice B'
 
 @pytest.mark.asyncio
 async def test_get_profile_not_found():

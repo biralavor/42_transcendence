@@ -161,9 +161,17 @@ async def register_credentials(register_request: RegisterRequest, session: Async
     return RegisterResponse(username=credentials.username)
 
 
-async def get_profile(user_id: int, session: AsyncSession) -> User | None:
-    result = await session.execute(select(User).where(User.id == user_id))
-    return result.scalars().first()
+async def get_profile(user_id: int, session: AsyncSession) -> dict | None:
+    result = await session.execute(
+        text(
+            "SELECT id, username, status, avatar_url, created_at, bio, "
+            "COALESCE(NULLIF(TRIM(display_name), ''), username) AS display_name "
+            "FROM users WHERE id = :uid"
+        ),
+        {"uid": user_id},
+    )
+    row = result.mappings().first()
+    return dict(row) if row else None
 
 
 async def get_me(token: str, session: AsyncSession) -> User:

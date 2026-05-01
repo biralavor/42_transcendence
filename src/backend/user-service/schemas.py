@@ -2,6 +2,12 @@ from datetime import datetime, date
 from typing import Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+def _coalesce_display_name(display_name: Optional[str], username: str) -> str:
+    """Return username when display_name is empty/whitespace, matching the SQL COALESCE pattern."""
+    if display_name and display_name.strip():
+        return display_name.strip()
+    return username
+
 
 class Login(BaseModel):
     username: str
@@ -34,6 +40,11 @@ class ProfileResponse(BaseModel):
     created_at:   Optional[datetime] = None
     bio:          Optional[str] = None
 
+    @model_validator(mode='after')
+    def normalize_display_name(self) -> 'ProfileResponse':
+        self.display_name = _coalesce_display_name(self.display_name, self.username)
+        return self
+
 
 class MeResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -47,6 +58,11 @@ class MeResponse(BaseModel):
     created_at:    Optional[datetime] = None
     bio:           Optional[str] = None
     is_admin:      bool = False
+
+    @model_validator(mode='after')
+    def normalize_display_name(self) -> 'MeResponse':
+        self.display_name = _coalesce_display_name(self.display_name, self.username)
+        return self
 
 
 class DailyCount(BaseModel):
@@ -91,6 +107,11 @@ class FriendResponse(BaseModel):
     display_name: Optional[str] = None
     avatar_url:   Optional[str] = None
     status:       str
+
+    @model_validator(mode='after')
+    def normalize_display_name(self) -> 'FriendResponse':
+        self.display_name = _coalesce_display_name(self.display_name, self.username)
+        return self
 
 
 class FriendRequestResponse(BaseModel):
