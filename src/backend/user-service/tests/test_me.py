@@ -39,6 +39,7 @@ def _session_returning(*call_results):
         scalars_mock.first.return_value = obj
         result_mock = MagicMock()
         result_mock.scalars.return_value = scalars_mock
+        result_mock.scalar_one_or_none.return_value = obj
         sides.append(result_mock)
     session.execute.side_effect = sides
     return session
@@ -54,7 +55,7 @@ async def test_get_me_returns_existing_user():
     cred = _make_credential()
     user = _make_user()
 
-    session = _session_returning(user)
+    session = _session_returning(user, "alice@transcendence.local")
     session.refresh = AsyncMock()
 
     from shared.database import get_db
@@ -79,7 +80,7 @@ async def test_get_me_returns_existing_user():
 async def test_get_me_exposes_is_admin_true():
     """MeResponse must surface is_admin=true for admin users."""
     user = _make_user(is_admin=True)
-    session = _session_returning(user)
+    session = _session_returning(user, "admin@transcendence.local")
     session.refresh = AsyncMock()
 
     from shared.database import get_db
@@ -103,7 +104,7 @@ async def test_get_me_creates_user_on_first_call():
     """Valid token but no User row yet → User is created and returned."""
     cred = _make_credential()
 
-    session = _session_returning(None)
+    session = _session_returning(None, "alice@transcendence.local")
 
     added_objects = []
     session.add = MagicMock(side_effect=added_objects.append)

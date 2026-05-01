@@ -7,9 +7,8 @@ const RegisterForm = () => {
   const { login } = useAuth()
   const navigate = useNavigate()
   const [formData, setFormData] = useState({
-    // capture only the fields needed for account creation. Email is no
-    // longer collected in this simplified registration flow.
     username: '',
+    email: '',
     password: '',
     confirmPassword: '',
     termsAccepted: false,
@@ -59,8 +58,7 @@ const RegisterForm = () => {
         credentials: 'include',
         body: JSON.stringify({
           username: formData.username,
-          // email is intentionally omitted from the payload; the backend no longer
-          // requires it for registration.
+          email: formData.email,
           password: formData.password,
         }),
       })
@@ -91,7 +89,7 @@ const RegisterForm = () => {
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({
-          username: formData.username,
+          identifier: formData.username,
           password: formData.password,
         }),
       })
@@ -104,6 +102,7 @@ const RegisterForm = () => {
 
       setFormData({
         username: '',
+        email: '',
         password: '',
         confirmPassword: '',
         termsAccepted: false,
@@ -179,8 +178,20 @@ const RegisterForm = () => {
             <label htmlFor="floatingUsername">Username</label>
           </div>
 
-          {/* Email collection has been removed to streamline registration. If email
-              support is added back in the future, reintroduce an email field here. */}
+          <div className="form-floating mb-3 arcade-form-control auth-form-control">
+            <input
+              type="email"
+              className="form-control"
+              id="floatingEmail"
+              name="email"
+              placeholder="Email"
+              autoComplete="email"
+              value={formData.email}
+              onChange={handleChange}
+              required
+            />
+            <label htmlFor="floatingEmail">Email</label>
+          </div>
 
           <div className="register-password-grid">
             <div className="form-floating mb-3 arcade-form-control auth-form-control">

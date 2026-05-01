@@ -1,10 +1,10 @@
 from datetime import datetime, date
 from typing import Literal, Optional
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 
 class Login(BaseModel):
-    username: str
+    identifier: str
     password: str
 
 
@@ -16,11 +16,13 @@ class LoginResponse(BaseModel):
 
 class RegisterRequest(BaseModel):
     username: str
+    email: EmailStr
     password: str
 
 
 class RegisterResponse(BaseModel):
     username: str
+    email: EmailStr
 
 
 class ProfileResponse(BaseModel):
@@ -28,6 +30,7 @@ class ProfileResponse(BaseModel):
 
     id:           int
     username:     str
+    email:        Optional[EmailStr] = None
     display_name: Optional[str] = None
     status:       str
     avatar_url:   Optional[str] = None
@@ -40,6 +43,7 @@ class MeResponse(BaseModel):
 
     id:            int
     username:      str
+    email:         Optional[EmailStr] = None
     credential_id: Optional[int] = None
     display_name:  Optional[str] = None
     status:        str

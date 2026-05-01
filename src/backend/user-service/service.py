@@ -1,3 +1,4 @@
+
 import asyncio
 from datetime import datetime, timedelta, timezone
 
@@ -6,7 +7,7 @@ import bcrypt
 import hashlib
 import secrets
 from jose import jwt, ExpiredSignatureError, JWTError
-from sqlalchemy import select, text
+from sqlalchemy import or_, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -61,7 +62,15 @@ async def _ensure_user(credential_id: int, username: str, session: AsyncSession)
 
 async def authenticate(login: Login, session: AsyncSession) -> LoginResponse:
     password_bytes = login.password.encode('utf-8')
-    result = await session.execute(select(Credentials).where(Credentials.username == login.username))
+    identifier = login.identifier.strip()
+    result = await session.execute(
+        select(Credentials).where(
+            or_(
+                Credentials.username == identifier,
+                Credentials.email == identifier.lower(),
+            )
+        )
+    )
     credential = result.scalars().first()
     is_authenticated = (credential is not None
         and bcrypt.checkpw(password_bytes, credential.password.encode('utf-8')))
@@ -137,7 +146,15 @@ async def refresh_access_token(body: RefreshRequest, session: AsyncSession) -> L
 
 
 async def register_credentials(register_request: RegisterRequest, session: AsyncSession) -> RegisterResponse:
-    result = await session.execute(select(Credentials).where(Credentials.username == register_request.username))
+    email_normalized = register_request.email.lower()
+    result = await session.execute(
+        select(Credentials).where(
+            or_(
+                Credentials.username == register_request.username,
+                Credentials.email == email_normalized,
+            )
+        )
+    )
     entity = result.scalars().first()
     if entity:
         raise HTTPException(
@@ -146,6 +163,7 @@ async def register_credentials(register_request: RegisterRequest, session: Async
         )
     credentials = Credentials(
         username=register_request.username,
+        email=email_normalized,
         password=hash_password(register_request.password).decode('utf-8'),
     )
     try:
@@ -158,12 +176,19 @@ async def register_credentials(register_request: RegisterRequest, session: Async
             status_code=status.HTTP_409_CONFLICT,
             detail="User already exists"
         ) from exc
-    return RegisterResponse(username=credentials.username)
+    return RegisterResponse(username=credentials.username, email=credentials.email)
 
 
 async def get_profile(user_id: int, session: AsyncSession) -> User | None:
     result = await session.execute(select(User).where(User.id == user_id))
     return result.scalars().first()
+
+
+async def get_credential_email(credential_id: int, session: AsyncSession) -> str | None:
+    result = await session.execute(
+        select(Credentials.email).where(Credentials.id == credential_id)
+    )
+    return result.scalar_one_or_none()
 
 
 async def get_me(token: str, session: AsyncSession) -> User:

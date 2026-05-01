@@ -740,7 +740,7 @@ if container_running user-service; then
     # Login — get tokens; user_id is resolved via /auth/me
     login_body=$(docker exec user-service wget -q -O - \
         --header="Content-Type: application/json" \
-        --post-data='{"username":"alice","password":"123dev"}' \
+        --post-data='{"identifier":"alice","password":"123dev"}' \
         "http://127.0.0.1:${_UPORT}/auth/login" 2>/dev/null || echo "")
 
     if echo "$login_body" | grep -q '"access_token"'; then
@@ -1112,7 +1112,7 @@ if command -v curl &>/dev/null && command -v python3 &>/dev/null; then
     # Try to login alice (may fail if DB was recently reset)
     alice_login=$(curl -sk -X POST "https://${DOMAIN}:8443/api/users/auth/login" \
         -H "Content-Type: application/json" \
-        -d '{"username":"alice","password":"123dev"}' 2>/dev/null || echo "{}")
+        -d '{"identifier":"alice","password":"123dev"}' 2>/dev/null || echo "{}")
     
     alice_token=$(echo "$alice_login" | json_get "access_token")
     
@@ -1131,7 +1131,7 @@ if command -v curl &>/dev/null && command -v python3 &>/dev/null; then
         # Login Bob
         bob_login=$(curl -sk -X POST "https://${DOMAIN}:8443/api/users/auth/login" \
             -H "Content-Type: application/json" \
-            -d '{"username":"bob","password":"123dev"}' 2>/dev/null || echo "{}")
+            -d '{"identifier":"bob","password":"123dev"}' 2>/dev/null || echo "{}")
         
         bob_token=$(echo "$bob_login" | json_get "access_token")
         

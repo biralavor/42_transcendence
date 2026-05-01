@@ -25,10 +25,10 @@ DATABASE_URL = "postgresql+asyncpg://{}:{}@{}:{}/{}".format(
 )
 
 USERS = [
-    dict(id=0, username="AI", password="123dev",
+    dict(id=0, username="AI", email="ai@transcendence.local", password="123dev",
          display_name="AI Opponent", status="offline",
          bio="I'm the AI.", avatar_url=None, is_admin=False),
-    dict(username="admin", password="123",
+    dict(username="admin", email="admin@transcendence.local", password="123",
          display_name="Admin", status="offline",
          bio="Site administrator.", avatar_url=None, is_admin=True),
 ]
@@ -57,16 +57,16 @@ async def init():
                 pw_hash = _hash(u["password"])
                 if "id" in u:
                     await session.execute(
-                        text("INSERT INTO credentials (id, username, password) "
-                             "VALUES (:id, :u, :p)"),
-                        {"id": u["id"], "u": u["username"], "p": pw_hash},
+                        text("INSERT INTO credentials (id, username, email, password) "
+                             "VALUES (:id, :u, :e, :p)"),
+                        {"id": u["id"], "u": u["username"], "e": u["email"], "p": pw_hash},
                     )
                     cred_id = u["id"]
                 else:
                     result = await session.execute(
-                        text("INSERT INTO credentials (username, password) "
-                             "VALUES (:u, :p) RETURNING id"),
-                        {"u": u["username"], "p": pw_hash},
+                        text("INSERT INTO credentials (username, email, password) "
+                             "VALUES (:u, :e, :p) RETURNING id"),
+                        {"u": u["username"], "e": u["email"], "p": pw_hash},
                     )
                     cred_id = result.fetchone()[0]
                 print(f"  [ok]   credentials '{u['username']}' created (id={cred_id})")

@@ -70,7 +70,7 @@ describe('Login page', () => {
     const btn = screen.getByRole('button', { name: /sign in/i })
     expect(btn).not.toBeDisabled()
 
-    fireEvent.change(screen.getByLabelText(/username/i), { target: { value: 'user' } })
+    fireEvent.change(screen.getByLabelText(/username or email/i), { target: { value: 'user' } })
     fireEvent.change(screen.getByLabelText(/password/i), { target: { value: 'pass' } })
     fireEvent.submit(btn.closest('form'))
 
@@ -78,7 +78,7 @@ describe('Login page', () => {
     await waitFor(() => expect(btn).not.toBeDisabled())
   })
 
-  it('sends username and password in request body', async () => {
+  it('sends identifier and password in request body', async () => {
     const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValueOnce(
       new Response(JSON.stringify({ access_token: 'a', refresh_token: 'r', token_type: 'bearer' }), {
         status: 200,
@@ -87,14 +87,14 @@ describe('Login page', () => {
     )
 
     renderLogin()
-    fireEvent.change(screen.getByLabelText(/username/i), { target: { value: 'testuser' } })
+    fireEvent.change(screen.getByLabelText(/username or email/i), { target: { value: 'testuser' } })
     fireEvent.change(screen.getByLabelText(/password/i), { target: { value: 'secret' } })
     fireEvent.submit(screen.getByRole('button', { name: /sign in/i }).closest('form'))
 
     await waitFor(() => expect(fetchSpy).toHaveBeenCalledOnce())
     const [url, options] = fetchSpy.mock.calls[0]
     expect(url).toBe('/api/users/auth/login')
-    expect(JSON.parse(options.body)).toEqual({ username: 'testuser', password: 'secret' })
+    expect(JSON.parse(options.body)).toEqual({ identifier: 'testuser', password: 'secret' })
   })
 
   it('stores tokens in sessionStorage on success (rememberMe unchecked)', async () => {
