@@ -9,6 +9,11 @@ import './Tournament.css'
 
 const READY_TIMEOUT_SECONDS = 90
 const TOURNAMENT_SYNC_INTERVAL_MS = 3000
+const LIVE_TOURNAMENT_STATUSES = new Set(['open', 'in_progress'])
+
+function isLiveTournamentStatus(status) {
+  return LIVE_TOURNAMENT_STATUSES.has(status)
+}
 
 export default function Tournament() {
   const { id: tournamentId } = useParams()
@@ -135,8 +140,7 @@ export default function Tournament() {
   const isJoined = useMemo(() => {
     if (!currentUser || !tournament) return false
   
-    const isActive =
-      tournament.status === 'open' || tournament.status === 'in_progress'
+    const isActive = isLiveTournamentStatus(tournament.status)
   
     return isActive && tournament.participants?.some(
       (p) => Number(p.user_id) === Number(currentUser.id),
@@ -259,7 +263,7 @@ export default function Tournament() {
     if (!tournamentId || !auth?.access_token) return
 
     const syncTournament = () => {
-      if (tournament?.status !== 'open' && tournament?.status !== 'in_progress') return
+      if (!isLiveTournamentStatus(tournament?.status)) return
       void refreshTournament()
     }
 
@@ -280,6 +284,8 @@ export default function Tournament() {
 
   useEffect(() => {
     if (!tournamentId || !auth?.access_token) return
+    if (!isLiveTournamentStatus(tournament?.status)) return
+    if (!isJoined) return
 
     const scheme = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const url = `${scheme}//${window.location.host}/api/game/ws/tournament/${tournamentId}?token=${auth.access_token}`
@@ -361,7 +367,7 @@ export default function Tournament() {
       setWsConnected(false)
       ws.close()
     }
-  }, [tournamentId, auth?.access_token, handleMatchStart, refreshTournament])
+  }, [tournamentId, auth?.access_token, tournament?.status, isJoined, handleMatchStart, refreshTournament])
 
   async function handleStartTournament() {
     if (!tournamentId || !canStart) return
