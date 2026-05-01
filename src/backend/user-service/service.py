@@ -182,7 +182,7 @@ async def register_credentials(register_request: RegisterRequest, session: Async
 async def get_profile(user_id: int, session: AsyncSession) -> dict | None:
     result = await session.execute(
         text(
-            "SELECT id, username, status, avatar_url, created_at, bio, "
+            "SELECT id, credential_id, username, status, avatar_url, created_at, bio, "
             "COALESCE(NULLIF(TRIM(display_name), ''), username) AS display_name "
             "FROM users WHERE id = :uid"
         ),

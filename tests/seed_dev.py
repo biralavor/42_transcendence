@@ -62,11 +62,11 @@ def _hash(password: str) -> str:
 
 
 USERS = [
-    dict(username="alice",   email="alice@transcendence.local",   display_name="Alice",   status="online",  bio="Hi, I'm Alice!",        avatar_url=None),
-    dict(username="bob",     email="bob@transcendence.local",     display_name="Bob",     status="offline", bio="Bob here.",              avatar_url=None),
-    dict(username="charlie", email="charlie@transcendence.local", display_name="Charlie", status="online",  bio="Charlie checking in.",   avatar_url=None),
-    dict(username="joao",    email="joao@transcendence.local",    display_name="João",    status="online",  bio="João aqui!",             avatar_url=None),
-    dict(username="maria",   email="maria@transcendence.local",   display_name="Maria",   status="offline", bio="Hey, I'm Maria.",        avatar_url=None),
+    dict(username="alice",   email="alice@example.com",   display_name="Alice",   status="online",  bio="Hi, I'm Alice!",        avatar_url=None),
+    dict(username="bob",     email="bob@example.com",     display_name="Bob",     status="offline", bio="Bob here.",              avatar_url=None),
+    dict(username="charlie", email="charlie@example.com", display_name="Charlie", status="online",  bio="Charlie checking in.",   avatar_url=None),
+    dict(username="joao",    email="joao@example.com",    display_name="João",    status="online",  bio="João aqui!",             avatar_url=None),
+    dict(username="maria",   email="maria@example.com",   display_name="Maria",   status="offline", bio="Hey, I'm Maria.",        avatar_url=None),
 ]
 
 PASSWORD = "123dev"

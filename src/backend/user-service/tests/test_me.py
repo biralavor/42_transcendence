@@ -56,7 +56,7 @@ async def test_get_me_returns_existing_user():
     cred = _make_credential()
     user = _make_user()
 
-    session = _session_returning(user, "alice@transcendence.local")
+    session = _session_returning(user, "alice@example.com")
     session.refresh = AsyncMock()
 
     from shared.database import get_db
@@ -81,7 +81,7 @@ async def test_get_me_returns_existing_user():
 async def test_get_me_exposes_is_admin_true():
     """MeResponse must surface is_admin=true for admin users."""
     user = _make_user(is_admin=True)
-    session = _session_returning(user, "admin@transcendence.local")
+    session = _session_returning(user, "admin@example.com")
     session.refresh = AsyncMock()
 
     from shared.database import get_db
@@ -105,7 +105,7 @@ async def test_get_me_creates_user_on_first_call():
     """Valid token but no User row yet → User is created and returned."""
     cred = _make_credential()
 
-    session = _session_returning(None, "alice@transcendence.local")
+    session = _session_returning(None, "alice@example.com")
 
     added_objects = []
     session.add = MagicMock(side_effect=added_objects.append)
@@ -207,7 +207,7 @@ async def test_get_me_coalesces_empty_display_name():
     user = _make_user()
     user.display_name = ''
 
-    session = _session_returning(user)
+    session = _session_returning(user, "alice@example.com")
     session.refresh = AsyncMock()
 
     from shared.database import get_db
@@ -232,7 +232,7 @@ async def test_get_me_coalesces_whitespace_display_name():
     user = _make_user()
     user.display_name = '   '
 
-    session = _session_returning(user)
+    session = _session_returning(user, "alice@example.com")
     session.refresh = AsyncMock()
 
     from shared.database import get_db
@@ -253,11 +253,11 @@ async def test_get_me_coalesces_whitespace_display_name():
 
 @pytest.mark.asyncio
 async def test_get_me_preserves_valid_display_name():
-    """GET /auth/me must return display_name when it is properly set."""
+    """GET /auth/me must return display_name unchanged when it is set."""
     user = _make_user()
     user.display_name = 'Alice B'
 
-    session = _session_returning(user)
+    session = _session_returning(user, "alice@example.com")
     session.refresh = AsyncMock()
 
     from shared.database import get_db

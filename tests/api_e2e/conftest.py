@@ -71,7 +71,7 @@ async def register_user(api: httpx.AsyncClient, username: str | None = None,
     if username is None:
         username = _unique_username()
     if email is None:
-        email = f"{username}@e2e.test"
+        email = f"{username}@example.com"
 
     resp = await api.post("/api/users/auth/register", json={
         "username": username,

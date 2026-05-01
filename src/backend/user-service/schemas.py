@@ -28,7 +28,7 @@ class RegisterRequest(BaseModel):
 
 class RegisterResponse(BaseModel):
     username: str
-    email: EmailStr
+    email: str  # output schema: return what's stored, validation is at input
 
 
 class ProfileResponse(BaseModel):
@@ -36,7 +36,7 @@ class ProfileResponse(BaseModel):
 
     id:           int
     username:     str
-    email:        Optional[EmailStr] = None
+    email:        Optional[str] = None  # output schema: return what's stored
     display_name: Optional[str] = None
     status:       str
     avatar_url:   Optional[str] = None
@@ -54,7 +54,7 @@ class MeResponse(BaseModel):
 
     id:            int
     username:      str
-    email:         Optional[EmailStr] = None
+    email:         Optional[str] = None  # output schema: return what's stored
     credential_id: Optional[int] = None
     display_name:  Optional[str] = None
     status:        str

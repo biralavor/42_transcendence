@@ -25,10 +25,10 @@ DATABASE_URL = "postgresql+asyncpg://{}:{}@{}:{}/{}".format(
 )
 
 USERS = [
-    dict(id=0, username="AI", email="ai@transcendence.local", password="123dev",
+    dict(id=0, username="AI", email="ai@example.com", password="123dev",
          display_name="AI Opponent", status="offline",
          bio="I'm the AI.", avatar_url=None, is_admin=False),
-    dict(username="admin", email="admin@transcendence.local", password="123",
+    dict(username="admin", email="admin@example.com", password="123",
          display_name="Admin", status="offline",
          bio="Site administrator.", avatar_url=None, is_admin=True),
 ]

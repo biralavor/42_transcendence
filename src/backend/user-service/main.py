@@ -102,16 +102,16 @@ async def get_user_profile(user_id: int, session: SessionDependency):
     profile = await get_profile(user_id, session)
     if profile is None:
         raise HTTPException(status_code=404, detail="User not found")
-    email = await get_credential_email(profile.credential_id, session)
+    email = await get_credential_email(profile['credential_id'], session)
     return ProfileResponse(
-        id=profile.id,
-        username=profile.username,
+        id=profile['id'],
+        username=profile['username'],
         email=email,
-        display_name=profile.display_name,
-        status=profile.status,
-        avatar_url=profile.avatar_url,
-        created_at=profile.created_at,
-        bio=profile.bio,
+        display_name=profile['display_name'],
+        status=profile['status'],
+        avatar_url=profile['avatar_url'],
+        created_at=profile['created_at'],
+        bio=profile['bio'],
     )
 
 
