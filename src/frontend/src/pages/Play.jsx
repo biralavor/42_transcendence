@@ -1,9 +1,9 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback } from 'react'
 import NavbarComponent from '../Components/Navbar'
 import PongCanvas from '../Components/PongCanvas'
 import VsCpuCard from '../Components/VsCpuCard'
 import GameOverOverlay from '../Components/GameOverOverlay'
-import { apiJson } from '../utils/apiClient'
+import { useUser } from '../context/userContext'
 
 const matchModes = [
   {
@@ -29,13 +29,8 @@ const quickActions = [
 export default function Play() {
   const [localGameResult, setLocalGameResult] = useState(null)
   const [canvasKey, setCanvasKey] = useState(0)
-  const [p1Name, setP1Name] = useState('Player 1')
-
-  useEffect(() => {
-    apiJson('/api/users/auth/me')
-      .then(me => setP1Name(me.display_name ?? me.username ?? 'Player 1'))
-      .catch(() => {})
-  }, [])
+  const { user } = useUser()
+  const p1Name = user?.display_name ?? user?.username ?? 'Player 1'
 
   const handleLocalGameEnd = useCallback((result) => {
     setLocalGameResult(prev => prev ?? result)

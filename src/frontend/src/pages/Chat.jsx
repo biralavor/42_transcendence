@@ -1,14 +1,13 @@
 // src/frontend/src/pages/Chat.jsx
 import { useState, useEffect, useRef } from 'react'
-import { useParams, useLocation, useNavigate, Link } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import { createWsClient } from '../utils/wsClient'
-import { apiCall } from '../utils/apiClient'
 import NavbarComponent from '../Components/Navbar'
 import FriendsSidebar from '../Components/FriendsSidebar'
 import LobbyPanel from '../Components/LobbyPanel'
 import UserProfileModal from '../Components/UserProfileModal'
-import { useAuth } from '../context/authContext'
 import { useUnread } from '../context/unreadContext'
+import { useUser } from '../context/userContext'
 import './Chat.css'
 
 function senderHue(name) {
@@ -19,18 +18,12 @@ function senderHue(name) {
 
 export default function Chat() {
   const { roomId } = useParams()
-  const location = useLocation()
   const navigate = useNavigate()
-  const { auth, isAuthReady } = useAuth()
+  const { user, token } = useUser()
   const { clearUnread, setActiveRoom } = useUnread()
-  const autoName = location.state?.username ?? ''
-  const passedUserId = location.state?.userId ?? null
-  const [name, setName] = useState(autoName)
-  const [joined, setJoined] = useState(!!autoName)
   const [connected, setConnected] = useState(false)
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
-  const [userId, setUserId] = useState(passedUserId)
   const [typingUsers, setTypingUsers] = useState([])
   const [profileTarget, setProfileTarget] = useState(null)
   const wsRef = useRef(null)
@@ -38,26 +31,7 @@ export default function Chat() {
   const typingTimers = useRef(new Map())
   const emitThrottle = useRef(null)
 
-  // Fetch userId (and name if not yet set) from auth/me
-  useEffect(() => {
-    if (userId || !auth.access_token) return
-    const controller = new AbortController()
-    apiCall('/api/users/auth/me', {
-      signal: controller.signal,
-    })
-      .then(r => (r.ok ? r.json() : null))
-      .then(me => {
-        if (me) {
-          setUserId(me.id)
-          setName(prev => prev || me.username)
-        }
-      })
-      .catch(err => {
-        if (err.name !== 'AbortError')
-          console.warn('Failed to fetch user identity for chat:', err)
-      })
-    return () => controller.abort()
-  }, [auth.access_token, userId])
+  const joined = !!(user && roomId)
 
   useEffect(() => {
     // Clear room messages when changing room
@@ -77,7 +51,7 @@ export default function Chat() {
     if (!joined || !roomId) return
     const scheme = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const base = `${scheme}//${window.location.host}/api/chat/ws/chat/${roomId}`
-    const url = auth.access_token ? `${base}?token=${auth.access_token}` : base
+    const url = token ? `${base}?token=${token}` : base
     const ws = createWsClient(url, {
       onOpen: () => setConnected(true),
       onClose: () => setConnected(false),
@@ -86,9 +60,8 @@ export default function Chat() {
           const sender = data.sender
           if (!sender) return
           const isSelf =
-            userId && data.sender_uid != null
-              ? data.sender_uid === userId
-              : sender === name
+            user && data.sender_uid != null
+              && data.sender_uid === user.id
           if (isSelf) return
           setTypingUsers(prev => (prev.includes(sender) ? prev : [...prev, sender]))
           clearTimeout(typingTimers.current.get(sender))
@@ -112,7 +85,7 @@ export default function Chat() {
       typingTimers.current.clear()
       setTypingUsers([])
     }
-  }, [joined, roomId])
+  }, [joined, roomId, token, user])
 
   useEffect(() => {
     if (typeof bottomRef.current?.scrollIntoView === 'function') {
@@ -120,44 +93,39 @@ export default function Chat() {
     }
   }, [messages])
 
-  // Auto-join once identity is known — covers nav-state entry AND direct URL / refresh
-  useEffect(() => {
-    if (name && roomId) setJoined(true)
-  }, [name, roomId])
-
   // Safety-net redirect: auth fully loaded, no token, still no identity → go to lobby
   // (PrivateRoute normally handles unauthenticated users before reaching here)
   useEffect(() => {
-    if (roomId && !joined && isAuthReady && !auth.access_token) {
+    if (roomId && !joined && !token) {
       navigate('/chat', { replace: true })
     }
-  }, [roomId, joined, isAuthReady, auth.access_token, navigate])
+  }, [roomId, joined, token, user, navigate])
 
   function handleInputChange(e) {
     setInput(e.target.value)
-    if (!connected || !wsRef.current || !e.target.value.trim()) return
+    if (!connected || !wsRef.current || !e.target.value.trim() || !user) return
     clearTimeout(emitThrottle.current)
     emitThrottle.current = setTimeout(() => {
-      wsRef.current?.send({ type: 'typing', sender: name, sender_uid: userId })
+      wsRef.current?.send({ type: 'typing', sender: user.username, sender_uid: user.id })
     }, 300)
   }
 
   function send() {
-    if (!input.trim() || !connected || !wsRef.current) return
-    wsRef.current.send({ content: input.trim(), sender: name })
+    if (!user || !input.trim() || !connected || !wsRef.current) return
+    wsRef.current.send({ content: input.trim(), sender: user.username })
     setInput('')
   }
 
   function handleChatFromModal(targetUserId) {
-    if (!userId) return
-    const [a, b] = [userId, targetUserId].sort((x, y) => x - y)
+    if (!user) return
+    const [a, b] = [user.id, targetUserId].sort((x, y) => x - y)
     setProfileTarget(null)
-    navigate(`/chat/DM-${a}-${b}`, { state: { username: name, userId } })
+    navigate(`/chat/DM-${a}-${b}`, { state: { username: user.username, userId: user.id } })
   }
 
   function handleEnterRoom(slug) {
-    if (!name) return  // auth/me fetch not yet resolved — LobbyPanel disables buttons when username is empty
-    navigate(`/chat/${slug}`, { state: { username: name, userId } })
+    if (!user) return  // auth/me fetch not yet resolved — LobbyPanel disables buttons when username is empty
+    navigate(`/chat/${slug}`, { state: { username: user.username, userId: user.id } })
   }
 
   // ── Lobby view (no roomId) ────────────────────────────────────────────────
@@ -166,10 +134,10 @@ export default function Chat() {
       <>
         <NavbarComponent />
         <div className="chat-layout">
-          {userId && (
+          {user && (
             <FriendsSidebar
-              userId={userId}
-              username={name}
+              userId={user.id}
+              username={user.username}
               onViewProfile={(uname, uid) =>
                 setProfileTarget({ username: uname, userId: uid ?? null })
               }
@@ -178,15 +146,13 @@ export default function Chat() {
           <LobbyPanel
             compact={false}
             onEnter={handleEnterRoom}
-            username={name}
-            token={auth.access_token}
           />
         </div>
-        {profileTarget && (
+        {profileTarget && user && (
           <UserProfileModal
             username={profileTarget.username}
             userId={profileTarget.userId}
-            currentUserId={userId}
+            currentUserId={user.id}
             onClose={() => setProfileTarget(null)}
             onChat={handleChatFromModal}
           />
@@ -203,10 +169,10 @@ export default function Chat() {
     <>
       <NavbarComponent />
       <div className="chat-layout">
-        {userId && (
+        {user && (
           <FriendsSidebar
-            userId={userId}
-            username={name}
+            userId={user.id}
+            username={user.username}
             onViewProfile={(uname, uid) =>
               setProfileTarget({ username: uname, userId: uid ?? null })
             }
@@ -283,19 +249,17 @@ export default function Chat() {
             </code>
           </p>
         </div>
-        <LobbyPanel
+       <LobbyPanel
           compact={true}
           onEnter={handleEnterRoom}
-          username={name}
-          token={auth.access_token}
         />
       </div>
 
-      {profileTarget && (
+      {profileTarget && user && (
         <UserProfileModal
           username={profileTarget.username}
           userId={profileTarget.userId}
-          currentUserId={userId}
+          currentUserId={user.id}
           onClose={() => setProfileTarget(null)}
           onChat={handleChatFromModal}
         />

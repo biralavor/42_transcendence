@@ -3,6 +3,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import Tournament from './Tournament'
 import { apiCall, apiJson } from '../utils/apiClient'
+import { createWsClient } from '../utils/wsClient'
 
 let wsHandlers = {}
 const mockWsClient = {
@@ -40,13 +41,13 @@ function mockOk(data) {
   }
 }
 
-function makeTournament(participantIds) {
+function makeTournament(participantIds, status = 'open') {
   return {
     id: 99,
     name: 'Spring Cup',
     creator_id: 1,
     max_participants: 4,
-    status: 'open',
+    status,
     created_at: '2026-04-21T00:00:00Z',
     participants: participantIds.map((userId, index) => ({
       user_id: userId,
@@ -106,6 +107,7 @@ describe('Tournament page realtime sync', () => {
     renderTournamentPage()
 
     await screen.findByText(/1 \/ 4 participants/i)
+    await waitFor(() => expect(createWsClient).toHaveBeenCalled())
 
     await act(async () => {
       await wsHandlers.onMessage?.({
@@ -117,6 +119,77 @@ describe('Tournament page realtime sync', () => {
     await waitFor(() => {
       expect(screen.getByText(/2 \/ 4 participants/i)).toBeInTheDocument()
     })
+  })
+
+  it('does not open websocket for completed tournaments', async () => {
+    apiCall.mockImplementation(async (url) => {
+      if (url === '/api/users/auth/me') {
+        return mockOk({ id: 1, username: 'owner' })
+      }
+      if (url === '/api/game/tournaments/99') {
+        return mockOk(makeTournament([1, 2, 3, 4], 'complete'))
+      }
+      if (url.startsWith('/api/users/profile/')) {
+        const userId = url.split('/').pop()
+        return mockOk({ username: `user-${userId}`, display_name: `User ${userId}`, avatar_url: null })
+      }
+      throw new Error(`Unexpected URL in test: ${url}`)
+    })
+
+    renderTournamentPage()
+
+    await screen.findByText(/4 \/ 4 participants/i)
+
+    expect(createWsClient).not.toHaveBeenCalled()
+  })
+
+  it('opens websocket for in-progress tournaments', async () => {
+    apiCall.mockImplementation(async (url) => {
+      if (url === '/api/users/auth/me') {
+        return mockOk({ id: 1, username: 'owner' })
+      }
+      if (url === '/api/game/tournaments/99') {
+        return mockOk(makeTournament([1, 2, 3, 4], 'in_progress'))
+      }
+      if (url.startsWith('/api/users/profile/')) {
+        const userId = url.split('/').pop()
+        return mockOk({ username: `user-${userId}`, display_name: `User ${userId}`, avatar_url: null })
+      }
+      throw new Error(`Unexpected URL in test: ${url}`)
+    })
+
+    renderTournamentPage()
+
+    await screen.findByText(/4 \/ 4 participants/i)
+
+    await waitFor(() => {
+      expect(createWsClient).toHaveBeenCalledWith(
+        expect.stringContaining('/api/game/ws/tournament/99?token=test-token'),
+        expect.any(Object),
+      )
+    })
+  })
+
+  it('does not open websocket for active tournaments when current user is not a participant', async () => {
+    apiCall.mockImplementation(async (url) => {
+      if (url === '/api/users/auth/me') {
+        return mockOk({ id: 9, username: 'former-player' })
+      }
+      if (url === '/api/game/tournaments/99') {
+        return mockOk(makeTournament([1, 2, 3, 4], 'in_progress'))
+      }
+      if (url.startsWith('/api/users/profile/')) {
+        const userId = url.split('/').pop()
+        return mockOk({ username: `user-${userId}`, display_name: `User ${userId}`, avatar_url: null })
+      }
+      throw new Error(`Unexpected URL in test: ${url}`)
+    })
+
+    renderTournamentPage()
+
+    await screen.findByText(/4 \/ 4 participants/i)
+
+    expect(createWsClient).not.toHaveBeenCalled()
   })
 
   it('polls and refreshes participants without websocket events', async () => {
@@ -231,6 +304,7 @@ describe('Tournament page realtime sync', () => {
 
     renderTournamentPage()
     await screen.findByText(/2 \/ 4 participants/i)
+    await waitFor(() => expect(createWsClient).toHaveBeenCalled())
 
     await act(async () => {
       await wsHandlers.onMessage?.({
@@ -263,6 +337,7 @@ describe('Tournament page realtime sync', () => {
 
     renderTournamentPage()
     await screen.findByText(/2 \/ 4 participants/i)
+    await waitFor(() => expect(createWsClient).toHaveBeenCalled())
 
     await act(async () => {
       await wsHandlers.onMessage?.({

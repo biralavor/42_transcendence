@@ -285,3 +285,52 @@ async def test_history_pagination_metadata_clamps_out_of_range_page(db):
     # The query CTE clamps `page` to last_page; verify that contract.
     assert page.page <= page.last_page
     assert page.per_page == 10
+
+
+@pytest.mark.asyncio
+async def test_history_opponent_display_name_falls_back_to_username_when_null(db):
+    """opponent_display_name must equal opponent's username when display_name is NULL.
+
+    Users inserted by this fixture have no display_name (NULL). The COALESCE in
+    paged_matches_with_opponent_display_name must substitute the username so the
+    frontend never receives an empty / null player-card name.
+    """
+    match = await create_match(db, player1_id=70001, player2_id=70002)
+    await finish_match(db, match.id, winner_id=70001, score_p1=10, score_p2=4)
+
+    page = await get_match_history_paginated(
+        search_for={
+            'player_id': 70001, 'page': 0, 'limit': 10,
+            'result': None, 'date_from': None, 'date_to': None,
+        },
+        sort_assoc=None,
+        session=db,
+    )
+    row = next((r for r in page.results if r.match_id == match.id), None)
+    assert row is not None
+    assert row.opponent_display_name == 'hist_user_70002', (
+        f"Expected username fallback 'hist_user_70002', got {row.opponent_display_name!r}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_history_opponent_display_name_uses_set_display_name(db):
+    """opponent_display_name must return the actual display_name when it is set."""
+    await db.execute(
+        text("UPDATE users SET display_name = 'Bobby Tables' WHERE id = 70002")
+    )
+
+    match = await create_match(db, player1_id=70001, player2_id=70002)
+    await finish_match(db, match.id, winner_id=70001, score_p1=7, score_p2=3)
+
+    page = await get_match_history_paginated(
+        search_for={
+            'player_id': 70001, 'page': 0, 'limit': 10,
+            'result': None, 'date_from': None, 'date_to': None,
+        },
+        sort_assoc=None,
+        session=db,
+    )
+    row = next((r for r in page.results if r.match_id == match.id), None)
+    assert row is not None
+    assert row.opponent_display_name == 'Bobby Tables'
