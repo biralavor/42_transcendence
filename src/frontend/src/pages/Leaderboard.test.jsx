@@ -7,17 +7,18 @@ vi.mock('../Components/Navbar', () => ({
   default: () => <div data-testid="navbar" />,
 }))
 
+// Mock the useUser hook
+const mockUseUser = vi.fn()
+vi.mock('../context/userContext', () => ({
+  useUser: () => mockUseUser(),
+  UserProvider: ({ children }) => <>{children}</>,
+}))
+
 // Helper for the post-Task-7 fetch flow:
 //   1. /api/users/auth/me            (returns the caller's user_id)
 //   2. /api/game/leaderboard?...     (single fetch with embedded xp/level)
 function mockLeaderboardBoot({ results = [], page = 0, last_page = 0, total = 0 } = {}) {
   vi.spyOn(global, 'fetch')
-    .mockResolvedValueOnce(
-      new Response(JSON.stringify({ id: 5001, username: 'alice' }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      })
-    )
     .mockResolvedValueOnce(
       new Response(
         JSON.stringify({
@@ -58,6 +59,7 @@ describe('Leaderboard subtitle captions', () => {
     sessionStorage.setItem('access_token', 'fake-token')
     sessionStorage.setItem('refresh_token', 'fake-refresh-token')
     sessionStorage.setItem('token_type', 'bearer')
+    mockUseUser.mockReturnValue({user: {id: 5001, display_name: 'Alice'}, token: null})
   })
   afterEach(() => {
     vi.restoreAllMocks()
@@ -97,6 +99,7 @@ describe('Leaderboard fetch flow', () => {
     sessionStorage.setItem('access_token', 'fake-token')
     sessionStorage.setItem('refresh_token', 'fake-refresh-token')
     sessionStorage.setItem('token_type', 'bearer')
+    mockUseUser.mockReturnValue({user: {id: 5001, display_name: 'Alice'}, token: null})
   })
   afterEach(() => {
     vi.restoreAllMocks()
@@ -108,7 +111,6 @@ describe('Leaderboard fetch flow', () => {
     renderLeaderboard()
     await waitFor(() => {
       const calls = global.fetch.mock.calls.map(c => c[0])
-      expect(calls.some(url => url.includes('/api/users/auth/me'))).toBe(true)
       expect(calls.some(url =>
         url.includes('/api/game/leaderboard') &&
         url.includes('order=xp%3Adesc') &&
@@ -135,6 +137,7 @@ describe('Leaderboard sort toggle', () => {
     sessionStorage.setItem('access_token', 'fake-token')
     sessionStorage.setItem('refresh_token', 'fake-refresh-token')
     sessionStorage.setItem('token_type', 'bearer')
+    mockUseUser.mockReturnValue({user: {id: 5001, display_name: 'Alice'}, token: null})
   })
   afterEach(() => {
     vi.restoreAllMocks()
@@ -187,6 +190,7 @@ describe('Leaderboard pagination', () => {
     sessionStorage.setItem('access_token', 'fake-token')
     sessionStorage.setItem('refresh_token', 'fake-refresh-token')
     sessionStorage.setItem('token_type', 'bearer')
+    mockUseUser.mockReturnValue({user: {id: 5001, display_name: 'Alice'}, token: null})
   })
   afterEach(() => {
     vi.restoreAllMocks()
@@ -206,11 +210,7 @@ describe('Leaderboard pagination', () => {
 
   it('shows "Page X of Y · Z players total" footer', async () => {
     vi.spyOn(global, 'fetch')
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ id: 5001, username: 'alice' }), {
-          status: 200, headers: { 'Content-Type': 'application/json' },
-        })
-      )
+
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
@@ -233,11 +233,7 @@ describe('Leaderboard pagination', () => {
 
   it('clicking Next increments the page query and re-fetches', async () => {
     vi.spyOn(global, 'fetch')
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ id: 5001, username: 'alice' }), {
-          status: 200, headers: { 'Content-Type': 'application/json' },
-        })
-      )
+
       // First page response (last_page > 0 so Next is enabled)
       .mockResolvedValueOnce(
         new Response(
@@ -284,6 +280,7 @@ describe('Leaderboard current-user highlight', () => {
     sessionStorage.setItem('access_token', 'fake-token')
     sessionStorage.setItem('refresh_token', 'fake-refresh-token')
     sessionStorage.setItem('token_type', 'bearer')
+    mockUseUser.mockReturnValue({user: {id: 5001, display_name: 'Alice'}, token: null})
   })
   afterEach(() => {
     vi.restoreAllMocks()
@@ -324,7 +321,9 @@ describe('Leaderboard player column', () => {
     sessionStorage.setItem('access_token', 'fake-token')
     sessionStorage.setItem('refresh_token', 'fake-refresh-token')
     sessionStorage.setItem('token_type', 'bearer')
+    mockUseUser.mockReturnValue({user: {id: 5042 }, token: 'fake-token' })
   })
+
   afterEach(() => {
     vi.restoreAllMocks()
     sessionStorage.clear()
@@ -379,6 +378,7 @@ describe('Leaderboard sort toggle accessibility (aria-pressed)', () => {
     sessionStorage.setItem('access_token', 'fake-token')
     sessionStorage.setItem('refresh_token', 'fake-refresh-token')
     sessionStorage.setItem('token_type', 'bearer')
+    mockUseUser.mockReturnValue({user: null, token: null})
   })
   afterEach(() => {
     vi.restoreAllMocks()
@@ -435,6 +435,7 @@ describe('Leaderboard pagination stability (tie-breaker columns)', () => {
     sessionStorage.setItem('access_token', 'fake-token')
     sessionStorage.setItem('refresh_token', 'fake-refresh-token')
     sessionStorage.setItem('token_type', 'bearer')
+    mockUseUser.mockReturnValue({user: null, token: null})
   })
   afterEach(() => {
     vi.restoreAllMocks()
@@ -493,6 +494,7 @@ describe('Leaderboard auth/me on public route (skipRefreshOn401)', () => {
     sessionStorage.setItem('access_token', 'fake-token')
     sessionStorage.setItem('refresh_token', 'fake-refresh-token')
     sessionStorage.setItem('token_type', 'bearer')
+    mockUseUser.mockReturnValue({user: null, token: null})
   })
   afterEach(() => {
     vi.restoreAllMocks()
@@ -503,7 +505,6 @@ describe('Leaderboard auth/me on public route (skipRefreshOn401)', () => {
     // First call: /auth/me 401 (logged-out visitor)
     // Second call: /api/game/leaderboard 200 (page should still render)
     vi.spyOn(global, 'fetch')
-      .mockResolvedValueOnce(new Response('Unauthorized', { status: 401 }))
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({

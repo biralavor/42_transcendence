@@ -1,20 +1,25 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import LobbyPanel from './LobbyPanel'
+import { UserProvider } from '../context/userContext'
 
-const TOKEN = 'test-token'
-const USERNAME = 'alice'
+// Mock the useUser hook
+const mockUseUser = vi.fn()
+vi.mock('../context/userContext', () => ({
+  useUser: () => mockUseUser(),
+  UserProvider: ({ children }) => <>{children}</>,
+}))
 
 function renderLobby(props = {}) {
   const onEnter = vi.fn()
   render(
-    <LobbyPanel
-      compact={false}
-      onEnter={onEnter}
-      username={USERNAME}
-      token={TOKEN}
-      {...props}
-    />
+    <UserProvider>
+      <LobbyPanel
+        compact={false}
+        onEnter={onEnter}
+        {...props}
+      />
+    </UserProvider>
   )
   return { onEnter }
 }
@@ -30,6 +35,10 @@ describe('LobbyPanel', () => {
   beforeEach(() => {
     vi.useRealTimers()
     vi.restoreAllMocks()
+    mockUseUser.mockReturnValue({
+      user: { id: 1, username: 'Alice' },
+      token: 'fake-token',
+    })
   })
 
   it('fetches rooms on mount and renders the list', async () => {
