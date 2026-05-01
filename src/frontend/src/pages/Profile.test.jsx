@@ -43,7 +43,6 @@ function defaultProfile({ userId, username, avatarUrl }) {
     id: userId,
     username,
     display_name: username === 'alice' ? 'Alice' : username,
-    dark_mode: false,
     avatar_url: avatarUrl,
     bio: '',
     status: 'online',
@@ -547,7 +546,6 @@ describe('Profile page (general)', () => {
             id: 7,
             username: 'bruno',
             display_name: 'Bruno',
-            dark_mode: false,
             avatar_url: null,
             bio: 'visitor profile',
             status: 'online',
@@ -712,17 +710,15 @@ describe('Profile page (general)', () => {
     })
   })
 
-  it('Save profile sends PUT with display name, bio and dark mode', async () => {
+  it('Save profile sends PUT with display name and bio', async () => {
     mockProfileBoot()
     renderProfile()
 
     const displayInput = await screen.findByLabelText(/display name/i)
     const bioInput = screen.getByLabelText(/^bio$/i)
-    const darkToggle = screen.getByLabelText(/enable dark mode/i)
 
     fireEvent.change(displayInput, { target: { value: 'Renamed' } })
     fireEvent.change(bioInput, { target: { value: 'fresh bio' } })
-    fireEvent.click(darkToggle)
 
     global.fetch.mockResolvedValueOnce(
       new Response(JSON.stringify({}), {
@@ -745,7 +741,6 @@ describe('Profile page (general)', () => {
     expect(JSON.parse(putCall[1].body)).toEqual({
       display_name: 'Renamed',
       bio: 'fresh bio',
-      dark_mode: true,
     })
     expect(putCall[1].headers?.['Content-Type']).toBe('application/json')
   })
