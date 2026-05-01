@@ -9,7 +9,7 @@ const mockSetFontSize = vi.fn()
 const mockSetLineWidth = vi.fn()
 const mockLine = vi.fn()
 
-const docInstance = {
+const mockDocInstance = {
   save: mockSave,
   text: mockText,
   addImage: mockAddImage,
@@ -24,7 +24,7 @@ const docInstance = {
 }
 
 vi.mock('jspdf', () => ({
-  jsPDF: vi.fn(() => docInstance),
+  jsPDF: vi.fn(() => mockDocInstance),
 }))
 
 import { exportAdminPdf } from './adminPdfExport'

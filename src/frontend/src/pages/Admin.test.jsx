@@ -245,7 +245,9 @@ describe('Admin page', () => {
     const button = screen.getByRole('button', { name: /Export PDF/i })
     await userEvent.click(button)
 
-    expect(mockExportAdminPdf).toHaveBeenCalledTimes(1)
+    await waitFor(() => {
+      expect(mockExportAdminPdf).toHaveBeenCalledTimes(1)
+    })
     const arg = mockExportAdminPdf.mock.calls[0][0]
     expect(arg.stats).toMatchObject({
       range_start: payload.range_start,

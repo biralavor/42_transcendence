@@ -36,9 +36,12 @@ function drawTotals(doc, stats, y) {
 
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(11)
-  doc.text(`Active users: ${stats.active_users}`, PAGE_MARGIN, y); y += LINE_HEIGHT
-  doc.text(`Games: ${stats.games_total}`, PAGE_MARGIN, y); y += LINE_HEIGHT
-  doc.text(`Messages: ${stats.messages_total}`, PAGE_MARGIN, y); y += LINE_HEIGHT * 1.5
+  doc.text(`Active users: ${stats.active_users}`, PAGE_MARGIN, y)
+  y += LINE_HEIGHT
+  doc.text(`Games: ${stats.games_total}`, PAGE_MARGIN, y)
+  y += LINE_HEIGHT
+  doc.text(`Messages: ${stats.messages_total}`, PAGE_MARGIN, y)
+  y += LINE_HEIGHT * 1.5
   return y
 }
 

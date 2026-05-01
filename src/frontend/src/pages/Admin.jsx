@@ -7,7 +7,6 @@ import {
   MessagesPerDayChart,
 } from '../Components/ActivityCharts'
 import { apiCall } from '../utils/apiClient'
-import { exportAdminPdf } from '../utils/adminPdfExport'
 import './Admin.css'
 
 const ADMIN_POLL_INTERVAL_MS = 5000
@@ -57,8 +56,9 @@ export default function Admin() {
   const gamesChartRef = useRef(null)
   const messagesChartRef = useRef(null)
 
-  function handleExportPdf() {
+  async function handleExportPdf() {
     if (!stats) return
+    const { exportAdminPdf } = await import('../utils/adminPdfExport')
     const gamesCanvas = gamesChartRef.current?.querySelector('canvas') ?? null
     const messagesCanvas = messagesChartRef.current?.querySelector('canvas') ?? null
     exportAdminPdf({ stats, gamesCanvas, messagesCanvas })
