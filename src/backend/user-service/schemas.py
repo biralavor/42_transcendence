@@ -8,6 +8,12 @@ def _coalesce_display_name(display_name: Optional[str], username: str) -> str:
         return display_name.strip()
     return username
 
+def _coalesce_display_name(display_name: Optional[str], username: str) -> str:
+    """Return username when display_name is empty/whitespace, matching the SQL COALESCE pattern."""
+    if display_name and display_name.strip():
+        return display_name.strip()
+    return username
+
 
 class Login(BaseModel):
     identifier: str
