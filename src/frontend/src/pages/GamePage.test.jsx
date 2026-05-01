@@ -66,6 +66,15 @@ const remoteState = {
   opponent:    { id: 2, username: 'Bob',   avatar_url: null },
 }
 
+const tournamentState = {
+  currentUser: { id: 1, username: 'Alice', avatar_url: null },
+  opponent: { id: 2, username: 'Bob', avatar_url: null },
+  player1_id: 1,
+  player2_id: 2,
+  tournamentId: 99,
+  matchId: 7,
+}
+
 describe('GamePage game over overlay', () => {
   beforeEach(() => {
     apiJson.mockRejectedValue(new Error('no server in tests'))
@@ -126,6 +135,9 @@ describe('GamePage game over overlay', () => {
     // João should see YOU LOST, not YOU WON
     expect(await screen.findByRole('heading', { name: /you lost/i })).toBeInTheDocument()
     expect(screen.getByTestId('winner-name').textContent).toBe('João')
+    expect(apiJson.mock.calls.some(([url]) =>
+      url.includes('/api/game/tournaments/99/matches/7/result')
+    )).toBe(false)
   })
 
   it('skips profile fetch for player2 in AI games (player2Id === 0)', async () => {
@@ -150,6 +162,63 @@ describe('GamePage game over overlay', () => {
     await screen.findByRole('heading', { name: /you won/i })
     expect(screen.getByTestId('p1-name').textContent).toBe('alice')
     expect(screen.getByTestId('p2-name').textContent).toBe('bob')
+  })
+
+  it('does not submit tournament results from the game page client', async () => {
+    apiJson.mockImplementation((url) => {
+      if (url.includes('/auth/me')) {
+        return Promise.resolve({ id: 1, username: 'alice', display_name: 'Alice' })
+      }
+      if (url.includes('/profile/')) {
+        return Promise.reject(new Error('profile ignored'))
+      }
+      if (url.includes('/api/game/tournaments/99/matches/7/result')) {
+        return Promise.resolve({})
+      }
+      return Promise.reject(new Error(`unexpected url: ${url}`))
+    })
+
+    renderGamePage(tournamentState)
+    await act(async () => {})
+
+    fireEvent.click(screen.getByText('Simulate Game End'))
+
+    expect(await screen.findByRole('heading', { name: /you won/i })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('Simulate Game End'))
+
+    const resultCalls = apiJson.mock.calls.filter(([url]) =>
+      url.includes('/api/game/tournaments/99/matches/7/result')
+    )
+    expect(resultCalls).toHaveLength(0)
+  })
+
+  it('does not submit tournament result from the losing client', async () => {
+    apiJson.mockImplementation((url) => {
+      if (url.includes('/auth/me')) {
+        return Promise.resolve({ id: 2, username: 'bob', display_name: 'Bob' })
+      }
+      if (url.includes('/profile/')) {
+        return Promise.reject(new Error('profile ignored'))
+      }
+      if (url.includes('/api/game/tournaments/99/matches/7/result')) {
+        return Promise.resolve({})
+      }
+      return Promise.reject(new Error(`unexpected url: ${url}`))
+    })
+
+    renderGamePage({
+      ...tournamentState,
+      currentUser: { id: 2, username: 'Bob', avatar_url: null },
+    })
+    await act(async () => {})
+
+    fireEvent.click(screen.getByText('Simulate Game End'))
+
+    expect(await screen.findByRole('heading', { name: /you lost/i })).toBeInTheDocument()
+    expect(apiJson.mock.calls.some(([url]) =>
+      url.includes('/api/game/tournaments/99/matches/7/result')
+    )).toBe(false)
   })
 })
 
