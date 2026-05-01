@@ -6,7 +6,7 @@ Covers the endpoints NOT already tested by test_service.py:
   - DELETE /block/{user_id}
   - GET /blocked
   - POST /rooms (create_room)
-  - GET /rooms (list_live_rooms)
+  - GET /rooms (list_public_rooms)
   - GET /room/{room_slug}/active
 
 The /dm/{friend_id} endpoint is covered by test_service.py.
@@ -297,7 +297,7 @@ async def test_get_rooms_returns_list_from_persistence():
         {"room_name": "general-2", "active_connections": 1},
     ]
     try:
-        with patch("main.list_live_rooms", new=AsyncMock(return_value=fake_rooms)):
+        with patch("main.list_public_rooms", new=AsyncMock(return_value=fake_rooms)):
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 resp = await client.get(
                     "/rooms",
@@ -314,7 +314,7 @@ async def test_get_rooms_returns_empty_list_when_no_rooms():
     session = _make_session()
     _override_db(session)
     try:
-        with patch("main.list_live_rooms", new=AsyncMock(return_value=[])):
+        with patch("main.list_public_rooms", new=AsyncMock(return_value=[])):
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 resp = await client.get(
                     "/rooms",

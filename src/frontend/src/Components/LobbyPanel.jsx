@@ -23,9 +23,13 @@ export default function LobbyPanel({
       return
     }
 
+    let isMounted = true
+    let latestRequestId = 0
+    let intervalId = null
     const controllers = new Set()
 
     async function fetchRooms(showLoading = false) {
+      const requestId = ++latestRequestId
       const controller = new AbortController()
       controllers.add(controller)
       if (showLoading) {
@@ -39,27 +43,35 @@ export default function LobbyPanel({
         })
         if (!r.ok) throw new Error(`HTTP ${r.status}`)
         const data = await r.json()
+        if (!isMounted || requestId !== latestRequestId) return
         setRooms(data)
         setFetchError('')
       } catch (err) {
         if (err.name === 'AbortError') return
+        if (!isMounted || requestId !== latestRequestId) return
         if (showLoading) {
           setFetchError('Could not load rooms. Try refreshing.')
         } else {
           console.warn('Could not refresh public rooms:', err)
         }
       } finally {
-        setLoading(false)
         controllers.delete(controller)
+        if (isMounted && showLoading && requestId === latestRequestId) {
+          setLoading(false)
+        }
       }
     }
 
-    fetchRooms(true)
-    const intervalId = refreshIntervalMs > 0
-      ? window.setInterval(() => fetchRooms(false), refreshIntervalMs)
-      : null
+    async function startPolling() {
+      await fetchRooms(true)
+      if (!isMounted || refreshIntervalMs <= 0) return
+      intervalId = window.setInterval(() => fetchRooms(false), refreshIntervalMs)
+    }
+
+    startPolling()
 
     return () => {
+      isMounted = false
       if (intervalId) window.clearInterval(intervalId)
       controllers.forEach(controller => controller.abort())
       controllers.clear()

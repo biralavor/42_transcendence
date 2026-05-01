@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import LobbyPanel from './LobbyPanel'
 
 const TOKEN = 'test-token'
@@ -19,8 +19,18 @@ function renderLobby(props = {}) {
   return { onEnter }
 }
 
+async function flushPromises() {
+  await act(async () => {
+    await Promise.resolve()
+    await Promise.resolve()
+  })
+}
+
 describe('LobbyPanel', () => {
-  beforeEach(() => vi.restoreAllMocks())
+  beforeEach(() => {
+    vi.useRealTimers()
+    vi.restoreAllMocks()
+  })
 
   it('fetches rooms on mount and renders the list', async () => {
     vi.spyOn(global, 'fetch').mockResolvedValueOnce(
@@ -60,6 +70,7 @@ describe('LobbyPanel', () => {
   })
 
   it('refreshes room counts while the lobby stays mounted', async () => {
+    vi.useFakeTimers()
     vi.spyOn(global, 'fetch')
       .mockResolvedValueOnce(
         new Response(
@@ -74,10 +85,16 @@ describe('LobbyPanel', () => {
         )
       )
 
-    renderLobby({ refreshIntervalMs: 10 })
+    renderLobby({ refreshIntervalMs: 5000 })
 
-    await waitFor(() => expect(screen.getByText('(2)')).toBeInTheDocument())
-    await waitFor(() => expect(screen.getByText('(12)')).toBeInTheDocument())
+    await flushPromises()
+    expect(screen.getByText('(2)')).toBeInTheDocument()
+
+    await act(async () => {
+      vi.advanceTimersByTime(5000)
+    })
+    await flushPromises()
+    expect(screen.getByText('(12)')).toBeInTheDocument()
   })
 
   it('calls onEnter with room name when a room button is clicked', async () => {
