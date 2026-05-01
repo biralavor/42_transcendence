@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react'
 import './LobbyPanel.css'
+import { useUser } from '../context/userContext'
+
 
 const ROOM_REFRESH_INTERVAL_MS = 5000
 
 export default function LobbyPanel({
   compact = false,
   onEnter,
-  username,
-  token,
   refreshIntervalMs = ROOM_REFRESH_INTERVAL_MS,
 }) {
   const [rooms, setRooms] = useState([])
@@ -16,6 +16,7 @@ export default function LobbyPanel({
   const [newRoomName, setNewRoomName] = useState('')
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState('')
+  const { user, token } = useUser()
 
   useEffect(() => {
     if (!token) {
@@ -76,11 +77,11 @@ export default function LobbyPanel({
       controllers.forEach(controller => controller.abort())
       controllers.clear()
     }
-  }, [token, refreshIntervalMs])
+  }, [token, refreshIntervalMs, user])
 
   async function handleCreate(e) {
     e.preventDefault()
-    if (!newRoomName.trim() || !token || !username) return
+    if (!newRoomName.trim() || !token || !user) return
     setCreating(true)
     setCreateError('')
     try {
@@ -133,7 +134,7 @@ export default function LobbyPanel({
                 className="lobby-panel__room-btn"
                 onClick={() => onEnter(room.room_name)}
                 aria-label={`${room.room_name}, ${room.active_connections} users`}
-                disabled={!username}
+                disabled={!user}
               >
                 <span className="lobby-panel__room-name">{room.room_name}</span>
                 <span className="lobby-panel__room-count">({room.active_connections})</span>
@@ -159,7 +160,7 @@ export default function LobbyPanel({
         <button
           type="submit"
           className="arcade-btn arcade-btn-primary"
-          disabled={creating || !newRoomName.trim() || !token || !username}
+          disabled={creating || !newRoomName.trim() || !token || !user}
         >
           {creating ? 'Creating…' : 'Create'}
         </button>
