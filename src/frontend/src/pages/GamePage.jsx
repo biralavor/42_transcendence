@@ -273,6 +273,7 @@ export default function GamePage() {
                   gameId={roomId}
                   player1Id={player1Id}
                   player2Id={player2Id}
+                  matchId={matchId}
                   onGameEnd={handleGameEnd}
                   spectator={isSpectator}
                   onSpectatorCount={setSpectatorCount}

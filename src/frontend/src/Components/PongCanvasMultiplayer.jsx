@@ -27,6 +27,7 @@ function PongCanvasMultiplayer(props) {
   const gameId = props?.gameId || 'default-game'
   const player1Id = props?.player1Id
   const player2Id = props?.player2Id
+  const matchId = props?.matchId
   const onGameEnd = props?.onGameEnd || (() => { })
   const spectator = Boolean(props?.spectator)
   const onSpectatorCount = props?.onSpectatorCount || (() => { })
@@ -110,11 +111,13 @@ function PongCanvasMultiplayer(props) {
       // Spectators must NOT send game_start — server's spectator branch closes
       // 4003 on any inbound message. Players still need it to bootstrap.
       if (!spectator) {
-        ws.send(JSON.stringify({
+        const startPayload = {
           type: 'game_start',
           player1_id: parseInt(player1Id, 10),
           player2_id: parseInt(player2Id, 10),
-        }))
+        }
+        if (matchId) startPayload.match_id = parseInt(matchId, 10)
+        ws.send(JSON.stringify(startPayload))
       }
     }
 
