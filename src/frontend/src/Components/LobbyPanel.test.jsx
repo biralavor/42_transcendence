@@ -33,6 +33,7 @@ async function flushPromises() {
 
 describe('LobbyPanel', () => {
   beforeEach(() => {
+    vi.useRealTimers()
     vi.restoreAllMocks()
     mockUseUser.mockReturnValue({
       user: { id: 1, username: 'Alice' },
