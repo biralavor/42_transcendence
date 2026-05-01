@@ -13,6 +13,8 @@ const TYPE_LABELS = {
     tournament_match_available: 'Tournament Match',
     tournament_complete: 'Tournament Complete',
     unread_chat: 'Unread Chat',
+    game_achievement: 'Achievement Unlocked',
+    user_achievement: 'Achievement Unlocked',
 }
 
 // Format datetime to relative or short format
@@ -59,6 +61,9 @@ function getNotificationRoute(notif) {
         }
         case 'unread_chat':
             return `/chat/${notif.room_slug}`
+        case 'game_achievement':
+        case 'user_achievement':
+            return '/profile'
         default:
             return null
     }
