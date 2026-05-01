@@ -21,6 +21,8 @@ import Tournaments from './pages/Tournaments'
 import Admin from './pages/Admin'
 import ActivityDashboard from './pages/ActivityDashboard'
 import Search from './pages/Search'
+import Privacy from './pages/Privacy'
+import Terms from './pages/Terms'
 
 export default function App() {
   useEffect(() => {
@@ -148,6 +150,9 @@ export default function App() {
         />
 
         <Route path="/forgot-password" element={<ForgotPassword />} />
+
+        <Route path="/privacy" element={<Privacy />} />
+        <Route path="/terms" element={<Terms />} />
       </Routes>
       <GameInviteModal />
     </BrowserRouter>

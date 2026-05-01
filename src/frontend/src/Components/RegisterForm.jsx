@@ -225,7 +225,10 @@ const RegisterForm = () => {
                 onChange={handleChange}
               />
               <label className="form-check-label" htmlFor="termsCheck">
-                I agree to the Terms of Use
+                I agree to the{' '}
+                <Link to="/terms" target="_blank" rel="noopener noreferrer">
+                  Terms of Use
+                </Link>
               </label>
             </div>
 
@@ -239,7 +242,10 @@ const RegisterForm = () => {
                 onChange={handleChange}
               />
               <label className="form-check-label" htmlFor="privacyCheck">
-                I agree to the Privacy Policy
+                I agree to the{' '}
+                <Link to="/privacy" target="_blank" rel="noopener noreferrer">
+                  Privacy Policy
+                </Link>
               </label>
             </div>
           </div>
