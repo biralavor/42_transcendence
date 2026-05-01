@@ -261,6 +261,78 @@ async def test_tournament_ready_timeout_marks_wo_winner(monkeypatch, seeded_tour
 
 
 @pytest.mark.asyncio
+async def test_game_over_records_tournament_match_result_server_side(monkeypatch):
+    game_id = "tournament-2-match-6"
+    tournament_id = 2
+    match_id = 6
+    tournament_match_id = 50
+
+    ws_router._match_ids[game_id] = match_id
+    ws_router._waiting_room_tournament_context[game_id] = (
+        tournament_id,
+        match_id,
+        tournament_match_id,
+    )
+
+    recorded = {}
+
+    async def fake_record_tournament_match_result(
+        db,
+        tournament_id,
+        match_id,
+        winner_id,
+        score_p1,
+        score_p2,
+    ):
+        recorded.update(
+            {
+                "tournament_id": tournament_id,
+                "match_id": match_id,
+                "winner_id": winner_id,
+                "score_p1": score_p1,
+                "score_p2": score_p2,
+            }
+        )
+        return SimpleNamespace(id=tournament_id), True, []
+
+    async def fake_get_tournament_with_participants(_db, _tournament_id):
+        return SimpleNamespace(id=tournament_id), [], []
+
+    monkeypatch.setattr(ws_router, "AsyncSessionLocal", lambda: _NoopSession())
+    monkeypatch.setattr(
+        ws_router,
+        "record_tournament_match_result",
+        fake_record_tournament_match_result,
+    )
+    monkeypatch.setattr(
+        ws_router,
+        "get_tournament_with_participants",
+        fake_get_tournament_with_participants,
+    )
+    monkeypatch.setattr(ws_router.game_manager, "delete_session", AsyncMock())
+    broadcast_mock = AsyncMock()
+    monkeypatch.setattr(ws_router.manager, "broadcast", broadcast_mock)
+
+    await ws_router._on_game_over(game_id, winner_id=4, score_p1=10, score_p2=6)
+
+    assert recorded == {
+        "tournament_id": tournament_id,
+        "match_id": match_id,
+        "winner_id": 4,
+        "score_p1": 10,
+        "score_p2": 6,
+    }
+    tournament_room = f"tournament_{tournament_id}"
+    broadcast_payloads = [
+        call.args[1]
+        for call in broadcast_mock.await_args_list
+        if call.args[0] == tournament_room
+    ]
+    assert {"type": "tournament_updated", "tournament_id": tournament_id} in broadcast_payloads
+    assert {"type": "tournament_complete", "tournament_id": tournament_id} in broadcast_payloads
+
+
+@pytest.mark.asyncio
 async def test_tournament_ready_timeout_with_no_ready_players(monkeypatch, seeded_tournament):
     tournament_id = seeded_tournament["tournament_id"]
     tournament_match_id = seeded_tournament["tournament_match_id"]

@@ -15,9 +15,14 @@ from shared.ws.manager import ConnectionManager
 from shared.database import AsyncSessionLocal, get_db
 from shared.logging import ws_logger
 from service.persistence import (
+    InvalidWinner,
+    TournamentMatchAlreadyFinished,
+    TournamentMatchNotFound,
+    TournamentNotFound,
     create_match,
     finish_match,
     get_tournament_with_participants,
+    record_tournament_match_result,
     record_tournament_match_timeout_result,
 )
 from service.game_manager import game_manager
@@ -689,10 +694,30 @@ async def _on_game_over(
     forfeit_reason: str | None = None,
 ) -> None:
     """Server-driven callback when a match naturally ends."""
+    tournament_ctx = _waiting_room_tournament_context.get(game_id)
+    tournament_complete = False
+    tournament_matches = []
     try:
         async with AsyncSessionLocal() as db:
             match_id = _match_ids.get(game_id)
-            if match_id is not None:
+            if match_id is not None and tournament_ctx is not None:
+                tournament_id, tournament_match_db_id, _ = tournament_ctx
+                try:
+                    _, tournament_complete, _ = await record_tournament_match_result(
+                        db,
+                        tournament_id,
+                        tournament_match_db_id,
+                        winner_id,
+                        score_p1,
+                        score_p2,
+                    )
+                    refreshed = await get_tournament_with_participants(db, tournament_id)
+                    tournament_matches = refreshed[2] if refreshed is not None else []
+                except TournamentMatchAlreadyFinished:
+                    pass
+                except (TournamentNotFound, TournamentMatchNotFound, InvalidWinner):
+                    pass
+            elif match_id is not None:
                 # finish_match() now skips XP awarding for AI_PLAYER_ID on
                 # either side (see persistence.py), so the previous AI-bypass
                 # raw-UPDATE path is no longer needed and would skip the
@@ -709,6 +734,21 @@ async def _on_game_over(
     except SQLAlchemyError:
         pass  # best-effort
     finally:
+        if tournament_ctx is not None:
+            tournament_id = tournament_ctx[0]
+            if tournament_matches:
+                sync_tournament_ready_timeouts(tournament_id, tournament_matches)
+            tournament_room = f"tournament_{tournament_id}"
+            await manager.broadcast(
+                tournament_room,
+                {"type": "tournament_updated", "tournament_id": tournament_id},
+            )
+            if tournament_complete:
+                await manager.broadcast(
+                    tournament_room,
+                    {"type": "tournament_complete", "tournament_id": tournament_id},
+                )
+
         # Cancel any in-flight disconnect countdown and await its completion so the
         # countdown coroutine fully exits before we proceed with cleanup.
         # Guard: _on_game_over may be called *from* the countdown task itself

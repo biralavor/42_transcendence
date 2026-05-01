@@ -21,7 +21,7 @@ export default function Login() {
   const navigate = useNavigate()
 
   const [formData, setFormData] = useState({
-    username: '',
+    identifier: '',
     password: '',
     rememberMe: false,
   })
@@ -52,7 +52,7 @@ export default function Login() {
       const data = await apiJson('/api/users/auth/login', {
         method: 'POST',
         body: JSON.stringify({
-          username: formData.username,
+          identifier: formData.identifier,
           password: formData.password,
         }),
         skipRefreshOn401: true, // Login endpoint 401 = bad credentials, not expired session
@@ -120,15 +120,15 @@ export default function Login() {
                 <input
                   type="text"
                   className="form-control"
-                  id="floatingUsername"
-                  name="username"
-                  placeholder="Username"
+                  id="floatingIdentifier"
+                  name="identifier"
+                  placeholder="Username or email"
                   autoComplete="username"
-                  value={formData.username}
+                  value={formData.identifier}
                   onChange={handleChange}
                   required
                 />
-                <label htmlFor="floatingUsername">Username</label>
+                <label htmlFor="floatingIdentifier">Username or email</label>
               </div>
 
               <div className="form-floating mb-2 arcade-form-control auth-form-control">
