@@ -42,6 +42,14 @@ _match_id_to_game_id: dict[int, str] = {}
 _disconnected_players: dict[str, int] = {}
 # Maps game_id → asyncio Task running the disconnect countdown
 _disconnect_timers: dict[str, asyncio.Task] = {}
+# Maps game_id → monotonic timestamp when the match finished. Used to refuse
+# stale tab/URL reconnects that would otherwise spawn a ghost session for a
+# match that has already been finalized in the DB. Each "Play Again" gets a
+# fresh room_id (Date.now() suffix in buildInviteRoomId), so retaining a
+# finished room_id forever does not block legitimate rematches. Pruned on
+# insert to keep the dict bounded over the server lifetime.
+_finished_rooms: dict[str, float] = {}
+_FINISHED_ROOM_TTL_SECONDS = 3600.0
 
 DISCONNECT_GRACE_SECONDS = 30
 
@@ -64,6 +72,26 @@ def _bind_match(game_id: str, match_id: int) -> None:
     """Set _match_ids[game_id] = match_id and keep the reverse map consistent."""
     _match_ids[game_id] = match_id
     _match_id_to_game_id[match_id] = game_id
+
+
+def _mark_room_finished(game_id: str) -> None:
+    """Record that the given room's match has been finalized."""
+    now = time.monotonic()
+    cutoff = now - _FINISHED_ROOM_TTL_SECONDS
+    for stale in [gid for gid, ts in _finished_rooms.items() if ts < cutoff]:
+        _finished_rooms.pop(stale, None)
+    _finished_rooms[game_id] = now
+
+
+def _is_room_finished(game_id: str) -> bool:
+    """True if the room was finalized within the retention window."""
+    ts = _finished_rooms.get(game_id)
+    if ts is None:
+        return False
+    if time.monotonic() - ts > _FINISHED_ROOM_TTL_SECONDS:
+        _finished_rooms.pop(game_id, None)
+        return False
+    return True
 
 
 def _unbind_match(game_id: str) -> None:
@@ -422,6 +450,7 @@ async def _handle_waiting_room_timeout(game_id: str) -> None:
     _setup_sessions.pop(game_id, None)
     _cleanup_waiting_room(game_id)
     _waiting_room_timeout_tasks.pop(game_id, None)
+    _mark_room_finished(game_id)
 
 
 def _schedule_waiting_room_timeout(game_id: str) -> None:
@@ -652,7 +681,13 @@ def _infer_waiting_room_players(
     return None, None
 
 
-async def _on_game_over(game_id: str, winner_id: int, score_p1: int, score_p2: int) -> None:
+async def _on_game_over(
+    game_id: str,
+    winner_id: int,
+    score_p1: int,
+    score_p2: int,
+    forfeit_reason: str | None = None,
+) -> None:
     """Server-driven callback when a match naturally ends."""
     try:
         async with AsyncSessionLocal() as db:
@@ -693,14 +728,18 @@ async def _on_game_over(game_id: str, winner_id: int, score_p1: int, score_p2: i
         _setup_sessions.pop(game_id, None)
         _unbind_match(game_id)
         _cleanup_waiting_room(game_id)
+        _mark_room_finished(game_id)
 
         # Broadcast the game over event authoritatively
-        await manager.broadcast(game_id, {
+        payload = {
             "type": "game_over",
             "winner_id": winner_id,
             "score_p1": score_p1,
-            "score_p2": score_p2
-        })
+            "score_p2": score_p2,
+        }
+        if forfeit_reason:
+            payload["forfeit_reason"] = forfeit_reason
+        await manager.broadcast(game_id, payload)
 
 
 # Colocated with the WS router (rather than service/router.py) because it
@@ -724,7 +763,13 @@ async def _disconnect_countdown(game_id: str, winner_id: int) -> None:
         session = game_manager.get_session(game_id)
         if session and session.is_active and manager.active_connections(game_id) > 0:
             try:
-                await _on_game_over(game_id, winner_id, session.score.p1, session.score.p2)
+                await _on_game_over(
+                    game_id,
+                    winner_id,
+                    session.score.p1,
+                    session.score.p2,
+                    forfeit_reason="opponent_disconnected",
+                )
             except Exception:
                 logging.getLogger(__name__).exception(
                     "[DISCONNECT_COUNTDOWN] _on_game_over failed for %s", game_id
@@ -821,6 +866,7 @@ async def _both_disconnect_grace(game_id: str) -> None:
     _unbind_match(game_id)
     _cleanup_waiting_room(game_id)
     _disconnect_timers.pop(game_id, None)
+    _mark_room_finished(game_id)
 
 
 @router.post("/ai", status_code=201, response_model=AiGameResponse)
@@ -957,6 +1003,15 @@ async def game_websocket(websocket: WebSocket, game_id: str, token: str | None =
                     "user lookup failed for credential_id=%s; treating ws caller as anonymous",
                     credential_id, exc_info=True,
                 )
+
+    # ── Refuse stale reconnects to a room whose match already ended. ────────
+    # Without this guard, reopening a tab on a finished match's URL would
+    # spawn a fresh GameSession via the game_start handler — a "ghost" game
+    # with no matches-table row. Each Play Again uses a new room_id (Date.now
+    # suffix in buildInviteRoomId), so this does not block legitimate rematches.
+    if _is_room_finished(game_id) and game_manager.get_session(game_id) is None:
+        await websocket.close(code=4004, reason="Match already ended")
+        return
 
     # ── Classify caller as player vs spectator ──────────────────────────────
     player_ids = _resolve_room_player_ids(game_id)

@@ -114,7 +114,67 @@ describe('PongCanvasMultiplayer — server messages', () => {
       winner_id: 11,
       score_p1: 10,
       score_p2: 7,
+      forfeit_reason: null,
     })
+  })
+
+  it('forwards forfeit_reason when game_over includes it', () => {
+    const onGameEnd = vi.fn()
+    renderComponent({ onGameEnd })
+    const ws = lastSocket()
+    act(() => ws.simulateOpen())
+    act(() => ws.simulateMessage({
+      type: 'game_over',
+      winner_id: 11,
+      score_p1: 10,
+      score_p2: 7,
+      forfeit_reason: 'opponent_disconnected',
+    }))
+    expect(onGameEnd).toHaveBeenCalledWith({
+      winner_id: 11,
+      score_p1: 10,
+      score_p2: 7,
+      forfeit_reason: 'opponent_disconnected',
+    })
+  })
+
+  it('shows the disconnect countdown overlay on opponent_disconnected', () => {
+    renderComponent()
+    const ws = lastSocket()
+    act(() => ws.simulateOpen())
+    act(() => ws.simulateMessage({ type: 'opponent_disconnected', seconds_left: 25 }))
+    expect(screen.getByRole('status')).toBeInTheDocument()
+    expect(screen.getByText('25s')).toBeInTheDocument()
+  })
+
+  it('hides the disconnect countdown overlay on opponent_reconnected', () => {
+    renderComponent()
+    const ws = lastSocket()
+    act(() => ws.simulateOpen())
+    act(() => ws.simulateMessage({ type: 'opponent_disconnected', seconds_left: 20 }))
+    expect(screen.getByRole('status')).toBeInTheDocument()
+    act(() => ws.simulateMessage({ type: 'opponent_reconnected' }))
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  })
+
+  it('hides the disconnect countdown overlay when game_over arrives', () => {
+    const onGameEnd = vi.fn()
+    renderComponent({ onGameEnd })
+    const ws = lastSocket()
+    act(() => ws.simulateOpen())
+    act(() => ws.simulateMessage({ type: 'opponent_disconnected', seconds_left: 10 }))
+    expect(screen.getByRole('status')).toBeInTheDocument()
+    act(() => ws.simulateMessage({ type: 'game_over', winner_id: 11, score_p1: 10, score_p2: 0 }))
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  })
+
+  it('ignores opponent_disconnected when seconds_left is not a finite number', () => {
+    renderComponent()
+    const ws = lastSocket()
+    act(() => ws.simulateOpen())
+    act(() => ws.simulateMessage({ type: 'opponent_disconnected' }))            // missing
+    act(() => ws.simulateMessage({ type: 'opponent_disconnected', seconds_left: 'bad' }))  // string
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
   })
 
   it('does not throw on malformed JSON in onmessage', () => {
