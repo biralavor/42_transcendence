@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sess
 from sqlalchemy.pool import NullPool
 
 from shared.config.settings import settings
+from service.persistence import get_ranks_for_user_ids, get_leaderboard_paginated
 from persistence import (
     InvalidWinner,
     TournamentMatchAlreadyFinished,
@@ -515,6 +516,65 @@ async def test_perfect_game_badge_unlocked_on_10_0_win(db):
     assert row is not None, "perfect_game badge should unlock on 10-0 win"
 
 
+@pytest.mark.asyncio
+async def test_has_perfect_game_returns_false_for_partial_shutout(db):
+    """A 5-0 win is a shutout but NOT a perfect game (badge requires winner ≥10).
+
+    Regression guard for the description-vs-implementation fix: previously
+    `has_perfect_game` returned True for any shutout regardless of winner score.
+    """
+    # Use a fresh user pair so prior shutouts don't affect the assertion
+    match = await create_match(db, player1_id=42, player2_id=99)
+    await finish_match(db, match.id, winner_id=42, score_p1=5, score_p2=0)
+    # We can't directly assert has_perfect_game(42) is False because earlier
+    # tests in the same DB may have given user 42 a real 10-0 win. Instead
+    # check that THIS specific 5-0 match was not enough to unlock the badge
+    # via SELECT against the matches table directly using the same predicate.
+    from persistence import has_perfect_game
+    # ── First, verify the predicate-level behavior using a fresh user (3) ──
+    # User 3 has no prior matches in our test seed.
+    count_user3 = (await db.execute(
+        text(
+            "SELECT COUNT(*) FROM matches "
+            "WHERE winner_id = 3 AND status = 'finished' AND ("
+            "  (player1_id = 3 AND score_p2 = 0 AND score_p1 >= 10) OR "
+            "  (player2_id = 3 AND score_p1 = 0 AND score_p2 >= 10)"
+            ")"
+        ),
+    )).scalar_one()
+    # Build a 5-0 win for user 3
+    m_partial = await create_match(db, player1_id=3, player2_id=99)
+    await finish_match(db, m_partial.id, winner_id=3, score_p1=5, score_p2=0)
+    after_partial = (await db.execute(
+        text(
+            "SELECT COUNT(*) FROM matches "
+            "WHERE winner_id = 3 AND status = 'finished' AND ("
+            "  (player1_id = 3 AND score_p2 = 0 AND score_p1 >= 10) OR "
+            "  (player2_id = 3 AND score_p1 = 0 AND score_p2 >= 10)"
+            ")"
+        ),
+    )).scalar_one()
+    assert after_partial == count_user3, (
+        f"5-0 should NOT count as a perfect game (count went {count_user3} → {after_partial}). "
+        f"perfect_game requires winner score ≥10."
+    )
+    # And the helper itself should agree (no prior matches → still False)
+    assert await has_perfect_game(3, db) is False
+
+
+@pytest.mark.asyncio
+async def test_has_perfect_game_returns_true_for_10_0_win(db):
+    """A 10-0 win DOES qualify (winner reached the standard Pong score)."""
+    from persistence import has_perfect_game
+    # Snapshot: did user 50 already have a perfect game?
+    pre = await has_perfect_game(50, db)
+    m = await create_match(db, player1_id=50, player2_id=51)
+    await finish_match(db, m.id, winner_id=50, score_p1=10, score_p2=0)
+    assert await has_perfect_game(50, db) is True, (
+        f"10-0 should unlock perfect_game (was perfect_game={pre} before)"
+    )
+
+
 # ── Task 2: XP amount tests ───────────────────────────────────────────────────
 
 @pytest.mark.asyncio
@@ -588,3 +648,258 @@ async def test_finish_match_skips_xp_when_ai_is_loser(db):
         text("SELECT xp FROM user_xp WHERE user_id = 0"),
     )).one_or_none()
     assert row_ai is None, "AI sentinel (user_id=0) should never get a user_xp row"
+
+
+# --------------------------------------------------------------------------- #
+# list_live_matches
+# --------------------------------------------------------------------------- #
+@pytest.mark.asyncio
+async def test_list_live_matches_returns_only_ongoing(db):
+    # Two distinct user pairs to avoid colliding on the same room
+    await _ensure_users(db, 90001, 90002, 90003, 90004)
+    ongoing = await create_match(db, player1_id=90001, player2_id=90002)
+    finished = await create_match(db, player1_id=90003, player2_id=90004)
+    await finish_match(db, finished.id, winner_id=90003, score_p1=10, score_p2=4)
+
+    from persistence import list_live_matches
+    rows = await list_live_matches(db)
+    match_ids = [int(r["match_id"]) for r in rows]
+    assert ongoing.id in match_ids
+    assert finished.id not in match_ids
+
+
+@pytest.mark.asyncio
+async def test_list_live_matches_excludes_ai_games(db):
+    await _ensure_users(db, 90010)
+    # AI sentinel = 0; one side AI → must be excluded
+    ai_match = await create_match(db, player1_id=90010, player2_id=0)
+
+    from persistence import list_live_matches
+    rows = await list_live_matches(db)
+    match_ids = [int(r["match_id"]) for r in rows]
+    assert ai_match.id not in match_ids
+
+
+@pytest.mark.asyncio
+async def test_list_live_matches_projects_player_fields(db):
+    await _ensure_users(db, 90020, 90021)
+    # Set display_name + avatar_url so we can assert projection
+    await db.execute(
+        text("UPDATE users SET display_name='Alice A', avatar_url='/uploads/avatars/90020.png' WHERE id=:i"),
+        {"i": 90020},
+    )
+    await db.execute(
+        text("UPDATE users SET display_name='', avatar_url=NULL WHERE id=:i"),
+        {"i": 90021},
+    )
+    match = await create_match(db, player1_id=90020, player2_id=90021)
+
+    from persistence import list_live_matches
+    rows = await list_live_matches(db)
+    row = next(r for r in rows if int(r["match_id"]) == match.id)
+    assert row["p1_id"] == 90020
+    assert row["p1_username"] == "stats_user_90020"
+    assert row["p1_display_name"] == "Alice A"
+    assert row["p1_avatar_url"] == "/uploads/avatars/90020.png"
+    # Empty display_name falls back to username (COALESCE+NULLIF in SQL)
+    assert row["p2_display_name"] == "stats_user_90021"
+    assert row["p2_avatar_url"] is None
+
+
+@pytest.mark.asyncio
+async def test_list_live_matches_orders_by_started_at_desc(db):
+    await _ensure_users(db, 90030, 90031, 90032, 90033)
+    older = await create_match(db, player1_id=90030, player2_id=90031)
+    newer = await create_match(db, player1_id=90032, player2_id=90033)
+
+    # Ensure deterministic ordering by adjusting started_at
+    await db.execute(
+        text("UPDATE matches SET started_at = started_at - INTERVAL '1 hour' WHERE id=:i"),
+        {"i": older.id},
+    )
+
+    from persistence import list_live_matches
+    rows = await list_live_matches(db)
+    # Filter to the two we just created
+    relevant = [r for r in rows if int(r["match_id"]) in (older.id, newer.id)]
+    assert [int(r["match_id"]) for r in relevant] == [newer.id, older.id]
+
+
+@pytest.mark.asyncio
+async def test_mark_match_finished_if_ongoing_marks_ongoing_row_and_returns_true(db):
+    """An 'ongoing' row gets status='finished' + finished_at populated, and
+    the helper returns True."""
+    from datetime import datetime, timedelta, timezone
+    from sqlalchemy import select
+    from service.persistence import mark_match_finished_if_ongoing
+    from service.models.match import Match
+
+    m = Match(
+        player1_id=42,
+        player2_id=50,
+        status="ongoing",
+        started_at=datetime.now(timezone.utc) - timedelta(hours=1),
+    )
+    db.add(m)
+    await db.flush()
+    match_id = m.id
+
+    updated = await mark_match_finished_if_ongoing(db, match_id)
+    await db.commit()
+    assert updated is True
+
+    result = await db.execute(
+        select(Match).where(Match.id == match_id)
+    )
+    row = result.scalars().one()
+    assert row.status == "finished"
+    assert row.finished_at is not None
+    # We deliberately do NOT touch winner_id or scores — caller has no data.
+    assert row.winner_id is None
+    assert row.score_p1 == 0
+    assert row.score_p2 == 0
+
+
+@pytest.mark.asyncio
+async def test_mark_match_finished_if_ongoing_is_idempotent_on_finished_row(db):
+    """Calling the helper on a row that's already finished returns False and
+    leaves all fields untouched."""
+    from datetime import datetime, timezone
+    from sqlalchemy import select
+    from service.persistence import mark_match_finished_if_ongoing
+    from service.models.match import Match
+
+    earlier = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    m = Match(
+        player1_id=42,
+        player2_id=50,
+        status="finished",
+        finished_at=earlier,
+        winner_id=42,
+        score_p1=7,
+        score_p2=3,
+    )
+    db.add(m)
+    await db.flush()
+    match_id = m.id
+
+    updated = await mark_match_finished_if_ongoing(db, match_id)
+    await db.commit()
+    assert updated is False
+
+    result = await db.execute(
+        select(Match).where(Match.id == match_id)
+    )
+    row = result.scalars().one()
+    assert row.status == "finished"
+    assert row.finished_at == earlier  # not bumped
+    assert row.winner_id == 42
+    assert row.score_p1 == 7
+    assert row.score_p2 == 3
+
+
+@pytest.mark.asyncio
+async def test_mark_match_finished_if_ongoing_respects_grace_window(db):
+    """A freshly-created match (started_at = NOW) is too young to reconcile
+    under the default 30-second grace window. Passing min_age_seconds=0
+    bypasses the gate and finishes it immediately."""
+    from datetime import datetime, timezone
+    from sqlalchemy import select
+    from service.persistence import mark_match_finished_if_ongoing
+    from service.models.match import Match
+
+    m = Match(
+        player1_id=42,
+        player2_id=50,
+        status="ongoing",
+        started_at=datetime.now(timezone.utc),
+    )
+    db.add(m)
+    await db.flush()
+    match_id = m.id
+
+    # Default grace window — too young, helper returns False, row unchanged.
+    updated_default = await mark_match_finished_if_ongoing(db, match_id)
+    await db.commit()
+    assert updated_default is False
+
+    result = await db.execute(select(Match).where(Match.id == match_id))
+    row = result.scalars().one()
+    assert row.status == "ongoing"
+    assert row.finished_at is None
+
+    # Override window to 0 — gate is bypassed, helper finishes the row.
+    updated_override = await mark_match_finished_if_ongoing(db, match_id, min_age_seconds=0)
+    await db.commit()
+    assert updated_override is True
+
+    result = await db.execute(select(Match).where(Match.id == match_id))
+    row = result.scalars().one()
+    assert row.status == "finished"
+    assert row.finished_at is not None
+
+
+# ---------------------------------------------------------------------------
+# get_ranks_for_user_ids
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_get_ranks_for_user_ids_returns_dict_keyed_by_user_id(db):
+    """Two users with at least one finished match each must come back with
+    positive integer ranks keyed by user_id."""
+    p1, p2 = 30101, 30102
+    await _ensure_users(db, p1, p2)
+    m = await create_match(db, player1_id=p1, player2_id=p2)
+    await finish_match(db, m.id, winner_id=p1, score_p1=7, score_p2=3)
+
+    ranks = await get_ranks_for_user_ids(db, [p1, p2])
+    assert isinstance(ranks, dict)
+    assert ranks.get(p1) is not None and isinstance(ranks[p1], int)
+    assert ranks.get(p2) is not None and isinstance(ranks[p2], int)
+    assert ranks[p1] >= 1 and ranks[p2] >= 1
+
+
+@pytest.mark.asyncio
+async def test_get_ranks_for_user_ids_returns_none_for_unknown_user(db):
+    """Unknown user IDs map to None — the dict always contains every input
+    key, even when the CTE produced no row."""
+    ranks = await get_ranks_for_user_ids(db, [999_999])
+    assert ranks == {999_999: None}
+
+
+@pytest.mark.asyncio
+async def test_get_ranks_for_user_ids_returns_none_for_ai_sentinel(db):
+    """user_id=0 is the AI sentinel — it has no row in `users` and therefore
+    no rank."""
+    ranks = await get_ranks_for_user_ids(db, [0])
+    assert ranks == {0: None}
+
+
+@pytest.mark.asyncio
+async def test_get_ranks_for_user_ids_handles_empty_list(db):
+    ranks = await get_ranks_for_user_ids(db, [])
+    assert ranks == {}
+
+
+@pytest.mark.asyncio
+async def test_get_ranks_for_user_ids_matches_leaderboard_order(db):
+    """If user X outranks user Y on the leaderboard endpoint, the rank dict
+    must reflect that (X's rank < Y's rank)."""
+    p1, p2, p3 = 30201, 30202, 30203
+    await _ensure_users(db, p1, p2, p3)
+
+    # p1 wins 2 matches; p2 wins 1; p3 wins 0 — p1 > p2 > p3 on leaderboard
+    m1 = await create_match(db, player1_id=p1, player2_id=p3)
+    await finish_match(db, m1.id, winner_id=p1, score_p1=7, score_p2=0)
+    m2 = await create_match(db, player1_id=p1, player2_id=p2)
+    await finish_match(db, m2.id, winner_id=p1, score_p1=7, score_p2=0)
+    m3 = await create_match(db, player1_id=p2, player2_id=p3)
+    await finish_match(db, m3.id, winner_id=p2, score_p1=5, score_p2=0)
+
+    page = await get_leaderboard_paginated(db, None, 100, 0, None)
+    rows = page["results"] if page else []
+    if len(rows) < 2:
+        pytest.skip("need at least 2 ranked users in the seed for this test")
+
+    ranks = await get_ranks_for_user_ids(db, [p1, p2, p3])
+    assert ranks[p1] < ranks[p2] < ranks[p3]

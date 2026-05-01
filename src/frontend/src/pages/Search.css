@@ -1,0 +1,119 @@
+.search-page {
+  min-height: 100vh;
+}
+
+.search-panel {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+.search-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.search-form {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: min(420px, 100%);
+}
+
+.search-form input {
+  width: 100%;
+  min-height: 52px;
+  padding: 0.75rem 0.9rem;
+  border: 3px solid var(--arcade-border, #3b241d);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #1f1713;
+  font-family: 'VT323', monospace;
+  font-size: 1.2rem;
+}
+
+.search-status,
+.search-summary,
+.search-pagination {
+  color: var(--metal-silver);
+  font-family: 'VT323', monospace;
+  font-size: 1.2rem;
+}
+
+.search-status--error {
+  color: #ef9a9a;
+}
+
+.search-results {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.search-result-row {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  min-height: 68px;
+  padding: 0.75rem 1rem;
+  border: 2px solid rgba(246, 217, 82, 0.45);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--metal-silver);
+  text-decoration: none;
+  transition: background-color 0.16s ease, transform 0.16s ease;
+}
+
+.search-result-row:hover {
+  background: rgba(246, 217, 82, 0.15);
+  transform: translateY(-1px);
+}
+
+.search-result-avatar {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  border: 2px solid #f6d952;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #3b241d;
+}
+
+.search-result-username {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 0.7rem;
+  line-height: 1.5;
+}
+
+.search-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.search-pagination button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+@media (max-width: 720px) {
+  .search-panel {
+    padding: 1.25rem;
+  }
+
+  .search-header,
+  .search-form,
+  .search-pagination {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .search-form {
+    min-width: 0;
+  }
+}

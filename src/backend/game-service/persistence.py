@@ -727,6 +727,89 @@ async def get_user_matches(db: AsyncSession, user_id: int) -> list[Match]:
     )
     return list(result.scalars().all())
 
+
+async def list_live_matches(db: AsyncSession) -> list[dict]:
+    """Return all human-vs-human matches currently in 'ongoing' status,
+    with both players' usernames + display names + avatars.
+
+    AI matches (player_id = 0) are excluded — the AI is not a watchable player.
+    Spectator counts are NOT included here; they are sourced live from the
+    in-memory ConnectionManager by the route handler.
+    """
+    result = await db.execute(
+        text(
+            """
+            SELECT
+                m.id::text                                                      AS match_id,
+                m.player1_id                                                    AS p1_id,
+                u1.username                                                     AS p1_username,
+                COALESCE(NULLIF(TRIM(u1.display_name), ''), u1.username)        AS p1_display_name,
+                u1.avatar_url                                                   AS p1_avatar_url,
+                m.player2_id                                                    AS p2_id,
+                u2.username                                                     AS p2_username,
+                COALESCE(NULLIF(TRIM(u2.display_name), ''), u2.username)        AS p2_display_name,
+                u2.avatar_url                                                   AS p2_avatar_url,
+                m.started_at                                                    AS started_at
+            FROM matches m
+            JOIN users u1 ON u1.id = m.player1_id
+            JOIN users u2 ON u2.id = m.player2_id
+            WHERE m.status = 'ongoing'
+              AND m.player1_id <> 0
+              AND m.player2_id <> 0
+            ORDER BY m.started_at DESC
+            """
+        )
+    )
+    return [dict(row) for row in result.mappings()]
+
+
+async def mark_match_finished_if_ongoing(
+    db: AsyncSession,
+    match_id: int,
+    *,
+    min_age_seconds: int = 30,
+) -> bool:
+    """Mark a single match as finished, idempotently and atomically, only if
+    the row is older than ``min_age_seconds``.
+
+    The age gate prevents a race where ``create_match`` (which commits the
+    row as ``ongoing``) and the WS ``_bind_match`` call are separated by an
+    ``await`` window. A ``/games/live`` poll arriving in that window would
+    otherwise see the row unbound and prematurely finish a real game. The
+    30-second default comfortably exceeds the typical create-to-bind gap
+    (sub-100 ms) and matches the project's other "give players time"
+    constants such as ``DISCONNECT_GRACE_SECONDS``.
+
+    Leaves ``winner_id`` and scores untouched — the caller has no data to
+    reconstruct them honestly.
+
+    Returns True if the row was updated, False if the row was already
+    finished, too young, or did not exist. Caller is responsible for
+    committing.
+    """
+    # Use clock_timestamp() (real wall-clock) instead of NOW() (transaction
+    # start). In SAVEPOINT-based test fixtures the outer transaction is
+    # long-lived, so NOW() doesn't advance and the age gate would compare
+    # against a stale anchor. clock_timestamp() always reflects real time
+    # and behaves identically in production (where this helper runs in a
+    # short-lived request transaction).
+    result = await db.execute(
+        text(
+            """
+            UPDATE matches
+               SET status = 'finished',
+                   finished_at = clock_timestamp()
+             WHERE id = :match_id
+               AND status = 'ongoing'
+               AND started_at < clock_timestamp() - make_interval(secs => :min_age_seconds)
+            """
+        ),
+        {"match_id": match_id, "min_age_seconds": min_age_seconds},
+    )
+    db.expire_all()
+    return result.rowcount > 0
+
+
 def leaderboard_order_by_str(sort_assoc: list[tuple[str, str]] | None) -> str | None:
     valid_columns = [
         'rank',
@@ -747,31 +830,19 @@ def leaderboard_order_by_str(sort_assoc: list[tuple[str, str]] | None) -> str | 
     return get_order_by_str(sort_assoc, valid_columns)
 
 
-async def get_leaderboard_paginated(
-        db: AsyncSession,
-        player_id: int | None = None,
-        limit: int = 20,
-        page: int = 0,
-        sort_assoc: list[tuple[str, str]] | None = None
-) -> dict | None:
-    offset = page * limit
-    default_sort_string = """
-xp DESC,
-points DESC,
-goal_difference DESC,
-goals_scored DESC,
-user_id ASC
-    """
-    sort_string = leaderboard_order_by_str(sort_assoc)
-    sort_string = sort_string if sort_string is not None else default_sort_string
-    # `rank` is the OUTPUT of ROW_NUMBER; it can't be referenced inside its own
-    # ORDER BY. When the user requests `order=rank:...`, fall back to the default
-    # sort for the ROW_NUMBER computation. Result-list ordering still honors
-    # `sort_string` (so `order=rank:desc` returns lowest-ranked rows first).
-    row_number_sort = (
-        default_sort_string if 'rank' in sort_string.lower() else sort_string
-    )
-    statement = text(f"""
+# ---------------------------------------------------------------------------
+# Shared CTE prefix used by both get_leaderboard_paginated and
+# get_ranks_for_user_ids so they always agree on rank ordering.
+#
+# Contains: all_matches, stats_away, stats_home, stats_all, user_distinct,
+#           user_count, match_streaks, user_win_streaks, user_win_streak_stats,
+#           ranked_stats, ranking_results.
+#
+# IMPORTANT: keep the {row_number_sort} placeholder so callers can override
+# the ORDER BY (the leaderboard endpoint uses this); the rank helper passes
+# the default sort string for it.
+# ---------------------------------------------------------------------------
+_LEADERBOARD_RANKING_CTE_SQL = """
 WITH all_matches AS
 (
     SELECT
@@ -945,6 +1016,34 @@ WITH all_matches AS
         , level
     FROM ranked_stats
 )
+"""
+
+# Default ordering used by both the leaderboard endpoint and the rank helper.
+_DEFAULT_RANK_ORDER_SQL = (
+    "xp DESC, points DESC, goal_difference DESC, goals_scored DESC, user_id ASC"
+)
+
+
+async def get_leaderboard_paginated(
+        db: AsyncSession,
+        player_id: int | None = None,
+        limit: int = 20,
+        page: int = 0,
+        sort_assoc: list[tuple[str, str]] | None = None
+) -> dict | None:
+    offset = page * limit
+    default_sort_string = _DEFAULT_RANK_ORDER_SQL
+    sort_string = leaderboard_order_by_str(sort_assoc)
+    sort_string = sort_string if sort_string is not None else default_sort_string
+    # `rank` is the OUTPUT of ROW_NUMBER; it can't be referenced inside its own
+    # ORDER BY. When the user requests `order=rank:...`, fall back to the default
+    # sort for the ROW_NUMBER computation. Result-list ordering still honors
+    # `sort_string` (so `order=rank:desc` returns lowest-ranked rows first).
+    row_number_sort = (
+        default_sort_string if 'rank' in sort_string.lower() else sort_string
+    )
+    cte_prefix = _LEADERBOARD_RANKING_CTE_SQL.format(row_number_sort=row_number_sort)
+    statement = text(cte_prefix + f"""
 , player_stats AS
 (
     SELECT
@@ -1040,6 +1139,33 @@ FROM page_ranking_results
         }
     )
     return result.mappings().one_or_none()
+
+
+async def get_ranks_for_user_ids(
+    db: AsyncSession,
+    user_ids: list[int],
+) -> dict[int, int | None]:
+    """Return {user_id: rank or None} for each input ID.
+
+    Uses the same ROW_NUMBER ordering as the leaderboard. Users with no
+    stats row, the AI sentinel (user_id=0), and unknown IDs map to None —
+    the returned dict always contains every input key, so callers can do a
+    simple `.get(uid)` without a default.
+    """
+    if not user_ids:
+        return {}
+
+    cte_prefix = _LEADERBOARD_RANKING_CTE_SQL.format(
+        row_number_sort=_DEFAULT_RANK_ORDER_SQL,
+    )
+    sql = text(cte_prefix + """
+        SELECT user_id, rank
+        FROM ranking_results
+        WHERE user_id = ANY(:ids)
+    """)
+    result = await db.execute(sql, {"ids": user_ids})
+    found = {row.user_id: int(row.rank) for row in result}
+    return {uid: found.get(uid) for uid in user_ids}
 
 
 async def get_leaderboard(db: AsyncSession, limit: int = 20) -> list[dict]:
@@ -1201,36 +1327,59 @@ async def reward_game_achievement_if_should(
         await insert_game_achievement(user_id, achievement, session)
 
     # ── New badge conditions ─────────────────────────────────────────────────
-    total_games = await count_games(user_id, session)
-    if total_games >= 1:
+    # Consolidate the 3 matches-table COUNTs and the user_xp level lookup into
+    # ONE query (4 round-trips → 1) using PostgreSQL FILTER clauses. The
+    # standalone helpers (count_games, won_vs_ai, has_perfect_game) remain
+    # available and tested for callers that need just one of these values.
+    stats_row = (await session.execute(
+        text("""
+            WITH match_stats AS (
+                SELECT
+                    COUNT(*) FILTER (WHERE (player1_id = :uid OR player2_id = :uid)
+                                     AND status = 'finished')                     AS total_games,
+                    COUNT(*) FILTER (WHERE winner_id = :uid AND player2_id = 0
+                                     AND status = 'finished')                     AS ai_wins,
+                    COUNT(*) FILTER (WHERE winner_id = :uid AND status = 'finished'
+                                     AND ((player1_id = :uid AND score_p2 = 0 AND score_p1 >= 10)
+                                       OR (player2_id = :uid AND score_p1 = 0 AND score_p2 >= 10))) AS perfect_games
+                FROM matches
+            )
+            SELECT
+                ms.total_games,
+                ms.ai_wins,
+                ms.perfect_games,
+                ux.level
+            FROM match_stats ms
+            LEFT JOIN user_xp ux ON ux.user_id = :uid
+        """),
+        {"uid": user_id},
+    )).one()
+
+    if stats_row.total_games >= 1:
         await insert_game_achievement(user_id, {
             "a_key": "first_game", "a_name": "Getting Started",
             "a_desc": "Play your first game", "a_icon": "(ง •_•)ง",
         }, session)
 
-    if await won_vs_ai(user_id, session):
+    if stats_row.ai_wins >= 1:
         await insert_game_achievement(user_id, {
             "a_key": "ai_conqueror", "a_name": "AI Conqueror",
             "a_desc": "Beat the AI opponent", "a_icon": "ʕっ•ᴥ•ʔっ",
         }, session)
 
-    if await has_perfect_game(user_id, session):
+    if stats_row.perfect_games >= 1:
         await insert_game_achievement(user_id, {
             "a_key": "perfect_game", "a_name": "Perfect Pong",
             "a_desc": "Win a game 10-0", "a_icon": "¬‿¬",
         }, session)
 
-    xp_result = await session.execute(
-        text("SELECT level FROM user_xp WHERE user_id = :uid"), {"uid": user_id}
-    )
-    level_row = xp_result.one_or_none()
-    if level_row:
-        if level_row.level >= 5:
+    if stats_row.level is not None:
+        if stats_row.level >= 5:
             await insert_game_achievement(user_id, {
                 "a_key": "level_5", "a_name": "Rising Star",
                 "a_desc": "Reach Level 5", "a_icon": "★彡(◕‿◕)",
             }, session)
-        if level_row.level >= 10:
+        if stats_row.level >= 10:
             await insert_game_achievement(user_id, {
                 "a_key": "level_10", "a_name": "Elite Player",
                 "a_desc": "Reach Level 10", "a_icon": "(ﾉ≧∀≦)ﾉ",
@@ -1349,14 +1498,19 @@ async def won_vs_ai(user_id: int, session: AsyncSession) -> bool:
 
 
 async def has_perfect_game(user_id: int, session: AsyncSession) -> bool:
-    """True if user has won any match with opponent scoring 0."""
+    """True if user has won any match 10-0 (winner scored ≥10, opponent scored 0).
+
+    The badge description in the achievements catalog says "Win a game 10-0",
+    so the implementation enforces both halves: the opponent must be shut out
+    AND the winner must have reached the standard 10-point Pong score.
+    """
     result = await session.execute(
         text(
             "SELECT COUNT(*) FROM matches "
             "WHERE winner_id = :uid AND status = 'finished' "
             "AND ("
-            "  (player1_id = :uid AND score_p2 = 0) OR "
-            "  (player2_id = :uid AND score_p1 = 0)"
+            "  (player1_id = :uid AND score_p2 = 0 AND score_p1 >= 10) OR "
+            "  (player2_id = :uid AND score_p1 = 0 AND score_p2 >= 10)"
             ")"
         ),
         {"uid": user_id},
