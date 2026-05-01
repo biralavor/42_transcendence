@@ -1,4 +1,5 @@
 SHELL := /bin/bash
+MAKEFLAGS += --no-print-directory
 
 .PHONY: all
 all: up
