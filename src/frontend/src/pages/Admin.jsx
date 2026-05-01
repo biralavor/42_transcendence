@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import NavbarComponent from '../Components/Navbar'
 import {
@@ -7,6 +7,7 @@ import {
   MessagesPerDayChart,
 } from '../Components/ActivityCharts'
 import { apiCall } from '../utils/apiClient'
+import { exportAdminPdf } from '../utils/adminPdfExport'
 import './Admin.css'
 
 const ADMIN_POLL_INTERVAL_MS = 5000
@@ -53,6 +54,15 @@ export default function Admin() {
   const defaultEnd = today
   const [start, setStart] = useState(defaultStart)
   const [end, setEnd] = useState(defaultEnd)
+  const gamesChartRef = useRef(null)
+  const messagesChartRef = useRef(null)
+
+  function handleExportPdf() {
+    if (!stats) return
+    const gamesCanvas = gamesChartRef.current?.querySelector('canvas') ?? null
+    const messagesCanvas = messagesChartRef.current?.querySelector('canvas') ?? null
+    exportAdminPdf({ stats, gamesCanvas, messagesCanvas })
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -184,6 +194,14 @@ export default function Admin() {
                   >
                     Reset (last {MAX_WINDOW_DAYS} days)
                   </button>
+                  <button
+                    type="button"
+                    className="arcade-btn arcade-btn-primary"
+                    onClick={handleExportPdf}
+                    disabled={!stats || !!error}
+                  >
+                    Export PDF
+                  </button>
                 </div>
 
                 {error && (
@@ -206,13 +224,13 @@ export default function Admin() {
                       <StatCard label="Messages" value={stats.messages_total} />
                     </div>
 
-                    <div className="activity-chart-block">
+                    <div className="activity-chart-block" ref={gamesChartRef}>
                       <h2 className="arcade-kicker mb-2">Games per day</h2>
                       <GamesPerDayChart points={games} />
                       <ChartA11yTable caption="Games played per day (selected window)" rows={games} />
                     </div>
 
-                    <div className="activity-chart-block">
+                    <div className="activity-chart-block" ref={messagesChartRef}>
                       <h2 className="arcade-kicker mb-2">Messages per day</h2>
                       <MessagesPerDayChart points={messages} />
                       <ChartA11yTable caption="Messages sent per day (selected window)" rows={messages} />

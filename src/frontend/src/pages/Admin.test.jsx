@@ -1,6 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
+
+const mockExportAdminPdf = vi.fn()
+vi.mock('../utils/adminPdfExport', () => ({
+  exportAdminPdf: (...args) => mockExportAdminPdf(...args),
+}))
 
 // chart.js / react-chartjs-2 use canvas which jsdom doesn't implement.
 vi.mock('chart.js', () => ({
@@ -80,6 +86,7 @@ describe('Admin page', () => {
     sessionStorage.setItem('access_token', 'fake-token')
     sessionStorage.setItem('refresh_token', 'fake-refresh-token')
     sessionStorage.setItem('token_type', 'bearer')
+    mockExportAdminPdf.mockReset()
   })
   afterEach(() => {
     vi.restoreAllMocks()
@@ -206,5 +213,51 @@ describe('Admin page', () => {
     renderAdmin()
     expect(screen.getByText(/Loading admin stats/i)).toBeInTheDocument()
     resolveMe(jsonResponse({ id: 1, username: 'admin', is_admin: false }))
+  })
+
+  it('disables the Export PDF button until stats are loaded', async () => {
+    let resolveStats
+    vi.spyOn(global, 'fetch')
+      .mockResolvedValueOnce(jsonResponse({ id: 1, username: 'admin', is_admin: true }))
+      .mockImplementationOnce(() => new Promise(resolve => { resolveStats = resolve }))
+
+    renderAdmin()
+    const button = await screen.findByRole('button', { name: /Export PDF/i })
+    expect(button).toBeDisabled()
+
+    resolveStats(jsonResponse(buildAdminPayload()))
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Export PDF/i })).toBeEnabled()
+    })
+  })
+
+  it('calls exportAdminPdf with current stats when Export PDF is clicked', async () => {
+    const payload = buildAdminPayload()
+    vi.spyOn(global, 'fetch')
+      .mockResolvedValueOnce(jsonResponse({ id: 1, username: 'admin', is_admin: true }))
+      .mockResolvedValueOnce(jsonResponse(payload))
+
+    renderAdmin()
+    await waitFor(() => {
+      expect(screen.getByText('Active users')).toBeInTheDocument()
+    })
+
+    const button = screen.getByRole('button', { name: /Export PDF/i })
+    await userEvent.click(button)
+
+    expect(mockExportAdminPdf).toHaveBeenCalledTimes(1)
+    const arg = mockExportAdminPdf.mock.calls[0][0]
+    expect(arg.stats).toMatchObject({
+      range_start: payload.range_start,
+      range_end: payload.range_end,
+      active_users: payload.active_users,
+      games_total: payload.games_total,
+      messages_total: payload.messages_total,
+    })
+    // Refs resolve to the chart-block divs; mocked Bar/Line don't render canvases,
+    // so the handler should pass null for both. The unit test for the export
+    // utility itself covers the canvas-snapshot path.
+    expect(arg.gamesCanvas).toBeNull()
+    expect(arg.messagesCanvas).toBeNull()
   })
 })
