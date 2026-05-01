@@ -8,6 +8,7 @@ RUN npm run build
 
 # Stage 2: serve
 FROM nginx:1.28-alpine
+RUN apk add --no-cache wget
 COPY --from=builder /app/dist /usr/share/nginx/html
 COPY services/frontend/nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 3000
