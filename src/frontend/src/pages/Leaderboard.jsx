@@ -62,7 +62,7 @@ export default function Leaderboard() {
   const [error, setError] = useState('');
   const [sortMode, setSortMode] = useState('xp')      // 'xp' | 'wins'
   const [currentPage, setCurrentPage] = useState(0)
-  const { user, token } = useUser()
+  const { user } = useUser()
 
   const entries = page.results ?? [];
   const summary = page.summary ?? {

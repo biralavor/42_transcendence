@@ -1,12 +1,11 @@
 // src/frontend/src/pages/Chat.jsx
 import { useState, useEffect, useRef } from 'react'
-import { useParams, useLocation, useNavigate, Link } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import { createWsClient } from '../utils/wsClient'
 import NavbarComponent from '../Components/Navbar'
 import FriendsSidebar from '../Components/FriendsSidebar'
 import LobbyPanel from '../Components/LobbyPanel'
 import UserProfileModal from '../Components/UserProfileModal'
-import { useAuth } from '../context/authContext'
 import { useUnread } from '../context/unreadContext'
 import { useUser } from '../context/userContext'
 import './Chat.css'
@@ -22,7 +21,6 @@ export default function Chat() {
   const navigate = useNavigate()
   const { user, token } = useUser()
   const { clearUnread, setActiveRoom } = useUnread()
-  const [joined, setJoined] = useState(!!user)
   const [connected, setConnected] = useState(false)
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
@@ -32,6 +30,8 @@ export default function Chat() {
   const bottomRef = useRef(null)
   const typingTimers = useRef(new Map())
   const emitThrottle = useRef(null)
+
+  const joined = !!(user && roomId)
 
   useEffect(() => {
     // Clear room messages when changing room
@@ -85,7 +85,7 @@ export default function Chat() {
       typingTimers.current.clear()
       setTypingUsers([])
     }
-  }, [joined, roomId])
+  }, [joined, roomId, token, user])
 
   useEffect(() => {
     if (typeof bottomRef.current?.scrollIntoView === 'function') {
@@ -93,18 +93,13 @@ export default function Chat() {
     }
   }, [messages])
 
-  // Auto-join once identity is known — covers nav-state entry AND direct URL / refresh
-  useEffect(() => {
-    if (user && roomId) setJoined(true)
-  }, [user, roomId])
-
   // Safety-net redirect: auth fully loaded, no token, still no identity → go to lobby
   // (PrivateRoute normally handles unauthenticated users before reaching here)
   useEffect(() => {
     if (roomId && !joined && !token) {
       navigate('/chat', { replace: true })
     }
-  }, [roomId, joined, token, navigate])
+  }, [roomId, joined, token, user, navigate])
 
   function handleInputChange(e) {
     setInput(e.target.value)
@@ -116,7 +111,7 @@ export default function Chat() {
   }
 
   function send() {
-    if (!input.trim() || !connected || !wsRef.current) return
+    if (!user || !input.trim() || !connected || !wsRef.current) return
     wsRef.current.send({ content: input.trim(), sender: user.username })
     setInput('')
   }
@@ -151,8 +146,6 @@ export default function Chat() {
           <LobbyPanel
             compact={false}
             onEnter={handleEnterRoom}
-            username={user.username}
-            token={token}
           />
         </div>
         {profileTarget && user && (
@@ -256,15 +249,13 @@ export default function Chat() {
             </code>
           </p>
         </div>
-        <LobbyPanel
+       <LobbyPanel
           compact={true}
           onEnter={handleEnterRoom}
-          username={user.username}
-          token={token}
         />
       </div>
 
-      {profileTarget && (
+      {profileTarget && user && (
         <UserProfileModal
           username={profileTarget.username}
           userId={profileTarget.userId}

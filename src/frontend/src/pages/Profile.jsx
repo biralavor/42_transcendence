@@ -138,9 +138,9 @@ export default function Profile() {
   const [historyFilters, setHistoryFilters] = useState(DEFAULT_HISTORY_FILTERS)
   const [historyPage, setHistoryPage] = useState(0)
   const todayDate = formatLocalDateInputValue()
-  const isOwnProfile = user !== null && (user.id == profileUserId || profileUserId == null)
-  const id = isNaN(Number(profileUserId)) ? user?.id : Number(profileUserId)
-  
+  const profileUserIdNorm = Number(profileUserId)
+  const isOwnProfile = user !== null && (isNaN(profileUserIdNorm) || user.id == profileUserIdNorm || profileUserIdNorm < 0)
+  const id = isNaN(profileUserIdNorm) ? user?.id : profileUserIdNorm
   useEffect(() => {
     return () => {
       clearTimeout(saveStatusTimer.current)
@@ -245,7 +245,7 @@ export default function Profile() {
   }
 
   useEffect(() => {
-    if (!token) {
+    if (!token || !user || id < 0) {
       setError('Not authenticated')
       setLoading(false)
       return
@@ -266,9 +266,7 @@ export default function Profile() {
     setAchievements([])
 
     const controller = new AbortController()
-    const { signal } = controller
-
-    if (!id) return
+    const { signal } = controller    
 
     Promise.all([
       apiCall(`/api/users/profile/${id}`, { signal }).then(r => {
@@ -310,7 +308,7 @@ export default function Profile() {
     })
 
     return () => controller.abort()
-  }, [user, token, id, profileUserId])
+  }, [user, token, id, profileUserIdNorm])
 
   useEffect(() => {
     if (!token || !user || !id) return
@@ -403,7 +401,7 @@ export default function Profile() {
                 currentUser={{
                   id: user.id,
                   username: user.username,
-                  avatarUrl: user.avatarUrl,
+                  avatarUrl: user.avatar_url,
                 }}
               />
             </div>

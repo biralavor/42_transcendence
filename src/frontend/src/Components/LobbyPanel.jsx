@@ -77,7 +77,7 @@ export default function LobbyPanel({
       controllers.forEach(controller => controller.abort())
       controllers.clear()
     }
-  }, [token, refreshIntervalMs, user])
+  }, [token, refreshIntervalMs])
 
   async function handleCreate(e) {
     e.preventDefault()

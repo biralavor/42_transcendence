@@ -1,6 +1,6 @@
-import { createContext, useContext, useState, useEffect, useRef } from 'react';
+import { createContext, useContext, useState, useEffect } from 'react';
 import { useAuth } from './authContext';
-import { apiJson, apiCall } from '../utils/apiClient';
+import { apiJson } from '../utils/apiClient';
 
 
 const UserContext = createContext(null);
@@ -35,6 +35,7 @@ export function UserProvider({ children }) {
        });
      return () => {
        isCurrent = false;
+       controller.abort();
      };
   }, [isAuthReady, auth?.access_token]);
 

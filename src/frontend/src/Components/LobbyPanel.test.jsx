@@ -3,9 +3,6 @@ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import LobbyPanel from './LobbyPanel'
 import { UserProvider } from '../context/userContext'
 
-const TOKEN = 'test-token'
-const USERNAME = 'alice'
-
 // Mock the useUser hook
 const mockUseUser = vi.fn()
 vi.mock('../context/userContext', () => ({
@@ -36,16 +33,11 @@ async function flushPromises() {
 
 describe('LobbyPanel', () => {
   beforeEach(() => {
-<<<<<<< HEAD
-    vi.useRealTimers()
-    vi.restoreAllMocks()
-=======
     vi.restoreAllMocks()
     mockUseUser.mockReturnValue({
       user: { id: 1, username: 'Alice' },
       token: 'fake-token',
     })
->>>>>>> 6542a6e (reformat: use useUser on Chat and LobbyPanel)
   })
 
   it('fetches rooms on mount and renders the list', async () => {
