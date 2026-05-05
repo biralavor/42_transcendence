@@ -202,7 +202,7 @@ See [docs/DEV_DOC.md](docs/DEV_DOC.md) · [docs/ARCHITECTURE.md](docs/ARCHITECTU
   - Implemented Game Achievements, Authentication
   - Implemented **Pong game engine** (physics, collision detection, AI opponent logic)
 
-### **Bira Lavor** (Project Manager & Scrum Master) [@biralavor](https://github.com/biralavor)
+### **Bira Lavor** (Project Manager, DevOps & Scrum Master) [@biralavor](https://github.com/biralavor)
 - **Role:** Sprint planning, team coordination, CI/CD infrastructure, DevOps, user-facing experience
 - **Key Contributions:**
   - Established Trunk-Based Development workflow with GitHub Projects automation
