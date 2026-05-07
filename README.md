@@ -12,6 +12,8 @@ This project has been created as part of the 42 curriculum by *maurodri*, *umene
 
 > Real-time multiplayer Pong platform with chat, user management, AI opponent, and tournament system — built as the final 42 Common Core project.
 
+<img width="904" height="654" alt="image" src="https://github.com/user-attachments/assets/a72e420b-66a8-4a9e-972d-b8212770732f" />
+
 ---
 
 ## Tech Stack
@@ -202,7 +204,7 @@ See [docs/DEV_DOC.md](docs/DEV_DOC.md) · [docs/ARCHITECTURE.md](docs/ARCHITECTU
   - Implemented Game Achievements, Authentication
   - Implemented **Pong game engine** (physics, collision detection, AI opponent logic)
 
-### **Bira Lavor** (Project Manager & Scrum Master) [@biralavor](https://github.com/biralavor)
+### **Bira Lavor** (Project Manager, DevOps & Scrum Master) [@biralavor](https://github.com/biralavor)
 - **Role:** Sprint planning, team coordination, CI/CD infrastructure, DevOps, user-facing experience
 - **Key Contributions:**
   - Established Trunk-Based Development workflow with GitHub Projects automation
